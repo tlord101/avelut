@@ -114,7 +114,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
     const handleSend = async () => {
         if ((!input.trim() && !imageFile) || isSending) return;
         
-        const textToSend = input;
+        const textToSend = input.trim();
         const fileToSend = imageFile;
 
         setIsSending(true);
@@ -139,8 +139,8 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
             };
             
             // Only add properties if they have values (Firebase doesn't allow undefined)
-            if (textToSend.trim()) {
-                messageData.text = textToSend.trim();
+            if (textToSend) {
+                messageData.text = textToSend;
             }
             if (imageUrl) {
                 messageData.image_url = imageUrl;
@@ -149,7 +149,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
             await set(newMessageRef, messageData);
             
             const updates: { [key: string]: any } = {};
-            let lastMessageText = textToSend.trim();
+            let lastMessageText = textToSend;
             if (!lastMessageText && fileToSend) {
                 lastMessageText = '📷 Photo';
             }

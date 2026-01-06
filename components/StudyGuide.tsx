@@ -759,6 +759,9 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         if (error) throw error;
         
         addToast(`Topic complete! +2 XP`, 'success');
+        
+        // Close the learning interface to trigger a refresh of the study guide
+        setSelectedTopic(null);
     } catch (err: any) {
         console.error("Failed to mark topic as complete:", err);
         addToast("Could not save your progress. Please check your connection or try again later.", 'error');
