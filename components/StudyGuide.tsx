@@ -751,12 +751,38 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     }
     
     try {
-        const { error } = await supabase.rpc('mark_topic_complete', {
+        // First, try using the RPC function for XP calculation
+        const { error: rpcError } = await supabase.rpc('mark_topic_complete', {
             p_topic_id: topicId,
             p_user_id: userProfile.uid,
         });
 
-        if (error) throw error;
+        // If RPC fails, fall back to direct upsert
+        if (rpcError) {
+            console.warn("RPC failed, using direct upsert:", rpcError);
+            const { error: upsertError } = await supabase
+                .from('user_progress')
+                .upsert({
+                    user_id: userProfile.uid,
+                    topic_id: topicId,
+                    is_complete: true,
+                    xp_earned: 2,
+                }, {
+                    onConflict: 'user_id,topic_id'
+                });
+            
+            if (upsertError) throw upsertError;
+            
+            // Also update the user's XP
+            const { error: xpError } = await supabase
+                .from('user_profiles')
+                .update({ 
+                    xp: userProfile.xp + 2 
+                })
+                .eq('uid', userProfile.uid);
+            
+            if (xpError) console.warn("Could not update XP:", xpError);
+        }
         
         addToast(`Topic complete! +2 XP`, 'success');
         
