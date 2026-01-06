@@ -9,20 +9,23 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.27.0",
+    "@supabase/supabase-js": "2",
+    "firebase": "^12.5.0",
+    "katex": "^0.16.25",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.27.0",
     "react-markdown": "9.0.1",
-    "remark-gfm": "4.0.0",
-    "remark-math": "6.0.0",
     "rehype-katex": "7.0.0",
-    "katex": "^0.16.25",
-    "@supabase/supabase-js": "2",
-    "firebase": "^12.5.0"
+    "remark-gfm": "4.0.0",
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

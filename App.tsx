@@ -381,7 +381,7 @@ const App: React.FC = () => {
         const chatsChannel = supabase
             .channel(`public:private_chats:members=cs.{"${userProfile.uid}"}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'private_chats', filter: `members=cs.{"${userProfile.uid}"}` }, async () => {
-                   const { count } = await supabase.from('private_chats').select('*', { count: 'exact', head: true }).contains('members', [userProfile.uid]).not('last_message.read_by', 'cs', `{${userProfile.uid}}`);
+                   const { count } = await supabase.from('private_chats').select('*', { count: 'exact', head: true }).contains('members', [userProfile.uid]).not('last_message->read_by', 'cs', `{${userProfile.uid}}`);
                    setUnreadMessagesCount(count || 0);
             })
             .subscribe();
@@ -426,7 +426,7 @@ const App: React.FC = () => {
             .subscribe();
 
         const fetchInitialData = async () => {
-            const { count } = await supabase.from('private_chats').select('*', { count: 'exact', head: true }).contains('members', [userProfile.uid]).not('last_message.read_by', 'cs', `{${userProfile.uid}}`);
+            const { count } = await supabase.from('private_chats').select('*', { count: 'exact', head: true }).contains('members', [userProfile.uid]).not('last_message->read_by', 'cs', `{${userProfile.uid}}`);
             setUnreadMessagesCount(count || 0);
             
             const { data: initialNotifs, error: notifError } = await supabase.from('notifications').select('*').eq('user_id', userProfile.uid).order('timestamp', { ascending: false }).limit(20);
