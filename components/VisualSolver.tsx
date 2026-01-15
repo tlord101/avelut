@@ -93,6 +93,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const interactionRef = useRef<{
         startX: number; startY: number; initialCropBox: CropBox; videoRect: DOMRect;
@@ -333,6 +334,35 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         initializeCamera();
     };
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            addToast('Please select an image file.', 'error');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            addToast('Image must be under 5MB.', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const imageDataUrl = event.target?.result as string;
+            setScannedImage(imageDataUrl);
+            setCameraState('preview');
+        };
+        reader.onerror = () => {
+            addToast('Could not read the image file.', 'error');
+        };
+        reader.readAsDataURL(file);
+
+        // Reset input so the same file can be selected again
+        e.target.value = '';
+    };
+
     const renderContent = () => {
         switch (cameraState) {
             case 'initializing':
@@ -387,7 +417,24 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                             </div>
                         </div>
                         {/* Shutter Button Area */}
-                        <div className="flex-shrink-0 flex justify-center items-center h-28 bg-gray-100">
+                        <div className="flex-shrink-0 flex justify-center items-center gap-4 h-28 bg-gray-100">
+                            <button 
+                                onClick={() => fileInputRef.current?.click()} 
+                                aria-label="Upload photo"
+                                className="flex items-center gap-2 px-4 py-3 bg-gray-700 text-white rounded-full hover:bg-gray-800 transition-colors shadow-lg font-semibold"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Upload Photo
+                            </button>
+                            <input 
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileUpload}
+                                className="hidden"
+                            />
                             <button onClick={handleScan} aria-label="Scan problem" className="p-2 bg-white/50 rounded-full transition-transform active:scale-95 shadow-lg">
                                 <ShutterIcon />
                             </button>
@@ -415,12 +462,24 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                                         <span className="font-semibold">Back</span>
                                     </button>
                                 </div>
-                                <div className="absolute bottom-8 w-full px-4">
-                                    <div className="max-w-md mx-auto space-y-3">
-                                        <button onClick={handleAnalyze} className="w-full bg-lime-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-lime-700 transition-colors shadow-md text-lg">
-                                            Get Tutorial
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-6 pt-12">
+                                    <div className="max-w-sm mx-auto space-y-3">
+                                        <button 
+                                            onClick={handleAnalyze} 
+                                            className="w-full bg-gradient-to-r from-lime-600 to-lime-500 text-white font-bold py-4 px-6 rounded-xl hover:from-lime-700 hover:to-lime-600 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                            </svg>
+                                            Detailed Tutorial
                                         </button>
-                                        <button onClick={handleQuickAnswer} className="w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors shadow-md text-lg">
+                                        <button 
+                                            onClick={handleQuickAnswer} 
+                                            className="w-full bg-white/20 backdrop-blur-sm border-2 border-white text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
                                             Quick Answer
                                         </button>
                                     </div>
