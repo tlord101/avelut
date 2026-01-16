@@ -51,6 +51,10 @@ const TextChat: React.FC<{
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const { addToast } = useToast();
+    const liveSessionRef = useRef<any>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioWorkletRef = useRef<AudioWorkletNode | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
 
     // Fetch course and topic context
     useEffect(() => {
@@ -220,74 +224,157 @@ const TextChat: React.FC<{
     const startVoiceRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = mediaRecorder;
-            audioChunksRef.current = [];
+            
+            // Initialize Gemini Live Session
+            const response = await fetch('https://generativelanguage.googleapis.com/v1alpha/media/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': process.env.API_KEY || ''
+                },
+                body: JSON.stringify({
+                    display_name: 'VanTutor Chat'
+                })
+            });
 
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
+            // Create real-time audio connection
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContextRef.current = audioContext;
+
+            const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser();
+            analyserRef.current = analyser;
+            
+            mediaStreamSource.connect(analyser);
+
+            // Create a simple live connection using WebSocket
+            const ws = new WebSocket(`wss://generativelanguage.googleapis.com/google.ai.generativelanguage.v1alpha.GenerativeService/BidiGenerateContent?key=${process.env.API_KEY}`);
+            
+            let liveSessionActive = true;
+            liveSessionRef.current = { ws, stream, audioContext };
+
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            analyser.connect(processor);
+            processor.connect(audioContext.destination);
+
+            processor.onaudioprocess = (event) => {
+                if (!liveSessionActive || ws.readyState !== WebSocket.OPEN) return;
+                
+                const inputData = event.inputBuffer.getChannelData(0);
+                const audioData = new Uint8Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    audioData[i] = Math.max(-128, Math.min(127, inputData[i] * 128)) | 0;
+                }
+
+                ws.send(JSON.stringify({
+                    realtimeInput: {
+                        mediaStream: {
+                            mimeType: 'audio/pcm',
+                            data: btoa(String.fromCharCode(...Array.from(audioData)))
+                        }
+                    }
+                }));
+            };
+
+            ws.onopen = () => {
+                // Send initial system instruction
+                ws.send(JSON.stringify({
+                    systemInstruction: {
+                        parts: [{
+                            text: `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Provide clear, detailed explanations tailored to their level. Be encouraging and supportive. Keep responses conversational and natural for voice interaction.`
+                        }]
+                    }
+                }));
+                
+                setVoiceStatus('listening');
+                setIsVoiceMode(true);
+                addToast('Voice conversation started. Speak naturally!', 'info');
+            };
+
+            ws.onmessage = async (event) => {
+                try {
+                    const response = JSON.parse(event.data);
+                    
+                    if (response.serverContent?.turns) {
+                        const turns = response.serverContent.turns;
+                        turns.forEach((turn: any) => {
+                            if (turn.parts) {
+                                turn.parts.forEach((part: any) => {
+                                    if (part.text) {
+                                        setInput(prev => prev + ' ' + part.text);
+                                    }
+                                    if (part.inlineData?.data) {
+                                        // Play audio response
+                                        const binaryData = atob(part.inlineData.data);
+                                        const bytes = new Uint8Array(binaryData.length);
+                                        for (let i = 0; i < binaryData.length; i++) {
+                                            bytes[i] = binaryData.charCodeAt(i);
+                                        }
+                                        playAudio(bytes, audioContext);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error processing live response:', error);
                 }
             };
 
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                stream.getTracks().forEach(track => track.stop());
-                await transcribeAudio(audioBlob);
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addToast('Connection error. Please try again.', 'error');
+                stopVoiceRecording();
             };
 
-            mediaRecorder.start();
-            setVoiceStatus('listening');
-            setIsVoiceMode(true);
+            ws.onclose = () => {
+                liveSessionActive = false;
+            };
+
         } catch (error) {
             console.error('Error starting voice recording:', error);
             addToast('Could not access microphone. Please check permissions.', 'error');
         }
     };
 
-    const stopVoiceRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop();
-            setVoiceStatus('processing');
+    const playAudio = (audioData: Uint8Array, audioContext: AudioContext) => {
+        try {
+            const audioBuffer = audioContext.createBuffer(1, audioData.length, 16000);
+            const channelData = audioBuffer.getChannelData(0);
+            for (let i = 0; i < audioData.length; i++) {
+                channelData[i] = audioData[i] / 128;
+            }
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+        } catch (error) {
+            console.error('Error playing audio:', error);
         }
     };
 
-    const transcribeAudio = async (audioBlob: Blob) => {
-        try {
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-                const base64Audio = (reader.result as string).split(',')[1];
-                
-                // Transcribe the audio to text first
-                const transcriptionResult = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: [{
-                        parts: [
-                            { text: 'Transcribe this audio accurately:' },
-                            { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
-                        ]
-                    }]
-                });
-
-                const transcribedText = transcriptionResult.text.trim();
-                if (transcribedText) {
-                    setInput(transcribedText);
-                    addToast('Voice transcribed! Ready to send.', 'success');
-                    setVoiceStatus('idle');
-                    setIsVoiceMode(false);
-                } else {
-                    addToast('Could not transcribe audio. Please try again.', 'error');
-                    setVoiceStatus('idle');
-                    setIsVoiceMode(false);
-                }
-            };
-        } catch (error) {
-            console.error('Error transcribing audio:', error);
-            addToast('Failed to transcribe audio.', 'error');
-            setVoiceStatus('idle');
-            setIsVoiceMode(false);
+    const stopVoiceRecording = () => {
+        if (liveSessionRef.current) {
+            const { ws, stream, audioContext } = liveSessionRef.current;
+            
+            // Close WebSocket
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            
+            // Stop audio stream
+            stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+            
+            // Clean up audio context
+            if (audioContext) {
+                audioContext.close();
+            }
+            
+            liveSessionRef.current = null;
         }
+        
+        setVoiceStatus('idle');
+        setIsVoiceMode(false);
     };
 
     const toggleVoice = () => {
@@ -327,28 +414,23 @@ const TextChat: React.FC<{
                         </div>
                     )}
                     <div className="p-4 border-t border-gray-200 bg-white/80 backdrop-blur-lg">
-                        {voiceStatus === 'processing' && (
-                            <div className="mb-2 text-center">
-                                <span className="text-sm text-gray-500 font-medium">Processing voice...</span>
-                            </div>
-                        )}
                         {voiceStatus === 'listening' && (
                             <div className="mb-2 text-center">
-                                <span className="text-sm text-red-600 font-medium">🎤 Listening... Click again to stop</span>
+                                <span className="text-sm text-red-600 font-medium animate-pulse">🎤 Listening... Talking with AI in real-time</span>
                             </div>
                         )}
                         <div className="relative flex items-center gap-2">
                             <button onClick={() => setIsMobilePanelOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ListIcon /></button>
-                            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder={isVoiceMode ? "Listening..." : "Ask me anything..."} className="flex-1 bg-gray-100 border border-gray-200 rounded-full py-3 pl-5 pr-24 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" rows={1} style={{ fieldSizing: 'content' }} disabled={isLoading || isVoiceMode} />
+                            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isVoiceMode) { e.preventDefault(); handleSendMessage(); } }} placeholder={isVoiceMode ? "Speaking with AI..." : "Ask me anything..."} className="flex-1 bg-gray-100 border border-gray-200 rounded-full py-3 pl-5 pr-24 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" rows={1} style={{ fieldSizing: 'content' }} disabled={isLoading || isVoiceMode} />
                             <button 
                                 onClick={toggleVoice} 
-                                disabled={isLoading || voiceStatus === 'processing'}
+                                disabled={isLoading}
                                 className={`absolute right-14 top-1/2 -translate-y-1/2 rounded-full p-2.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
                                     isVoiceMode 
                                         ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' 
                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                 }`}
-                                title={isVoiceMode ? "Stop recording" : "Start voice input"}
+                                title={isVoiceMode ? "Stop voice conversation" : "Start voice conversation"}
                             >
                                 <VoiceIcon className="w-5 h-5" />
                             </button>
