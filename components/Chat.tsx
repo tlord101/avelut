@@ -259,7 +259,8 @@ const TextChat: React.FC<{
             reader.onloadend = async () => {
                 const base64Audio = (reader.result as string).split(',')[1];
                 
-                const result = await ai.models.generateContent({
+                // Transcribe the audio to text first
+                const transcriptionResult = await ai.models.generateContent({
                     model: 'gemini-2.5-flash',
                     contents: [{
                         parts: [
@@ -269,18 +270,21 @@ const TextChat: React.FC<{
                     }]
                 });
 
-                const transcribedText = result.text.trim();
+                const transcribedText = transcriptionResult.text.trim();
                 if (transcribedText) {
                     setInput(transcribedText);
-                    addToast('Voice transcribed!', 'success');
+                    addToast('Voice transcribed! Ready to send.', 'success');
+                    setVoiceStatus('idle');
+                    setIsVoiceMode(false);
                 } else {
                     addToast('Could not transcribe audio. Please try again.', 'error');
+                    setVoiceStatus('idle');
+                    setIsVoiceMode(false);
                 }
             };
         } catch (error) {
             console.error('Error transcribing audio:', error);
             addToast('Failed to transcribe audio.', 'error');
-        } finally {
             setVoiceStatus('idle');
             setIsVoiceMode(false);
         }
@@ -325,7 +329,12 @@ const TextChat: React.FC<{
                     <div className="p-4 border-t border-gray-200 bg-white/80 backdrop-blur-lg">
                         {voiceStatus === 'processing' && (
                             <div className="mb-2 text-center">
-                                <span className="text-sm text-gray-500">Processing voice...</span>
+                                <span className="text-sm text-gray-500 font-medium">Processing voice...</span>
+                            </div>
+                        )}
+                        {voiceStatus === 'listening' && (
+                            <div className="mb-2 text-center">
+                                <span className="text-sm text-red-600 font-medium">🎤 Listening... Click again to stop</span>
                             </div>
                         )}
                         <div className="relative flex items-center gap-2">
@@ -339,6 +348,7 @@ const TextChat: React.FC<{
                                         ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' 
                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                 }`}
+                                title={isVoiceMode ? "Stop recording" : "Start voice input"}
                             >
                                 <VoiceIcon className="w-5 h-5" />
                             </button>
