@@ -8,11 +8,21 @@ import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { LogoIcon } from './icons/LogoIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
+import { GoogleGenAI } from '@google/genai';
 
 import { db, storage, auth, onAuthStateChanged, firebaseSignOut, type FirebaseUser, GoogleAuthProvider, signInWithPopup, updateProfile } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, update, serverTimestamp as firebaseServerTimestamp, onDisconnect } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { supabase } from '../supabase';
+
+// @ts-ignore
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const VoiceIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+    </svg>
+);
 
 const UserStatusIndicator: React.FC<{ isOnline?: boolean; lastSeen?: number }> = ({ isOnline }) => {
     return <div className={`w-3 h-3 rounded-full border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>;
@@ -49,9 +59,15 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
     const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+    const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
+    const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
     const { addToast } = useToast();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<number | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const liveClientRef = useRef<any>(null);
     
     useEffect(() => {
         const messagesRef = dbRef(db, `private_messages/${chatId}`);
@@ -108,6 +124,86 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 setImagePreviewUrl(reader.result as string);
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const startVoiceStreaming = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                stream.getTracks().forEach(track => track.stop());
+                await processVoiceStreaming(audioBlob);
+            };
+
+            mediaRecorder.start();
+            setVoiceStatus('listening');
+            setIsVoiceStreaming(true);
+            addToast('Listening... Click again to stop.', 'info');
+        } catch (error) {
+            console.error('Error starting voice recording:', error);
+            addToast('Could not access microphone. Please check permissions.', 'error');
+        }
+    };
+
+    const stopVoiceStreaming = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+            setVoiceStatus('processing');
+        }
+    };
+
+    const processVoiceStreaming = async (audioBlob: Blob) => {
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = (reader.result as string).split(',')[1];
+                
+                // Send voice message to Gemini for live response
+                const result = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: [{
+                        parts: [
+                            { text: 'Please respond conversationally to this voice message. Keep your response natural and friendly for a chat conversation.' },
+                            { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
+                        ]
+                    }]
+                });
+
+                const responseText = result.text.trim();
+                if (responseText) {
+                    // Add the AI's response as a text message in the chat
+                    setInput(responseText);
+                    addToast('Voice processed and response ready!', 'success');
+                } else {
+                    addToast('Could not process voice. Please try again.', 'error');
+                }
+            };
+        } catch (error) {
+            console.error('Error processing voice:', error);
+            addToast('Failed to process voice input.', 'error');
+        } finally {
+            setVoiceStatus('idle');
+            setIsVoiceStreaming(false);
+        }
+    };
+
+    const toggleVoiceStreaming = () => {
+        if (isVoiceStreaming) {
+            stopVoiceStreaming();
+        } else {
+            startVoiceStreaming();
         }
     };
 
@@ -212,7 +308,15 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                         <PaperclipIcon className="w-6 h-6" />
                     </label>
                     <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isSending} />
-                    <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Enter') handleSend()}} placeholder="Type a message..." className="w-full bg-gray-100 border-transparent rounded-full py-2 px-4 text-gray-900 placeholder-gray-500 focus:ring-lime-500 focus:border-lime-500" />
+                    <button 
+                        onClick={toggleVoiceStreaming} 
+                        disabled={isSending}
+                        className={`mr-2 p-3 rounded-full transition-colors ${isVoiceStreaming ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'text-gray-500 hover:text-lime-600'}`}
+                        title="Voice input"
+                    >
+                        <VoiceIcon className="w-6 h-6" />
+                    </button>
+                    <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Enter') handleSend()}} placeholder="Type a message..." className="w-full bg-gray-100 border-transparent rounded-full py-2 px-4 text-gray-900 placeholder-gray-500 focus:ring-lime-500 focus:border-lime-500" disabled={isVoiceStreaming} />
                     <button onClick={handleSend} disabled={isSending || (!input.trim() && !imageFile)} className="ml-2 bg-lime-600 rounded-full p-3 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 active:scale-95"><SendIcon className="w-6 h-6" /></button>
                 </div>
             </footer>
