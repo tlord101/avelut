@@ -6,7 +6,6 @@ import { StudyGuide } from './components/StudyGuide';
 import { Chat } from './components/Chat';
 import { VisualSolver } from './components/VisualSolver';
 import { Exam } from './components/Exam';
-import { Leaderboard } from './components/Leaderboard';
 import { Settings } from './components/Settings';
 import Help from './components/Help';
 import { Messenger } from './components/Messenger';
@@ -17,7 +16,6 @@ interface MainContentProps {
     userProfile: UserProfile;
     userProgress: UserProgress;
     dashboardData: DashboardData | null;
-    handleXPEarned: (xp: number, type?: 'lesson' | 'test') => void;
     handleLogout: () => void;
     handleProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string; }>;
     handleDeleteAccount: () => Promise<{ success: boolean; error?: string; }>;
@@ -31,7 +29,6 @@ export const MainContent: React.FC<MainContentProps> = ({
     userProfile,
     userProgress,
     dashboardData,
-    handleXPEarned,
     handleLogout,
     handleProfileUpdate,
     handleDeleteAccount,
@@ -50,9 +47,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'visual_solver':
             return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by parent */ }} />;
         case 'exam':
-            return <Exam userProfile={userProfile} userProgress={userProgress} onXPEarned={(xp) => handleXPEarned(xp, 'test')} />;
-        case 'leaderboard':
-            return <Leaderboard userProfile={userProfile} />;
+            return <Exam userProfile={userProfile} userProgress={userProgress} />;
         case 'settings':
             return <Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
         case 'help':

@@ -12,8 +12,6 @@ export interface UserProfile {
   photo_url?: string;
   course_id: string;
   level: string;
-  total_xp: number;
-  total_test_xp: number;
   current_streak: number;
   last_activity_date: number; // Store as timestamp
   notifications_enabled: boolean;
@@ -57,21 +55,8 @@ export interface ExamHistoryItem {
   course_id: string;
   score: number;
   total_questions: number;
-  xp_earned: number;
   timestamp: number;
   questions: ExamQuestionResult[];
-}
-
-// Types for the Leaderboard System
-export interface LeaderboardEntry {
-    user_id: string;
-    display_name: string;
-    photo_url?: string;
-    xp: number;
-}
-
-export interface WeeklyLeaderboardEntry extends LeaderboardEntry {
-    week_id: string; // e.g., "2024-27"
 }
 
 // Types for the new Study Guide System
@@ -92,7 +77,6 @@ export interface Subject {
 export interface UserProgress {
   [topic_id: string]: {
     is_complete: boolean;
-    xp_earned: number;
   };
 }
 
@@ -101,13 +85,12 @@ export interface DashboardData {
     totalTopics: number;
     completedTopicsCount: number;
     examHistory: ExamHistoryItem[];
-    xpHistory: { date: string, xp: number }[];
 }
 
 // Type for the new Notification System
 export interface Notification {
   id: string;
-  type: 'study_update' | 'exam_reminder' | 'leaderboard_change' | 'welcome';
+  type: 'study_update' | 'exam_reminder' | 'welcome';
   title: string;
   message: string;
   timestamp: number;

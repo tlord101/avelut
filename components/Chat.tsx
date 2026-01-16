@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI, Chat as GeminiChat, LiveServerMessage, Modality, Blob as GenAI_Blob } from '@google/genai';
+import { GoogleGenAI, Chat as GeminiChat } from '@google/genai';
 import { supabase } from '../supabase';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
@@ -16,11 +16,6 @@ import { Avatar } from './Avatar';
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- INLINE ICONS ---
-const TextIcon: React.FC<{className?: string}> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
-    </svg>
-);
 const VoiceIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -48,9 +43,60 @@ const TextChat: React.FC<{
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
+    const [isVoiceMode, setIsVoiceMode] = useState(false);
+    const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
+    const [courseContext, setCourseContext] = useState<string>('');
     const geminiChat = useRef<GeminiChat | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
     const { addToast } = useToast();
+
+    // Fetch course and topic context
+    useEffect(() => {
+        const fetchCourseContext = async () => {
+            try {
+                const { data: courseData, error: courseError } = await supabase
+                    .from('courses_data')
+                    .select('subject_list')
+                    .eq('id', userProfile.course_id)
+                    .single();
+                
+                if (courseError) throw courseError;
+                
+                const { data: progressData, error: progressError } = await supabase
+                    .from('user_progress')
+                    .select('topic_id, is_complete')
+                    .eq('user_id', userProfile.uid);
+                
+                if (progressError) throw progressError;
+                
+                const completedTopics = progressData?.filter(p => p.is_complete).map(p => p.topic_id) || [];
+                const subjects = courseData?.subject_list || [];
+                
+                let contextText = `User's Course Information:\n`;
+                contextText += `Level: ${userProfile.level}\n`;
+                contextText += `Course ID: ${userProfile.course_id}\n\n`;
+                contextText += `Subjects and Topics:\n`;
+                
+                subjects.forEach((subject: any) => {
+                    if (subject.level === userProfile.level) {
+                        contextText += `\n${subject.subject_name}:\n`;
+                        subject.topics?.forEach((topic: any) => {
+                            const completed = completedTopics.includes(topic.topic_id);
+                            contextText += `  - ${topic.topic_name} ${completed ? '(✓ completed)' : '(in progress)'}\n`;
+                        });
+                    }
+                });
+                
+                setCourseContext(contextText);
+            } catch (error) {
+                console.error('Error fetching course context:', error);
+            }
+        };
+        
+        fetchCourseContext();
+    }, [userProfile.uid, userProfile.course_id, userProfile.level]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -78,7 +124,14 @@ const TextChat: React.FC<{
                     role: msg.sender === 'user' ? 'user' : 'model',
                     parts: [{ text: msg.text || '' }]
                 }));
-                geminiChat.current = ai.chats.create({ model: 'gemini-2.5-flash', history });
+                
+                const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
+                
+                geminiChat.current = ai.chats.create({ 
+                    model: 'gemini-2.5-flash', 
+                    history,
+                    systemInstruction 
+                });
             }
         };
         fetchMessages();
@@ -95,7 +148,7 @@ const TextChat: React.FC<{
             ).subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [activeConversationId, addToast]);
+    }, [activeConversationId, addToast, courseContext]);
 
     const handleSendMessage = async () => {
         if (!input.trim() || isLoading) return;
@@ -133,7 +186,8 @@ const TextChat: React.FC<{
             // Now handle the bot response.
             if (!geminiChat.current) {
                 const history = [...messages, userMessage as Message].map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{ text: msg.text || '' }] }));
-                geminiChat.current = ai.chats.create({ model: 'gemini-2.5-flash', history });
+                const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
+                geminiChat.current = ai.chats.create({ model: 'gemini-2.5-flash', history, systemInstruction });
             }
             
             const stream = await geminiChat.current.sendMessageStream({ message: currentInput });
@@ -160,6 +214,83 @@ const TextChat: React.FC<{
             setInput(currentInput); // Restore input on error
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const startVoiceRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                stream.getTracks().forEach(track => track.stop());
+                await transcribeAudio(audioBlob);
+            };
+
+            mediaRecorder.start();
+            setVoiceStatus('listening');
+            setIsVoiceMode(true);
+        } catch (error) {
+            console.error('Error starting voice recording:', error);
+            addToast('Could not access microphone. Please check permissions.', 'error');
+        }
+    };
+
+    const stopVoiceRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+            setVoiceStatus('processing');
+        }
+    };
+
+    const transcribeAudio = async (audioBlob: Blob) => {
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = (reader.result as string).split(',')[1];
+                
+                const result = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: [{
+                        parts: [
+                            { text: 'Transcribe this audio accurately:' },
+                            { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
+                        ]
+                    }]
+                });
+
+                const transcribedText = result.text.trim();
+                if (transcribedText) {
+                    setInput(transcribedText);
+                    addToast('Voice transcribed!', 'success');
+                } else {
+                    addToast('Could not transcribe audio. Please try again.', 'error');
+                }
+            };
+        } catch (error) {
+            console.error('Error transcribing audio:', error);
+            addToast('Failed to transcribe audio.', 'error');
+        } finally {
+            setVoiceStatus('idle');
+            setIsVoiceMode(false);
+        }
+    };
+
+    const toggleVoice = () => {
+        if (isVoiceMode) {
+            stopVoiceRecording();
+        } else {
+            startVoiceRecording();
         }
     };
     
@@ -192,143 +323,29 @@ const TextChat: React.FC<{
                         </div>
                     )}
                     <div className="p-4 border-t border-gray-200 bg-white/80 backdrop-blur-lg">
-                        <div className="relative flex items-center">
-                            <button onClick={() => setIsMobilePanelOpen(true)} className="md:hidden mr-2 p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ListIcon /></button>
-                            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Ask me anything..." className="w-full bg-gray-100 border border-gray-200 rounded-full py-3 pl-5 pr-14 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" rows={1} style={{ fieldSizing: 'content' }} disabled={isLoading} />
-                            <button onClick={handleSendMessage} disabled={isLoading || !input.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 bg-lime-600 rounded-full p-2.5 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><SendIcon className="w-5 h-5" /></button>
+                        {voiceStatus === 'processing' && (
+                            <div className="mb-2 text-center">
+                                <span className="text-sm text-gray-500">Processing voice...</span>
+                            </div>
+                        )}
+                        <div className="relative flex items-center gap-2">
+                            <button onClick={() => setIsMobilePanelOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ListIcon /></button>
+                            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder={isVoiceMode ? "Listening..." : "Ask me anything..."} className="flex-1 bg-gray-100 border border-gray-200 rounded-full py-3 pl-5 pr-24 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" rows={1} style={{ fieldSizing: 'content' }} disabled={isLoading || isVoiceMode} />
+                            <button 
+                                onClick={toggleVoice} 
+                                disabled={isLoading || voiceStatus === 'processing'}
+                                className={`absolute right-14 top-1/2 -translate-y-1/2 rounded-full p-2.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isVoiceMode 
+                                        ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                            >
+                                <VoiceIcon className="w-5 h-5" />
+                            </button>
+                            <button onClick={handleSendMessage} disabled={isLoading || !input.trim() || isVoiceMode} className="absolute right-2 top-1/2 -translate-y-1/2 bg-lime-600 rounded-full p-2.5 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><SendIcon className="w-5 h-5" /></button>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    );
-};
-
-
-// --- VOICE ASSISTANT COMPONENT ---
-// Helper audio functions
-function encode(bytes: Uint8Array) { let binary = ''; const len = bytes.byteLength; for (let i = 0; i < len; i++) { binary += String.fromCharCode(bytes[i]); } return btoa(binary); }
-function decode(base64: string) { const binaryString = atob(base64); const len = binaryString.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); } return bytes; }
-async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> { const dataInt16 = new Int16Array(data.buffer); const frameCount = dataInt16.length / numChannels; const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate); for (let channel = 0; channel < numChannels; channel++) { const channelData = buffer.getChannelData(channel); for (let i = 0; i < frameCount; i++) { channelData[i] = dataInt16[i * numChannels + channel] / 32768.0; } } return buffer; }
-function createBlob(data: Float32Array): GenAI_Blob { const l = data.length; const int16 = new Int16Array(l); for (let i = 0; i < l; i++) { int16[i] = data[i] * 32768; } return { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' }; }
-
-type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error';
-interface Transcript { id: number; sender: 'user' | 'bot'; text: string; }
-
-const VoiceAssistant: React.FC = () => {
-    const [status, setStatus] = useState<VoiceStatus>('idle');
-    const [transcripts, setTranscripts] = useState<Transcript[]>([]);
-    const sessionPromise = useRef<Promise<any> | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const { addToast } = useToast();
-    const transcriptContainerRef = useRef<HTMLDivElement>(null);
-    let nextStartTime = 0;
-    
-    const cleanup = () => {
-        if(sessionPromise.current) {
-            sessionPromise.current.then(session => session.close());
-            sessionPromise.current = null;
-        }
-        streamRef.current?.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-        setStatus('idle');
-    };
-
-    useEffect(() => {
-        return cleanup;
-    }, []);
-
-    useEffect(() => {
-        transcriptContainerRef.current?.scrollTo(0, transcriptContainerRef.current.scrollHeight);
-    }, [transcripts]);
-
-    const startSession = async () => {
-        setStatus('connecting');
-        let currentInputTranscription = '';
-        let currentOutputTranscription = '';
-
-        try {
-            const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-            const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-            
-            sessionPromise.current = ai.live.connect({
-                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-                callbacks: {
-                    onopen: async () => {
-                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        streamRef.current = stream;
-                        setStatus('listening');
-                        const source = inputAudioContext.createMediaStreamSource(stream);
-                        const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
-                        scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-                            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-                            const pcmBlob = createBlob(inputData);
-                            sessionPromise.current?.then((session) => { session.sendRealtimeInput({ media: pcmBlob }); });
-                        };
-                        source.connect(scriptProcessor);
-                        scriptProcessor.connect(inputAudioContext.destination);
-                    },
-                    onmessage: async (message: LiveServerMessage) => {
-                        if (message.serverContent?.outputTranscription) { currentOutputTranscription += message.serverContent.outputTranscription.text; } 
-                        else if (message.serverContent?.inputTranscription) { currentInputTranscription += message.serverContent.inputTranscription.text; }
-                        
-                        if (message.serverContent?.turnComplete) {
-                            if(currentInputTranscription.trim()) setTranscripts(prev => [...prev, { id: Date.now(), sender: 'user', text: currentInputTranscription }]);
-                            if(currentOutputTranscription.trim()) setTranscripts(prev => [...prev, { id: Date.now()+1, sender: 'bot', text: currentOutputTranscription }]);
-                            currentInputTranscription = ''; currentOutputTranscription = '';
-                        }
-                        
-                        const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
-                        if (base64Audio) {
-                            setStatus('speaking');
-                            nextStartTime = Math.max(nextStartTime, outputAudioContext.currentTime);
-                            const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContext, 24000, 1);
-                            const source = outputAudioContext.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(outputAudioContext.destination);
-                            source.start(nextStartTime);
-                            nextStartTime += audioBuffer.duration;
-                            source.onended = () => {
-                                if (outputAudioContext.currentTime >= nextStartTime - 0.1) { setStatus('listening'); }
-                            };
-                        }
-                    },
-                    onerror: (e: ErrorEvent) => { setStatus('error'); console.error('Live session error:', e); addToast('A connection error occurred.', 'error'); cleanup(); },
-                    onclose: (e: CloseEvent) => { cleanup(); },
-                },
-                config: { responseModalities: [Modality.AUDIO], inputAudioTranscription: {}, outputAudioTranscription: {} },
-            });
-        } catch(e) {
-            setStatus('error');
-            console.error("Failed to start session:", e);
-            addToast("Could not start voice session. Check microphone permissions.", "error");
-        }
-    };
-
-    return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 bg-white">
-            <div ref={transcriptContainerRef} className="w-full max-w-2xl h-40 overflow-y-auto mb-4 text-center space-y-2">
-                {transcripts.map(t => <p key={t.id} className={`${t.sender === 'user' ? 'text-gray-800 font-semibold' : 'text-gray-600'}`}>{t.text}</p>)}
-            </div>
-            <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center">
-                <div className={`w-full h-full rounded-full moon-sphere transition-all duration-300
-                    ${status === 'listening' ? 'animate-[moon-listening-pulse_2s_infinite]' : ''}
-                    ${status === 'speaking' ? 'animate-[moon-speaking-pulse_1.5s_infinite]' : ''}`}
-                ></div>
-                <div className="absolute text-center text-white font-semibold">
-                    {status === 'idle' && "Tap to Start"}
-                    {status === 'connecting' && "Connecting..."}
-                    {status === 'listening' && "Listening..."}
-                    {status === 'speaking' && "Speaking..."}
-                    {status === 'error' && "Error"}
-                </div>
-            </div>
-            <div className="mt-8">
-                {status === 'idle' || status === 'error' ?
-                    <button onClick={startSession} className="px-6 py-3 bg-lime-600 text-white font-bold rounded-full hover:bg-lime-700 transition-colors">Start Conversation</button>
-                    :
-                    <button onClick={cleanup} className="px-6 py-3 bg-red-600 text-white font-bold rounded-full hover:bg-red-700 transition-colors">End Conversation</button>
-                }
             </div>
         </div>
     );
@@ -341,7 +358,6 @@ interface ChatProps {
 }
 
 export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
-    const [mode, setMode] = useState<'text' | 'voice'>('text');
     const [conversations, setConversations] = useState<ChatConversation[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [isHistoryLoading, setIsHistoryLoading] = useState(true);
@@ -349,9 +365,8 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
     const { addToast } = useToast();
 
-    // Fetch and subscribe to conversation list (for text chat)
+    // Fetch and subscribe to conversation list
     useEffect(() => {
-        if (mode !== 'text') return;
         setIsHistoryLoading(true);
         const fetchConversations = async () => {
             const { data, error } = await supabase.from('chat_conversations').select('*').eq('user_id', userProfile.uid).order('last_updated_at', { ascending: false });
@@ -369,7 +384,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
                 }
         ).subscribe();
         return () => { supabase.removeChannel(channel); }
-    }, [userProfile.uid, addToast, mode]);
+    }, [userProfile.uid, addToast]);
 
     const handleNewChat = () => setActiveConversationId(null);
     const onRenameConversation = async (id: string, newTitle: string) => await supabase.from('chat_conversations').update({ title: newTitle }).eq('id', id);
@@ -401,28 +416,18 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     return (
         <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-white rounded-xl border border-gray-200">
             <ConfirmationModal {...modalState} onCancel={() => setModalState(s => ({...s, isOpen: false}))} isConfirming={isDeleting} />
-            <div className="flex-shrink-0 p-3 border-b border-gray-200 flex justify-center">
-                <div className="bg-gray-100 p-1 rounded-full flex w-fit">
-                    <button onClick={() => setMode('text')} className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 transition-colors ${mode === 'text' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}><TextIcon className="w-5 h-5"/> Text Tutor</button>
-                    <button onClick={() => setMode('voice')} className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 transition-colors ${mode === 'voice' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}><VoiceIcon className="w-5 h-5"/> Voice Assistant</button>
-                </div>
-            </div>
-            {mode === 'text' ? (
-                <TextChat 
-                    userProfile={userProfile}
-                    conversations={conversations}
-                    activeConversationId={activeConversationId}
-                    setActiveConversationId={setActiveConversationId}
-                    isHistoryLoading={isHistoryLoading}
-                    handleDeleteConversation={handleDeleteConversation}
-                    handleRenameConversation={onRenameConversation}
-                    handleClearAll={onClearAll}
-                    handleNewChat={handleNewChat}
-                    isDeleting={isDeleting}
-                />
-            ) : (
-                <VoiceAssistant />
-            )}
+            <TextChat 
+                userProfile={userProfile}
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                setActiveConversationId={setActiveConversationId}
+                isHistoryLoading={isHistoryLoading}
+                handleDeleteConversation={handleDeleteConversation}
+                handleRenameConversation={onRenameConversation}
+                handleClearAll={onClearAll}
+                handleNewChat={handleNewChat}
+                isDeleting={isDeleting}
+            />
         </div>
     );
 };

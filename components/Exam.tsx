@@ -100,11 +100,10 @@ const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHis
 
 interface ExamProps {
   userProfile: UserProfile;
-  onXPEarned: (xp: number, type: 'test') => void;
   userProgress: UserProgress;
 }
 
-export const Exam: React.FC<ExamProps> = ({ userProfile, onXPEarned, userProgress }) => {
+export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [examState, setExamState] = useState<'start' | 'generating' | 'in_progress' | 'completed' | 'history' | 'review'>('start');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
@@ -178,8 +177,6 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, onXPEarned, userProgres
           const currentScore = scoreRef.current;
           const currentAnswers = userAnswersRef.current;
           
-          const xpEarned = currentScore * 10;
-          
           const filledUserAnswers = [...currentAnswers];
           while (filledUserAnswers.length < questions.length) {
               filledUserAnswers.push("Unanswered");
@@ -190,7 +187,6 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, onXPEarned, userProgres
               course_id: userProfile.course_id,
               score: currentScore,
               total_questions: questions.length,
-              xp_earned: xpEarned,
               timestamp: Date.now(),
               questions: questions.map((q, i) => ({
                   ...q,
@@ -208,13 +204,11 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, onXPEarned, userProgres
                       user_id: userProfile.uid,
                       type: 'exam_reminder' as const,
                       title: 'Exam Finished!',
-                      message: `You scored ${currentScore}/${questions.length} and earned ${xpEarned} XP!`,
+                      message: `You scored ${currentScore}/${questions.length}!`,
                       is_read: false,
                   };
                   const { error: notificationError } = await supabase.from('notifications').insert(notificationData);
                   if (notificationError) throw notificationError;
-                  
-                  onXPEarned(xpEarned, 'test');
               } catch (error) {
                   console.error("Failed to save exam results:", error);
                   addToast("Could not save your exam results.", 'error');
@@ -227,7 +221,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, onXPEarned, userProgres
           
           return 'completed';
       });
-  }, [questions, userProfile.course_id, userProfile.uid, onXPEarned, addToast]);
+  }, [questions, userProfile.course_id, userProfile.uid, addToast]);
 
   useEffect(() => {
       if (examState !== 'in_progress' || timeLeft <= 0) {

@@ -1,7 +1,6 @@
 import React from 'react';
 import type { Notification } from '../types';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
-import { LeaderboardIcon } from './icons/LeaderboardIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { LogoIcon } from './icons/LogoIcon';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
@@ -28,8 +27,6 @@ const NotificationTypeIcon: React.FC<{ type: Notification['type'], className?: s
             return <LogoIcon className={className} />;
         case 'study_update':
             return <StudyGuideIcon className={className} />;
-        case 'leaderboard_change':
-            return <LeaderboardIcon className={className} />;
         case 'exam_reminder':
             return <ExamIcon className={className} />;
         default:

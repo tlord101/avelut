@@ -637,7 +637,7 @@ Student: "${tempInput}"
                 </div>
                 {file && <div className="text-xs text-gray-600 mt-2 flex items-center gap-2 bg-gray-200 p-1 px-2 rounded-md w-fit"><FileIcon /><span>{file.name}</span><button onClick={() => { setFile(null); setFileData(null); }} className="text-red-500 hover:text-red-400">&times;</button></div>}
                 
-                {!isCompleted && <button onClick={() => onMarkComplete(topic.topic_id)} disabled={isIllustrating || isLoading} className="mt-4 w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">Mark as Complete (+2 XP)</button>}
+                {!isCompleted && <button onClick={() => onMarkComplete(topic.topic_id)} disabled={isIllustrating || isLoading} className="mt-4 w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">Mark as Complete</button>}
             </footer>
         </div>
     );
@@ -751,40 +751,20 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     }
     
     try {
-        // First, try using the RPC function for XP calculation
-        const { error: rpcError } = await supabase.rpc('mark_topic_complete', {
-            p_topic_id: topicId,
-            p_user_id: userProfile.uid,
-        });
-
-        // If RPC fails, fall back to direct upsert
-        if (rpcError) {
-            console.warn("RPC failed, using direct upsert:", rpcError);
-            const { error: upsertError } = await supabase
-                .from('user_progress')
-                .upsert({
-                    user_id: userProfile.uid,
-                    topic_id: topicId,
-                    is_complete: true,
-                    xp_earned: 2,
-                }, {
-                    onConflict: 'user_id,topic_id'
-                });
-            
-            if (upsertError) throw upsertError;
-            
-            // Also update the user's XP
-            const { error: xpError } = await supabase
-                .from('user_profiles')
-                .update({ 
-                    xp: userProfile.xp + 2 
-                })
-                .eq('uid', userProfile.uid);
-            
-            if (xpError) console.warn("Could not update XP:", xpError);
-        }
+        // Use direct upsert to mark topic as complete
+        const { error: upsertError } = await supabase
+            .from('user_progress')
+            .upsert({
+                user_id: userProfile.uid,
+                topic_id: topicId,
+                is_complete: true,
+            }, {
+                onConflict: 'user_id,topic_id'
+            });
         
-        addToast(`Topic complete! +2 XP`, 'success');
+        if (upsertError) throw upsertError;
+        
+        addToast(`Topic complete!`, 'success');
         
         // Close the learning interface to trigger a refresh of the study guide
         setSelectedTopic(null);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { User, RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, PrivateChat, LeaderboardEntry, Subject } from './types';
+import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, PrivateChat, Subject } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
 import { Onboarding } from './components/Onboarding';
@@ -87,14 +87,6 @@ const App: React.FC = () => {
         try {
             const { error } = await supabase.from('users').update(updatedData).eq('uid', user.id);
             if (error) throw error;
-            
-            if (updatedData.display_name !== undefined || updatedData.photo_url !== undefined) {
-                const leaderboardUpdate: { display_name?: string; photo_url?: string } = {};
-                if (updatedData.display_name !== undefined) leaderboardUpdate.display_name = updatedData.display_name;
-                if (updatedData.photo_url !== undefined) leaderboardUpdate.photo_url = updatedData.photo_url;
-                
-                await supabase.from('leaderboard_overall').update(leaderboardUpdate).eq('user_id', user.id);
-            }
 
             const userUpdatePayload: { data?: any, password?: string } = { data: {} };
             if (updatedData.display_name) userUpdatePayload.data.display_name = updatedData.display_name;
@@ -279,10 +271,10 @@ const App: React.FC = () => {
             .channel(`public:user_progress:user_id=eq.${userProfile.uid}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'user_progress', filter: `user_id=eq.${userProfile.uid}`}, payload => {
                  if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                    const newItem = payload.new as { topic_id: string; is_complete: boolean; xp_earned: number };
+                    const newItem = payload.new as { topic_id: string; is_complete: boolean };
                     setUserProgress(prev => ({
                         ...prev,
-                        [newItem.topic_id]: { is_complete: newItem.is_complete, xp_earned: newItem.xp_earned }
+                        [newItem.topic_id]: { is_complete: newItem.is_complete }
                     }));
                 } else if (payload.eventType === 'DELETE') {
                     const oldItem = payload.old as { topic_id: string };
@@ -304,7 +296,7 @@ const App: React.FC = () => {
             } else if (data) {
                 const progressData: UserProgress = {};
                 data.forEach(item => {
-                    progressData[item.topic_id] = { is_complete: item.is_complete, xp_earned: item.xp_earned };
+                    progressData[item.topic_id] = { is_complete: item.is_complete };
                 });
                 setUserProgress(progressData);
             }
@@ -346,15 +338,10 @@ const App: React.FC = () => {
                 const { data: examHistory, error: examError } = await supabase.from('exam_history').select('*').eq('user_id', userProfile.uid).order('timestamp', { ascending: false }).limit(5);
                 if(examError) throw examError;
 
-                const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                const { data: xpHistory, error: xpError } = await supabase.from('xp_history').select('date, xp').eq('user_id', userProfile.uid).gte('date', thirtyDaysAgo).order('date', { ascending: true });
-                if(xpError) throw xpError;
-
                 setDashboardData({ 
                     totalTopics, 
                     completedTopicsCount, 
-                    examHistory: examHistory as ExamHistoryItem[], 
-                    xpHistory: xpHistory || [] 
+                    examHistory: examHistory as ExamHistoryItem[]
                 });
 
             } catch (error) {
@@ -400,31 +387,6 @@ const App: React.FC = () => {
             })
             .subscribe();
 
-        const xpHistoryChannel = supabase
-            .channel(`public:xp_history:user_id=eq.${userProfile.uid}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'xp_history', filter: `user_id=eq.${userProfile.uid}` }, payload => {
-                const changedRecord = payload.new as { date: string, xp: number };
-                setDashboardData(prev => {
-                    if (!prev) return null;
-                    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).getTime();
-                    let updatedXpHistory;
-                    const existingIndex = prev.xpHistory.findIndex(item => item.date === changedRecord.date);
-                    if (existingIndex > -1) {
-                        updatedXpHistory = [...prev.xpHistory];
-                        updatedXpHistory[existingIndex] = changedRecord;
-                    } else {
-                        updatedXpHistory = [...prev.xpHistory, changedRecord];
-                    }
-                    
-                    updatedXpHistory = updatedXpHistory
-                        .filter(item => new Date(item.date).getTime() >= thirtyDaysAgo)
-                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-                    return { ...prev, xpHistory: updatedXpHistory };
-                });
-            })
-            .subscribe();
-
         const fetchInitialData = async () => {
             const { count } = await supabase.from('private_chats').select('*', { count: 'exact', head: true }).contains('members', [userProfile.uid]).not('last_message->read_by', 'cs', `{${userProfile.uid}}`);
             setUnreadMessagesCount(count || 0);
@@ -445,7 +407,6 @@ const App: React.FC = () => {
             supabase.removeChannel(notificationsChannel);
             supabase.removeChannel(chatsChannel);
             supabase.removeChannel(examHistoryChannel);
-            supabase.removeChannel(xpHistoryChannel);
         }
     }, [userProfile, userProgress]);
 
@@ -474,8 +435,6 @@ const App: React.FC = () => {
             photo_url: photoURL,
             course_id: profileData.courseId,
             level: profileData.level,
-            total_xp: 0,
-            total_test_xp: 0,
             current_streak: 0,
             last_activity_date: now,
             notifications_enabled: false,
@@ -505,19 +464,6 @@ const App: React.FC = () => {
             addToast(error.message || "Could not save your profile.", "error");
         }
     };
-
-    const handleXPEarned = useCallback(async (xp: number, type: 'lesson' | 'test' = 'lesson') => {
-        if (!userProfile) return;
-        const { error } = await supabase.rpc('handle_xp_earned', {
-            p_user_id: userProfile.uid,
-            p_xp_amount: xp,
-            p_xp_type: type,
-        });
-        if (error) {
-            console.error("Failed to update XP:", (error as Error).message || error);
-            addToast("There was an issue recording your XP.", "error");
-        }
-    }, [userProfile, addToast]);
 
     const handleMarkNotificationRead = async (id: string) => {
         if (!user) return;
@@ -692,7 +638,6 @@ const App: React.FC = () => {
                             userProfile={userProfile}
                             userProgress={userProgress}
                             dashboardData={dashboardData}
-                            handleXPEarned={handleXPEarned}
                             handleLogout={handleLogout}
                             handleProfileUpdate={handleProfileUpdate}
                             handleDeleteAccount={handleAccountDeletion}
