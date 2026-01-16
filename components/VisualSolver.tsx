@@ -327,6 +327,36 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         }
     }, [scannedImage, attemptApiCall, addToast]);
 
+    const handleSolution = useCallback(async () => {
+        if (!scannedImage) return;
+    
+        setCameraState('analyzing');
+        
+        const result = await attemptApiCall(async () => {
+            const base64Data = scannedImage.split(',')[1];
+            if (!base64Data) throw new Error("Could not extract image data.");
+            
+            const promptText = `Answer the question or solve the problem shown in the image. Provide a clear, concise solution without unnecessary details or lengthy explanations. Give the answer directly as it was asked.`;
+    
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: { parts: [
+                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                    { text: promptText }
+                ]},
+            });
+    
+            setAnalysisResult(response.text);
+        });
+        
+        if (result.success) {
+            setCameraState('showingTutorial');
+        } else {
+            addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+            setCameraState('preview');
+        }
+    }, [scannedImage, attemptApiCall, addToast]);
+
     const handleRetake = () => {
         setScannedImage(null);
         setAnalysisResult('');
@@ -472,6 +502,15 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                             </svg>
                                             Detailed Tutorial
+                                        </button>
+                                        <button 
+                                            onClick={handleSolution} 
+                                            className="w-full bg-white/20 backdrop-blur-sm border-2 border-white text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Solution
                                         </button>
                                         <button 
                                             onClick={handleQuickAnswer} 
