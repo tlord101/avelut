@@ -40,31 +40,117 @@ interface TutorialDisplayProps {
 
 const TutorialDisplay: React.FC<TutorialDisplayProps> = ({ scannedImage, tutorialText, onClose }) => {
     return (
-        <div className="w-full h-full flex flex-col bg-white">
-            <div className="flex-shrink-0 h-[33vh] bg-gray-100 border-b border-gray-200">
-                <img src={scannedImage} alt="Scanned problem" className="w-full h-full object-contain" />
+        <div className="w-full h-full flex flex-col bg-gradient-to-b from-gray-50 to-white">
+            <div className="flex-shrink-0 h-[33vh] bg-gradient-to-br from-indigo-50 to-blue-50 border-b-2 border-indigo-200 shadow-sm">
+                <img src={scannedImage} alt="Scanned problem" className="w-full h-full object-contain p-2" />
             </div>
-            <div className="flex-1 p-4 sm:p-6 overflow-hidden min-h-0">
-                <div className="max-w-none text-gray-800 h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                            p: ({node, ...props}) => <p className="mb-4 text-base leading-relaxed" {...props} />,
-                            h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2" {...props} />,
-                            h2: ({node, ...props}) => <h2 className="text-xl font-bold text-gray-900 mb-3" {...props} />,
-                            strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
-                            ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-2 my-4 pl-2" {...props} />,
-                        }}
-                    >
-                        {tutorialText}
-                    </ReactMarkdown>
+            <div className="flex-1 px-4 py-6 sm:px-8 sm:py-8 overflow-hidden min-h-0">
+                <div className="max-w-4xl mx-auto h-full">
+                    <div className="h-full overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_#f1f5f9] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-gray-400">
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                                // Main headings - Problem Title
+                                h1: ({node, ...props}) => (
+                                    <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 mb-6 pb-4 border-b-2 border-indigo-200 mt-2" {...props} />
+                                ),
+                                // Section headings - Steps, Analysis, etc.
+                                h2: ({node, ...props}) => (
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 mt-8 pt-4 border-t border-gray-200 flex items-center gap-3 before:content-['▸'] before:text-indigo-500" {...props} />
+                                ),
+                                // Sub-sections
+                                h3: ({node, ...props}) => (
+                                    <h3 className="text-xl sm:text-2xl font-semibold text-indigo-700 mb-3 mt-6 pl-4 border-l-4 border-indigo-400" {...props} />
+                                ),
+                                // Minor headings
+                                h4: ({node, ...props}) => (
+                                    <h4 className="text-lg sm:text-xl font-semibold text-gray-800 mb-2 mt-4" {...props} />
+                                ),
+                                // Paragraphs with better spacing and readability
+                                p: ({node, ...props}) => (
+                                    <p className="mb-5 text-base sm:text-lg leading-relaxed text-gray-700 tracking-wide" {...props} />
+                                ),
+                                // Bold text - for key concepts
+                                strong: ({node, ...props}) => (
+                                    <strong className="font-bold text-gray-900 bg-yellow-100 px-1.5 py-0.5 rounded" {...props} />
+                                ),
+                                // Italic text - for emphasis
+                                em: ({node, ...props}) => (
+                                    <em className="italic text-indigo-600 font-medium" {...props} />
+                                ),
+                                // Unordered lists with better styling
+                                ul: ({node, ...props}) => (
+                                    <ul className="list-none space-y-3 my-5 pl-1" {...props} />
+                                ),
+                                // List items with custom bullets
+                                li: ({node, ...props}) => (
+                                    <li className="flex items-start gap-3 text-base sm:text-lg text-gray-700 leading-relaxed before:content-['●'] before:text-indigo-500 before:font-bold before:text-xl before:mt-0.5 before:flex-shrink-0" {...props} />
+                                ),
+                                // Ordered lists for steps
+                                ol: ({node, ...props}) => (
+                                    <ol className="list-none space-y-4 my-6 counter-reset-[step]" {...props} />
+                                ),
+                                // Code blocks with syntax highlighting style
+                                code: ({node, inline, ...props}: any) => 
+                                    inline ? (
+                                        <code className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-mono text-sm border border-indigo-200" {...props} />
+                                    ) : (
+                                        <code className="block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm leading-relaxed border-l-4 border-indigo-500" {...props} />
+                                    ),
+                                // Pre blocks for code
+                                pre: ({node, ...props}) => (
+                                    <pre className="bg-gray-900 rounded-lg overflow-hidden my-5 shadow-lg" {...props} />
+                                ),
+                                // Blockquotes for important notes
+                                blockquote: ({node, ...props}) => (
+                                    <blockquote className="border-l-4 border-amber-400 bg-amber-50 pl-6 pr-4 py-4 my-5 rounded-r-lg shadow-sm" {...props} />
+                                ),
+                                // Tables with better styling
+                                table: ({node, ...props}) => (
+                                    <div className="overflow-x-auto my-6 shadow-md rounded-lg">
+                                        <table className="min-w-full divide-y divide-gray-200 border border-gray-200" {...props} />
+                                    </div>
+                                ),
+                                thead: ({node, ...props}) => (
+                                    <thead className="bg-indigo-600 text-white" {...props} />
+                                ),
+                                tbody: ({node, ...props}) => (
+                                    <tbody className="bg-white divide-y divide-gray-200" {...props} />
+                                ),
+                                tr: ({node, ...props}) => (
+                                    <tr className="hover:bg-gray-50 transition-colors" {...props} />
+                                ),
+                                th: ({node, ...props}) => (
+                                    <th className="px-6 py-4 text-left text-sm font-bold uppercase tracking-wider" {...props} />
+                                ),
+                                td: ({node, ...props}) => (
+                                    <td className="px-6 py-4 text-sm text-gray-700" {...props} />
+                                ),
+                                // Horizontal rules
+                                hr: ({node, ...props}) => (
+                                    <hr className="my-8 border-t-2 border-gray-200" {...props} />
+                                ),
+                            }}
+                        >
+                            {tutorialText}
+                        </ReactMarkdown>
+                    </div>
                 </div>
             </div>
-            <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white/80 backdrop-blur-sm grid grid-cols-1 gap-3">
-                <button onClick={onClose} className="w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                    Scan Another
-                </button>
+            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-gray-200 bg-white/90 backdrop-blur-md shadow-lg">
+                <div className="max-w-4xl mx-auto">
+                    <button 
+                        onClick={onClose} 
+                        className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Scan Another Problem
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -276,7 +362,60 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const promptText = `You are VANTUTOR, an expert AI educator. Analyze the problem in the image and provide a clear, step-by-step tutorial on how to solve it. Break down the solution into simple, easy-to-understand steps. Use Markdown for formatting and LaTeX for any mathematical equations.`;
+            const promptText = `You are VANTUTOR, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.
+
+**FORMATTING REQUIREMENTS:**
+1. Start with a clear # Title identifying the problem type
+2. Use ## for major sections (Understanding, Solution, Steps, etc.)
+3. Use ### for sub-sections
+4. Number all solution steps clearly
+5. **Bold** all key concepts, formulas, and important terms
+6. Use *italics* for emphasis and definitions
+7. Wrap ALL mathematical expressions in LaTeX:
+   - Inline math: $x^2 + y^2 = z^2$
+   - Display math: $$\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$
+8. Use > blockquotes for important notes, tips, or warnings
+9. Create clear visual hierarchy with proper spacing
+10. Use bullet points for lists of concepts
+11. Use numbered lists for sequential steps
+12. Add horizontal rules (---) between major sections
+13. Use tables for comparing values or showing work
+
+**STRUCTURE YOUR RESPONSE:**
+# [Problem Type/Title]
+
+## 📋 Understanding the Problem
+[Explain what we're solving and identify given information]
+
+## 🎯 Key Concepts
+- **Concept 1**: Definition
+- **Concept 2**: Definition
+
+## 📝 Solution Strategy
+[Overview of approach]
+
+## 🔢 Step-by-Step Solution
+
+### Step 1: [Action]
+Detailed explanation with math: $formula$
+
+### Step 2: [Action]
+$$
+detailed\\:calculation
+$$
+
+[Continue with all steps...]
+
+## ✅ Final Answer
+[Clear, highlighted answer]
+
+## 💡 Key Takeaways
+- Important point 1
+- Important point 2
+
+> **Note:** [Any important reminders or common mistakes to avoid]
+
+Make it visually engaging, well-spaced, and easy to follow!`;
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',

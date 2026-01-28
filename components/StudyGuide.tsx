@@ -287,9 +287,22 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const tempFile = file;
         const tempFileData = fileData;
 
+        // Clear input immediately for better UX
         setInput('');
         setFile(null);
         setFileData(null);
+        
+        // Create optimistic user message with temporary ID
+        const optimisticUserMessage: Message = {
+            id: `temp-${Date.now()}`,
+            text: tempInput || undefined,
+            sender: 'user',
+            timestamp: Date.now(),
+            image_url: undefined,
+        };
+        
+        // Show user message immediately
+        setMessages(prev => [...prev, optimisticUserMessage]);
         setIsLoading(true);
 
         try {
@@ -325,17 +338,27 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             
             if (saveUserError || !savedUserMessage) throw saveUserError || new Error("Failed to save user message.");
             
-            // Create message for local state
-            const newUserMessage: Message = {
+            // Update the optimistic message with real data from database
+            setMessages(prev => prev.map(m => 
+                m.id === optimisticUserMessage.id
+                    ? {
+                        id: savedUserMessage.id,
+                        text: savedUserMessage.text || undefined,
+                        sender: 'user' as const,
+                        timestamp: new Date(savedUserMessage.timestamp).getTime(),
+                        image_url: savedUserMessage.image_url,
+                    }
+                    : m
+            ));
+            
+            // Get updated messages for API call
+            const updatedMessages = [...messages, {
                 id: savedUserMessage.id,
                 text: savedUserMessage.text || undefined,
-                sender: 'user',
+                sender: 'user' as const,
                 timestamp: new Date(savedUserMessage.timestamp).getTime(),
                 image_url: savedUserMessage.image_url,
-            };
-            
-            const updatedMessages = [...messages, newUserMessage];
-            setMessages(updatedMessages);
+            }];
 
             const result = await attemptApiCall(async () => {
                 const history = updatedMessages.map(m => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text || ''}`).join('\n');
@@ -538,21 +561,46 @@ Student: "${tempInput}"
                                         </div>
                                     )}
                                     {message.sender === 'user' ? (
-                                        <p className="text-sm whitespace-pre-wrap user-select-text">{message.text}</p>
+                                        <p className="text-sm sm:text-base whitespace-pre-wrap break-words">{message.text}</p>
                                     ) : (
                                         message.text &&
-                                        <div className="text-sm prose max-w-none user-select-text">
+                                        <div className="text-sm sm:text-base prose prose-sm max-w-none">
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm, remarkMath]}
                                                 rehypePlugins={[rehypeKatex]}
                                                 components={{
-                                                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                                                    strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
-                                                    em: ({node, ...props}) => <em className="italic" {...props} />,
-                                                    ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1 my-2" {...props} />,
-                                                    ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1 my-2" {...props} />,
-                                                    li: ({node, ...props}) => <li className="text-gray-700" {...props} />,
-                                                    a: ({node, ...props}) => <a className="text-lime-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                                                    // Headings
+                                                    h1: ({node, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3 mt-2" {...props} />,
+                                                    h2: ({node, ...props}) => <h2 className="text-lg font-bold text-gray-900 mb-2 mt-3" {...props} />,
+                                                    h3: ({node, ...props}) => <h3 className="text-base font-semibold text-gray-800 mb-2 mt-2" {...props} />,
+                                                    // Paragraphs with better spacing
+                                                    p: ({node, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800" {...props} />,
+                                                    // Bold - highlighted key concepts
+                                                    strong: ({node, ...props}) => <strong className="font-bold text-gray-900 bg-yellow-100 px-1 py-0.5 rounded" {...props} />,
+                                                    // Italics for emphasis
+                                                    em: ({node, ...props}) => <em className="italic text-lime-700 font-medium" {...props} />,
+                                                    // Lists with better styling
+                                                    ul: ({node, ...props}) => <ul className="list-disc list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                                    ol: ({node, ...props}) => <ol className="list-decimal list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                                    li: ({node, ...props}) => <li className="text-gray-700 leading-relaxed pl-1" {...props} />,
+                                                    // Links
+                                                    a: ({node, ...props}) => <a className="text-lime-600 hover:text-lime-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />,
+                                                    // Code blocks
+                                                    code: ({node, inline, ...props}: any) => 
+                                                        inline ? (
+                                                            <code className="bg-lime-50 text-lime-800 px-1.5 py-0.5 rounded text-xs font-mono border border-lime-200" {...props} />
+                                                        ) : (
+                                                            <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-3 text-xs font-mono" {...props} />
+                                                        ),
+                                                    pre: ({node, ...props}) => <pre className="bg-gray-900 rounded-lg overflow-hidden my-3" {...props} />,
+                                                    // Blockquotes for notes
+                                                    blockquote: ({node, ...props}) => <blockquote className="border-l-3 border-lime-500 bg-lime-50 pl-4 pr-3 py-2 my-3 rounded-r italic" {...props} />,
+                                                    // Tables
+                                                    table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-gray-200 border border-gray-200 text-xs" {...props} /></div>,
+                                                    th: ({node, ...props}) => <th className="px-3 py-2 bg-lime-100 text-left font-semibold text-gray-900" {...props} />,
+                                                    td: ({node, ...props}) => <td className="px-3 py-2 border-t border-gray-200" {...props} />,
+                                                    // Horizontal rules
+                                                    hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
                                                 }}
                                             >
                                                 {message.text}
@@ -615,22 +663,34 @@ Student: "${tempInput}"
                 <div className="relative flex items-center">
                     <textarea 
                         value={input} 
-                        onChange={(e) => setInput(e.target.value)} 
-                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} 
+                        onChange={(e) => {
+                            e.preventDefault();
+                            setInput(e.target.value);
+                        }} 
+                        onKeyDown={(e) => { 
+                            if (e.key === 'Enter' && !e.shiftKey) { 
+                                e.preventDefault(); 
+                                handleSend(); 
+                            } 
+                        }} 
                         placeholder="Ask a question..." 
-                        className="w-full bg-white border border-gray-300 rounded-full py-3 pl-12 pr-14 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" 
+                        className="w-full bg-white border border-gray-300 rounded-full py-3 pl-12 pr-14 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none resize-none overflow-hidden" 
                         rows={1}
-                        style={{ fieldSizing: 'content' }}
-                        disabled={isLoading || isIllustrating} 
+                        disabled={isLoading || isIllustrating}
+                        autoComplete="off"
+                        spellCheck="true"
                     />
                     <label className="absolute left-4 cursor-pointer text-gray-500 hover:text-gray-900 transition-colors">
                         <PaperclipIcon className="w-5 h-5" />
                         <input type="file" className="hidden" onChange={handleFileChange} disabled={isLoading || isIllustrating} accept="image/*" />
                     </label>
                     <button 
-                        onClick={() => handleSend()} 
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleSend();
+                        }} 
                         disabled={isLoading || isIllustrating || (!input.trim() && !file)} 
-                        className="absolute right-3 bg-lime-600 rounded-full p-2 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="absolute right-3 bg-lime-600 rounded-full p-2 text-white hover:bg-lime-700 active:bg-lime-800 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-lime-600"
                     >
                         <SendIcon className="w-5 h-5" />
                     </button>
