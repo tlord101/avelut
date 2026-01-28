@@ -176,6 +176,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const [analysisResult, setAnalysisResult] = useState<string>('');
     const [error, setError] = useState<string>('');
     const [cropBox, setCropBox] = useState<CropBox>({ x: 0.05, y: 0.125, width: 0.9, height: 0.75 });
+    const [customPrompt, setCustomPrompt] = useState<string>('');
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -362,7 +363,9 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const promptText = `You are VANTUTOR, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.
+            const basePrompt = `You are VANTUTOR, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.`;
+            const customInstruction = customPrompt ? `\n\n**ADDITIONAL INSTRUCTIONS FROM USER:**\n${customPrompt}\n` : '';
+            const promptText = `${basePrompt}${customInstruction}
 
 **FORMATTING REQUIREMENTS:**
 1. Start with a clear # Title identifying the problem type
@@ -434,7 +437,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, addToast]);
+    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
 
     const handleQuickAnswer = useCallback(async () => {
         if (!scannedImage) return;
@@ -445,7 +448,9 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const promptText = `Analyze the problem in the image and provide only the final answer, without any explanation or steps. Be direct and concise.`;
+            const basePrompt = `Analyze the problem in the image and provide only the final answer, without any explanation or steps. Be direct and concise.`;
+            const customInstruction = customPrompt ? ` ${customPrompt}` : '';
+            const promptText = `${basePrompt}${customInstruction}`;
     
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -464,7 +469,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, addToast]);
+    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
 
     const handleSolution = useCallback(async () => {
         if (!scannedImage) return;
@@ -475,7 +480,9 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const promptText = `Answer the question or solve the problem shown in the image. Provide a clear, concise solution without unnecessary details or lengthy explanations. Give the answer directly as it was asked.`;
+            const basePrompt = `Answer the question or solve the problem shown in the image. Provide a clear, concise solution without unnecessary details or lengthy explanations. Give the answer directly as it was asked.`;
+            const customInstruction = customPrompt ? ` ${customPrompt}` : '';
+            const promptText = `${basePrompt}${customInstruction}`;
     
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -494,12 +501,13 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, addToast]);
+    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
 
     const handleRetake = () => {
         setScannedImage(null);
         setAnalysisResult('');
         setError('');
+        setCustomPrompt('');
         initializeCamera();
     };
 
@@ -633,6 +641,15 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                                 </div>
                                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-6 pt-12">
                                     <div className="max-w-sm mx-auto space-y-3">
+                                        <div className="mb-4">
+                                            <textarea
+                                                value={customPrompt}
+                                                onChange={(e) => setCustomPrompt(e.target.value)}
+                                                placeholder="Optional: Add custom instructions (e.g., 'Explain this step by step', 'Focus on the methodology', etc.)"
+                                                className="w-full bg-white/20 backdrop-blur-sm border-2 border-white/50 text-white placeholder-white/70 rounded-xl p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-400 transition-all"
+                                                rows={2}
+                                            />
+                                        </div>
                                         <button 
                                             onClick={handleAnalyze} 
                                             className="w-full bg-gradient-to-r from-lime-600 to-lime-500 text-white font-bold py-4 px-6 rounded-xl hover:from-lime-700 hover:to-lime-600 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
