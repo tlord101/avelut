@@ -13,7 +13,6 @@ import { GoogleGenAI } from '@google/genai';
 import { db, storage, auth, onAuthStateChanged, firebaseSignOut, type FirebaseUser, GoogleAuthProvider, signInWithPopup, updateProfile } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, update, serverTimestamp as firebaseServerTimestamp, onDisconnect } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { supabase } from '../supabase';
 
 // @ts-ignore
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -172,7 +171,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 
                 // Send voice message to Gemini for live response
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     contents: [{
                         parts: [
                             { text: 'Please respond conversationally to this voice message. Keep your response natural and friendly for a chat conversation.' },
@@ -342,8 +341,8 @@ const MessengerAuth: React.FC<MessengerAuthProps> = ({ userProfile }) => {
             // Create/update user record in RTDB for discovery and presence
             const userRef = dbRef(db, `users/${user.uid}`);
             await set(userRef, {
-                displayName: userProfile.display_name, // Use Supabase profile name as source of truth
-                photoURL: userProfile.photo_url,      // Use Supabase photo as source of truth
+                displayName: userProfile.display_name, // Use RTDB profile name as source of truth
+                photoURL: userProfile.photo_url,      // Use RTDB photo as source of truth
             });
             
             addToast("Successfully signed into Messenger!", "success");
@@ -402,9 +401,8 @@ const MessengerAuth: React.FC<MessengerAuthProps> = ({ userProfile }) => {
 // --- Main Component: Messenger ---
 interface MessengerProps {
   userProfile: UserProfile;
-  allUsers: UserProfile[]; // Supabase users, for search
 }
-export const Messenger: React.FC<MessengerProps> = ({ userProfile, allUsers }) => {
+export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [view, setView] = useState<'list' | 'chat'>('list');
@@ -445,7 +443,7 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile, allUsers }) =
             return;
         };
 
-        // Sync Supabase profile to Firebase Auth & RTDB
+        // Sync profile to Firebase Auth & RTDB
         const syncFirebaseProfile = async () => {
             const authUpdates: { displayName?: string; photoURL?: string | null } = {};
 

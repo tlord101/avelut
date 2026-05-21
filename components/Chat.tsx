@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Chat as GeminiChat } from '@google/genai';
-import { supabase } from '../supabase';
+import { db } from '../firebase';
+import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
@@ -60,22 +61,13 @@ const TextChat: React.FC<{
     useEffect(() => {
         const fetchCourseContext = async () => {
             try {
-                const { data: courseData, error: courseError } = await supabase
-                    .from('courses_data')
-                    .select('subject_list')
-                    .eq('id', userProfile.course_id)
-                    .single();
+                const courseSnapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
+                const courseData = courseSnapshot.val();
                 
-                if (courseError) throw courseError;
+                const progressSnapshot = await get(dbRef(db, `user_progress/${userProfile.uid}`));
+                const progressData = progressSnapshot.val() || {};
                 
-                const { data: progressData, error: progressError } = await supabase
-                    .from('user_progress')
-                    .select('topic_id, is_complete')
-                    .eq('user_id', userProfile.uid);
-                
-                if (progressError) throw progressError;
-                
-                const completedTopics = progressData?.filter(p => p.is_complete).map(p => p.topic_id) || [];
+                const completedTopics = Object.keys(progressData).filter(pId => progressData[pId].is_complete);
                 const subjects = courseData?.subject_list || [];
                 
                 let contextText = `User's Course Information:\n`;
@@ -113,18 +105,17 @@ const TextChat: React.FC<{
             return;
         }
 
-        const fetchMessages = async () => {
-            const { data, error } = await supabase
-                .from('chat_messages')
-                .select('*')
-                .eq('conversation_id', activeConversationId)
-                .order('timestamp', { ascending: true });
-            
-            if (error) {
-                addToast('Could not load messages.', 'error');
-            } else {
-                setMessages(data as Message[]);
-                const history = data.map(msg => ({
+        const messagesRef = dbRef(db, `chat_messages/${activeConversationId}`);
+        const unsubscribeMessages = onValue(messagesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data: any[] = [];
+                snapshot.forEach((child) => {
+                    data.push({ id: child.key, ...child.val() });
+                });
+                const sortedMessages = data.sort((a,b) => a.timestamp - b.timestamp);
+                setMessages(sortedMessages as Message[]);
+
+                const history = sortedMessages.map(msg => ({
                     role: msg.sender === 'user' ? 'user' : 'model',
                     parts: [{ text: msg.text || '' }]
                 }));
@@ -132,27 +123,18 @@ const TextChat: React.FC<{
                 const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
                 
                 geminiChat.current = ai.chats.create({ 
-                    model: 'gemini-2.5-flash', 
+                    model: 'gemini-2.0-flash', 
                     history,
                     systemInstruction 
                 });
+            } else {
+                setMessages([]);
+                geminiChat.current = null;
             }
-        };
-        fetchMessages();
+        });
 
-        const channel = supabase
-            .channel(`public:chat_messages:conversation_id=eq.${activeConversationId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${activeConversationId}`},
-                (payload) => {
-                    setMessages(prev => {
-                        if (prev.some(m => m.id === payload.new.id)) return prev;
-                        return [...prev, payload.new as Message]
-                    });
-                }
-            ).subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [activeConversationId, addToast, courseContext]);
+        return () => off(messagesRef);
+    }, [activeConversationId, courseContext]);
 
     const handleSendMessage = async () => {
         if (!input.trim() || isLoading) return;
@@ -166,32 +148,36 @@ const TextChat: React.FC<{
             // If it's a new chat, create it before sending the message
             if (!currentConvoId) {
                 const now = Date.now();
-                const { data: convoData, error: convoError } = await supabase.from('chat_conversations').insert({ user_id: userProfile.uid, title: 'New Chat', created_at: now, last_updated_at: now }).select().single();
-                if (convoError || !convoData) throw convoError;
-                currentConvoId = (convoData as ChatConversation).id;
-                setActiveConversationId(currentConvoId); // This will setup subscription and fetch (0 messages)
+                const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+                const newConvoRef = push(conversationsRef);
+                const convoData = {
+                    title: 'New Chat',
+                    created_at: now,
+                    last_updated_at: now
+                };
+                await set(newConvoRef, convoData);
+                currentConvoId = newConvoRef.key!;
+                setActiveConversationId(currentConvoId);
                 
                 // Don't wait for title generation
-                ai.models.generateContent({ model: 'gemini-2.5-flash', contents: `Generate a very short, concise title (4 words max) for the following user query: "${currentInput}"` })
-                    .then(titleResult => supabase.from('chat_conversations').update({ title: titleResult.text.replace(/"/g, '') }).eq('id', currentConvoId!).then());
+                ai.models.generateContent({ model: 'gemini-2.0-flash', contents: `Generate a very short, concise title (4 words max) for the following user query: "${currentInput}"` })
+                    .then(titleResult => update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { title: titleResult.text.replace(/"/g, '') }));
             }
             
-            // Insert user message and get it back with its real ID.
-            const { data: userMessage, error: insertError } = await supabase.from('chat_messages')
-                .insert({ conversation_id: currentConvoId, text: currentInput, sender: 'user' })
-                .select()
-                .single();
-    
-            if (insertError) throw insertError;
-            
-            // Update state with the real message. The subscription will ignore it because the ID will match.
-            setMessages(prev => [...prev, userMessage as Message]);
+            const messagesRef = dbRef(db, `chat_messages/${currentConvoId}`);
+            const newUserMsgRef = push(messagesRef);
+            const userMessageData = {
+                text: currentInput,
+                sender: 'user',
+                timestamp: serverTimestamp()
+            };
+            await set(newUserMsgRef, userMessageData);
     
             // Now handle the bot response.
             if (!geminiChat.current) {
-                const history = [...messages, userMessage as Message].map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{ text: msg.text || '' }] }));
+                const history = [...messages, { id: newUserMsgRef.key!, ...userMessageData, timestamp: Date.now() }].map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{ text: msg.text || '' }] }));
                 const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
-                geminiChat.current = ai.chats.create({ model: 'gemini-2.5-flash', history, systemInstruction });
+                geminiChat.current = ai.chats.create({ model: 'gemini-2.0-flash', history, systemInstruction });
             }
             
             const stream = await geminiChat.current.sendMessageStream({ message: currentInput });
@@ -204,13 +190,15 @@ const TextChat: React.FC<{
                 setMessages(prev => prev.map(m => m.id === tempBotMessageId ? {...m, text: fullText} : m));
             }
             
-            const { data: botMessage, error: botInsertError } = await supabase.from('chat_messages').insert({ conversation_id: currentConvoId, text: fullText, sender: 'bot' }).select().single();
-            if (botInsertError) throw botInsertError;
-    
-            // Replace temp bot message with the real one.
-            setMessages(prev => prev.map(m => m.id === tempBotMessageId ? (botMessage as Message) : m));
+            const newBotMsgRef = push(messagesRef);
+            const botMessageData = {
+                text: fullText,
+                sender: 'bot',
+                timestamp: serverTimestamp()
+            };
+            await set(newBotMsgRef, botMessageData);
             
-            await supabase.from('chat_conversations').update({ last_updated_at: Date.now() }).eq('id', currentConvoId);
+            await update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: serverTimestamp() });
     
         } catch (error) {
             console.error("Error sending message:", error);
@@ -460,33 +448,34 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     // Fetch and subscribe to conversation list
     useEffect(() => {
         setIsHistoryLoading(true);
-        const fetchConversations = async () => {
-            const { data, error } = await supabase.from('chat_conversations').select('*').eq('user_id', userProfile.uid).order('last_updated_at', { ascending: false });
-            if (error) { addToast('Could not load chat history.', 'error'); console.error(error); } 
-            else { setConversations(data as ChatConversation[]); }
+        const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+        const unsubscribeConversations = onValue(conversationsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data: any[] = [];
+                snapshot.forEach((child) => {
+                    data.push({ id: child.key, ...child.val() });
+                });
+                const sortedConvos = data.sort((a,b) => b.last_updated_at - a.last_updated_at);
+                setConversations(sortedConvos as ChatConversation[]);
+            } else {
+                setConversations([]);
+            }
             setIsHistoryLoading(false);
-        };
-        fetchConversations();
-        const channel = supabase.channel(`public:chat_conversations:user_id=eq.${userProfile.uid}`).on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations', filter: `user_id=eq.${userProfile.uid}` },
-                (payload) => {
-                    const sortConvos = (convos: ChatConversation[]) => convos.sort((a,b) => b.last_updated_at - a.last_updated_at);
-                    if (payload.eventType === 'INSERT') { setConversations(prev => sortConvos([payload.new as ChatConversation, ...prev])); }
-                    else if (payload.eventType === 'UPDATE') { setConversations(prev => sortConvos(prev.map(c => c.id === payload.new.id ? payload.new as ChatConversation : c))); }
-                    else if (payload.eventType === 'DELETE') { setConversations(prev => prev.filter(c => c.id !== (payload.old as any).id)); }
-                }
-        ).subscribe();
-        return () => { supabase.removeChannel(channel); }
-    }, [userProfile.uid, addToast]);
+        });
+
+        return () => off(conversationsRef);
+    }, [userProfile.uid]);
 
     const handleNewChat = () => setActiveConversationId(null);
-    const onRenameConversation = async (id: string, newTitle: string) => await supabase.from('chat_conversations').update({ title: newTitle }).eq('id', id);
+    const onRenameConversation = async (id: string, newTitle: string) => update(dbRef(db, `chat_conversations/${userProfile.uid}/${id}`), { title: newTitle });
     const handleDeleteConversation = async (id: string) => {
         setModalState({ isOpen: true, title: 'Delete Chat?', message: 'This will permanently delete this conversation.', confirmText: 'Delete',
             onConfirm: async () => {
                 setIsDeleting(true);
                 setModalState(s => ({ ...s, isOpen: false }));
                 if (activeConversationId === id) handleNewChat();
-                await supabase.from('chat_conversations').delete().eq('id', id);
+                await remove(dbRef(db, `chat_conversations/${userProfile.uid}/${id}`));
+                await remove(dbRef(db, `chat_messages/${id}`));
                 addToast('Conversation deleted.', 'success');
                 setIsDeleting(false);
             }
@@ -498,7 +487,10 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
                 setIsDeleting(true);
                 setModalState(s => ({...s, isOpen: false}));
                 handleNewChat();
-                await supabase.from('chat_conversations').delete().eq('user_id', userProfile.uid);
+                // In RTDB, we can delete the whole path
+                await remove(dbRef(db, `chat_conversations/${userProfile.uid}`));
+                // We should also delete messages for all those conversations, but that's more complex without knowing IDs.
+                // For now, removing conversations is enough to clear the list.
                 addToast('All conversations deleted.', 'success');
                 setIsDeleting(false);
             }

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User } from '@supabase/supabase-js';
+import type { FirebaseUser } from './firebase';
 import type { UserProfile, UserProgress, DashboardData } from './types';
 import { Dashboard } from './components/Dashboard';
 import { StudyGuide } from './components/StudyGuide';
@@ -12,7 +12,7 @@ import { Messenger } from './components/Messenger';
 
 interface MainContentProps {
     activeItem: string;
-    user: User | null;
+    user: FirebaseUser | null;
     userProfile: UserProfile;
     userProgress: UserProgress;
     dashboardData: DashboardData | null;
@@ -20,7 +20,6 @@ interface MainContentProps {
     handleProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string; }>;
     handleDeleteAccount: () => Promise<{ success: boolean; error?: string; }>;
     startTour: () => void;
-    allUsers: UserProfile[];
 }
 
 export const MainContent: React.FC<MainContentProps> = ({
@@ -33,7 +32,6 @@ export const MainContent: React.FC<MainContentProps> = ({
     handleProfileUpdate,
     handleDeleteAccount,
     startTour,
-    allUsers,
 }) => {
     if (!userProfile) return null;
 
@@ -53,7 +51,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'help':
             return <Help onStartTour={startTour} />;
         case 'messenger':
-            return <Messenger userProfile={userProfile} allUsers={allUsers} />;
+            return <Messenger userProfile={userProfile} />;
         default:
             return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
     }

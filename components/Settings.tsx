@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile } from '../types';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { auth, storage, db, type FirebaseUser } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref as dbRef, get } from 'firebase/database';
 import { useToast } from '../hooks/useToast';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -11,7 +12,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 declare var __app_id: string;
 
 interface SettingsProps {
-  user: User | null;
+  user: FirebaseUser | null;
   userProfile: UserProfile;
   onLogout: () => void;
   onProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
@@ -71,14 +72,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
       setIsCourseLoading(true);
       setIsLevelsLoading(true);
       try {
-        // FIX: Migrated from Firebase to Supabase
-        const { data: courseData, error } = await supabase
-          .from('courses_data')
-          .select('course_name, levels')
-          .eq('id', userProfile.course_id)
-          .single();
-
-        if (error) throw error;
+        const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
+        const courseData = snapshot.val();
 
         if (courseData) {
           setCourseName(courseData.course_name || userProfile.course_id.replace(/_/g, ' '));
@@ -210,21 +205,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
 
         setIsSaving(true);
         try {
-            const { error: uploadError } = await supabase.storage
-                .from('profile-pictures')
-                .upload(user.id, file, { upsert: true });
-
-            if (uploadError) throw uploadError;
-            
-            const { data } = supabase.storage
-                .from('profile-pictures')
-                .getPublicUrl(user.id);
+            const avatarRef = storageRef(storage, `profile-pictures/${user.uid}`);
+            const uploadResult = await uploadBytes(avatarRef, file);
+            const downloadURL = await getDownloadURL(uploadResult.ref);
             
             // Add a timestamp to bust cache for updated images
-            const downloadURL = `${data.publicUrl}?t=${new Date().getTime()}`;
+            const cacheBustURL = `${downloadURL}&t=${new Date().getTime()}`;
 
             // FIX: Use snake_case for photo_url
-            const result = await onProfileUpdate({ photo_url: downloadURL });
+            const result = await onProfileUpdate({ photo_url: cacheBustURL });
             if (result.success) {
                 addToast("Profile picture updated!", "success");
             } else {
@@ -243,9 +232,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
         if (!user || !userProfile.photo_url) return;
         setIsSaving(true);
         try {
-            const { error } = await supabase.storage.from('profile-pictures').remove([user.id]);
-            if (error) throw error;
-            
             // FIX: Use snake_case for photo_url
             const result = await onProfileUpdate({ photo_url: "" });
              if (result.success) {

@@ -5,17 +5,16 @@ import App from './App';
 import { ToastProvider } from './hooks/useToast';
 import { LogoIcon } from './components/icons/LogoIcon';
 
-declare var __supabase_url: string;
-declare var __supabase_anon_key: string;
+declare var __firebase_config: any;
 
-// A component to display when Supabase credentials are not configured.
+// A component to display when Firebase credentials are not configured.
 const SetupRequired: React.FC = () => (
   <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
     <div className="w-full max-w-2xl text-center bg-white p-8 rounded-2xl shadow-2xl border border-red-200">
       <LogoIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
       <h1 className="text-3xl font-bold text-red-600">Configuration Required</h1>
       <p className="mt-4 text-lg text-gray-700">
-        Welcome to VANTUTOR! To get started, you need to connect the application to your Supabase backend.
+        Welcome to VANTUTOR! To get started, you need to connect the application to your Firebase project.
       </p>
       <div className="mt-6 text-left bg-gray-50 p-6 rounded-lg border border-gray-200">
         <p className="font-semibold text-gray-800">Please follow these steps:</p>
@@ -23,11 +22,11 @@ const SetupRequired: React.FC = () => (
           <li>Open the <code className="bg-gray-200 text-red-700 font-mono px-1 py-0.5 rounded">index.html</code> file in your project.</li>
           <li>Find the script tag near the bottom of the file.</li>
           <li>
-            Replace <code className="bg-gray-200 text-red-700 font-mono px-1 py-0.5 rounded">"YOUR_SUPABASE_URL"</code> and <code className="bg-gray-200 text-red-700 font-mono px-1 py-0.5 rounded">"YOUR_SUPABASE_ANON_KEY"</code> with your actual Supabase project credentials.
+            Search for <code className="bg-gray-200 text-red-700 font-mono px-1 py-0.5 rounded">window.__firebase_config</code> and replace the placeholder fields with your actual Firebase project config.
           </li>
         </ol>
         <p className="mt-4 text-sm text-gray-500">
-          You can find these credentials in your Supabase project dashboard under <span className="font-semibold">Settings &gt; API</span>.
+          You can find these credentials in your Firebase Project Settings under <span className="font-semibold">General &gt; Your apps &gt; SDK setup and configuration</span>.
         </p>
       </div>
        <p className="mt-6 text-gray-600">
@@ -46,9 +45,7 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 
 const isConfigured = 
-  typeof __supabase_url !== 'undefined' && __supabase_url !== 'YOUR_SUPABASE_URL' &&
-  typeof __supabase_anon_key !== 'undefined' && __supabase_anon_key !== 'YOUR_SUPABASE_ANON_KEY' &&
-  __supabase_url.startsWith('http');
+  typeof __firebase_config !== 'undefined' && __firebase_config.apiKey && __firebase_config.apiKey !== 'YOUR_FIREBASE_API_KEY';
 
 if (isConfigured) {
   root.render(

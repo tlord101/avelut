@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { supabase } from '../supabase';
+import { auth, db, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from '../firebase';
+import { ref as dbRef, set } from 'firebase/database';
 import { LogoIcon } from './icons/LogoIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { useToast } from '../hooks/useToast';
@@ -20,16 +21,11 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
   const handleGoogleSignIn = async () => {
     setIsGoogleSubmitting(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
-      // On successful sign-in, onAuthStateChange will trigger in App.tsx
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      // On successful sign-in, onAuthStateChanged in App.tsx will trigger.
     } catch (err: any) {
-      addToast(err.error_description || err.message || 'Failed to sign in with Google.', 'error');
+      addToast(err.message || 'Failed to sign in with Google.', 'error');
       console.error('Google sign in failed:', err);
     } finally {
       setIsGoogleSubmitting(false);
@@ -45,22 +41,23 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            display_name: displayName.trim(),
-          }
-        }
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      await updateProfile(user, { displayName: displayName.trim() });
+      
+      // Initialize user profile in RTDB
+      await set(dbRef(db, `users/${user.uid}`), {
+        uid: user.uid,
+        display_name: displayName.trim(),
+        email: user.email,
+        created_at: Date.now()
       });
-      if (error) throw error;
-      addToast("Confirmation email sent! Please check your inbox.", "success");
-      onSwitchToLogin();
-      // On successful signup, user needs to confirm email.
-      // onAuthStateChanged in App.tsx will handle the state change once they are verified and log in.
+
+      addToast("Account created successfully!", "success");
+      // onAuthStateChanged in App.tsx will handle the state change.
     } catch (err: any) {
-      let errorMessage = err.error_description || err.message || 'Failed to create an account.';
+      let errorMessage = err.message || 'Failed to create an account.';
       console.error('Sign up failed:', err);
       addToast(errorMessage, 'error');
     } finally {

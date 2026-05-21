@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { supabase } from '../supabase';
+import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword } from '../firebase';
 import { LogoIcon } from './icons/LogoIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
@@ -21,16 +21,10 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignUp }) => {
   const handleGoogleSignIn = async () => {
     setIsGoogleSubmitting(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
-      // On successful sign-in, onAuthStateChange will trigger in App.tsx
+      await signInWithPopup(auth, googleProvider);
+      // On successful sign-in, onAuthStateChanged will trigger in App.tsx
     } catch (err: any) {
-      addToast(err.error_description || err.message || 'Failed to sign in with Google.', 'error');
+      addToast(err.message || 'Failed to sign in with Google.', 'error');
       console.error('Google sign in failed:', err);
     } finally {
       setIsGoogleSubmitting(false);
@@ -42,15 +36,11 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignUp }) => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-      // On successful login, onAuthStateChange in App.tsx will handle the state change.
+      await signInWithEmailAndPassword(auth, email, password);
+      // On successful login, onAuthStateChanged in App.tsx will handle the state change.
     } catch (err: any) {
-      let errorMessage = err.error_description || err.message || 'An unexpected error occurred.';
-      if(err.message === 'Invalid login credentials') {
+      let errorMessage = err.message || 'An unexpected error occurred.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
         errorMessage = 'Incorrect email or password. Please try again.';
       }
       console.error('Login failed:', err);

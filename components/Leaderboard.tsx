@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { db } from '../firebase';
+import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'firebase/database';
 import type { UserProfile, LeaderboardEntry, WeeklyLeaderboardEntry } from '../types';
 import { Avatar } from './Avatar';
 
@@ -52,43 +53,37 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    const tableName = activeTab === 'overall' ? 'leaderboard_overall' : 'leaderboard_weekly';
     
-    const fetchLeaderboard = async () => {
-        let query = supabase.from(tableName).select('*').order('xp', { ascending: false }).limit(100);
+    const weekId = getWeekId(new Date());
+    const path = activeTab === 'overall' ? 'leaderboard_overall' : `leaderboard_weekly/${weekId}`;
+    const leaderboardRef = query(dbRef(db, path), orderByChild('xp'), limitToLast(100));
 
-        if (activeTab === 'weekly') {
-            const currentWeekId = getWeekId(new Date());
-            query = query.eq('week_id', currentWeekId);
-        }
-        
-        const { data, error: fetchError } = await query;
-        
-        if (fetchError) {
-             console.error("Error fetching leaderboard: ", fetchError);
-            setError("Could not load leaderboard data. Please try again later.");
-        } else {
+    const unsubscribe = onValue(leaderboardRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const data: any[] = [];
+            snapshot.forEach((child) => {
+                data.push({ user_id: child.key, ...child.val() });
+            });
+            // Firebase sorts ascending by child, so we reverse for descending leaderboard
+            const sortedData = data.sort((a, b) => b.xp - a.xp);
+            
             if (activeTab === 'overall') {
-                setOverallData(data as LeaderboardEntry[]);
+                setOverallData(sortedData as LeaderboardEntry[]);
             } else {
-                setWeeklyData(data as WeeklyLeaderboardEntry[]);
+                setWeeklyData(sortedData as WeeklyLeaderboardEntry[]);
             }
+        } else {
+            if (activeTab === 'overall') setOverallData([]);
+            else setWeeklyData([]);
         }
         setIsLoading(false);
-    }
-    
-    fetchLeaderboard();
+    }, (err) => {
+        console.error("Error fetching leaderboard: ", err);
+        setError("Could not load leaderboard data. Please try again later.");
+        setIsLoading(false);
+    });
 
-    const channel = supabase
-        .channel(`public:${tableName}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, payload => {
-            fetchLeaderboard(); // Refetch on any change
-        })
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(channel);
-    };
+    return () => off(leaderboardRef);
   }, [activeTab]);
 
   const data = activeTab === 'overall' ? overallData : weeklyData;

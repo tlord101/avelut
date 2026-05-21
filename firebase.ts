@@ -49,17 +49,45 @@ export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChang
  *                                                                                                *
 {
   "rules": {
-    "status": {
-      "$uid": {
-        ".read": "auth != null",
-        ".write": "auth != null && auth.uid === $uid"
-      }
+    "courses_data": {
+      ".read": "auth != null",
+      ".write": "false" // Read-only for users
     },
     "users": {
-      ".read": "auth != null",
-      "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
-      }
+        ".read": "auth != null",
+        "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+        }
+    },
+    "user_progress": {
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid"
+        }
+    },
+    "exam_history": {
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid"
+        }
+    },
+    "notifications": {
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid"
+        }
+    },
+    "chat_conversations": {
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid"
+        }
+    },
+    "chat_messages": {
+        "$convoId": {
+            ".read": "auth != null", 
+            ".write": "auth != null"
+        }
     },
     "user_chats": {
       "$uid": {
@@ -72,27 +100,13 @@ export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChang
         }
       }
     },
-    "typing": {
-      "$chatId": {
-        ".read": "root.child('user_chats').child(auth.uid).child($chatId).exists()",
-        "$uid": {
-          ".write": "auth != null && auth.uid === $uid"
-        }
-      }
-    },
     "private_messages": {
       "$chatId": {
         ".read": "root.child('user_chats').child(auth.uid).child($chatId).exists()",
         ".write": "root.child('user_chats').child(auth.uid).child($chatId).exists()",
         "$messageId": {
           ".validate": "newData.hasChildren(['sender_id', 'timestamp']) && newData.child('sender_id').val() === auth.uid",
-          ".write": "!data.exists() || (data.exists() && data.child('sender_id').val() === auth.uid)",
-          "is_edited": {
-            ".write": "data.child('sender_id').val() === auth.uid"
-          },
-          "viewed_by": {
-            ".write": "root.child('user_chats').child(auth.uid).child($chatId).exists()"
-          }
+          ".write": "!data.exists() || (data.exists() && data.child('sender_id').val() === auth.uid)"
         }
       }
     }
@@ -107,7 +121,18 @@ export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChang
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Private chat images: only members of the chat can read/write.
+    match /profile-pictures/{userId}/{allPaths=**} {
+      allow read: if auth != null;
+      allow write: if auth != null && auth.uid == userId;
+    }
+    match /chat-media/{allPaths=**} {
+      allow read, write: if auth != null;
+    }
+    match /messenger-media/{chatId}/{allPaths=**} {
+      allow read, write: if auth != null;
+    }
+  }
+}
     // The chat ID is the first folder in the path.
     match /private_chats/{chatId}/{allPaths=**} {
       allow read, write: if request.auth != null && 

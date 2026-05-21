@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
-import { supabase } from '../supabase';
+import { db } from '../firebase';
+import { ref as dbRef, onValue, off, set, update, get } from 'firebase/database';
 import type { UserProfile, Message, Subject, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
@@ -172,30 +173,26 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 `;
         const result = await attemptApiCall(async () => {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.0-flash',
                 contents: { parts: [{ text: prompt }] },
                 config: { systemInstruction }
             });
             const botResponseText = response.text;
 
-            const { data: savedMessage, error } = await supabase
-              .from('study_guide_messages')
-              .insert({
-                  user_id: userProfile.uid,
-                  topic_id: topic.topic_id,
-                  sender: 'bot',
-                  text: botResponseText,
-              })
-              .select()
-              .single();
+            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+            const newMsgRef = push(messagesRef);
+            const msgData = {
+                sender: 'bot',
+                text: botResponseText,
+                timestamp: serverTimestamp(),
+            };
+            await set(newMsgRef, msgData);
 
-            if (error || !savedMessage) throw error || new Error("Failed to save initial message.");
-            
             const botMessage: Message = { 
-                id: savedMessage.id, 
+                id: newMsgRef.key!, 
                 text: botResponseText, 
                 sender: 'bot', 
-                timestamp: new Date(savedMessage.timestamp).getTime() 
+                timestamp: Date.now() 
             };
             setMessages([botMessage]);
         });
@@ -207,61 +204,32 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
     };
 
     useEffect(() => {
-        let channel: any;
-
-        const fetchAndSubscribe = async () => {
-            setIsLoading(true);
-            try {
-                const { data, error } = await supabase
-                    .from('study_guide_messages')
-                    .select('*')
-                    .eq('user_id', userProfile.uid)
-                    .eq('topic_id', topic.topic_id)
-                    .order('timestamp', { ascending: true });
-
-                if (error || !data || data.length === 0) {
-                    if (error) console.warn("Could not fetch lesson history, starting a new session.", error);
-                    await initiateAutoTeach();
-                } else {
-                    const fetchedMessages: Message[] = data.map(msg => ({
-                        id: msg.id, text: msg.text, sender: msg.sender as 'user' | 'bot',
-                        timestamp: new Date(msg.timestamp).getTime(), image_url: msg.image_url,
-                    }));
-                    setMessages(fetchedMessages);
-                }
-            } catch (err) {
-                console.error("Error initializing lesson:", err);
-                addToast("Could not start the lesson. Please try again.", "error");
-                onClose(); 
-            } finally {
-                setIsLoading(false);
+        const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+        
+        setIsLoading(true);
+        const unsubscribe = onValue(messagesRef, (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                initiateAutoTeach();
+            } else {
+                const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
+                    id,
+                    text: msg.text,
+                    sender: msg.sender as 'user' | 'bot',
+                    timestamp: msg.timestamp,
+                    image_url: msg.image_url,
+                })).sort((a,b) => a.timestamp - b.timestamp);
+                setMessages(fetchedMessages);
             }
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error initializing lesson:", error);
+            addToast("Could not start the lesson. Please try again.", "error");
+            onClose();
+            setIsLoading(false);
+        });
 
-            channel = supabase
-                .channel(`study_guide_messages-${userProfile.uid}-${topic.topic_id}`)
-                .on('postgres_changes', {
-                    event: 'INSERT', schema: 'public', table: 'study_guide_messages',
-                    filter: `user_id=eq.${userProfile.uid},and,topic_id=eq.${topic.topic_id}`,
-                }, (payload) => {
-                    const newMessage = payload.new as any;
-                    const formattedMessage: Message = {
-                        id: newMessage.id, text: newMessage.text, sender: newMessage.sender as 'user' | 'bot',
-                        timestamp: new Date(newMessage.timestamp).getTime(), image_url: newMessage.image_url,
-                    };
-                    setMessages((prev) => {
-                        if (prev.some(m => m.id === formattedMessage.id)) return prev;
-                        return [...prev, formattedMessage];
-                    });
-                }).subscribe();
-        };
-
-        fetchAndSubscribe();
-
-        return () => {
-            if (channel) {
-                supabase.removeChannel(channel);
-            }
-        };
+        return () => off(messagesRef, 'value', unsubscribe);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userProfile.uid, topic.topic_id]);
 
@@ -309,55 +277,42 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             let imageUrl: string | undefined;
 
             if (tempFile) {
-                const filePath = `${userProfile.uid}/study-guide-uploads/${topic.topic_id}/${Date.now()}-${tempFile.name}`;
-                const { error: uploadError } = await supabase.storage
-                    .from('chat-media')
-                    .upload(filePath, tempFile);
-
-                if (uploadError) throw uploadError;
-                
-                const { data } = supabase.storage
-                    .from('chat-media')
-                    .getPublicUrl(filePath);
-
-                imageUrl = data.publicUrl;
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-uploads/${topic.topic_id}/${Date.now()}-${tempFile.name}`);
+                const uploadResult = await uploadBytes(storageRefObj, tempFile);
+                imageUrl = await getDownloadURL(uploadResult.ref);
             }
 
             // Save user message to DB
-            const { data: savedUserMessage, error: saveUserError } = await supabase
-                .from('study_guide_messages')
-                .insert({
-                    user_id: userProfile.uid,
-                    topic_id: topic.topic_id,
-                    sender: 'user',
-                    text: tempInput || '',
-                    image_url: imageUrl,
-                })
-                .select()
-                .single();
-            
-            if (saveUserError || !savedUserMessage) throw saveUserError || new Error("Failed to save user message.");
+            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+            const newUserMsgRef = push(messagesRef);
+            const userMessageData = {
+                sender: 'user',
+                text: tempInput || '',
+                image_url: imageUrl,
+                timestamp: serverTimestamp(),
+            };
+            await set(newUserMsgRef, userMessageData);
             
             // Update the optimistic message with real data from database
             setMessages(prev => prev.map(m => 
                 m.id === optimisticUserMessage.id
                     ? {
-                        id: savedUserMessage.id,
-                        text: savedUserMessage.text || undefined,
+                        id: newUserMsgRef.key!,
+                        text: tempInput || undefined,
                         sender: 'user' as const,
-                        timestamp: new Date(savedUserMessage.timestamp).getTime(),
-                        image_url: savedUserMessage.image_url,
+                        timestamp: Date.now(),
+                        image_url: imageUrl,
                     }
                     : m
             ));
             
             // Get updated messages for API call
             const updatedMessages = [...messages, {
-                id: savedUserMessage.id,
-                text: savedUserMessage.text || undefined,
+                id: newUserMsgRef.key!,
+                text: tempInput || undefined,
                 sender: 'user' as const,
-                timestamp: new Date(savedUserMessage.timestamp).getTime(),
-                image_url: savedUserMessage.image_url,
+                timestamp: Date.now(),
+                image_url: imageUrl,
             }];
 
             const result = await attemptApiCall(async () => {
@@ -386,30 +341,25 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({ 
-                    model: 'gemini-2.5-flash', 
+                    model: 'gemini-2.0-flash', 
                     contents: { parts },
                     config: { systemInstruction } 
                 });
                 const botResponseText = response.text;
                 
-                const { data: savedBotMessage, error: saveBotError } = await supabase
-                    .from('study_guide_messages')
-                    .insert({
-                        user_id: userProfile.uid,
-                        topic_id: topic.topic_id,
-                        sender: 'bot',
-                        text: botResponseText,
-                    })
-                    .select()
-                    .single();
-                
-                if (saveBotError || !savedBotMessage) throw saveBotError || new Error("Failed to save bot response.");
+                const newBotMsgRef = push(messagesRef);
+                const botMessageData = {
+                    sender: 'bot',
+                    text: botResponseText,
+                    timestamp: serverTimestamp(),
+                };
+                await set(newBotMsgRef, botMessageData);
 
                 const botMessage: Message = { 
-                    id: savedBotMessage.id, 
+                    id: newBotMsgRef.key!, 
                     text: botResponseText, 
                     sender: 'bot', 
-                    timestamp: new Date(savedBotMessage.timestamp).getTime()
+                    timestamp: Date.now()
                 };
                 setMessages(prev => [...prev, botMessage]);
             });
@@ -479,41 +429,26 @@ Student: "${tempInput}"
                 const fileExtension = mimeType.split('/')[1] || 'png';
 
                 const imageBlob = base64ToBlob(base64ImageBytes, mimeType);
-                const filePath = `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}.${fileExtension}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('chat-media')
-                    .upload(filePath, imageBlob);
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}.${fileExtension}`);
                 
-                if (uploadError) {
-                    throw new Error(`Storage upload failed: ${uploadError.message}`);
-                }
-
-                const { data } = supabase.storage
-                    .from('chat-media')
-                    .getPublicUrl(filePath);
-
-                const publicUrl = data.publicUrl;
+                const uploadResult = await uploadBytes(storageRefObj, imageBlob);
+                const publicUrl = await getDownloadURL(uploadResult.ref);
     
-                const { data: savedMessage, error: saveError } = await supabase
-                    .from('study_guide_messages')
-                    .insert({
-                        user_id: userProfile.uid,
-                        topic_id: topic.topic_id,
-                        sender: 'bot',
-                        text: 'Here is a visualization to help you understand:',
-                        image_url: publicUrl,
-                    })
-                    .select()
-                    .single();
-
-                if (saveError || !savedMessage) throw saveError || new Error("Failed to save illustration message.");
-                
-                const botMessage: Message = {
-                    id: savedMessage.id,
-                    text: savedMessage.text,
+                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+                const newBotMsgRef = push(messagesRef);
+                const botMessageData = {
                     sender: 'bot',
-                    timestamp: new Date(savedMessage.timestamp).getTime(),
+                    text: 'Here is a visualization to help you understand:',
+                    image_url: publicUrl,
+                    timestamp: serverTimestamp(),
+                };
+                await set(newBotMsgRef, botMessageData);
+
+                const botMessage: Message = {
+                    id: newBotMsgRef.key!,
+                    text: botMessageData.text,
+                    sender: 'bot',
+                    timestamp: Date.now(),
                     image_url: publicUrl
                 };
                 setMessages(prev => [...prev, botMessage]);
@@ -770,13 +705,8 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const fetchSubjects = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-            .from('courses_data')
-            .select('subject_list')
-            .eq('id', userProfile.course_id)
-            .single();
-        
-        if (error) throw error;
+        const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
+        const data = snapshot.val();
         
         if (data && data.subject_list) {
             const subjectsForLevel: Subject[] = (data.subject_list as Subject[]).filter(s => s.level === userProfile.level);
@@ -811,18 +741,10 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     }
     
     try {
-        // Use direct upsert to mark topic as complete
-        const { error: upsertError } = await supabase
-            .from('user_progress')
-            .upsert({
-                user_id: userProfile.uid,
-                topic_id: topicId,
-                is_complete: true,
-            }, {
-                onConflict: 'user_id,topic_id'
-            });
-        
-        if (upsertError) throw upsertError;
+        await update(dbRef(db, `user_progress/${userProfile.uid}/${topicId}`), {
+            is_complete: true,
+            timestamp: serverTimestamp(),
+        });
         
         addToast(`Topic complete!`, 'success');
         

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { supabase } from '../supabase';
+import { db } from '../firebase';
+import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Subject } from '../types';
 import { useToast } from '../hooks/useToast';
 
@@ -37,36 +38,30 @@ const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHis
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        const historyRef = dbRef(db, `exam_history/${userProfile.uid}`);
+        
         setIsLoading(true);
-        const fetchHistory = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('exam_history')
-                    .select('*')
-                    .eq('user_id', userProfile.uid)
-                    .order('timestamp', { ascending: false });
-                if (error) throw error;
-                setHistory(data as ExamHistoryItem[]);
-            } catch (error) {
-                console.error("Error fetching exam history: ", error);
-            } finally {
-                setIsLoading(false);
+        const unsubscribe = onValue(historyRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // RTDB returns an object, we want an array sorted by timestamp descending
+                const historyList: ExamHistoryItem[] = Object.values(data);
+                historyList.sort((a, b) => {
+                    const timeA = typeof a.timestamp === 'number' ? a.timestamp : (a.timestamp as any)?.seconds * 1000 || 0;
+                    const timeB = typeof b.timestamp === 'number' ? b.timestamp : (b.timestamp as any)?.seconds * 1000 || 0;
+                    return timeB - timeA;
+                });
+                setHistory(historyList);
+            } else {
+                setHistory([]);
             }
-        };
-        fetchHistory();
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching exam history: ", error);
+            setIsLoading(false);
+        });
 
-        const channel = supabase
-            .channel(`public:exam_history:user_id=eq.${userProfile.uid}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'exam_history', filter: `user_id=eq.${userProfile.uid}` },
-                (payload) => {
-                    setHistory(prev => [payload.new as ExamHistoryItem, ...prev]);
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => unsubscribe();
     }, [userProfile.uid]);
 
     if (isLoading) {
@@ -137,13 +132,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         }
         
         try {
-            const { data: courseData, error } = await supabase
-                .from('courses_data')
-                .select('subject_list')
-                .eq('id', userProfile.course_id)
-                .single();
-
-            if (error) throw error;
+            const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
+            const courseData = snapshot.val();
 
             if (courseData) {
                 const subjects: Subject[] = courseData.subject_list || [];
@@ -182,7 +172,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
               filledUserAnswers.push("Unanswered");
           }
 
-          const examResult: Omit<ExamHistoryItem, 'id'> = {
+          const examResult = {
               user_id: userProfile.uid,
               course_id: userProfile.course_id,
               score: currentScore,
@@ -197,18 +187,18 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
           const saveResults = async () => {
               try {
-                  const { error: historyError } = await supabase.from('exam_history').insert(examResult);
-                  if (historyError) throw historyError;
+                  const examHistoryRef = push(dbRef(db, `exam_history/${userProfile.uid}`));
+                  await set(examHistoryRef, examResult);
 
+                  const notificationRef = push(dbRef(db, `notifications/${userProfile.uid}`));
                   const notificationData = {
-                      user_id: userProfile.uid,
-                      type: 'exam_reminder' as const,
+                      type: 'exam_reminder',
                       title: 'Exam Finished!',
                       message: `You scored ${currentScore}/${questions.length}!`,
                       is_read: false,
+                      timestamp: serverTimestamp(),
                   };
-                  const { error: notificationError } = await supabase.from('notifications').insert(notificationData);
-                  if (notificationError) throw notificationError;
+                  await set(notificationRef, notificationData);
               } catch (error) {
                   console.error("Failed to save exam results:", error);
                   addToast("Could not save your exam results.", 'error');
@@ -244,7 +234,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     setExamState('generating');
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: `Generate 10 multiple-choice questions for a student studying "${getCourseNameById(userProfile.course_id)}" at a "${userProfile.level}" level, focusing on the following topics they have completed: ${completedTopicNames.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.`,
         config: {
           responseMimeType: "application/json",

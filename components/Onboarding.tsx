@@ -1,8 +1,8 @@
 
 
 import React, { useState, useEffect } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { db, type FirebaseUser } from '../firebase';
+import { ref as dbRef, get } from 'firebase/database';
 import { LogoIcon } from './icons/LogoIcon';
 import type { UserProfile } from '../types';
 
@@ -15,7 +15,7 @@ interface Course {
 }
 
 interface OnboardingProps {
-  user: User;
+  user: FirebaseUser;
   onOnboardingComplete: (profileData: { courseId: string; level: string }) => void;
 }
 
@@ -31,13 +31,15 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        // HACK: In a real app, this should be an edge function or a secured, public view.
-        // For this migration, we assume a public table 'courses_data' holds the course info.
-        const { data, error: fetchError } = await supabase.from('courses_data').select('id, course_name, levels');
-        if (fetchError) throw fetchError;
+        const snapshot = await get(dbRef(db, 'courses_data'));
+        const data = snapshot.val();
         
-        if (data && data.length > 0) {
-            const fetchedCourses: Course[] = data.map((c: any) => ({ id: c.id, name: c.course_name, levels: c.levels || [] }));
+        if (data) {
+            const fetchedCourses: Course[] = Object.keys(data).map(id => ({ 
+              id, 
+              name: data[id].course_name, 
+              levels: data[id].levels || [] 
+            }));
 
             setCourses(fetchedCourses);
             setSelectedCourse(fetchedCourses[0].id);
@@ -48,7 +50,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
           setError("Could not find configuration data. Please contact support.");
         }
       } catch (err) {
-        console.error("Error fetching courses data:", (err as Error).message || err);
+        console.error("Error fetching courses data:", (err as any).message || err);
         setError("An error occurred during setup. Please try again later.");
       } finally {
         setIsLoadingData(false);
