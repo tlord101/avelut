@@ -69,24 +69,7 @@ We are constantly evolving to provide the most futuristic learning experience po
 
 ---
 
-## 🚀 Getting Started
-
-If you are a developer looking to run this locally:
-
-1.  **Clone the Repository**
-2.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Environment Setup**: Create a `.env.local` file and add your `GEMINI_API_KEY`.
-4.  **Run Development Server**:
-    ```bash
-    npm run dev
-    ```
-
----
-
-## 📜 Privacy & Security
+##  Privacy & Security
 VanTutor respects your data. All academic progress is private, and collaboration tools are strictly isolated within your department to ensure a safe learning environment.
 
 ---
