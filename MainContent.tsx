@@ -54,7 +54,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'messenger':
             return <Messenger userProfile={userProfile} />;
         case 'admin':
-            return <AdminPanel userProfile={userProfile} />;
+            return userProfile.is_admin ? <AdminPanel userProfile={userProfile} /> : <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
         default:
             return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
     }

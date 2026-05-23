@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, type FirebaseUser } from './firebase';
+import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
+import { AdminLogin } from './components/AdminLogin';
 import { Onboarding } from './components/Onboarding';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -42,20 +43,28 @@ const App: React.FC = () => {
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
-    const [activeItem, setActiveItem] = useState('dashboard');
+    const [activeItem, setActiveItem] = useState(() => {
+        const isHashAdmin = window.location.hash === '#/admin';
+        const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
+        const isPathAdmin = window.location.pathname === '/admin';
+        return (isHashAdmin || isQueryAdmin || isPathAdmin) ? 'admin' : 'dashboard';
+    });
+    const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     // Simple Router for Admin access (handles #/admin and ?admin=true)
     useEffect(() => {
         const checkRoute = () => {
+            if (isAdminAuthenticated) return;
+
             const isHashAdmin = window.location.hash === '#/admin';
             const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
             const isPathAdmin = window.location.pathname === '/admin';
 
             if ((isHashAdmin || isQueryAdmin || isPathAdmin) && userProfile?.is_admin) {
                 setActiveItem('admin');
-            } else if ((isHashAdmin || isQueryAdmin || isPathAdmin) && !userProfile?.is_admin) {
-                // If not admin, clear the route and default to dashboard
+            } else if ((isHashAdmin || isQueryAdmin || isPathAdmin) && userProfile && !userProfile.is_admin) {
+                // Only redirect if we are sure the user is NOT an admin
                 if (isHashAdmin) window.location.hash = '';
                 if (isQueryAdmin || isPathAdmin) {
                      // We don't want to reload the whole page, but we should clean up
@@ -91,7 +100,15 @@ const App: React.FC = () => {
           setUser(currentUser);
           if (!currentUser) {
             setUserProfile(null);
-            setActiveItem('dashboard');
+            
+            // Only reset to dashboard if we're not on an admin route
+            const isHashAdmin = window.location.hash === '#/admin';
+            const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
+            const isPathAdmin = window.location.pathname === '/admin';
+            if (!(isHashAdmin || isQueryAdmin || isPathAdmin)) {
+                setActiveItem('dashboard');
+            }
+            
             tourStatusRef.current = 'unknown';
           }
           setIsLoading(false);
@@ -490,6 +507,65 @@ const App: React.FC = () => {
         placement: 'center',
       },
     ];
+    
+    if (activeItem === 'admin') {
+        if (!isAdminAuthenticated) {
+            return <AdminLogin onLogin={() => setIsAdminAuthenticated(true)} />;
+        }
+        
+        const mockAdminProfile: UserProfile = {
+            uid: 'admin-hardcoded',
+            display_name: 'Admin User',
+            department_id: 'admin',
+            level: 'admin',
+            current_streak: 0,
+            last_activity_date: Date.now(),
+            notifications_enabled: false,
+            is_admin: true
+        } as UserProfile;
+
+        return (
+            <div className="h-full flex flex-col md:flex-row bg-gray-100 p-2 md:p-4 gap-4">
+                <Sidebar
+                    activeItem="admin"
+                    onItemClick={setActiveItem}
+                    userProfile={mockAdminProfile}
+                    onLogout={() => {
+                        setIsAdminAuthenticated(false);
+                        setActiveItem('dashboard');
+                    }}
+                    isMobileSidebarOpen={isMobileSidebarOpen}
+                    onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+                />
+                <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    <Header 
+                        currentPageLabel="Admin Panel"
+                        unreadCount={0}
+                        onNotificationsClick={() => {}}
+                        onMenuClick={() => setIsMobileSidebarOpen(true)}
+                        onMessengerClick={() => {}}
+                        unreadMessagesCount={0}
+                    />
+                    <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
+                        <MainContent
+                            activeItem="admin"
+                            user={null}
+                            userProfile={mockAdminProfile}
+                            userProgress={{}}
+                            dashboardData={null}
+                            handleLogout={() => {
+                                setIsAdminAuthenticated(false);
+                                setActiveItem('dashboard');
+                            }}
+                            handleProfileUpdate={async () => ({ success: false })}
+                            handleDeleteAccount={async () => ({ success: false })}
+                            startTour={() => {}}
+                        />
+                    </div>
+                </main>
+            </div>
+        );
+    }
     
     if (isLoading || isProfileLoading) {
         return <AppLoader />;
