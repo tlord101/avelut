@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, serverTimestamp } from "firebase/database";
 import { getStorage } from "firebase/storage";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut as firebaseSignOut, type User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut as firebaseSignOut, type User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from "firebase/auth";
 
 // This variable is expected to be injected into the global scope by index.html.
 declare var __firebase_config: any;
@@ -13,8 +13,9 @@ const app = initializeApp(__firebase_config);
 const db = getDatabase(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
-export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, firebaseSignOut, type FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup };
+export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, firebaseSignOut, type FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, googleProvider };
 
 /*
 /**************************************************************************************************
