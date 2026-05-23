@@ -44,6 +44,33 @@ const App: React.FC = () => {
     
     const [activeItem, setActiveItem] = useState('dashboard');
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+    // Simple Router for Admin access (handles #/admin and ?admin=true)
+    useEffect(() => {
+        const checkRoute = () => {
+            const isHashAdmin = window.location.hash === '#/admin';
+            const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
+            const isPathAdmin = window.location.pathname === '/admin';
+
+            if ((isHashAdmin || isQueryAdmin || isPathAdmin) && userProfile?.is_admin) {
+                setActiveItem('admin');
+            } else if ((isHashAdmin || isQueryAdmin || isPathAdmin) && !userProfile?.is_admin) {
+                // If not admin, clear the route and default to dashboard
+                if (isHashAdmin) window.location.hash = '';
+                if (isQueryAdmin || isPathAdmin) {
+                     // We don't want to reload the whole page, but we should clean up
+                     window.history.replaceState({}, '', '/');
+                }
+                setActiveItem('dashboard');
+            }
+        };
+
+        window.addEventListener('hashchange', checkRoute);
+        checkRoute();
+
+        return () => window.removeEventListener('hashchange', checkRoute);
+    }, [userProfile]);
+
     const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
