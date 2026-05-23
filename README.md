@@ -18,39 +18,44 @@
 
 ## 🌟 What is VanTutor?
 
-VanTutor is a highly sophisticated AI-powered educational platform designed to help university students excel in their specific departments. Unlike general AI, VanTutor is **department-aware** and **level-specific**, meaning it knows exactly what you should be studying based on your course and year.
+VanTutor is your advanced AI-powered academic companion, built to ensure you never feel lost in your studies again. Unlike generic AI, VanTutor is **tailored to your curriculum**. It understands your department, your level, and your specific local university requirements, providing a learning experience that actually matters for your grades.
 
-### How it works for you:
-1.  **Select Your Path**: Tell the app your Department and Level (e.g., Computer Science, 200L).
-2.  **Interact with AI**: Chat with a tutor who actually understands your syllabus.
-3.  **Practice Smarter**: Take exams generated from real past questions or created by AI to match your progress.
+### Why Students Love VanTutor:
+*   **Context-Aware Learning**: No more generic answers. Get help based on the actual textbooks and syllabus used in your department.
+*   **Precision Prep**: Practice with real past questions that are automatically extracted and organized for your level.
+*   **Confidence Building**: Master complex topics through interactive, bite-sized lessons that adapt to your pace.
 
 ---
 
-## 🔥 Key Features
+## 🔥 Key Features for Students
 
 ### 🧠 Gemini 3.5 Flash Tutoring
-Experience the next generation of AI teaching. VanTutor uses massive context windows to understand entire textbooks, providing:
-*   **Bite-sized Lessons**: No more long lectures. The AI breaks down concepts and asks questions to make sure you understand.
-*   **Visual Solver**: Stuck on a math problem? Upload a photo, and VanTutor will explain the solution step-by-step.
-*   **Interactive Chat**: Ask anything, anytime.
+Experience a tutor that never sleeps and knows everything about your course. 
+*   **Deep Understanding**: Powered by Gemini 3.5 Flash, VanTutor can digest thousands of pages of textbooks to answer your most specific questions.
+*   **Bite-sized Lessons**: Complex chapters are broken down into easy-to-digest modules with interactive quizzes.
+*   **Visual Solver**: Simply snap a photo of a math problem or diagram, and get an instant, step-by-step walkthrough.
 
-### 📄 Textbook & Syllabus Digestion (Admin)
-Admins can upload a standard textbook, and VanTutor's AI will:
-*   Scan the entire PDF.
-*   Extract the syllabus and learning objectives.
-*   Create a structured "Study Guide" path for students.
+### ✍️ The Ultimate Exam Prep
+Stop hunting for "Past Questions" in dusty photocopies.
+*   **Simulated Mock Exams**: Take timed, realistic tests designed to mimic your actual university exams.
+*   **Instant Feedback**: Don't just see your score—get detailed AI-generated explanations for every wrong answer.
+*   **Performance Tracking**: See your strengths and weaknesses at a glance to focus your study time where it counts.
 
-### ✍️ Past Question Bank
-Never search for old exam papers again. 
-*   **AI Extraction**: Admins upload exam PDFs, and the AI automatically extracts all questions, options, and explanations.
-*   **Mock Exams**: Take timed tests that simulate real exam conditions for your specific courses.
+### 🏆 Gamified Community
+Learning is better together.
+*   **Department Leaderboards**: See how you rank against peers in your department and level.
+*   **Messenger & Collaboration**: Connect with students on your same path to share study tips and resources.
+*   **XP & Rewards**: Earn experience points for every milestone, keeping you motivated through the semester.
 
-### 🏆 Gamified Learning
-Stay motivated with our social features:
-*   **Department Leaderboards**: Compete with students in your own department and level for the top spot.
-*   **XP & Streaks**: Earn points for every topic you complete and every exam you pass.
-*   **Messenger**: Chat and collaborate with other students on your same academic path.
+---
+
+## 🚀 Upcoming Updates (Roadmap)
+
+We are constantly evolving to provide the most futuristic learning experience possible. Here’s what’s coming soon:
+
+*   **🎙️ Real-time Visual AI Assistant**: An interactive AI avatar that you can talk to naturally. It will see what you're working on, speak back to you in real-time, and guide you through problems interactively like a human tutor.
+*   **📅 AI Study Planner**: Automatically generate a study schedule based on your exam dates and current progress.
+*   **📱 Native Mobile App**: A dedicated iOS and Android experience for offline studying and instant notifications.
 
 ---
 
