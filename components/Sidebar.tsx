@@ -72,14 +72,6 @@ const SidebarContent: React.FC<{
           {navigationItems.map((item) => (
               <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
           ))}
-          {userProfile?.is_admin && (
-              <NavButton 
-                  item={{ id: 'admin', label: 'Admin Panel', icon: <ShieldCheckIcon /> }} 
-                  isActive={activeItem === 'admin'} 
-                  isExpanded={isExpanded} 
-                  onClick={() => onItemClick('admin')} 
-              />
-          )}
         </ul>
       </nav>
       
