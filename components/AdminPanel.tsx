@@ -15,7 +15,32 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'textbooks'>('questions');
+    const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
+    const [isUsersLoading, setIsUsersLoading] = useState(false);
     const { addToast } = useToast();
+
+    // Fetch Users helper
+    const fetchUsers = async () => {
+        setIsUsersLoading(true);
+        try {
+            const usersRef = dbRef(db, 'users');
+            const snapshot = await get(usersRef);
+            if (snapshot.exists()) {
+                const users = Object.values(snapshot.val()) as UserProfile[];
+                setAllUsersList(users);
+            }
+        } catch (error) {
+            console.error("Error fetching users:", error);
+            addToast("Failed to load users list", "error");
+        }
+        setIsUsersLoading(false);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'users') {
+            fetchUsers();
+        }
+    }, [activeTab]);
 
     // Past Questions State
     const [courseSearch, setCourseSearch] = useState('');
@@ -239,6 +264,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     className={`px-4 py-2 font-medium ${activeTab === 'textbooks' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
                     Textbooks
+                </button>
+                <button 
+                    onClick={() => setActiveTab('users')}
+                    className={`px-4 py-2 font-medium ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                >
+                    User Management
                 </button>
             </div>
 
@@ -533,6 +564,87 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         >
                             {isUploading ? 'Processing...' : 'Upload & Digest Textbook'}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'users' && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200">
+                            <p className="text-lime-800 text-sm font-medium uppercase">Total Registered Users</p>
+                            <h3 className="text-4xl font-bold text-lime-900 mt-2">{allUsersList.length}</h3>
+                        </div>
+                        <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
+                            <p className="text-blue-800 text-sm font-medium uppercase">Active Today</p>
+                            <h3 className="text-4xl font-bold text-blue-900 mt-2">
+                                {allUsersList.filter(u => {
+                                    const today = new Date().setHours(0,0,0,0);
+                                    return (u.last_activity_date || 0) >= today;
+                                }).length}
+                            </h3>
+                        </div>
+                        <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200">
+                            <p className="text-orange-800 text-sm font-medium uppercase">Admin Accounts</p>
+                            <h3 className="text-4xl font-bold text-orange-900 mt-2">
+                                {allUsersList.filter(u => u.is_admin).length}
+                            </h3>
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-bold text-gray-800">Users List</h3>
+                            <button 
+                                onClick={fetchUsers}
+                                className="text-sm text-lime-600 hover:text-lime-700 font-medium"
+                            >
+                                Refresh List
+                            </button>
+                        </div>
+                        <div className="max-h-[500px] overflow-y-auto">
+                            {isUsersLoading ? (
+                                <div className="p-10 text-center text-gray-500">Loading users...</div>
+                            ) : (
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                                        <tr>
+                                            <th className="px-6 py-3">User</th>
+                                            <th className="px-6 py-3">Dept / Level</th>
+                                            <th className="px-6 py-3">Last Active</th>
+                                            <th className="px-6 py-3">Role</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-sm">
+                                        {allUsersList.map((user) => (
+                                            <tr key={user.uid} className="hover:bg-gray-50 transition">
+                                                <td className="px-6 py-4 flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-lime-100 flex items-center justify-center text-lime-600 font-bold overflow-hidden">
+                                                        {user.photo_url ? (
+                                                            <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            user.display_name?.charAt(0) || '?'
+                                                        )}
+                                                    </div>
+                                                    <span className="font-medium text-gray-900">{user.display_name}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {user.department_id || 'Not Set'} / {user.level || '?' }L
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-500 text-xs">
+                                                    {user.last_activity_date ? new Date(user.last_activity_date).toLocaleString() : 'Never'}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${user.is_admin ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {user.is_admin ? 'Admin' : 'Student'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
