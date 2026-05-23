@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get } from 'firebase/database';
-import type { UserProfile, Message, Subject, Topic, UserProgress } from '../types';
+import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import ReactMarkdown from 'react-markdown';
@@ -105,7 +105,7 @@ const mockCourses = [
   { id: 'science_biology', name: 'Science - Biology' },
   { id: 'history_us', name: 'History - U.S. History' },
 ];
-const getCourseNameById = (id: string) => mockCourses.find(c => c.id === id)?.name || 'your course';
+const getCourseNameById = (id: string) => mockCourses.find(c => c.id === id)?.name || 'your department';
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -132,7 +132,7 @@ const StudyGuideSkeleton: React.FC = () => (
 // --- LEARNING INTERFACE COMPONENT (UNCHANGED LOGIC, STYLED TO FIT) ---
 interface LearningInterfaceProps {
     userProfile: UserProfile;
-    topic: Topic & { subjectName: string };
+    topic: Topic & { courseName: string };
     isCompleted: boolean;
     onClose: () => void;
     onMarkComplete: (topicId: string) => Promise<void>;
@@ -145,9 +145,22 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [fileData, setFileData] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isIllustrating, setIsIllustrating] = useState(false);
+    const [textbookContext, setTextbookContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
+
+    useEffect(() => {
+        const fetchTextbook = async () => {
+            const textbookRef = dbRef(db, `textbook_contexts/${userProfile.department_id}/${userProfile.level}/${topic.courseName}`);
+            const snap = await get(textbookRef);
+            if (snap.exists()) {
+                const data = snap.val();
+                setTextbookContext(`\n\nCOURSE TEXTBOOK CONTEXT:\nThis lesson must be strictly grounded in the following textbook syllabus and objectives:\n${JSON.stringify(data.syllabus)}`);
+            }
+        };
+        fetchTextbook();
+    }, [userProfile.department_id, userProfile.level, topic.courseName]);
 
     const systemInstruction = `You are VANTUTOR, an expert AI educator. Your primary goal is to provide a comprehensive and complete understanding of the given topic for a student at their specified level.
 
@@ -158,13 +171,13 @@ Your Method:
 4. After explaining a small concept, you MUST end your message with a simple question to check for understanding before proceeding. This is crucial.
 5. NEVER deliver long lectures. Keep it interactive and conversational.
 
-Use simple language, analogies, and Markdown for clarity. For mathematical formulas and symbols, use LaTeX syntax (e.g., $...$ for inline and $$...$$ for block). Be patient and encouraging.`;
+Use simple language, analogies, and Markdown for clarity. For mathematical formulas and symbols, use LaTeX syntax (e.g., $...$ for inline and $$...$$ for block). Be patient and encouraging.${textbookContext}`;
 
     const initiateAutoTeach = async () => {
         const prompt = `
 Context:
-Course: ${getCourseNameById(userProfile.course_id)}
-Subject: ${topic.subjectName}
+Department: ${getCourseNameById(userProfile.department_id)}
+Course: ${topic.courseName}
 Topic: ${topic.topic_name}
 User Level: ${userProfile.level}
 
@@ -173,7 +186,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 `;
         const result = await attemptApiCall(async () => {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-3.5-flash',
                 contents: { parts: [{ text: prompt }] },
                 config: { systemInstruction }
             });
@@ -341,7 +354,7 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({ 
-                    model: 'gemini-2.0-flash', 
+                    model: 'gemini-3.5-flash', 
                     contents: { parts },
                     config: { systemInstruction } 
                 });
@@ -392,7 +405,7 @@ Student: "${tempInput}"
             for (let i = 0; i <= maxRetries; i++) {
                 try {
                     response = await ai.models.generateContent({
-                        model: 'gemini-2.0-flash-preview-image-generation',
+                        model: 'gemini-3.5-flash',
                         contents: {
                             parts: [{ text: prompt }],
                         },
@@ -669,8 +682,8 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
     );
 };
 
-const SubjectHeader: React.FC<{ subject: Subject, isExpanded: boolean, onClick: () => void }> = ({ subject, isExpanded, onClick }) => {
-    const { Icon, gradient, textColor } = getSubjectVisuals(subject.subject_name);
+const CourseHeader: React.FC<{ course: Course, isExpanded: boolean, onClick: () => void }> = ({ course, isExpanded, onClick }) => {
+    const { Icon, gradient, textColor } = getSubjectVisuals(course.course_name);
     return (
         <div className="relative flex justify-center py-8">
             <button
@@ -680,7 +693,7 @@ const SubjectHeader: React.FC<{ subject: Subject, isExpanded: boolean, onClick: 
             >
                 <div className="flex items-center gap-3">
                     <Icon className={`w-8 h-8 ${textColor}`} />
-                    <h3 className={`text-xl font-bold ${textColor}`}>{subject.subject_name}</h3>
+                    <h3 className={`text-xl font-bold ${textColor}`}>{course.course_name}</h3>
                 </div>
                 <ChevronDownIcon className={`w-6 h-6 ${textColor} transition-transform duration-300 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
             </button>
@@ -694,41 +707,41 @@ interface StudyGuideProps {
   userProgress: UserProgress;
 }
 export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgress }) => {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTopic, setSelectedTopic] = useState<(Topic & { subjectName: string }) | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string }) | null>(null);
   const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'all', searchTerm: '' });
-  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+  const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
   const { addToast } = useToast();
 
   useEffect(() => {
-    const fetchSubjects = async () => {
+    const fetchCourses = async () => {
       setIsLoading(true);
       try {
-        const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
+        const snapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
         const data = snapshot.val();
         
-        if (data && data.subject_list) {
-            const subjectsForLevel: Subject[] = (data.subject_list as Subject[]).filter(s => s.level === userProfile.level);
-            setSubjects(subjectsForLevel);
+        if (data && data.course_list) {
+            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => c.level === userProfile.level);
+            setCourses(coursesForLevel);
         }
       } catch (err) {
-        console.error("Error fetching subjects:", err);
+        console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');
       } finally {
         setIsLoading(false);
       }
     };
-    fetchSubjects();
-  }, [userProfile.course_id, userProfile.level, addToast]);
+    fetchCourses();
+  }, [userProfile.department_id, userProfile.level, addToast]);
   
-  const toggleSubject = (subjectId: string) => {
-    setExpandedSubjects(prev => {
+  const toggleCourse = (courseId: string) => {
+    setExpandedCourses(prev => {
         const newSet = new Set(prev);
-        if (newSet.has(subjectId)) {
-            newSet.delete(subjectId);
+        if (newSet.has(courseId)) {
+            newSet.delete(courseId);
         } else {
-            newSet.add(subjectId);
+            newSet.add(courseId);
         }
         return newSet;
     });
@@ -756,13 +769,13 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     }
   };
 
-  const filteredSubjects = subjects
-    .map(subject => {
-        if (filter.semester !== 'all' && subject.semester !== filter.semester) {
+  const filteredCourses = courses
+    .map(course => {
+        if (filter.semester !== 'all' && course.semester !== filter.semester) {
             return null;
         }
 
-        const filteredTopics = subject.topics.filter(topic => 
+        const filteredTopics = course.topics.filter(topic => 
             topic.topic_name.toLowerCase().includes(filter.searchTerm.toLowerCase())
         );
 
@@ -770,9 +783,9 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             return null;
         }
 
-        return { ...subject, topics: filteredTopics };
+        return { ...course, topics: filteredTopics };
     })
-    .filter((s): s is Subject => s !== null);
+    .filter((c): c is Course => c !== null);
 
   if (selectedTopic) {
     return (
@@ -790,7 +803,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     <div className="flex-1 flex flex-col w-full bg-white p-4 sm:p-6 md:p-8 rounded-xl border border-gray-200">
         <div className="flex-shrink-0 mb-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Study Guide</h2>
-            <p className="text-gray-600">Explore topics, learn with your AI Tutor, and earn XP.</p>
+            <p className="text-gray-600">Explore courses, learn with your AI Tutor, and earn XP.</p>
             
             <div className="mt-4 flex flex-col sm:flex-row gap-2">
                 <div className="flex-1 relative">
@@ -817,27 +830,27 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             {isLoading ? (
                 <StudyGuideSkeleton />
             ) : (
-                filteredSubjects.length > 0 ? (
+                filteredCourses.length > 0 ? (
                     <div className="relative space-y-0">
-                        {filteredSubjects.map(subject => {
-                            const isExpanded = expandedSubjects.has(subject.subject_id);
+                        {filteredCourses.map(course => {
+                            const isExpanded = expandedCourses.has(course.course_id);
                             return (
-                                <div key={subject.subject_id}>
-                                    <SubjectHeader
-                                        subject={subject}
+                                <div key={course.course_id}>
+                                    <CourseHeader
+                                        course={course}
                                         isExpanded={isExpanded}
-                                        onClick={() => toggleSubject(subject.subject_id)}
+                                        onClick={() => toggleCourse(course.course_id)}
                                     />
                                     <div className={`grid transition-all duration-500 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
                                         <div className="overflow-hidden">
-                                            {subject.topics.map((topic, index) => (
+                                            {course.topics.map((topic, index) => (
                                                 <TopicNode
                                                     key={topic.topic_id}
                                                     topic={topic}
                                                     isCompleted={userProgress[topic.topic_id]?.is_complete || false}
-                                                    onSelect={() => setSelectedTopic({ ...topic, subjectName: subject.subject_name })}
+                                                    onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
                                                     index={index}
-                                                    pathColor={getSubjectVisuals(subject.subject_name).pathColor}
+                                                    pathColor={getSubjectVisuals(course.course_name).pathColor}
                                                 />
                                             ))}
                                         </div>

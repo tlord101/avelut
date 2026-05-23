@@ -171,7 +171,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 
                 // Send voice message to Gemini for live response
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-3.5-flash',
                     contents: [{
                         parts: [
                             { text: 'Please respond conversationally to this voice message. Keep your response natural and friendly for a chat conversation.' },
@@ -470,6 +470,8 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
             update(rtdbUserRef, {
                 displayName: userProfile.display_name,
                 photoURL: userProfile.photo_url,
+                department_id: userProfile.department_id,
+                level: userProfile.level
             });
         };
 
@@ -487,13 +489,27 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
         const usersRef = dbRef(db, 'users');
         const handleUsers = (snapshot: any) => {
             const usersData = snapshot.val() || {};
-            const usersList = Object.entries(usersData).map(([uid, data]: [string, any]) => ({ uid, display_name: data.displayName, photo_url: data.photoURL }));
+            const usersList = Object.entries(usersData).map(([uid, data]: [string, any]) => ({ 
+                uid, 
+                display_name: data.displayName, 
+                photo_url: data.photoURL,
+                department_id: data.department_id,
+                level: data.level
+            }));
             
             const statusRef = dbRef(db, 'status');
             onValue(statusRef, (statusSnap) => {
                 const statuses = statusSnap.val() || {};
                 const usersWithStatus: UserProfile[] = usersList.map((u: any) => ({ ...u, ...statuses[u.uid] }));
-                setAllFirebaseUsers(usersWithStatus);
+                
+                // Filter to show users in the same department and level
+                const filteredUsers = usersWithStatus.filter(u => 
+                    u.uid !== firebaseUser.uid && 
+                    u.department_id === userProfile.department_id && 
+                    u.level === userProfile.level
+                );
+                
+                setAllFirebaseUsers(filteredUsers);
             });
         };
         onValue(usersRef, handleUsers);

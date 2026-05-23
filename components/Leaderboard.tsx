@@ -55,7 +55,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
     setError(null);
     
     const weekId = getWeekId(new Date());
-    const path = activeTab === 'overall' ? 'leaderboard_overall' : `leaderboard_weekly/${weekId}`;
+    const path = activeTab === 'overall' 
+        ? `leaderboard_overall/${userProfile.department_id}/${userProfile.level}` 
+        : `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.level}`;
     const leaderboardRef = query(dbRef(db, path), orderByChild('xp'), limitToLast(100));
 
     const unsubscribe = onValue(leaderboardRef, (snapshot) => {

@@ -51,7 +51,11 @@ export { db, storage, serverTimestamp, auth, signInAnonymously, onAuthStateChang
   "rules": {
     "courses_data": {
       ".read": "auth != null",
-      ".write": "false" // Read-only for users
+      ".write": "root.child('users').child(auth.uid).child('is_admin').val() === true"
+    },
+    "past_questions": {
+      ".read": "auth != null",
+      ".write": "root.child('users').child(auth.uid).child('is_admin').val() === true"
     },
     "users": {
         ".read": "auth != null",

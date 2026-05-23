@@ -421,7 +421,7 @@ $$
 Make it visually engaging, well-spaced, and easy to follow!`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-3.5-flash',
                 contents: { parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
@@ -453,7 +453,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const promptText = `${basePrompt}${customInstruction}`;
     
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-3.5-flash',
                 contents: { parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
@@ -485,7 +485,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const promptText = `${basePrompt}${customInstruction}`;
     
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-3.5-flash',
                 contents: { parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }

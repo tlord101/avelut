@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
-import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Subject } from '../types';
+import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course } from '../types';
 import { useToast } from '../hooks/useToast';
 
 declare var __app_id: string;
@@ -18,7 +18,7 @@ const mockCourses = [
 ];
 
 const getCourseNameById = (id: string) => {
-    return mockCourses.find(c => c.id === id)?.name || 'your course';
+    return mockCourses.find(c => c.id === id)?.name || 'your department';
 }
 
 const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
@@ -77,7 +77,7 @@ const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHis
             {history.map(exam => (
                 <div key={exam.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex justify-between items-center">
                     <div>
-                        <p className="font-semibold text-gray-900">{getCourseNameById(exam.course_id)}</p>
+                        <p className="font-semibold text-gray-900">{getCourseNameById(exam.department_id)}</p>
                         <p className="text-sm text-gray-600">
                             {new Date(exam.timestamp).toLocaleString()}
                         </p>
@@ -100,6 +100,7 @@ interface ExamProps {
 
 export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [examState, setExamState] = useState<'start' | 'generating' | 'in_progress' | 'completed' | 'history' | 'review'>('start');
+  const [examMode, setExamMode] = useState<'ai' | 'pq'>('ai');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -108,9 +109,23 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [score, setScore] = useState(0);
   const [reviewExam, setReviewExam] = useState<ExamHistoryItem | null>(null);
   const [completedTopicNames, setCompletedTopicNames] = useState<string[]>([]);
+  const [availablePQSubjects, setAvailablePQSubjects] = useState<string[]>([]);
+  const [selectedPQSubject, setSelectedPQSubject] = useState<string>('');
   const [isTopicDataLoading, setIsTopicDataLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    // Check for available subjects (courses) in Past Questions FOR THE USER'S DEPT AND LEVEL
+    const pqRef = dbRef(db, `past_questions/${userProfile.department_id}/${userProfile.level}`);
+    get(pqRef).then(snap => {
+        if(snap.exists()) {
+            setAvailablePQSubjects(Object.keys(snap.val()));
+        } else {
+            setAvailablePQSubjects([]);
+        }
+    });
+  }, [userProfile.department_id, userProfile.level]);
 
   const userAnswersRef = useRef(userAnswers);
   useEffect(() => { userAnswersRef.current = userAnswers; }, [userAnswers]);
@@ -132,14 +147,14 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         }
         
         try {
-            const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
-            const courseData = snapshot.val();
+            const snapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+            const departmentData = snapshot.val();
 
-            if (courseData) {
-                const subjects: Subject[] = courseData.subject_list || [];
+            if (departmentData) {
+                const courses: Course[] = departmentData.course_list || [];
                 const topicNames: string[] = [];
-                subjects.forEach(subject => {
-                    subject.topics?.forEach(topic => {
+                courses.forEach(course => {
+                    course.topics?.forEach(topic => {
                         if (completedTopicIds.includes(topic.topic_id)) {
                             topicNames.push(topic.topic_name);
                         }
@@ -148,7 +163,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                 setCompletedTopicNames(topicNames);
             }
         } catch (error) {
-            console.error("Error fetching course data for exam generation:", error);
+            console.error("Error fetching department data for exam generation:", error);
             addToast("Could not load topic data to create your exam.", 'error');
         } finally {
             setIsTopicDataLoading(false);
@@ -156,7 +171,41 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     };
 
     fetchCompletedTopics();
-  }, [userProgress, userProfile.course_id, addToast]);
+  }, [userProgress, userProfile.department_id, addToast]);
+
+  const startPQExam = async (courseName: string) => {
+    setExamState('generating');
+    try {
+        const pqRef = dbRef(db, `past_questions/${userProfile.department_id}/${userProfile.level}/${courseName}`);
+        const snapshot = await get(pqRef);
+        if(!snapshot.exists()) throw new Error("No questions found for this course.");
+        
+        const yearsData = snapshot.val();
+        let allQuestions: Question[] = [];
+        Object.keys(yearsData).forEach(year => {
+            const yearQuestions = Object.values(yearsData[year]) as Question[];
+            allQuestions = [...allQuestions, ...yearQuestions];
+        });
+
+        if(allQuestions.length === 0) throw new Error("Question bank is empty.");
+
+        // Randomly pick 10 questions
+        const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, 10);
+        
+        setQuestions(selected);
+        setUserAnswers(new Array(selected.length).fill(''));
+        setCurrentQuestionIndex(0);
+        setScore(0);
+        setTimeLeft(selected.length * 60); // 1 min per question
+        setExamState('in_progress');
+        setExamMode('pq');
+    } catch (err: any) {
+        console.error("Failed to start PQ exam:", err);
+        addToast(err.message || "Failed to load past questions.", 'error');
+        setExamState('start');
+    }
+  };
 
   const finishExam = useCallback(async () => {
       setExamState(currentState => {
@@ -174,7 +223,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
           const examResult = {
               user_id: userProfile.uid,
-              course_id: userProfile.course_id,
+              department_id: userProfile.department_id,
               score: currentScore,
               total_questions: questions.length,
               timestamp: Date.now(),
@@ -211,7 +260,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           
           return 'completed';
       });
-  }, [questions, userProfile.course_id, userProfile.uid, addToast]);
+  }, [questions, userProfile.department_id, userProfile.uid, addToast]);
 
   useEffect(() => {
       if (examState !== 'in_progress' || timeLeft <= 0) {
@@ -234,8 +283,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     setExamState('generating');
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: `Generate 10 multiple-choice questions for a student studying "${getCourseNameById(userProfile.course_id)}" at a "${userProfile.level}" level, focusing on the following topics they have completed: ${completedTopicNames.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.`,
+        model: 'gemini-3.5-flash',
+        contents: `Generate 10 multiple-choice questions for a student studying "${getCourseNameById(userProfile.department_id)}" at a "${userProfile.level}" level, focusing on the following topics they have completed: ${completedTopicNames.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -430,33 +479,86 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       
       default: // 'start'
         if (isTopicDataLoading) {
-            return <LoadingSpinner text="Checking your completed topics..." />;
+            return (
+                <LoadingSpinner text="Checking your completed topics..." />
+            );
         }
         
         const canStartExam = completedTopicNames.length > 0;
 
         return (
-          <div className="text-center">
+          <div className="max-w-2xl mx-auto w-full text-center space-y-8 py-8">
             <h3 className="text-2xl font-bold text-gray-900">Ready for your exam?</h3>
-            {canStartExam ? (
-                <p className="text-gray-600 mt-2">You'll be tested on topics you've completed in the Study Guide.</p>
-            ) : (
-                <p className="text-yellow-800 bg-yellow-50 p-3 rounded-lg mt-4 border border-yellow-200">
-                    Please complete at least one topic in the Study Guide before starting an exam.
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* AI Generated Exam */}
+              <div className="bg-white border-2 border-lime-100 rounded-2xl p-6 hover:border-lime-500 transition-all text-left flex flex-col">
+                <div className="w-12 h-12 bg-lime-100 rounded-xl flex items-center justify-center text-lime-600 mb-4 font-bold text-xl">
+                    AI
+                </div>
+                <h4 className="text-lg font-bold text-gray-900">Adaptive AI Quiz</h4>
+                <p className="text-sm text-gray-600 mt-2 flex-grow">
+                    Practice with AI-generated questions based specifically on the topics you've recently covered.
                 </p>
-            )}
-            <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                <button
-                    onClick={generateQuestions}
-                    className="flex-1 bg-lime-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!canStartExam || isTopicDataLoading}
-                >
-                    Start Exam
-                </button>
-                <button onClick={() => setExamState('history')} className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                    View Exam History
-                </button>
+                {canStartExam ? (
+                    <button
+                        onClick={generateQuestions}
+                        className="w-full mt-6 bg-lime-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-lime-700 transition-colors"
+                    >
+                        Start AI Exam
+                    </button>
+                ) : (
+                    <div className="mt-6 text-xs text-yellow-800 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                        Complete at least one topic in the Study Guide.
+                    </div>
+                )}
+              </div>
+
+              {/* Past Questions Exam */}
+              <div className="bg-white border-2 border-purple-100 rounded-2xl p-6 hover:border-purple-500 transition-all text-left flex flex-col">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 mb-4">
+                  <GraduationCapIcon className="w-6 h-6" />
+                </div>
+                <h4 className="text-lg font-bold text-gray-900">Past Question Mock</h4>
+                <p className="text-sm text-gray-600 mt-2 flex-grow">
+                  Test yourself with real past questions uploaded by administrators for your course.
+                </p>
+                
+                {availablePQSubjects.length > 0 ? (
+                  <div className="mt-6 space-y-3">
+                    <select 
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500"
+                      onChange={(e) => setSelectedPQSubject(e.target.value)}
+                      value={selectedPQSubject}
+                    >
+                      <option value="">Select Subject</option>
+                      {availablePQSubjects.map(s => (
+                        <option key={s} value={s}>{s.replace(/_/g, ' ').toUpperCase()}</option>
+                      ))}
+                    </select>
+                    <button
+                        onClick={() => selectedPQSubject && startPQExam(selectedPQSubject)}
+                        disabled={!selectedPQSubject}
+                        className="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
+                    >
+                        Start Mock Exam
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-6 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
+                    No past questions available yet for your course.
+                  </div>
+                )}
+              </div>
             </div>
+
+            <button 
+              onClick={() => setExamState('history')} 
+              className="inline-flex items-center text-gray-600 font-semibold hover:text-lime-600 transition-colors mt-8"
+            >
+              <ListIcon className="w-5 h-5 mr-2" />
+              View Exam History
+            </button>
           </div>
         );
     }

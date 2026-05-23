@@ -8,7 +8,7 @@ import type { UserProfile } from '../types';
 
 declare var __app_id: string;
 
-interface Course {
+interface Department {
   id: string;
   name: string;
   levels: string[];
@@ -16,59 +16,59 @@ interface Course {
 
 interface OnboardingProps {
   user: FirebaseUser;
-  onOnboardingComplete: (profileData: { courseId: string; level: string }) => void;
+  onOnboardingComplete: (profileData: { departmentId: string; level: string }) => void;
 }
 
 export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComplete }) => {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [levels, setLevels] = useState<string[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [selectedLevel, setSelectedLevel] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchDepartments = async () => {
       try {
-        const snapshot = await get(dbRef(db, 'courses_data'));
+        const snapshot = await get(dbRef(db, 'departments_data'));
         const data = snapshot.val();
         
         if (data) {
-            const fetchedCourses: Course[] = Object.keys(data).map(id => ({ 
+            const fetchedDepartments: Department[] = Object.keys(data).map(id => ({ 
               id, 
-              name: data[id].course_name, 
+              name: data[id].department_name, 
               levels: data[id].levels || [] 
             }));
 
-            setCourses(fetchedCourses);
-            setSelectedCourse(fetchedCourses[0].id);
-            const initialLevels = fetchedCourses[0].levels || [];
+            setDepartments(fetchedDepartments);
+            setSelectedDepartment(fetchedDepartments[0].id);
+            const initialLevels = fetchedDepartments[0].levels || [];
             setLevels(initialLevels);
             setSelectedLevel(initialLevels[0] || '');
         } else {
           setError("Could not find configuration data. Please contact support.");
         }
       } catch (err) {
-        console.error("Error fetching courses data:", (err as any).message || err);
+        console.error("Error fetching departments data:", (err as any).message || err);
         setError("An error occurred during setup. Please try again later.");
       } finally {
         setIsLoadingData(false);
       }
     };
 
-    fetchCourses();
+    fetchDepartments();
   }, []);
 
-  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newCourseId = e.target.value;
-    setSelectedCourse(newCourseId);
+  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newDeptId = e.target.value;
+    setSelectedDepartment(newDeptId);
     
-    const selectedCourseData = courses.find(c => c.id === newCourseId);
-    if (selectedCourseData) {
-        const courseLevels = selectedCourseData.levels || [];
-        setLevels(courseLevels);
-        setSelectedLevel(courseLevels[0] || '');
+    const selectedDeptData = departments.find(d => d.id === newDeptId);
+    if (selectedDeptData) {
+        const deptLevels = selectedDeptData.levels || [];
+        setLevels(deptLevels);
+        setSelectedLevel(deptLevels[0] || '');
     } else {
         setLevels([]);
         setSelectedLevel('');
@@ -77,15 +77,15 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedCourse || !selectedLevel) {
-      setError("Please select both a course and a level.");
+    if (!selectedDepartment || !selectedLevel) {
+      setError("Please select both a department and a level.");
       return;
     }
     setIsSubmitting(true);
     
     setTimeout(() => {
       onOnboardingComplete({
-        courseId: selectedCourse,
+        departmentId: selectedDepartment,
         level: selectedLevel,
       });
     }, 1500);
@@ -112,19 +112,19 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
       <form onSubmit={handleSubmit}>
         <div className="space-y-6">
           <div>
-            <label htmlFor="course" className="block text-sm font-medium text-gray-700 mb-2">
-              Choose your course
+            <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-2">
+              Choose your department
             </label>
             <select
-              id="course"
-              name="course"
-              value={selectedCourse}
-              onChange={handleCourseChange}
+              id="department"
+              name="department"
+              value={selectedDepartment}
+              onChange={handleDepartmentChange}
               className="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none"
             >
-              {courses.map((course) => (
-                <option key={course.id} value={course.id} className="bg-white">
-                  {course.name}
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id} className="bg-white">
+                  {dept.name}
                 </option>
               ))}
             </select>
@@ -142,7 +142,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
               disabled={levels.length === 0}
               className="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {levels.length === 0 && <option disabled value="" className="bg-white">Select a course</option>}
+              {levels.length === 0 && <option disabled value="" className="bg-white">Select a department</option>}
               {levels.map((level) => (
                 <option key={level} value={level} className="bg-white">
                   {level}
@@ -155,7 +155,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
         <div className="mt-8">
           <button
             type="submit"
-            disabled={isSubmitting || isLoadingData || !!error || !selectedCourse || !selectedLevel}
+            disabled={isSubmitting || isLoadingData || !!error || !selectedDepartment || !selectedLevel}
             className="w-full bg-gradient-to-r from-lime-500 to-teal-500 text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {isSubmitting ? (

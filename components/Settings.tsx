@@ -43,11 +43,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
   // FIX: Use snake_case for display_name
   const [newDisplayName, setNewDisplayName] = useState(userProfile.display_name);
   const [isSaving, setIsSaving] = useState(false);
-  const [courseName, setCourseName] = useState<string>('');
-  const [isCourseLoading, setIsCourseLoading] = useState(true);
+  const [departmentName, setDepartmentName] = useState<string>('');
+  const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
   const [levels, setLevels] = useState<string[]>([]);
   const [isLevelsLoading, setIsLevelsLoading] = useState(true);
-  // FIX: Use snake_case for notifications_enabled
   const [isNotificationSwitchOn, setIsNotificationSwitchOn] = useState(userProfile.notifications_enabled);
   const [isNotificationSaving, setIsNotificationSaving] = useState(false);
   const { addToast } = useToast();
@@ -56,46 +55,43 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    // FIX: Use snake_case for notifications_enabled
     setIsNotificationSwitchOn(userProfile.notifications_enabled);
   }, [userProfile.notifications_enabled]);
 
   useEffect(() => {
-    const fetchCourseData = async () => {
-      // FIX: Use snake_case for course_id
-      if (!userProfile.course_id) {
-        setCourseName('Not Set');
-        setIsCourseLoading(false);
+    const fetchDepartmentData = async () => {
+      if (!userProfile.department_id) {
+        setDepartmentName('Not Set');
+        setIsDepartmentLoading(false);
         setIsLevelsLoading(false);
         return;
       }
-      setIsCourseLoading(true);
+      setIsDepartmentLoading(true);
       setIsLevelsLoading(true);
       try {
-        const snapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
-        const courseData = snapshot.val();
+        const snapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+        const departmentData = snapshot.val();
 
-        if (courseData) {
-          setCourseName(courseData.course_name || userProfile.course_id.replace(/_/g, ' '));
-          setLevels(courseData.levels || []);
+        if (departmentData) {
+          setDepartmentName(departmentData.department_name || userProfile.department_id.replace(/_/g, ' '));
+          setLevels(departmentData.levels || []);
         } else {
-          setCourseName(userProfile.course_id.replace(/_/g, ' '));
+          setDepartmentName(userProfile.department_id.replace(/_/g, ' '));
           setLevels([]);
         }
       } catch (error) {
-        console.error("Failed to fetch course data:", error);
-        setCourseName(userProfile.course_id.replace(/_/g, ' '));
+        console.error("Failed to fetch department data:", error);
+        setDepartmentName(userProfile.department_id.replace(/_/g, ' '));
         setLevels([]);
-        addToast("Could not load course details.", "error");
+        addToast("Could not load department details.", "error");
       } finally {
-        setIsCourseLoading(false);
+        setIsDepartmentLoading(false);
         setIsLevelsLoading(false);
       }
     };
 
-    fetchCourseData();
-    // FIX: Use snake_case for course_id
-  }, [userProfile.course_id, addToast]);
+    fetchDepartmentData();
+  }, [userProfile.department_id, addToast]);
   
   const handleNotificationToggle = async (enabled: boolean) => {
     setIsNotificationSaving(true);
@@ -299,8 +295,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
             <span className="text-gray-800 font-medium">{user?.email}</span>
           </div>
            <div className="flex justify-between items-center border-t border-gray-200 pt-4">
-            <span className="text-gray-600">Current Course</span>
-            <span className="text-gray-800 font-medium">{isCourseLoading ? 'Loading...' : courseName}</span>
+            <span className="text-gray-600">Current Department</span>
+            <span className="text-gray-800 font-medium">{isDepartmentLoading ? 'Loading...' : departmentName}</span>
           </div>
            <div className="flex justify-between items-center border-t border-gray-200 pt-4">
             <span className="text-gray-600">Level</span>

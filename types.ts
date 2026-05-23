@@ -10,11 +10,12 @@ export interface UserProfile {
   uid: string;
   display_name: string;
   photo_url?: string;
-  course_id: string;
+  department_id: string;
   level: string;
   current_streak: number;
   last_activity_date: number; // Store as timestamp
   notifications_enabled: boolean;
+  is_admin?: boolean; // New property for admin access
   is_online?: boolean;
   last_seen?: number;
   privacy_consent?: {
@@ -52,7 +53,7 @@ export interface ExamQuestionResult extends Question {
 export interface ExamHistoryItem {
   id:string;
   user_id: string;
-  course_id: string;
+  department_id: string;
   score: number;
   total_questions: number;
   timestamp: number;
@@ -65,11 +66,11 @@ export interface Topic {
   topic_name: string;
 }
 
-export interface Subject {
-  subject_id: string;
-  subject_name: string;
+export interface Course {
+  course_id: string;
+  course_name: string;
   topics: Topic[];
-  level?: string; // The difficulty level this subject belongs to
+  level?: string; // The difficulty level this course belongs to
   semester?: 'first' | 'second'; // New field for semester categorization
 }
 

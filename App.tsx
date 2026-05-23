@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
-import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Subject } from './types';
+import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
 import { Onboarding } from './components/Onboarding';
@@ -117,7 +117,7 @@ const App: React.FC = () => {
         const unsubscribeProfile = onValue(userRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                if (!data.course_id) {
+                if (!data.department_id) {
                     setIsOnboarding(true);
                 } else {
                     setUserProfile(data as UserProfile);
@@ -219,17 +219,17 @@ const App: React.FC = () => {
         
         const setupDashboardData = async () => {
             try {
-                const courseSnapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
-                const courseData = courseSnapshot.val();
-                if (!courseData) return;
+                const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+                const departmentData = departmentSnapshot.val();
+                if (!departmentData) return;
 
-                const subjectsForLevel = (courseData.subject_list || []).filter((subject: Subject) => subject.level === userProfile.level);
+                const coursesForLevel = (departmentData.course_list || []).filter((course: Course) => course.level === userProfile.level);
                 
-                const totalTopics = subjectsForLevel.reduce((acc: number, subject: Subject) => acc + (subject.topics?.length || 0), 0) || 0;
+                const totalTopics = coursesForLevel.reduce((acc: number, course: Course) => acc + (course.topics?.length || 0), 0) || 0;
 
                 const topicIdsForLevel = new Set<string>();
-                subjectsForLevel.forEach(subject => {
-                    subject.topics?.forEach(topic => {
+                coursesForLevel.forEach(course => {
+                    course.topics?.forEach(topic => {
                         topicIdsForLevel.add(topic.topic_id);
                     });
                 });
@@ -304,7 +304,7 @@ const App: React.FC = () => {
         }
     };
     
-    const handleOnboardingComplete = async (profileData: { courseId: string; level: string }) => {
+    const handleOnboardingComplete = async (profileData: { departmentId: string; level: string }) => {
         if (!user) return;
         const now = Date.now();
         const displayName = user.displayName || 'Learner';
@@ -314,7 +314,7 @@ const App: React.FC = () => {
             uid: user.uid,
             display_name: displayName,
             photo_url: photoURL,
-            course_id: profileData.courseId,
+            department_id: profileData.departmentId,
             level: profileData.level,
             current_streak: 0,
             last_activity_date: now,
@@ -539,6 +539,7 @@ const App: React.FC = () => {
               activeItem={activeItem}
               onItemClick={setActiveItem}
               isVisible={!isMobileSidebarOpen}
+              userProfile={userProfile}
             />
             <GuidedTour 
                 steps={tourSteps}

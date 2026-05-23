@@ -61,38 +61,50 @@ const TextChat: React.FC<{
     useEffect(() => {
         const fetchCourseContext = async () => {
             try {
-                const courseSnapshot = await get(dbRef(db, `courses_data/${userProfile.course_id}`));
-                const courseData = courseSnapshot.val();
+                const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+                const departmentData = departmentSnapshot.val();
                 
                 const progressSnapshot = await get(dbRef(db, `user_progress/${userProfile.uid}`));
                 const progressData = progressSnapshot.val() || {};
                 
                 const completedTopics = Object.keys(progressData).filter(pId => progressData[pId].is_complete);
-                const subjects = courseData?.subject_list || [];
+                const courses = departmentData?.course_list || [];
                 
-                let contextText = `User's Course Information:\n`;
+                let contextText = `User's Department Information:\n`;
                 contextText += `Level: ${userProfile.level}\n`;
-                contextText += `Course ID: ${userProfile.course_id}\n\n`;
-                contextText += `Subjects and Topics:\n`;
+                contextText += `Department ID: ${userProfile.department_id}\n\n`;
+                contextText += `Courses and Topics:\n`;
                 
-                subjects.forEach((subject: any) => {
-                    if (subject.level === userProfile.level) {
-                        contextText += `\n${subject.subject_name}:\n`;
-                        subject.topics?.forEach((topic: any) => {
+                courses.forEach((course: any) => {
+                    if (course.level === userProfile.level) {
+                        contextText += `\n${course.course_name}:\n`;
+                        course.topics?.forEach((topic: any) => {
                             const completed = completedTopics.includes(topic.topic_id);
                             contextText += `  - ${topic.topic_name} ${completed ? '(✓ completed)' : '(in progress)'}\n`;
                         });
                     }
                 });
+
+                // Fetch textbook contexts for grounding
+                const textbooksRef = dbRef(db, `textbook_contexts/${userProfile.department_id}`);
+                const textbookSnap = await get(textbooksRef);
+                let textbookDataText = '';
+                if (textbookSnap.exists()) {
+                    textbookDataText = '\n\nTEXTBOOK KNOWLEDGE BASE:\nThe following structured knowledge from uploaded textbooks is available. Ground your answers in this material where applicable:\n';
+                    const textbooks = textbookSnap.val();
+                    Object.keys(textbooks).forEach(subj => {
+                        textbookDataText += `Course: ${subj}\nSyllabus: ${JSON.stringify(textbooks[subj].syllabus)}\n\n`;
+                    });
+                }
                 
-                setCourseContext(contextText);
+                setCourseContext(contextText + textbookDataText);
             } catch (error) {
                 console.error('Error fetching course context:', error);
             }
         };
         
         fetchCourseContext();
-    }, [userProfile.uid, userProfile.course_id, userProfile.level]);
+    }, [userProfile.uid, userProfile.department_id, userProfile.level]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -123,7 +135,7 @@ const TextChat: React.FC<{
                 const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
                 
                 geminiChat.current = ai.chats.create({ 
-                    model: 'gemini-2.0-flash', 
+                    model: 'gemini-3.5-flash', 
                     history,
                     systemInstruction 
                 });
@@ -160,7 +172,7 @@ const TextChat: React.FC<{
                 setActiveConversationId(currentConvoId);
                 
                 // Don't wait for title generation
-                ai.models.generateContent({ model: 'gemini-2.0-flash', contents: `Generate a very short, concise title (4 words max) for the following user query: "${currentInput}"` })
+                ai.models.generateContent({ model: 'gemini-3.5-flash', contents: `Generate a very short, concise title (4 words max) for the following user query: "${currentInput}"` })
                     .then(titleResult => update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { title: titleResult.text.replace(/"/g, '') }));
             }
             
@@ -177,7 +189,7 @@ const TextChat: React.FC<{
             if (!geminiChat.current) {
                 const history = [...messages, { id: newUserMsgRef.key!, ...userMessageData, timestamp: Date.now() }].map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{ text: msg.text || '' }] }));
                 const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
-                geminiChat.current = ai.chats.create({ model: 'gemini-2.0-flash', history, systemInstruction });
+                geminiChat.current = ai.chats.create({ model: 'gemini-3.5-flash', history, systemInstruction });
             }
             
             const stream = await geminiChat.current.sendMessageStream({ message: currentInput });

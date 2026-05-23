@@ -9,6 +9,7 @@ import { Exam } from './components/Exam';
 import { Settings } from './components/Settings';
 import Help from './components/Help';
 import { Messenger } from './components/Messenger';
+import { AdminPanel } from './components/AdminPanel';
 
 interface MainContentProps {
     activeItem: string;
@@ -52,6 +53,8 @@ export const MainContent: React.FC<MainContentProps> = ({
             return <Help onStartTour={startTour} />;
         case 'messenger':
             return <Messenger userProfile={userProfile} />;
+        case 'admin':
+            return <AdminPanel userProfile={userProfile} />;
         default:
             return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
     }

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { NavItem, UserProfile } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { navigationItems, secondaryNavigationItems } from '../constants';
 import { Avatar } from './Avatar';
 
@@ -71,6 +72,14 @@ const SidebarContent: React.FC<{
           {navigationItems.map((item) => (
               <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
           ))}
+          {userProfile?.is_admin && (
+              <NavButton 
+                  item={{ id: 'admin', label: 'Admin Panel', icon: <ShieldCheckIcon /> }} 
+                  isActive={activeItem === 'admin'} 
+                  isExpanded={isExpanded} 
+                  onClick={() => onItemClick('admin')} 
+              />
+          )}
         </ul>
       </nav>
       
