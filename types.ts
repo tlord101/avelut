@@ -70,10 +70,22 @@ export interface Course {
   course_id: string;
   course_name: string;
   topics: Topic[];
-  level?: string; // The difficulty level this course belongs to
-  semester?: 'first' | 'second'; // New field for semester categorization
+  level: string; // 100lvl, 200lvl, etc.
+  semester?: 'first' | 'second';
+  textbook_url?: string;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  levels: {
+    [level: string]: {
+      courses: {
+        [courseId: string]: Course;
+      };
+    };
+  };
+}
 
 export interface UserProgress {
   [topic_id: string]: {

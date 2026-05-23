@@ -14,10 +14,49 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
-    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'textbooks'>('questions');
+    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'textbooks' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const { addToast } = useToast();
+
+    // Departments State
+    const [allDepartments, setAllDepartments] = useState<any[]>([]);
+    const [newDeptName, setNewDeptName] = useState('');
+    const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
+
+    const fetchDepartments = async () => {
+        try {
+            const deptRef = dbRef(db, 'departments_data');
+            const snapshot = await get(deptRef);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const depts = Object.keys(data).map(id => ({ id, ...data[id] }));
+                setAllDepartments(depts);
+            }
+        } catch (error) {
+            console.error("Error fetching departments:", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchDepartments();
+    }, []);
+
+    const handleAddDepartment = async () => {
+        if (!newDeptName) return;
+        const id = newDeptName.toLowerCase().replace(/\s+/g, '_');
+        try {
+            await set(dbRef(db, `departments_data/${id}`), {
+                department_name: newDeptName,
+                levels: LEVELS
+            });
+            setNewDeptName('');
+            fetchDepartments();
+            addToast("Department added successfully!", "success");
+        } catch (error: any) {
+            addToast(error.message, "error");
+        }
+    };
 
     // Fetch Users helper
     const fetchUsers = async () => {
@@ -196,17 +235,83 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             const downloadURL = await getDownloadURL(uploadResult.ref);
 
             setExtractionProgress('Extracting syllabus with Gemini 3.5 Flash...');
-            // ... (rest same until RTDB save)
+            
+            const reader = new FileReader();
+            reader.readAsDataURL(textbookFile);
+            const base64PDF = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            });
 
-            // 3. Save to RTDB
-            const textbookRef = dbRef(db, `textbook_contexts/${uploadDepartmentId}/${uploadLevel}/${uploadCourseName}`);
-            await set(textbookRef, {
+            const prompt = `Analyze this PDF textbook for "${uploadCourseName}" at "${uploadLevel}" level.
+            Extract a comprehensive syllabus/course outline into a structured JSON array of topics.
+            
+            RULES:
+            1. Output ONLY the JSON object.
+            2. The root object must have a "syllabus" key which is an array of objects.
+            3. Each topic object must have: topic_name (string) and topic_id (slugified string).
+
+            FORMAT:
+            {
+                "syllabus": [
+                    { "topic_name": "Introduction to...", "topic_id": "intro_to_..." },
+                    ...
+                ]
+            }`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
+                contents: [
+                    {
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
+                        ]
+                    }
+                ],
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            const responseData = JSON.parse(response.text);
+            const syllabusData = responseData.syllabus || [];
+
+            setExtractionProgress('Saving to database...');
+
+            // 3. Save to Textbook Contexts (for AI grounding)
+            const textbookContextRef = dbRef(db, `textbook_contexts/${uploadDepartmentId}/${uploadLevel}/${uploadCourseName}`);
+            await set(textbookContextRef, {
                 pdf_url: downloadURL,
                 syllabus: syllabusData,
                 uploaded_at: Date.now()
             });
 
-            addToast("Textbook processed and saved successfully!", "success");
+            // 4. Update Department Course List (for UI)
+            const deptRef = dbRef(db, `departments_data/${uploadDepartmentId}`);
+            const deptSnap = await get(deptRef);
+            let currentCourses = [];
+            if (deptSnap.exists()) {
+                currentCourses = deptSnap.val().course_list || [];
+            }
+
+            const newCourse: Course = {
+                course_id: uploadCourseName.toLowerCase().replace(/\s+/g, '_'),
+                course_name: uploadCourseName,
+                level: uploadLevel,
+                topics: syllabusData,
+                textbook_url: downloadURL
+            };
+
+            const existingIndex = currentCourses.findIndex((c: any) => c.course_id === newCourse.course_id);
+            if (existingIndex > -1) {
+                currentCourses[existingIndex] = newCourse;
+            } else {
+                currentCourses.push(newCourse);
+            }
+
+            await update(deptRef, { course_list: currentCourses });
+
+            addToast("Textbook processed and course added successfully!", "success");
             setTextbookFile(null);
             setUploadCourseName('');
         } catch (error: any) {
@@ -248,6 +353,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2">
                 <button 
+                    onClick={() => setActiveTab('departments')}
+                    className={`px-4 py-2 font-medium ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                >
+                    Departments
+                </button>
+                <button 
                     onClick={() => setActiveTab('questions')}
                     className={`px-4 py-2 font-medium ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
@@ -273,6 +384,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 </button>
             </div>
 
+            {activeTab === 'departments' && (
+                <div className="space-y-6 max-w-2xl">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                        <h3 className="font-bold text-gray-800 mb-4">Add New Department</h3>
+                        <div className="flex gap-4">
+                            <input 
+                                type="text" 
+                                placeholder="Department Name (e.g., Computer Science)" 
+                                value={newDeptName} 
+                                onChange={e => setNewDeptName(e.target.value)}
+                                className="flex-1 p-2 border rounded-lg"
+                            />
+                            <button 
+                                onClick={handleAddDepartment}
+                                className="px-6 py-2 bg-lime-600 text-white rounded-lg font-bold hover:bg-lime-700"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                        <h3 className="font-bold text-gray-800 mb-4">Existing Departments</h3>
+                        <div className="space-y-2">
+                            {allDepartments.map(dept => (
+                                <div key={dept.id} className="p-3 border rounded-lg flex justify-between items-center">
+                                    <span>{dept.department_name}</span>
+                                    <span className="text-xs text-gray-500">{dept.levels?.join(', ')}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'questions' && (
                 <div className="space-y-8 max-w-2xl">
                     {/* Automated Upload Section */}
@@ -285,16 +431,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         </p>
                         
                         <div className="grid grid-cols-2 gap-4 mb-4">
-                            <input 
-                                type="text" placeholder="Department ID (e.g., computer_science)" 
-                                value={uploadDepartmentId} onChange={e => setUploadDepartmentId(e.target.value)}
+                            <select 
+                                value={uploadDepartmentId} 
+                                onChange={e => setUploadDepartmentId(e.target.value)}
                                 className="p-2 border rounded-lg bg-white"
-                            />
-                            <input 
-                                type="text" placeholder="Level (e.g., 100L)" 
-                                value={uploadLevel} onChange={e => setUploadLevel(e.target.value)}
+                            >
+                                <option value="">Select Department</option>
+                                {allDepartments.map(dept => (
+                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                ))}
+                            </select>
+                            <select 
+                                value={uploadLevel} 
+                                onChange={e => setUploadLevel(e.target.value)}
                                 className="p-2 border rounded-lg bg-white"
-                            />
+                            >
+                                <option value="">Select Level</option>
+                                {LEVELS.map(lvl => (
+                                    <option key={lvl} value={lvl}>{lvl}</option>
+                                ))}
+                            </select>
                             <input 
                                 type="text" placeholder="Course Name (e.g., Mathematics)" 
                                 value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
@@ -341,16 +497,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <input 
-                                type="text" placeholder="Dept ID" 
-                                value={uploadDepartmentId} onChange={e => setUploadDepartmentId(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
-                            <input 
-                                type="text" placeholder="Level" 
-                                value={uploadLevel} onChange={e => setUploadLevel(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
+                            <select 
+                                value={uploadDepartmentId} 
+                                onChange={e => setUploadDepartmentId(e.target.value)}
+                                className="p-2 border rounded-lg bg-white"
+                            >
+                                <option value="">Select Department</option>
+                                {allDepartments.map(dept => (
+                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                ))}
+                            </select>
+                            <select 
+                                value={uploadLevel} 
+                                onChange={e => setUploadLevel(e.target.value)}
+                                className="p-2 border rounded-lg bg-white"
+                            >
+                                <option value="">Select Level</option>
+                                {LEVELS.map(lvl => (
+                                    <option key={lvl} value={lvl}>{lvl}</option>
+                                ))}
+                            </select>
                             <input 
                                 type="text" placeholder="Course Name" 
                                 value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
@@ -405,11 +571,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
             {activeTab === 'courses' && (
                 <div className="space-y-6">
-                    <input 
-                        type="text" placeholder="Department ID (e.g., computer_science)" 
-                        value={departmentId} onChange={e => setDepartmentId(e.target.value)}
-                        className="w-full max-w-md p-2 border rounded-lg block"
-                    />
+                    <select 
+                        value={departmentId} 
+                        onChange={e => setDepartmentId(e.target.value)}
+                        className="w-full max-w-md p-2 border rounded-lg block bg-white"
+                    >
+                        <option value="">Select Department</option>
+                        {allDepartments.map(dept => (
+                            <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                        ))}
+                    </select>
                     
                     <div className="space-y-4">
                         <h3 className="font-bold text-lg">Courses in this Department</h3>
@@ -436,10 +607,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                         }}
                                         className="p-2 border rounded-lg"
                                     >
-                                        <option value="100">Level 100</option>
-                                        <option value="200">Level 200</option>
-                                        <option value="300">Level 300</option>
-                                        <option value="400">Level 400</option>
+                                        {LEVELS.map(lvl => (
+                                            <option key={lvl} value={lvl}>{lvl}</option>
+                                        ))}
                                     </select>
                                 </div>
                                 
@@ -513,18 +683,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
+                            <select 
+                                value={uploadDepartmentId} 
+                                onChange={e => setUploadDepartmentId(e.target.value)}
+                                className="p-2 border rounded-lg bg-white"
+                            >
+                                <option value="">Select Department</option>
+                                {allDepartments.map(dept => (
+                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                ))}
+                            </select>
+                            <select 
+                                value={uploadLevel} 
+                                onChange={e => setUploadLevel(e.target.value)}
+                                className="p-2 border rounded-lg bg-white"
+                            >
+                                <option value="">Select Level</option>
+                                {LEVELS.map(lvl => (
+                                    <option key={lvl} value={lvl}>{lvl}</option>
+                                ))}
+                            </select>
                             <input 
-                                type="text" placeholder="Department ID" 
-                                value={uploadDepartmentId} onChange={e => setUploadDepartmentId(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
-                            <input 
-                                type="text" placeholder="Level (e.g., 100L)" 
-                                value={uploadLevel} onChange={e => setUploadLevel(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
-                            <input 
-                                type="text" placeholder="Course Name" 
+                                type="text" placeholder="Course Name (e.g., CSC 101)" 
                                 value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
                                 className="p-2 border rounded-lg col-span-2"
                             />
