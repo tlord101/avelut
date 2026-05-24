@@ -99,6 +99,11 @@ const getSubjectVisuals = (subjectName: string) => {
     };
 };
 
+const normalizeLevelValue = (value?: string): string => {
+    if (!value) return '';
+    return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
+};
+
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -771,7 +776,10 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         const data = snapshot.val();
         
         if (data && data.course_list) {
-            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => c.level === userProfile.level);
+            const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => (
+                normalizeLevelValue(c.level) === normalizedUserLevel
+            ));
             setCourses(coursesForLevel);
         }
       } catch (err) {
