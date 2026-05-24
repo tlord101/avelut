@@ -633,9 +633,6 @@ Student: "${tempInput}"
                 await set(imageMsgRef, imageMessageData);
             }
 
-            if (botMessagesToAdd.length > 0) {
-                setMessages(prev => [...prev, ...botMessagesToAdd]);
-            }
         });
 
         if (!result.success) {
