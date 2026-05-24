@@ -64,6 +64,9 @@ export interface ExamHistoryItem {
 export interface Topic {
   topic_id: string;
   topic_name: string;
+  topic_context?: string;
+  start_point?: string;
+  end_point?: string;
 }
 
 export interface Course {

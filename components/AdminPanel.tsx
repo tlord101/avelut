@@ -26,6 +26,19 @@ const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
 const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
     semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
 );
+const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+
+const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
+    const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
+    const rawTopicId = (topic?.topic_id || '').toString().trim();
+    return {
+        topic_name: topicName,
+        topic_id: rawTopicId || normalizeTopicId(topicName),
+        topic_context: (topic?.topic_context || topic?.context || '').toString().trim(),
+        start_point: (topic?.start_point || topic?.start || '').toString().trim(),
+        end_point: (topic?.end_point || topic?.end || '').toString().trim(),
+    };
+};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
@@ -270,17 +283,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             });
 
             const prompt = `Analyze this PDF textbook for "${course_name}" at "${level}" level.
-            Extract a comprehensive syllabus/course outline into a structured JSON array of topics.
+            Extract a comprehensive syllabus/course outline into a structured JSON array of topics with concise grounding context.
             
             RULES:
             1. Output ONLY the JSON object.
             2. The root object must have a "syllabus" key which is an array of objects.
-            3. Each topic object must have: topic_name (string) and topic_id (slugified string).
+            3. Each topic object must have:
+               - topic_name (string)
+               - topic_id (slugified string)
+               - topic_context (string, 1-2 lines describing what this topic covers and why it matters in this course)
+               - start_point (string, where teaching should begin for this topic)
+               - end_point (string, where teaching should stop for this topic)
+            4. Keep context concise and specific to this course level.
 
             FORMAT:
             {
                 "syllabus": [
-                    { "topic_name": "Introduction to...", "topic_id": "intro_to_..." },
+                    {
+                        "topic_name": "Introduction to...",
+                        "topic_id": "intro_to_...",
+                        "topic_context": "Brief course-grounded context...",
+                        "start_point": "Start from ...",
+                        "end_point": "Stop after ..."
+                    },
                     ...
                 ]
             }`;
@@ -305,7 +330,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 throw new Error("AI returned an empty response while extracting syllabus.");
             }
             const responseData = JSON.parse(response.text);
-            const syllabusData = responseData.syllabus || [];
+            const syllabusData = Array.isArray(responseData?.syllabus)
+                ? responseData.syllabus.map((topic: any, index: number) => sanitizeTopicMetadata(topic, index))
+                : [];
 
             setExtractionProgress('Saving to database...');
 
@@ -734,26 +761,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                 </div>
                                                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-gray-200">
                                                     {s.topics?.map((t, tIdx) => (
-                                                        <div key={tIdx} className="flex gap-2 animate-in slide-in-from-left-2 duration-300">
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Topic Name"
-                                                                value={t.topic_name}
+                                                        <div key={tIdx} className="space-y-2 animate-in slide-in-from-left-2 duration-300">
+                                                            <div className="flex gap-2">
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Topic Name"
+                                                                    value={t.topic_name}
+                                                                    onChange={e => {
+                                                                        const list = [...coursesList];
+                                                                        list[sIdx].topics[tIdx].topic_name = e.target.value;
+                                                                        list[sIdx].topics[tIdx].topic_id = normalizeTopicId(e.target.value);
+                                                                        setCoursesList(list);
+                                                                    }}
+                                                                    className="flex-1 p-2.5 border border-gray-100 rounded-xl text-xs font-bold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                                />
+                                                                <button onClick={() => {
+                                                                    const list = [...coursesList];
+                                                                    list[sIdx].topics = list[sIdx].topics.filter((_, i) => i !== tIdx);
+                                                                    setCoursesList(list);
+                                                                }} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                                                                    <XIcon className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                            <textarea
+                                                                placeholder="Topic context (what this topic should cover in this course)"
+                                                                value={t.topic_context || ''}
                                                                 onChange={e => {
                                                                     const list = [...coursesList];
-                                                                    list[sIdx].topics[tIdx].topic_name = e.target.value;
-                                                                    list[sIdx].topics[tIdx].topic_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                                                    list[sIdx].topics[tIdx].topic_context = e.target.value;
                                                                     setCoursesList(list);
                                                                 }}
-                                                                className="flex-1 p-2.5 border border-gray-100 rounded-xl text-xs font-bold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                                rows={2}
+                                                                className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none resize-y"
                                                             />
-                                                            <button onClick={() => {
-                                                                const list = [...coursesList];
-                                                                list[sIdx].topics = list[sIdx].topics.filter((_, i) => i !== tIdx);
-                                                                setCoursesList(list);
-                                                            }} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                                                <XIcon className="w-4 h-4" />
-                                                            </button>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Start point"
+                                                                    value={t.start_point || ''}
+                                                                    onChange={e => {
+                                                                        const list = [...coursesList];
+                                                                        list[sIdx].topics[tIdx].start_point = e.target.value;
+                                                                        setCoursesList(list);
+                                                                    }}
+                                                                    className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="End point"
+                                                                    value={t.end_point || ''}
+                                                                    onChange={e => {
+                                                                        const list = [...coursesList];
+                                                                        list[sIdx].topics[tIdx].end_point = e.target.value;
+                                                                        setCoursesList(list);
+                                                                    }}
+                                                                    className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                                />
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -761,7 +825,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                     onClick={() => {
                                                         const list = [...coursesList];
                                                         if(!list[sIdx].topics) list[sIdx].topics = [];
-                                                        list[sIdx].topics.push({ topic_id: '', topic_name: '', is_complete: false });
+                                                        list[sIdx].topics.push({ topic_id: '', topic_name: '', topic_context: '', start_point: '', end_point: '' });
                                                         setCoursesList(list);
                                                     }}
                                                     className="w-full py-2.5 border-2 border-dashed border-gray-100 rounded-xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:border-lime-200 hover:text-lime-600 transition-all"
