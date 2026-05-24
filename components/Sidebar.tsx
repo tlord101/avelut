@@ -38,11 +38,11 @@ const NavButton: React.FC<{
             ${isExpanded ? 'justify-start' : 'justify-center'}
             ${
                 isActive
-                ? 'bg-lime-100 text-lime-800 font-semibold'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? 'bg-mint text-emerald font-semibold'
+                : 'text-charcoal opacity-70 hover:bg-off-white hover:opacity-100'
             }`}
         >
-            {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-lime-500 rounded-r-full"></div>}
+            {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-emerald rounded-r-full"></div>}
             <span className={`flex-shrink-0 transition-all duration-300 ease-in-out ${isExpanded ? 'mr-4' : 'mr-0'}`}>{item.icon}</span>
             <span className={`font-medium whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                 {item.label}
@@ -60,19 +60,19 @@ const SidebarContent: React.FC<{
     items?: NavItem[];
     secondaryItems?: NavItem[];
 }> = ({ isExpanded, activeItem, onItemClick, userProfile, onLogout, items = navigationItems, secondaryItems = secondaryNavigationItems }) => (
-    <div className="h-full p-4 flex flex-col">
+    <div className="h-full p-4 flex flex-col bg-white">
       {/* Top Section: Logo */}
       <div className="flex items-center mb-10 flex-shrink-0">
-        <LogoIcon className="w-10 h-10 text-lime-500 flex-shrink-0" />
-        <h1 className={`text-2xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+        <LogoIcon className="w-10 h-10 text-emerald flex-shrink-0" />
+        <h1 className={`text-2xl font-bold text-charcoal tracking-tighter ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
           VANTUTOR
         </h1>
       </div>
       
       {/* Middle Section: Navigation */}
       <nav className="flex-grow overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <p className={`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 transition-opacity duration-300 ease-in-out ${isExpanded ? 'pl-3 opacity-100' : 'opacity-0'}`}>Menu</p>
-        <ul className="space-y-2">
+        <p className={`text-xs font-semibold text-charcoal opacity-40 uppercase tracking-widest mb-4 transition-opacity duration-300 ease-in-out ${isExpanded ? 'pl-3 opacity-100' : 'opacity-0'}`}>Menu</p>
+        <ul className="space-y-1">
           {items.map((item) => (
               <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
           ))}
@@ -81,26 +81,26 @@ const SidebarContent: React.FC<{
       
       {/* Bottom Section: Profile & Logout */}
       <div className="flex-shrink-0">
-         <ul className="space-y-2 pt-4 border-t border-gray-200">
+         <ul className="space-y-1 pt-4 border-t border-gray-100">
               {secondaryItems.map((item) => (
                   <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
               ))}
                <li>
                   <button
                       onClick={onLogout}
-                      className={`w-full flex items-center p-3 rounded-lg text-left transition-colors duration-300 ease-in-out text-gray-600 hover:bg-red-50 hover:text-red-600 group ${isExpanded ? 'justify-start' : 'justify-center'}`}
+                      className={`w-full flex items-center p-3 rounded-lg text-left transition-colors duration-300 ease-in-out text-charcoal opacity-70 hover:bg-red-50 hover:text-red-600 hover:opacity-100 group ${isExpanded ? 'justify-start' : 'justify-center'}`}
                   >
                       <span className="flex-shrink-0"><LogoutIcon /></span>
                       <span className={`font-medium ml-4 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>Logout</span>
                   </button>
               </li>
           </ul>
-        <div className="mt-6 p-3 bg-gray-100 rounded-lg">
+        <div className="mt-6 p-3 bg-off-white rounded-xl border border-gray-100">
           <div className="flex items-center">
             <Avatar display_name={userProfile?.display_name || null} photo_url={userProfile?.photo_url} className="w-10 h-10 flex-shrink-0" />
             <div className={`ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <p className="font-semibold text-gray-800">{userProfile?.display_name}</p>
-              <p className="text-xs text-gray-500">{userProfile?.level} Level</p>
+              <p className="font-semibold text-charcoal">{userProfile?.display_name}</p>
+              <p className="text-xs text-charcoal opacity-50 uppercase tracking-widest">{userProfile?.level} Level</p>
             </div>
           </div>
         </div>
@@ -125,9 +125,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
   return (
     <>
       {/* Mobile Sidebar */}
-      <div className={`fixed inset-0 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onCloseMobileSidebar} aria-hidden="true"></div>
-        <aside className="relative w-72 h-full bg-white border-r border-gray-200">
+      <div className={`fixed inset-0 z-[110] transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm" onClick={onCloseMobileSidebar} aria-hidden="true"></div>
+        <aside className="relative w-80 h-full bg-white border-r border-gray-100">
           <SidebarContent
             isExpanded={true}
             activeItem={activeItem}
@@ -142,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
       
       {/* Desktop Sidebar */}
       <aside 
-          className={`hidden md:block flex-shrink-0 bg-white border-r border-gray-200 w-64`}
+          className={`hidden md:block flex-shrink-0 bg-white border-r border-gray-100 w-72 h-full`}
       >
         <SidebarContent 
             isExpanded={true}

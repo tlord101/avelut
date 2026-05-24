@@ -601,7 +601,7 @@ const App: React.FC = () => {
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-gray-100 p-2 md:p-4 gap-4">
+        <div className="h-screen flex flex-col md:flex-row bg-off-white text-charcoal font-sans overflow-hidden">
             <Sidebar
                 activeItem={activeItem}
                 onItemClick={setActiveItem}
@@ -610,16 +610,18 @@ const App: React.FC = () => {
                 isMobileSidebarOpen={isMobileSidebarOpen}
                 onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
             />
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Header 
-                    currentPageLabel={currentPageLabel}
-                    unreadCount={unreadCount}
-                    onNotificationsClick={() => setIsNotificationsPanelOpen(true)}
-                    onMenuClick={() => setIsMobileSidebarOpen(true)}
-                    onMessengerClick={() => setActiveItem('messenger')}
-                    unreadMessagesCount={unreadMessagesCount}
-                />
-                <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+                {activeItem !== 'chat' && (
+                    <Header 
+                        currentPageLabel={currentPageLabel}
+                        unreadCount={unreadCount}
+                        onNotificationsClick={() => setIsNotificationsPanelOpen(true)}
+                        onMenuClick={() => setIsMobileSidebarOpen(true)}
+                        onMessengerClick={() => setActiveItem('messenger')}
+                        unreadMessagesCount={unreadMessagesCount}
+                    />
+                )}
+                <div className={`flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${activeItem !== 'chat' ? 'content-with-bottom-nav' : ''}`}>
                     {userProfile && (
                         <MainContent
                             key={location.pathname}

@@ -169,66 +169,84 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
     );
 
     const content = (isMobile: boolean) => (
-    <div className="h-full bg-[#F9FAFB] flex flex-col pt-6">
-      <div className="px-6 flex items-center justify-between mb-8">
-          <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">History</h2>
-          <button
-            onClick={isMobile ? handleMobileNewChat : onNewChat}
-            className="p-2 rounded-xl bg-white text-lime-600 shadow-sm ring-1 ring-gray-100 hover:ring-lime-100 hover:bg-lime-50 transition-all active:scale-95 group"
+    <div className="h-full bg-white flex flex-col p-4 animate-in fade-in duration-300">
+      {/* Top User Profile & Close Action */}
+      <div className="flex items-center justify-between mb-8">
+          <div className="w-10 h-10 rounded-full bg-emerald flex items-center justify-center text-white font-bold text-lg">
+              {userProfile.display_name?.charAt(0).toUpperCase() || 'D'}
+          </div>
+          <button 
+            onClick={onCloseMobilePanel}
+            className="p-2 text-charcoal hover:bg-off-white rounded-full transition-colors lg:hidden"
           >
-            <PlusIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
           </button>
+      </div>
+
+      {/* "New Conversation" Button */}
+      <button
+        onClick={isMobile ? handleMobileNewChat : onNewChat}
+        className="w-full flex items-center gap-3 px-6 h-[56px] rounded-[16px] bg-mint text-emerald hover:bg-emerald/10 transition-all font-semibold mb-8 group"
+      >
+        <PencilIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+        <span className="text-base">New Conversation</span>
+      </button>
+
+      {/* Conversations History List */}
+      <div className="flex items-center justify-between mb-4 px-2">
+          <h2 className="text-sm font-semibold text-charcoal">Conversations</h2>
+          <ChevronDownIcon className="w-4 h-4 text-charcoal transform rotate-180" />
       </div>
 
       <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-4">
         {conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
-                    <ChatBubbleIcon className="w-6 h-6 text-gray-200" />
-                </div>
-                <p className="text-xs font-bold text-gray-400 leading-tight">Your learning history will appear here.</p>
+            <div className="flex flex-col items-center justify-center py-12 px-2 text-center">
+                <p className="text-sm font-medium text-gray-400">Your history will appear here.</p>
             </div>
         ) : (
-            <ul className="space-y-1">
-                {conversations.map((convo) => renderConvoItem(convo, isMobile))}
+            <ul className="space-y-6 mt-4">
+                {conversations.map((convo) => (
+                    <li key={convo.id} className="group flex items-center justify-between px-2 cursor-pointer" onClick={() => isMobile ? handleMobileSelect(convo.id) : onSelectConversation(convo.id)}>
+                        <div className="flex-1 min-w-0 mr-4">
+                            <p className={`text-[15px] font-medium leading-tight truncate ${activeConversationId === convo.id ? 'text-emerald' : 'text-charcoal'}`}>
+                                {convo.title}
+                            </p>
+                            <p className="text-[13px] text-gray-400 mt-1">
+                                {timeAgo(convo.last_updated_at)}
+                            </p>
+                        </div>
+                        <button className="text-gray-400 hover:text-charcoal opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreVerticalIcon className="w-5 h-5" />
+                        </button>
+                    </li>
+                ))}
             </ul>
         )}
       </div>
 
-      <div className="p-6 border-t border-gray-100 bg-white/50">
-        <button
-          onClick={onClearAll}
-          disabled={isDeleting || conversations.length === 0}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-30 disabled:hover:bg-transparent"
-        >
-          <TrashIcon className="w-4 h-4" />
-          Clear everything
-        </button>
+      {/* Bottom Fixed/Sticky Area */}
+      <div className="mt-auto space-y-4 pt-4 border-t border-gray-100 bg-white">
+        <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 px-4 h-[48px] bg-off-white rounded-[24px] border border-gray-100">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input 
+                    type="text" 
+                    placeholder="Search history" 
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-sm placeholder-gray-500"
+                />
+            </div>
+            <button className="p-3 text-emerald hover:bg-off-white rounded-full transition-colors">
+                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg>
+            </button>
+        </div>
       </div>
-
-      {contextMenu && (
-          <div
-              style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-              className="fixed bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 p-2 z-[100] animate-in fade-in zoom-in duration-200"
-              onClick={(e) => e.stopPropagation()}
-          >
-              <div className="flex flex-col min-w-[140px]">
-                  <button 
-                    onClick={() => startRename(conversations.find(c => c.id === contextMenu.convoId)!)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors"
-                  >
-                    <PencilIcon className="w-4 h-4" /> Rename
-                  </button>
-                  <div className="h-px bg-gray-50 my-1 mx-2" />
-                  <button 
-                    onClick={() => { onDeleteConversation(contextMenu.convoId); setContextMenu(null); }}
-                    className="flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                  >
-                    <TrashIcon className="w-4 h-4" /> Delete
-                  </button>
-              </div>
-          </div>
-      )}
     </div>
   );
 
@@ -240,9 +258,9 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
       </aside>
       
       {/* Mobile Panel */}
-      <div className={`fixed inset-0 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`} >
+      <div className={`fixed inset-0 z-[100] transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`} >
           <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onCloseMobilePanel} aria-hidden="true" ></div>
-          <div className="relative w-72 h-full border-r border-gray-200">
+          <div className="relative w-[320px] h-full border-r border-gray-100 bg-white shadow-xl">
               {content(true)}
           </div>
       </div>

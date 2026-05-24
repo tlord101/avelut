@@ -194,10 +194,10 @@ const TextChat: React.FC<{
     };
 
     return (
-        <div className="flex-1 flex w-full h-full overflow-hidden bg-[#0A0A0A]">
+        <div className="flex-1 flex w-full h-full overflow-hidden bg-white">
             <div className="flex w-full">
                 {/* Desktop History Sidebar */}
-                <div className="hidden lg:flex w-[280px] flex-col border-r border-[#1F1F1F]">
+                <div className="hidden md:flex w-[320px] flex-col border-r border-gray-100">
                     <ChatHistoryPanel 
                         conversations={conversations}
                         activeConversationId={activeConversationId}
@@ -208,95 +208,211 @@ const TextChat: React.FC<{
                         handleClearAll={handleClearAll}
                         handleNewChat={handleNewChat}
                         isDeleting={isDeleting}
+                        userProfile={userProfile}
+                        onCloseMobilePanel={() => {}}
+                        isMobilePanelOpen={false}
+                        onSelectConversation={(id) => setActiveConversationId(id)}
                     />
                 </div>
 
                 {/* Main Chat View */}
-                <div className="flex-1 flex flex-col h-full bg-[#0A0A0A] relative animate-in fade-in duration-500">
+                <div className="flex-1 flex flex-col h-full bg-white relative animate-in fade-in duration-500 overflow-hidden pb-20 md:pb-0">
                     {/* Top Navigation Bar */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-[#1F1F1F]">
-                        <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-full border border-white/5">
-                            <button className="px-5 py-1.5 rounded-full bg-white text-black text-[11px] font-black uppercase tracking-wider">Ask</button>
-                            <button className="px-5 py-1.5 rounded-full text-gray-500 hover:text-white text-[11px] font-black uppercase tracking-wider">Imagine</button>
+                    <div className="flex items-center justify-between px-4 md:px-6 py-4 bg-white border-b border-gray-100 h-[60px] sticky top-0 z-20 shrink-0">
+                        <button 
+                            onClick={() => setIsMobilePanelOpen(true)}
+                            className="p-2 text-charcoal md:hidden"
+                        >
+                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M4 8h16M4 16h16" />
+                            </svg>
+                        </button>
+                        
+                        <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
+                            <span className="text-lg font-semibold text-charcoal uppercase tracking-tighter">Ask</span>
+                            <div className="w-[15px] h-[2px] bg-emerald rounded-full mt-0.5" />
                         </div>
-                        <div className="flex items-center gap-4">
-                            <button className="p-2 text-gray-500 hover:text-white transition-colors">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+
+                        <div className="flex items-center">
+                            <button className="p-2 text-charcoal opacity-60">
+                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08s5.97 1.09 6 3.08c-1.29 1.94-3.5 3.22-6 3.22z" />
+                                </svg>
                             </button>
                         </div>
                     </div>
 
                     {!activeConversationId && messages.length === 0 ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8">
-                            <div className="mb-12 relative">
-                                <div className="absolute inset-0 bg-blue-500/20 blur-[100px] rounded-full"></div>
-                                <div className="relative w-24 h-24 flex items-center justify-center bg-transparent">
-                                    <div className="w-16 h-16 border-[3px] border-white rounded-full flex items-center justify-center animate-pulse">
-                                        <div className="w-8 h-8 bg-white rotate-45"></div>
-                                    </div>
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+                            {/* Watermark Logo - Stylized 'O' with orbit ring */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05]">
+                                <div className="relative w-64 h-64 md:w-96 md:h-96">
+                                    <div className="absolute inset-0 border-[8px] md:border-[12px] border-charcoal rounded-full"></div>
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[20%] border-[8px] md:border-[12px] border-charcoal rounded-[100%] rotate-[-35deg]"></div>
                                 </div>
                             </div>
                             
-                            <h2 className="text-3xl font-black text-white mb-10 tracking-tight text-center">What can I help you learn today?</h2>
-                            
-                            <div className="w-full max-w-2xl grid grid-cols-3 gap-3">
-                                <button onClick={() => handleSendMessage("Explain my current syllabus")} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
-                                    <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-400 group-hover:scale-110 transition-transform">
-                                        <GraduationCapIcon className="w-5 h-5" />
+                            <div className="mt-auto w-full max-w-2xl px-4 space-y-6">
+                                {/* Horizontal Scrollable Action Pills */}
+                                <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-2">
+                                    <button onClick={() => handleSendMessage("Explain my current syllabus")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
+                                        <GraduationCapIcon className="w-4 h-4 text-emerald" />
+                                        <span>Explain syllabus</span>
+                                    </button>
+                                    <button onClick={() => handleSendMessage("Solve a complex problem")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
+                                        <SparklesIcon className="w-4 h-4 text-emerald" />
+                                        <span>Solve problem</span>
+                                    </button>
+                                    <button onClick={() => toggleVoice()} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
+                                        <VoiceIcon className="w-4 h-4 text-emerald" />
+                                        <span>Voice tutorial</span>
+                                    </button>
+                                    <button onClick={() => handleSendMessage("Help me study")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
+                                        <PlusIcon className="w-4 h-4 text-emerald" />
+                                        <span>Study tips</span>
+                                    </button>
+                                </div>
+
+                                {/* Main Input Container */}
+                                <div className="p-4 bg-off-white rounded-[24px] border border-gray-100 shadow-sm">
+                                    <textarea
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                handleSendMessage();
+                                            }
+                                        }}
+                                        placeholder="Ask anything"
+                                        className="w-full bg-transparent border-none focus:ring-0 text-charcoal placeholder-gray-500 resize-none min-h-[40px] text-base"
+                                        rows={1}
+                                    />
+                                    <div className="flex items-center justify-between mt-4">
+                                        <button className="p-2 bg-gray-200 rounded-full text-charcoal hover:bg-gray-300 transition-colors">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                        </button>
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={toggleVoice}
+                                                className={`p-2 text-charcoal hover:text-emerald transition-colors ${voiceStatus !== 'idle' ? 'text-emerald animate-pulse' : ''}`}
+                                            >
+                                                <VoiceIcon className="w-6 h-6" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleSendMessage()}
+                                                disabled={!input.trim() || isLoading}
+                                                className="flex items-center gap-2 px-6 py-2.5 bg-emerald hover:bg-emerald-hover text-white rounded-full font-bold transition-all disabled:opacity-50"
+                                            >
+                                                <SendIcon className="w-4 h-4 fill-current" />
+                                                <span>Send</span>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">Course Overview</span>
-                                </button>
-                                <button onClick={() => handleSendMessage("Solve a complex problem")} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
-                                    <div className="w-10 h-10 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-purple-400 group-hover:scale-110 transition-transform">
-                                        <SparklesIcon className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">AI Problem Solver</span>
-                                </button>
-                                <button onClick={() => toggleVoice()} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
-                                    <div className="w-10 h-10 bg-lime-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-lime-400 group-hover:scale-110 transition-transform">
-                                        <VoiceIcon className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">Voice Learning</span>
-                                </button>
+                                </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scroll-smooth">
-                            {messages.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
-                                    <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                                        <Avatar user={msg.sender === 'user' ? userProfile : { first_name: 'Van', last_name: 'Tutor', isAdmin: true }} size="sm" isAI={msg.sender === 'ai'} />
-                                        <div className={`mt-2 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
-                                            <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
-                                                <span className="text-[11px] font-black text-white/50 uppercase tracking-widest">{msg.sender === 'user' ? 'You' : 'Vantutor'}</span>
-                                                <span className="text-[10px] text-white/20 font-bold">{timeAgo(msg.timestamp)}</span>
+                        <div className="flex-1 flex flex-col min-h-0 bg-white">
+                            <div className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scroll-smooth">
+                                {messages.map((msg, i) => (
+                                    <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+                                        <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                            <div className="flex-shrink-0">
+                                                <Avatar user={msg.sender === 'user' ? userProfile : { display_name: 'VanTutor', isAdmin: true }} size="sm" isAI={msg.sender === 'ai'} />
                                             </div>
-                                            <div className={`rounded-3xl px-6 py-4 text-[15px] leading-relaxed transition-all shadow-lg ${
-                                                msg.sender === 'user' 
-                                                ? 'bg-[#1F1F1F] text-white rounded-tr-none shadow-white/5' 
-                                                : 'text-gray-200 bg-transparent rounded-tl-none border border-[#1F1F1F]'
-                                            }`}>
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                                            <div className={`mt-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
+                                                <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
+                                                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{msg.sender === 'user' ? 'You' : 'Vantutor'}</span>
+                                                    <span className="text-[10px] text-gray-400">{timeAgo(msg.timestamp)}</span>
+                                                </div>
+                                                <div className={`rounded-2xl px-5 py-3 text-[15px] leading-relaxed shadow-sm ${
+                                                    msg.sender === 'user' 
+                                                    ? 'bg-off-white text-charcoal border border-gray-100 rounded-tr-none' 
+                                                    : 'text-charcoal bg-white border border-gray-100 rounded-tl-none'
+                                                }`}>
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                            {isLoading && (
-                                <div className="flex justify-start animate-pulse">
-                                    <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white">VT</div>
-                                        <div className="mt-4 flex gap-1.5">
-                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce"></div>
-                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce [animation-delay:-0.5s]"></div>
+                                ))}
+                                {isLoading && (
+                                    <div className="flex justify-start animate-pulse">
+                                        <div className="flex gap-4">
+                                            <div className="w-8 h-8 rounded-full bg-off-white border border-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-400">VT</div>
+                                            <div className="mt-4 flex gap-1.5">
+                                                <div className="w-1.5 h-1.5 bg-emerald/40 rounded-full animate-bounce"></div>
+                                                <div className="w-1.5 h-1.5 bg-emerald/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                <div className="w-1.5 h-1.5 bg-emerald/40 rounded-full animate-bounce [animation-delay:-0.5s]"></div>
+                                            </div>
                                         </div>
                                     </div>
+                                )}
+                                <div ref={messagesEndRef} className="h-4" />
+                            </div>
+
+                            {/* Chat Input Fix for active state */}
+                            <div className="px-6 py-4 border-t border-gray-100 bg-white">
+                                <div className="p-3 bg-off-white rounded-3xl border border-gray-100 flex items-center gap-3">
+                                    <button className="p-2 text-charcoal hover:text-emerald transition-colors">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                        placeholder="Type a message..."
+                                        className="flex-1 bg-transparent border-none focus:ring-0 text-charcoal placeholder-gray-500 py-2"
+                                    />
+                                    <button 
+                                        onClick={() => handleSendMessage()}
+                                        disabled={!input.trim() || isLoading}
+                                        className="p-2.5 bg-emerald text-white rounded-full hover:bg-emerald-hover transition-colors disabled:opacity-50"
+                                    >
+                                        <SendIcon className="w-4 h-4 fill-current" />
+                                    </button>
                                 </div>
-                            )}
-                            <div ref={messagesEndRef} className="h-4" />
+                            </div>
                         </div>
                     )}
+
+                    {/* Mobile History Drawer (Controlled by Chat component state) */}
+                    <div className={`fixed inset-0 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsMobilePanelOpen(false)}></div>
+                        <div className="relative w-[320px] h-full shadow-2xl">
+                            <ChatHistoryPanel 
+                                conversations={conversations}
+                                activeConversationId={activeConversationId}
+                                setActiveConversationId={(id) => {
+                                    setActiveConversationId(id);
+                                    setIsMobilePanelOpen(false);
+                                }}
+                                isHistoryLoading={isHistoryLoading}
+                                handleDeleteConversation={handleDeleteConversation}
+                                handleRenameConversation={handleRenameConversation}
+                                handleClearAll={handleClearAll}
+                                handleNewChat={() => {
+                                    handleNewChat();
+                                    setIsMobilePanelOpen(false);
+                                }}
+                                isDeleting={isDeleting}
+                                isMobilePanelOpen={true}
+                                onCloseMobilePanel={() => setIsMobilePanelOpen(false)}
+                                userProfile={userProfile}
+                                onSelectConversation={(id) => {
+                                    setActiveConversationId(id);
+                                    setIsMobilePanelOpen(false);
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
                     {/* Chat Input Area */}
                     <div className="p-6">
