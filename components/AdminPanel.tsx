@@ -783,9 +783,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                                         <p className="text-[10px] font-black text-lime-600 uppercase tracking-widest">
                                                                             {textbookUrls.length} Textbook{textbookUrls.length > 1 ? 's' : ''} Active
                                                                         </p>
-                                                                        <div className="max-h-16 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-lime-200">
+                                                                        <div tabIndex={0} aria-label="Uploaded textbook documents" className="max-h-16 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-lime-200">
                                                                             {textbookUrls.map((url, urlIndex) => (
-                                                                                <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-xs font-bold text-gray-800 hover:underline">
+                                                                                <a key={url} href={url} target="_blank" rel="noopener noreferrer" aria-label={`View textbook document ${urlIndex + 1}`} className="block text-xs font-bold text-gray-800 hover:underline">
                                                                                     View Document {urlIndex + 1}
                                                                                 </a>
                                                                             ))}
