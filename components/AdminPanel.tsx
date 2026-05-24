@@ -37,6 +37,7 @@ const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
         topic_context: (topic?.topic_context || topic?.context || '').toString().trim(),
         start_point: (topic?.start_point || topic?.start || '').toString().trim(),
         end_point: (topic?.end_point || topic?.end || '').toString().trim(),
+        is_complete: Boolean(topic?.is_complete),
     };
 };
 
@@ -770,7 +771,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                                     onChange={e => {
                                                                         const list = [...coursesList];
                                                                         list[sIdx].topics[tIdx].topic_name = e.target.value;
-                                                                        list[sIdx].topics[tIdx].topic_id = normalizeTopicId(e.target.value);
+                                                                        if (!list[sIdx].topics[tIdx].topic_id) {
+                                                                            list[sIdx].topics[tIdx].topic_id = normalizeTopicId(e.target.value);
+                                                                        }
                                                                         setCoursesList(list);
                                                                     }}
                                                                     className="flex-1 p-2.5 border border-gray-100 rounded-xl text-xs font-bold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
@@ -825,7 +828,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                     onClick={() => {
                                                         const list = [...coursesList];
                                                         if(!list[sIdx].topics) list[sIdx].topics = [];
-                                                        list[sIdx].topics.push({ topic_id: '', topic_name: '', topic_context: '', start_point: '', end_point: '' });
+                                                        list[sIdx].topics.push({ topic_id: '', topic_name: '', topic_context: '', start_point: '', end_point: '', is_complete: false });
                                                         setCoursesList(list);
                                                     }}
                                                     className="w-full py-2.5 border-2 border-dashed border-gray-100 rounded-xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:border-lime-200 hover:text-lime-600 transition-all"

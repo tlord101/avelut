@@ -67,6 +67,7 @@ export interface Topic {
   topic_context?: string;
   start_point?: string;
   end_point?: string;
+  is_complete?: boolean;
 }
 
 export interface Course {
