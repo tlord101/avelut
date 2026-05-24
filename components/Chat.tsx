@@ -414,69 +414,6 @@ const TextChat: React.FC<{
     );
 };
 
-                    {/* Chat Input Area */}
-                    <div className="p-6">
-                        <div className="max-w-4xl mx-auto space-y-4">
-                            <div className="p-4 bg-[#141414] rounded-[3rem] border border-[#1F1F1F] shadow-2xl ring-1 ring-white/5">
-                                <div className="flex items-center gap-3">
-                                    <button className="p-3 text-gray-500 hover:text-white transition-colors bg-white/5 rounded-full border border-white/5">
-                                        <PlusIcon className="w-5 h-5" />
-                                    </button>
-                                    
-                                    <div className="flex-1 flex items-center bg-transparent px-2">
-                                        <textarea
-                                            value={input}
-                                            onChange={(e) => setInput(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                    e.preventDefault();
-                                                    handleSendMessage(input);
-                                                }
-                                            }}
-                                            placeholder="Ask anything"
-                                            className="flex-1 bg-transparent border-none focus:ring-0 text-gray-100 placeholder:text-gray-600 text-[15px] font-medium py-3 resize-none h-[48px] box-content"
-                                        />
-
-                                        <div className="flex items-center gap-2">
-                                            <button className="flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 text-[10px] font-black text-gray-300 uppercase tracking-widest transition-all">
-                                                <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                </svg>
-                                                Fast
-                                                <ChevronDownIcon className="w-3 h-3 text-gray-500" />
-                                            </button>
-
-                                            <button onClick={toggleVoice} className={`p-3 rounded-full transition-all ${isVoiceMode ? 'bg-red-500/10 text-red-500' : 'text-gray-500 hover:text-white bg-white/5 hover:bg-white/10'}`}>
-                                                <VoiceIcon className="w-6 h-6" />
-                                            </button>
-
-                                            <button onClick={() => handleSendMessage(input)} disabled={isLoading || (!input.trim() && !isVoiceMode)} className="flex items-center gap-2 px-8 py-3 bg-white text-[#0A0A0A] rounded-full font-black text-[13px] uppercase tracking-wider hover:bg-gray-200 active:scale-95 disabled:opacity-50 transition-all">
-                                                {isLoading ? (
-                                                    <div className="w-4 h-4 border-2 border-black/10 border-t-black rounded-full animate-spin" />
-                                                ) : (
-                                                    <div className="flex items-center gap-2">
-                                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                                                        </svg>
-                                                        Speak
-                                                    </div>
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <p className="text-center text-[9px] font-bold text-gray-700 uppercase tracking-[0.2em]">
-                                VANTUTOR can make mistakes. Verify important info.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 // --- MAIN CHAT COMPONENT ---
 interface ChatProps {
     userProfile: UserProfile;
@@ -539,7 +476,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     };
 
     return (
-        <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-[#0A0A0A]">
+        <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-white">
             <ConfirmationModal {...modalState} onCancel={() => setModalState(s => ({...s, isOpen: false}))} isConfirming={isDeleting} />
             <TextChat 
                 userProfile={userProfile}
