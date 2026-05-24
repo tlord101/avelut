@@ -106,7 +106,7 @@ const normalizeLevelValue = (value?: string): string => {
 
 const normalizeDepartmentValue = (value?: string): string => {
     if (!value) return '';
-    return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w]/g, '');
+    return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w_]/g, '');
 };
 
 const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
