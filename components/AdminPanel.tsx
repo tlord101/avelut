@@ -32,6 +32,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [newDeptName, setNewDeptName] = useState('');
     const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
     const SEMESTERS: Array<NonNullable<Course['semester']>> = ['first', 'second'];
+    const DEFAULT_SEMESTER: NonNullable<Course['semester']> = 'first';
 
     const fetchDepartments = async () => {
         try {
@@ -124,7 +125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         ...course,
                         semester: course.semester && SEMESTERS.includes(course.semester)
                             ? course.semester
-                            : 'first',
+                            : DEFAULT_SEMESTER,
                     }));
                     setCoursesList(normalizedCourseList);
                 } else {
@@ -360,7 +361,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const addCourseField = () => {
-        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: 'first' }]);
+        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: DEFAULT_SEMESTER }]);
     };
 
     if (!userProfile.is_admin) {
@@ -661,7 +662,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                     <div className="w-28">
                                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Semester</label>
                                                         <select
-                                                            value={s.semester || 'first'}
+                                                            value={s.semester || DEFAULT_SEMESTER}
                                                             onChange={e => {
                                                                 const list = [...coursesList];
                                                                 list[sIdx].semester = e.target.value as 'first' | 'second';
