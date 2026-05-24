@@ -407,12 +407,19 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             // Save user message to DB
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
             const newUserMsgRef = push(messagesRef);
-            const userMessageData = {
+            const userMessageData: {
+                sender: 'user';
+                text: string;
+                image_url?: string;
+                timestamp: object;
+            } = {
                 sender: 'user',
                 text: tempInput || '',
-                image_url: imageUrl,
                 timestamp: serverTimestamp(),
             };
+            if (imageUrl) {
+                userMessageData.image_url = imageUrl;
+            }
             await set(newUserMsgRef, userMessageData);
             
             // Update the optimistic message with real data from database
