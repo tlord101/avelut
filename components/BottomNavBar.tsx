@@ -37,7 +37,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     setActiveIndex(currentIndex); // Will be -1 if the activeItem is not in our nav array
   }, [activeItem, navItems]);
 
-  if (!isVisible) {
+  if (!isVisible || activeIndex === -1) {
       return null;
   }
 
