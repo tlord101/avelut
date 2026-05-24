@@ -21,6 +21,12 @@ interface AdminPanelProps {
     userProfile: UserProfile;
 }
 
+const SEMESTERS = ['first', 'second'] as const;
+const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
+const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
+    semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
+);
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -31,8 +37,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
     const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
-    const SEMESTERS: Array<NonNullable<Course['semester']>> = ['first', 'second'];
-    const DEFAULT_SEMESTER: NonNullable<Course['semester']> = 'first';
 
     const fetchDepartments = async () => {
         try {
@@ -123,9 +127,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     const rawCourseList = snap.val().course_list || [];
                     const normalizedCourseList = rawCourseList.map((course: Course) => ({
                         ...course,
-                        semester: course.semester && SEMESTERS.includes(course.semester)
-                            ? course.semester
-                            : DEFAULT_SEMESTER,
+                        semester: normalizeSemester(course.semester),
                     }));
                     setCoursesList(normalizedCourseList);
                 } else {
@@ -662,7 +664,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                     <div className="w-28">
                                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Semester</label>
                                                         <select
-                                                            value={s.semester || DEFAULT_SEMESTER}
+                                                            value={normalizeSemester(s.semester)}
                                                             onChange={e => {
                                                                 const list = [...coursesList];
                                                                 list[sIdx].semester = e.target.value as 'first' | 'second';
