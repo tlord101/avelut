@@ -37,6 +37,9 @@ export const MainContent: React.FC<MainContentProps> = ({
     if (!userProfile) return null;
 
     switch (activeItem) {
+        case 'dashboard':
+        case '':
+            return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
         case 'study_guide':
             return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
         case 'chat':
