@@ -206,8 +206,22 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [textbookContext, setTextbookContext] = useState<string>('');
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
+    const isAwardingTimeXpRef = useRef(false);
+    const profileSnapshotRef = useRef({
+        display_name: userProfile.display_name || 'Learner',
+        photo_url: userProfile.photo_url || '',
+        level: userProfile.level,
+    });
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
+
+    useEffect(() => {
+        profileSnapshotRef.current = {
+            display_name: userProfile.display_name || 'Learner',
+            photo_url: userProfile.photo_url || '',
+            level: userProfile.level,
+        };
+    }, [userProfile.display_name, userProfile.photo_url, userProfile.level]);
 
     useEffect(() => {
         const fetchTextbook = async () => {
@@ -260,11 +274,11 @@ Scope control (very important):
 ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}` : ''}${textbookContext}`;
 
     useEffect(() => {
-        let isAwarding = false;
+        let intervalId: ReturnType<typeof window.setInterval> | null = null;
 
         const awardTimeBasedXp = async () => {
-            if (isAwarding) return;
-            isAwarding = true;
+            if (isAwardingTimeXpRef.current) return;
+            isAwardingTimeXpRef.current = true;
 
             try {
                 const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
@@ -281,12 +295,13 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
                     return numericXp + CHAT_XP_REWARD;
                 });
                 const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
+                const profile = profileSnapshotRef.current;
 
                 const leaderboardEntryData = {
-                    display_name: userProfile.display_name || 'Learner',
-                    photo_url: userProfile.photo_url || '',
+                    display_name: profile.display_name,
+                    photo_url: profile.photo_url,
                     department_id: userProfile.department_id,
-                    level: userProfile.level,
+                    level: profile.level,
                     last_updated_at: serverTimestamp(),
                 };
 
@@ -302,19 +317,39 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             } catch (error) {
                 console.error('Failed to award time-based XP:', error);
             } finally {
-                isAwarding = false;
+                isAwardingTimeXpRef.current = false;
             }
         };
 
-        const intervalId = window.setInterval(() => {
-            if (document.visibilityState !== 'visible') return;
-            void awardTimeBasedXp();
-        }, CHAT_XP_INTERVAL_SECONDS * 1000);
+        const stopInterval = () => {
+            if (intervalId === null) return;
+            window.clearInterval(intervalId);
+            intervalId = null;
+        };
+
+        const startInterval = () => {
+            if (intervalId !== null) return;
+            intervalId = window.setInterval(() => {
+                void awardTimeBasedXp();
+            }, CHAT_XP_INTERVAL_SECONDS * 1000);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                startInterval();
+                return;
+            }
+            stopInterval();
+        };
+
+        handleVisibilityChange();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            stopInterval();
         };
-    }, [userProfile.uid, userProfile.department_id, userProfile.display_name, userProfile.photo_url, userProfile.level]);
+    }, [userProfile.uid, userProfile.department_id]);
 
     const initiateAutoTeach = async () => {
         const prompt = `
