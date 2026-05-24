@@ -31,6 +31,15 @@ const AppLoader: React.FC = () => {
   );
 };
 
+const ALLOWED_ROUTE_ITEMS = new Set([
+    'dashboard',
+    ...navigationItems.map(item => item.id),
+    'messenger',
+    'settings',
+    'help',
+    'admin'
+]);
+
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -50,16 +59,14 @@ const App: React.FC = () => {
     const resolveActiveItemFromPath = (pathname: string): string => {
         if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
         const rawSegment = pathname.substring(1).split('/')[0] || '';
-        const normalizedSegment = decodeURIComponent(rawSegment).toLowerCase().replace(/-/g, '_');
-        const allowedItems = new Set([
-            'dashboard',
-            ...navigationItems.map(item => item.id),
-            'messenger',
-            'settings',
-            'help',
-            'admin'
-        ]);
-        return allowedItems.has(normalizedSegment) ? normalizedSegment : 'dashboard';
+        let decodedSegment = rawSegment;
+        try {
+            decodedSegment = decodeURIComponent(rawSegment);
+        } catch {
+            return 'dashboard';
+        }
+        const normalizedSegment = decodedSegment.toLowerCase().replace(/-/g, '_');
+        return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
     };
 
     // Derived state from URL
