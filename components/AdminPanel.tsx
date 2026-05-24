@@ -121,7 +121,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     const rawCourseList = snap.val().course_list || [];
                     const normalizedCourseList = rawCourseList.map((course: Course) => ({
                         ...course,
-                        semester: course.semester === 'second' ? 'second' : 'first',
+                        semester: course.semester === 'first' || course.semester === 'second'
+                            ? course.semester
+                            : 'first',
                     }));
                     setCoursesList(normalizedCourseList);
                 } else {
