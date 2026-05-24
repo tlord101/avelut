@@ -1,6 +1,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ToastProvider } from './hooks/useToast';
 import { LogoIcon } from './components/icons/LogoIcon';
@@ -51,7 +52,9 @@ if (isConfigured) {
   root.render(
     <React.StrictMode>
       <ToastProvider>
-        <App />
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
       </ToastProvider>
     </React.StrictMode>
   );

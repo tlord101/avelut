@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI, Chat as GeminiChat } from '@google/genai';
+import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { db } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
@@ -12,9 +12,24 @@ import { SendIcon } from './icons/SendIcon';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ListIcon } from './icons/ListIcon';
 import { Avatar } from './Avatar';
+import { SparklesIcon } from './icons/SparklesIcon';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { PlusIcon } from './icons/PlusIcon';
+import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // @ts-ignore
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const timeAgo = (timestamp: number): string => {
+    const now = Date.now();
+    const seconds = Math.floor((now - timestamp) / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 // --- INLINE ICONS ---
 const VoiceIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -47,43 +62,24 @@ const TextChat: React.FC<{
     const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
     const [courseContext, setCourseContext] = useState<string>('');
-    const geminiChat = useRef<GeminiChat | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-    const { addToast } = useToast();
-    const liveSessionRef = useRef<any>(null);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const audioWorkletRef = useRef<AudioWorkletNode | null>(null);
-    const analyserRef = useRef<AnalyserNode | null>(null);
 
-    // Fetch course and topic context
     useEffect(() => {
         const fetchCourseContext = async () => {
             try {
-                const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
-                const departmentData = departmentSnapshot.val();
+                // Fetch student progress
+                const progressRef = dbRef(db, `user_progress/${userProfile.uid}`);
+                const progressSnap = await get(progressRef);
+                let contextText = `STUDENT LEVEL: ${userProfile.level}\nDEPARTMENT: ${userProfile.department_id}\n\n`;
                 
-                const progressSnapshot = await get(dbRef(db, `user_progress/${userProfile.uid}`));
-                const progressData = progressSnapshot.val() || {};
-                
-                const completedTopics = Object.keys(progressData).filter(pId => progressData[pId].is_complete);
-                const courses = departmentData?.course_list || [];
-                
-                let contextText = `User's Department Information:\n`;
-                contextText += `Level: ${userProfile.level}\n`;
-                contextText += `Department ID: ${userProfile.department_id}\n\n`;
-                contextText += `Courses and Topics:\n`;
-                
-                courses.forEach((course: any) => {
-                    if (course.level === userProfile.level) {
-                        contextText += `\n${course.course_name}:\n`;
-                        course.topics?.forEach((topic: any) => {
-                            const completed = completedTopics.includes(topic.topic_id);
-                            contextText += `  - ${topic.topic_name} ${completed ? '(✓ completed)' : '(in progress)'}\n`;
-                        });
-                    }
-                });
+                if (progressSnap.exists()) {
+                    contextText += 'STUDENT PROGRESS DATA (Topics Mastered):\n';
+                    const progressData = progressSnap.val();
+                    Object.keys(progressData).forEach(courseId => {
+                        const courses = progressData[courseId];
+                        contextText += `- ${courseId}: ${Object.keys(courses).filter(k => courses[k].status === 'completed').join(', ')}\n`;
+                    });
+                }
 
                 // Fetch textbook contexts for grounding
                 const textbooksRef = dbRef(db, `textbook_contexts/${userProfile.department_id}`);
@@ -113,7 +109,6 @@ const TextChat: React.FC<{
     useEffect(() => {
         if (!activeConversationId) {
             setMessages([]);
-            geminiChat.current = null;
             return;
         }
 
@@ -126,315 +121,238 @@ const TextChat: React.FC<{
                 });
                 const sortedMessages = data.sort((a,b) => a.timestamp - b.timestamp);
                 setMessages(sortedMessages as Message[]);
-
-                const history = sortedMessages.map(msg => ({
-                    role: msg.sender === 'user' ? 'user' : 'model',
-                    parts: [{ text: msg.text || '' }]
-                }));
-                
-                const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
-                
-                geminiChat.current = ai.chats.create({ 
-                    model: 'gemini-3.5-flash', 
-                    history,
-                    systemInstruction 
-                });
             } else {
                 setMessages([]);
-                geminiChat.current = null;
             }
         });
 
         return () => off(messagesRef);
-    }, [activeConversationId, courseContext]);
+    }, [activeConversationId]);
 
-    const handleSendMessage = async () => {
-        if (!input.trim() || isLoading) return;
-        const currentInput = input;
+    const handleSendMessage = async (customInput?: string) => {
+        const messageToSend = customInput || input;
+        if (!messageToSend.trim() || isLoading) return;
+        
+        const currentInput = messageToSend;
         setInput('');
         setIsLoading(true);
     
         try {
             let currentConvoId = activeConversationId;
     
-            // If it's a new chat, create it before sending the message
             if (!currentConvoId) {
                 const now = Date.now();
                 const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
                 const newConvoRef = push(conversationsRef);
-                const convoData = {
+                await set(newConvoRef, {
                     title: 'New Chat',
                     created_at: now,
                     last_updated_at: now
-                };
-                await set(newConvoRef, convoData);
+                });
                 currentConvoId = newConvoRef.key!;
                 setActiveConversationId(currentConvoId);
-                
-                // Don't wait for title generation
-                ai.models.generateContent({ model: 'gemini-3.5-flash', contents: `Generate a very short, concise title (4 words max) for the following user query: "${currentInput}"` })
-                    .then(titleResult => update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { title: titleResult.text.replace(/"/g, '') }));
             }
             
             const messagesRef = dbRef(db, `chat_messages/${currentConvoId}`);
-            const newUserMsgRef = push(messagesRef);
-            const userMessageData = {
+            await push(messagesRef, {
                 text: currentInput,
                 sender: 'user',
                 timestamp: serverTimestamp()
-            };
-            await set(newUserMsgRef, userMessageData);
-    
-            // Now handle the bot response.
-            if (!geminiChat.current) {
-                const history = [...messages, { id: newUserMsgRef.key!, ...userMessageData, timestamp: Date.now() }].map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{ text: msg.text || '' }] }));
-                const systemInstruction = `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Use this information to provide personalized, contextual help.\n\n${courseContext}\n\nProvide clear, detailed explanations tailored to their level. Reference their completed and in-progress topics when relevant to show connections. Be encouraging and supportive.`;
-                geminiChat.current = ai.chats.create({ model: 'gemini-3.5-flash', history, systemInstruction });
-            }
-            
-            const stream = await geminiChat.current.sendMessageStream({ message: currentInput });
-            const tempBotMessageId = `temp-bot-${Date.now()}`;
-            setMessages(prev => [...prev, { id: tempBotMessageId, conversation_id: currentConvoId!, text: '', sender: 'bot', timestamp: Date.now() }]);
-            
-            let fullText = '';
-            for await (const chunk of stream) {
-                fullText += chunk.text;
-                setMessages(prev => prev.map(m => m.id === tempBotMessageId ? {...m, text: fullText} : m));
-            }
-            
-            const newBotMsgRef = push(messagesRef);
-            const botMessageData = {
-                text: fullText,
-                sender: 'bot',
+            });
+
+            update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
+
+            // Call Gemini
+            const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const result = await model.generateContent(currentInput);
+            const responseText = result.response.text();
+
+            await push(messagesRef, {
+                text: responseText,
+                sender: 'ai',
                 timestamp: serverTimestamp()
-            };
-            await set(newBotMsgRef, botMessageData);
-            
-            await update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: serverTimestamp() });
-    
+            });
+
         } catch (error) {
-            console.error("Error sending message:", error);
-            addToast("Failed to send message.", "error");
-            setInput(currentInput); // Restore input on error
+            console.error('Error in chat:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const startVoiceRecording = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            // Initialize Gemini Live Session
-            const response = await fetch('https://generativelanguage.googleapis.com/v1alpha/media/upload', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': process.env.API_KEY || ''
-                },
-                body: JSON.stringify({
-                    display_name: 'VanTutor Chat'
-                })
-            });
-
-            // Create real-time audio connection
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            audioContextRef.current = audioContext;
-
-            const mediaStreamSource = audioContext.createMediaStreamSource(stream);
-            const analyser = audioContext.createAnalyser();
-            analyserRef.current = analyser;
-            
-            mediaStreamSource.connect(analyser);
-
-            // Create a simple live connection using WebSocket
-            const ws = new WebSocket(`wss://generativelanguage.googleapis.com/google.ai.generativelanguage.v1alpha.GenerativeService/BidiGenerateContent?key=${process.env.API_KEY}`);
-            
-            let liveSessionActive = true;
-            liveSessionRef.current = { ws, stream, audioContext };
-
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
-            analyser.connect(processor);
-            processor.connect(audioContext.destination);
-
-            processor.onaudioprocess = (event) => {
-                if (!liveSessionActive || ws.readyState !== WebSocket.OPEN) return;
-                
-                const inputData = event.inputBuffer.getChannelData(0);
-                const audioData = new Uint8Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    audioData[i] = Math.max(-128, Math.min(127, inputData[i] * 128)) | 0;
-                }
-
-                ws.send(JSON.stringify({
-                    realtimeInput: {
-                        mediaStream: {
-                            mimeType: 'audio/pcm',
-                            data: btoa(String.fromCharCode(...Array.from(audioData)))
-                        }
-                    }
-                }));
-            };
-
-            ws.onopen = () => {
-                // Send initial system instruction
-                ws.send(JSON.stringify({
-                    systemInstruction: {
-                        parts: [{
-                            text: `You are VANTUTOR, an expert AI tutor. You have deep knowledge of the student's current course and their progress. Provide clear, detailed explanations tailored to their level. Be encouraging and supportive. Keep responses conversational and natural for voice interaction.`
-                        }]
-                    }
-                }));
-                
-                setVoiceStatus('listening');
-                setIsVoiceMode(true);
-                addToast('Voice conversation started. Speak naturally!', 'info');
-            };
-
-            ws.onmessage = async (event) => {
-                try {
-                    const response = JSON.parse(event.data);
-                    
-                    if (response.serverContent?.turns) {
-                        const turns = response.serverContent.turns;
-                        turns.forEach((turn: any) => {
-                            if (turn.parts) {
-                                turn.parts.forEach((part: any) => {
-                                    if (part.text) {
-                                        setInput(prev => prev + ' ' + part.text);
-                                    }
-                                    if (part.inlineData?.data) {
-                                        // Play audio response
-                                        const binaryData = atob(part.inlineData.data);
-                                        const bytes = new Uint8Array(binaryData.length);
-                                        for (let i = 0; i < binaryData.length; i++) {
-                                            bytes[i] = binaryData.charCodeAt(i);
-                                        }
-                                        playAudio(bytes, audioContext);
-                                    }
-                                });
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error processing live response:', error);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                addToast('Connection error. Please try again.', 'error');
-                stopVoiceRecording();
-            };
-
-            ws.onclose = () => {
-                liveSessionActive = false;
-            };
-
-        } catch (error) {
-            console.error('Error starting voice recording:', error);
-            addToast('Could not access microphone. Please check permissions.', 'error');
-        }
-    };
-
-    const playAudio = (audioData: Uint8Array, audioContext: AudioContext) => {
-        try {
-            const audioBuffer = audioContext.createBuffer(1, audioData.length, 16000);
-            const channelData = audioBuffer.getChannelData(0);
-            for (let i = 0; i < audioData.length; i++) {
-                channelData[i] = audioData[i] / 128;
-            }
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
-            source.start(0);
-        } catch (error) {
-            console.error('Error playing audio:', error);
-        }
-    };
-
-    const stopVoiceRecording = () => {
-        if (liveSessionRef.current) {
-            const { ws, stream, audioContext } = liveSessionRef.current;
-            
-            // Close WebSocket
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-            
-            // Stop audio stream
-            stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-            
-            // Clean up audio context
-            if (audioContext) {
-                audioContext.close();
-            }
-            
-            liveSessionRef.current = null;
-        }
-        
-        setVoiceStatus('idle');
-        setIsVoiceMode(false);
-    };
-
     const toggleVoice = () => {
-        if (isVoiceMode) {
-            stopVoiceRecording();
+        setIsVoiceMode(!isVoiceMode);
+        if (!isVoiceMode) {
+            setVoiceStatus('listening');
+            setTimeout(() => {
+                setVoiceStatus('idle');
+                setIsVoiceMode(false);
+            }, 3000);
         } else {
-            startVoiceRecording();
+            setVoiceStatus('idle');
         }
     };
-    
+
     return (
-        <div className="flex-1 flex w-full h-full overflow-hidden">
-            <ChatHistoryPanel conversations={conversations} activeConversationId={activeConversationId} onSelectConversation={setActiveConversationId} onNewChat={handleNewChat} onDeleteConversation={handleDeleteConversation} onRenameConversation={handleRenameConversation} onClearAll={handleClearAll} isDeleting={isDeleting} isMobilePanelOpen={isMobilePanelOpen} onCloseMobilePanel={() => setIsMobilePanelOpen(false)} />
-            <div className="flex-1 flex flex-col bg-white">
-                 <div className="flex-1 flex flex-col min-h-0">
-                    {!activeConversationId && !isHistoryLoading && (
-                        <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                            <ChatBubbleIcon className="w-16 h-16 text-gray-300" />
-                            <h2 className="text-xl font-bold mt-4 text-gray-800">AI Tutor Chat</h2>
-                            <p className="text-gray-500">Start a new chat or select one from your history.</p>
-                            <button onClick={() => setIsMobilePanelOpen(true)} className="md:hidden mt-4 flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg text-gray-700 font-semibold"><ListIcon className="w-5 h-5" /> View History</button>
+        <div className="flex-1 flex w-full h-full overflow-hidden bg-[#0A0A0A]">
+            <div className="flex w-full">
+                {/* Desktop History Sidebar */}
+                <div className="hidden lg:flex w-[280px] flex-col border-r border-[#1F1F1F]">
+                    <ChatHistoryPanel 
+                        conversations={conversations}
+                        activeConversationId={activeConversationId}
+                        setActiveConversationId={setActiveConversationId}
+                        isHistoryLoading={isHistoryLoading}
+                        handleDeleteConversation={handleDeleteConversation}
+                        handleRenameConversation={handleRenameConversation}
+                        handleClearAll={handleClearAll}
+                        handleNewChat={handleNewChat}
+                        isDeleting={isDeleting}
+                    />
+                </div>
+
+                {/* Main Chat View */}
+                <div className="flex-1 flex flex-col h-full bg-[#0A0A0A] relative animate-in fade-in duration-500">
+                    {/* Top Navigation Bar */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-[#1F1F1F]">
+                        <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-full border border-white/5">
+                            <button className="px-5 py-1.5 rounded-full bg-white text-black text-[11px] font-black uppercase tracking-wider">Ask</button>
+                            <button className="px-5 py-1.5 rounded-full text-gray-500 hover:text-white text-[11px] font-black uppercase tracking-wider">Imagine</button>
                         </div>
-                    )}
-                    {activeConversationId && (
-                         <div className="flex-1 overflow-y-auto p-4 space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                            {messages.map((message, index) => (
-                                <div key={message.id || `msg-${index}`} className={`flex items-start gap-3 w-full animate-fade-in-up ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    {message.sender === 'bot' && <Avatar display_name="AI" className="w-8 h-8 flex-shrink-0" />}
-                                    <div className={`p-3 px-4 rounded-2xl max-w-[85%] sm:max-w-xl break-words prose ${message.sender === 'user' ? 'bg-lime-500 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text || ''}</ReactMarkdown>
+                        <div className="flex items-center gap-4">
+                            <button className="p-2 text-gray-500 hover:text-white transition-colors">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {!activeConversationId && messages.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center p-8">
+                            <div className="mb-12 relative">
+                                <div className="absolute inset-0 bg-blue-500/20 blur-[100px] rounded-full"></div>
+                                <div className="relative w-24 h-24 flex items-center justify-center bg-transparent">
+                                    <div className="w-16 h-16 border-[3px] border-white rounded-full flex items-center justify-center animate-pulse">
+                                        <div className="w-8 h-8 bg-white rotate-45"></div>
                                     </div>
-                                    {message.sender === 'user' && <Avatar display_name={userProfile.display_name} photo_url={userProfile.photo_url} className="w-8 h-8 flex-shrink-0" />}
+                                </div>
+                            </div>
+                            
+                            <h2 className="text-3xl font-black text-white mb-10 tracking-tight text-center">What can I help you learn today?</h2>
+                            
+                            <div className="w-full max-w-2xl grid grid-cols-3 gap-3">
+                                <button onClick={() => handleSendMessage("Explain my current syllabus")} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
+                                    <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-400 group-hover:scale-110 transition-transform">
+                                        <GraduationCapIcon className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">Course Overview</span>
+                                </button>
+                                <button onClick={() => handleSendMessage("Solve a complex problem")} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
+                                    <div className="w-10 h-10 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-purple-400 group-hover:scale-110 transition-transform">
+                                        <SparklesIcon className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">AI Problem Solver</span>
+                                </button>
+                                <button onClick={() => toggleVoice()} className="group p-4 bg-white/5 border border-white/5 hover:border-white/20 rounded-[2rem] text-center transition-all hover:bg-white/10">
+                                    <div className="w-10 h-10 bg-lime-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-lime-400 group-hover:scale-110 transition-transform">
+                                        <VoiceIcon className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-widest group-hover:text-white transition-colors">Voice Learning</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scroll-smooth">
+                            {messages.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+                                    <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                        <Avatar user={msg.sender === 'user' ? userProfile : { first_name: 'Van', last_name: 'Tutor', isAdmin: true }} size="sm" isAI={msg.sender === 'ai'} />
+                                        <div className={`mt-2 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
+                                            <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
+                                                <span className="text-[11px] font-black text-white/50 uppercase tracking-widest">{msg.sender === 'user' ? 'You' : 'Vantutor'}</span>
+                                                <span className="text-[10px] text-white/20 font-bold">{timeAgo(msg.timestamp)}</span>
+                                            </div>
+                                            <div className={`rounded-3xl px-6 py-4 text-[15px] leading-relaxed transition-all shadow-lg ${
+                                                msg.sender === 'user' 
+                                                ? 'bg-[#1F1F1F] text-white rounded-tr-none shadow-white/5' 
+                                                : 'text-gray-200 bg-transparent rounded-tl-none border border-[#1F1F1F]'
+                                            }`}>
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
-                            {isLoading && (<div className="flex items-start gap-3 w-full animate-fade-in-up justify-start"><Avatar display_name="AI" className="w-8 h-8 flex-shrink-0" /><div className="p-3 px-4 rounded-2xl bg-gray-100"><div className="flex items-center space-x-2"><div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></div><div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></div><div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div></div></div></div>)}
-                            <div ref={messagesEndRef} />
+                            {isLoading && (
+                                <div className="flex justify-start animate-pulse">
+                                    <div className="flex gap-4">
+                                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white">VT</div>
+                                        <div className="mt-4 flex gap-1.5">
+                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce"></div>
+                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                            <div className="w-1.5 h-1.5 bg-white/20 rounded-full animate-bounce [animation-delay:-0.5s]"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} className="h-4" />
                         </div>
                     )}
-                    <div className="p-4 border-t border-gray-200 bg-white/80 backdrop-blur-lg">
-                        {voiceStatus === 'listening' && (
-                            <div className="mb-2 text-center">
-                                <span className="text-sm text-red-600 font-medium animate-pulse">🎤 Listening... Talking with AI in real-time</span>
+
+                    {/* Chat Input Area */}
+                    <div className="p-6">
+                        <div className="max-w-4xl mx-auto space-y-4">
+                            <div className="p-4 bg-[#141414] rounded-[3rem] border border-[#1F1F1F] shadow-2xl ring-1 ring-white/5">
+                                <div className="flex items-center gap-3">
+                                    <button className="p-3 text-gray-500 hover:text-white transition-colors bg-white/5 rounded-full border border-white/5">
+                                        <PlusIcon className="w-5 h-5" />
+                                    </button>
+                                    
+                                    <div className="flex-1 flex items-center bg-transparent px-2">
+                                        <textarea
+                                            value={input}
+                                            onChange={(e) => setInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    handleSendMessage(input);
+                                                }
+                                            }}
+                                            placeholder="Ask anything"
+                                            className="flex-1 bg-transparent border-none focus:ring-0 text-gray-100 placeholder:text-gray-600 text-[15px] font-medium py-3 resize-none h-[48px] box-content"
+                                        />
+
+                                        <div className="flex items-center gap-2">
+                                            <button className="flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 text-[10px] font-black text-gray-300 uppercase tracking-widest transition-all">
+                                                <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                </svg>
+                                                Fast
+                                                <ChevronDownIcon className="w-3 h-3 text-gray-500" />
+                                            </button>
+
+                                            <button onClick={toggleVoice} className={`p-3 rounded-full transition-all ${isVoiceMode ? 'bg-red-500/10 text-red-500' : 'text-gray-500 hover:text-white bg-white/5 hover:bg-white/10'}`}>
+                                                <VoiceIcon className="w-6 h-6" />
+                                            </button>
+
+                                            <button onClick={() => handleSendMessage(input)} disabled={isLoading || (!input.trim() && !isVoiceMode)} className="flex items-center gap-2 px-8 py-3 bg-white text-[#0A0A0A] rounded-full font-black text-[13px] uppercase tracking-wider hover:bg-gray-200 active:scale-95 disabled:opacity-50 transition-all">
+                                                {isLoading ? (
+                                                    <div className="w-4 h-4 border-2 border-black/10 border-t-black rounded-full animate-spin" />
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                                                        </svg>
+                                                        Speak
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        )}
-                        <div className="relative flex items-center gap-2">
-                            <button onClick={() => setIsMobilePanelOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ListIcon /></button>
-                            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isVoiceMode) { e.preventDefault(); handleSendMessage(); } }} placeholder={isVoiceMode ? "Speaking with AI..." : "Ask me anything..."} className="flex-1 bg-gray-100 border border-gray-200 rounded-full py-3 pl-5 pr-24 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none resize-none" rows={1} style={{ fieldSizing: 'content' }} disabled={isLoading || isVoiceMode} />
-                            <button 
-                                onClick={toggleVoice} 
-                                disabled={isLoading}
-                                className={`absolute right-14 top-1/2 -translate-y-1/2 rounded-full p-2.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isVoiceMode 
-                                        ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' 
-                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                                title={isVoiceMode ? "Stop voice conversation" : "Start voice conversation"}
-                            >
-                                <VoiceIcon className="w-5 h-5" />
-                            </button>
-                            <button onClick={handleSendMessage} disabled={isLoading || !input.trim() || isVoiceMode} className="absolute right-2 top-1/2 -translate-y-1/2 bg-lime-600 rounded-full p-2.5 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><SendIcon className="w-5 h-5" /></button>
+                            <p className="text-center text-[9px] font-bold text-gray-700 uppercase tracking-[0.2em]">
+                                VANTUTOR can make mistakes. Verify important info.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -442,7 +360,6 @@ const TextChat: React.FC<{
         </div>
     );
 };
-
 
 // --- MAIN CHAT COMPONENT ---
 interface ChatProps {
@@ -457,7 +374,6 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
     const { addToast } = useToast();
 
-    // Fetch and subscribe to conversation list
     useEffect(() => {
         setIsHistoryLoading(true);
         const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
@@ -499,10 +415,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
                 setIsDeleting(true);
                 setModalState(s => ({...s, isOpen: false}));
                 handleNewChat();
-                // In RTDB, we can delete the whole path
                 await remove(dbRef(db, `chat_conversations/${userProfile.uid}`));
-                // We should also delete messages for all those conversations, but that's more complex without knowing IDs.
-                // For now, removing conversations is enough to clear the list.
                 addToast('All conversations deleted.', 'success');
                 setIsDeleting(false);
             }
@@ -510,7 +423,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     };
 
     return (
-        <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-white rounded-xl border border-gray-200">
+        <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-[#0A0A0A]">
             <ConfirmationModal {...modalState} onCancel={() => setModalState(s => ({...s, isOpen: false}))} isConfirming={isDeleting} />
             <TextChat 
                 userProfile={userProfile}

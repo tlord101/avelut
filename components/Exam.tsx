@@ -73,18 +73,28 @@ const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHis
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             {history.map(exam => (
-                <div key={exam.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex justify-between items-center">
-                    <div>
-                        <p className="font-semibold text-gray-900">{getCourseNameById(exam.department_id)}</p>
-                        <p className="text-sm text-gray-600">
-                            {new Date(exam.timestamp).toLocaleString()}
-                        </p>
+                <div key={exam.id} className="group bg-white p-5 rounded-[2rem] border border-gray-100 flex justify-between items-center transition-all hover:shadow-xl hover:-translate-y-1">
+                    <div className="flex gap-4 items-center">
+                        <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center text-lime-600">
+                             <GraduationCapIcon className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-gray-900 uppercase tracking-tight">{getCourseNameById(exam.department_id)}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {new Date(exam.timestamp).toLocaleDateString()}
+                            </p>
+                        </div>
                     </div>
-                    <div className="text-right">
-                        <p className="font-bold text-lime-600">{exam.score}/{exam.total_questions}</p>
-                        <button onClick={() => onReview(exam)} className="text-sm text-lime-600 hover:underline">Review</button>
+                    <div className="text-right flex items-center gap-4">
+                        <p className="font-black text-lime-600 text-lg">{exam.score}/{exam.total_questions}</p>
+                        <button 
+                            onClick={() => onReview(exam)} 
+                            className="p-2.5 rounded-xl bg-gray-50 text-gray-400 hover:text-lime-600 hover:bg-lime-50 transition-all active:scale-95"
+                        >
+                            <ChevronDownIcon className="w-5 h-5 -rotate-90" />
+                        </button>
                     </div>
                 </div>
             ))}
@@ -359,59 +369,103 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     }
   };
 
-  const currentQuestion = questions[currentQuestionIndex];
-  
   const renderContent = () => {
     switch (examState) {
       case 'generating':
-        return <LoadingSpinner text="Generating your exam based on completed topics..." />;
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px]">
+                <div className="relative mb-12">
+                    <div className="absolute inset-0 bg-lime-400 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+                    <LoadingSpinner text="" />
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tighter mb-2">Assembling your Exam...</h3>
+                <p className="text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse text-center max-w-xs">{extractionProgress || 'Gemini is selecting questions based on your mastery'}</p>
+            </div>
+        );
       
       case 'in_progress':
         return (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-                <p className="text-gray-500">Question {currentQuestionIndex + 1} of {questions.length}</p>
-                <div className="flex items-center gap-2 font-mono text-lg font-bold bg-gray-100 px-3 py-1 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <span>
+          <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-center bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100">
+                <div className="px-4">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Question</p>
+                    <p className="text-lg font-black text-gray-900">{currentQuestionIndex + 1} <span className="text-gray-300 mx-1">/</span> {questions.length}</p>
+                </div>
+                
+                <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-sm ring-1 ring-gray-100">
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${timeLeft < 30 ? 'bg-red-500' : 'bg-lime-500'}`}></div>
+                    <span className={`font-black text-xl tracking-tighter tabular-nums ${timeLeft < 30 ? 'text-red-500' : 'text-gray-900'}`}>
                         {Math.floor(timeLeft / 60)}:{('0' + (timeLeft % 60)).slice(-2)}
                     </span>
                 </div>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mt-2">{currentQuestion.question}</h3>
-            <div className="space-y-3 mt-4">
-              {currentQuestion.options.map((option, index) => (
-                <button
-                  key={index}
-                  onClick={() => !feedback && setSelectedOption(option)}
-                  className={`w-full text-left p-3 rounded-lg border-2 transition-all duration-200 text-gray-900
-                    ${feedback ? 
-                        (option === currentQuestion.correctAnswer ? 'bg-green-100 border-green-500' : (option === selectedOption ? 'bg-red-100 border-red-500' : 'bg-white border-gray-200'))
-                        : 
-                        (selectedOption === option ? 'bg-lime-100 border-lime-500' : 'bg-white border-gray-200 hover:border-lime-400')
-                    }`}
-                  disabled={!!feedback}
-                >
-                  {option}
-                </button>
-              ))}
+
+            <div className="space-y-6">
+                <h3 className="text-2xl md:text-3xl font-black text-gray-900 leading-[1.1] tracking-tight">{currentQuestion.question}</h3>
+                
+                <div className="grid grid-cols-1 gap-3">
+                {currentQuestion.options.map((option, index) => {
+                    const isSelected = selectedOption === option;
+                    const isCorrect = option === currentQuestion.correctAnswer;
+                    
+                    let variantClasses = "bg-white border-gray-100 hover:border-lime-200 hover:bg-lime-50/30";
+                    if (feedback) {
+                        if (isCorrect) variantClasses = "bg-lime-50 border-lime-500 text-lime-900 ring-4 ring-lime-500/10";
+                        else if (isSelected) variantClasses = "bg-red-50 border-red-500 text-red-900 ring-4 ring-red-500/10";
+                        else variantClasses = "bg-white border-gray-50 opacity-40";
+                    } else if (isSelected) {
+                        variantClasses = "bg-lime-600 border-lime-600 text-white shadow-xl shadow-lime-600/20";
+                    }
+
+                    return (
+                        <button
+                        key={index}
+                        onClick={() => !feedback && setSelectedOption(option)}
+                        className={`group w-full text-left p-6 rounded-[2rem] border-2 transition-all duration-300 flex items-center gap-4 ${variantClasses}`}
+                        disabled={!!feedback}
+                        >
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 font-black text-xs transition-colors ${
+                            isSelected && !feedback ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-lime-100 group-hover:text-lime-600'
+                        }`}>
+                            {String.fromCharCode(65 + index)}
+                        </div>
+                        <span className="font-bold text-sm md:text-base leading-snug">{option}</span>
+                        </button>
+                    );
+                })}
+                </div>
             </div>
+
             {feedback && (
-                <div className={`mt-4 p-4 rounded-lg ${feedback.isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
-                    <h4 className={`font-bold ${feedback.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-                        {feedback.isCorrect ? 'Correct!' : 'Incorrect'}
-                    </h4>
-                    <p className="text-sm text-gray-700 mt-1">{feedback.explanation}</p>
+                <div className={`p-8 rounded-[2.5rem] animate-in zoom-in-95 duration-300 ${feedback.isCorrect ? 'bg-lime-50 border border-lime-100' : 'bg-red-50 border border-red-100'}`}>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className={`p-2 rounded-xl ${feedback.isCorrect ? 'bg-lime-500 text-white' : 'bg-red-500 text-white'}`}>
+                            {feedback.isCorrect ? <CheckIcon className="w-5 h-5" /> : <XIcon className="w-5 h-5" />}
+                        </div>
+                        <h4 className={`text-lg font-black uppercase tracking-tight ${feedback.isCorrect ? 'text-lime-700' : 'text-red-700'}`}>
+                            {feedback.isCorrect ? 'Genius Move!' : 'Not Quite...'}
+                        </h4>
+                    </div>
+                    <p className={`text-sm font-bold leading-relaxed ${feedback.isCorrect ? 'text-lime-800/70' : 'text-red-800/70'}`}>{feedback.explanation}</p>
                 </div>
             )}
-            <div className="mt-6">
+
+            <div className="pt-4">
                 {feedback ? (
-                    <button onClick={handleNextQuestion} className="w-full bg-lime-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-lime-700 transition-colors">
-                        {currentQuestionIndex < questions.length - 1 ? 'Next Question' : 'Finish Exam'}
+                    <button 
+                        onClick={handleNextQuestion} 
+                        className="w-full flex items-center justify-center gap-3 bg-gray-900 text-white font-black py-6 rounded-[2rem] hover:bg-black transition-all transform active:scale-[0.98] shadow-2xl shadow-black/10 text-xs uppercase tracking-widest"
+                    >
+                        {currentQuestionIndex < questions.length - 1 ? 'Next Challenge' : 'See Results'}
+                        <ChevronDownIcon className="w-5 h-5 -rotate-90" />
                     </button>
                 ) : (
-                    <button onClick={handleAnswerSubmit} disabled={!selectedOption} className="w-full bg-lime-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-lime-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        Submit Answer
+                    <button 
+                        onClick={handleAnswerSubmit} 
+                        disabled={!selectedOption} 
+                        className="w-full bg-lime-600 text-white font-black py-6 rounded-[2rem] hover:bg-lime-700 transition-all transform active:scale-[0.98] disabled:opacity-30 disabled:grayscale shadow-2xl shadow-lime-600/20 text-xs uppercase tracking-widest"
+                    >
+                        Lock in Answer
                     </button>
                 )}
             </div>
@@ -420,20 +474,32 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       
       case 'completed':
           const xpEarned = score * 10;
+          const percentage = Math.round((score / questions.length) * 100);
         return (
-          <div className="text-center">
-            <h3 className="text-2xl font-bold text-gray-900">Exam Completed!</h3>
-            <p className="text-gray-600 mt-2">Here's how you did:</p>
-            <div className="my-6">
-              <p className="text-5xl font-bold text-lime-600">{score} / {questions.length}</p>
-              <p className="mt-2 text-lg font-semibold text-gray-800">+{xpEarned} XP Earned</p>
+          <div className="max-w-md mx-auto text-center space-y-10 py-10 animate-in zoom-in-95 duration-500">
+            <div className="relative inline-block">
+                <div className="absolute inset-0 bg-lime-400 rounded-full blur-3xl opacity-20 animate-pulse"></div>
+                <div className="relative w-48 h-48 rounded-full border-8 border-gray-50 flex flex-col items-center justify-center bg-white shadow-3xl">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">Score</p>
+                    <p className="text-6xl font-black text-gray-900 tracking-tighter">{score}</p>
+                    <div className="h-px w-12 bg-gray-100 my-2"></div>
+                    <p className="text-sm font-black text-lime-600 uppercase tracking-widest">{questions.length} total</p>
+                </div>
             </div>
-            <div className="flex gap-4">
-                <button onClick={() => setExamState('history')} className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                    View History
+
+            <div>
+                <h3 className="text-4xl font-black text-gray-900 tracking-tighter mb-2">
+                    {percentage >= 80 ? 'Masterfully Done.' : percentage >= 50 ? 'Strong effort.' : 'Keep studying.'}
+                </h3>
+                <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">You earned +{xpEarned} XP for your progress</p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+                <button onClick={resetExam} className="w-full bg-lime-600 text-white font-black py-5 rounded-[2rem] hover:bg-lime-700 transition-all shadow-xl shadow-lime-600/20 text-xs uppercase tracking-widest">
+                    Start New Training
                 </button>
-                <button onClick={resetExam} className="flex-1 bg-lime-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-lime-700 transition-colors">
-                    Take Another Exam
+                <button onClick={() => setExamState('history')} className="w-full bg-white text-gray-400 font-black py-5 rounded-[2rem] border border-gray-100 hover:text-gray-900 hover:bg-gray-50 transition-all text-xs uppercase tracking-widest">
+                    View Performance History
                 </button>
             </div>
           </div>
@@ -441,10 +507,18 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
       case 'history':
           return (
-              <div>
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold text-gray-900">Exam History</h3>
-                      <button onClick={resetExam} className="text-lime-600 hover:underline">Back to Exam</button>
+              <div className="max-w-3xl mx-auto space-y-8 py-8 animate-in fade-in duration-500">
+                  <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="text-3xl font-black text-gray-900 tracking-tighter leading-none mb-2">Exam History</h3>
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Your previous performance</p>
+                      </div>
+                      <button 
+                        onClick={resetExam} 
+                        className="p-4 rounded-2xl bg-white text-lime-600 border border-gray-100 shadow-sm hover:bg-lime-50 transition-all active:scale-95"
+                      >
+                         <XIcon className="w-5 h-5" />
+                      </button>
                   </div>
                   <ExamHistory userProfile={userProfile} onReview={(exam) => { setReviewExam(exam); setExamState('review'); }} />
               </div>
@@ -453,23 +527,52 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       case 'review':
         if (!reviewExam) return null;
           return (
-              <div>
-                  <div className="flex justify-between items-center mb-4">
+              <div className="max-w-3xl mx-auto space-y-10 py-8 animate-in slide-in-from-right-8 duration-500">
+                  <div className="flex justify-between items-center bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl">
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900">Reviewing Exam</h3>
-                        <p className="text-sm text-gray-600">{new Date(reviewExam.timestamp).toLocaleString()}</p>
+                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">Reviewing Session</p>
+                        <h3 className="text-2xl font-black tracking-tighter leading-none">{getCourseNameById(reviewExam.department_id)}</h3>
+                        <p className="text-xs font-bold text-white/60 mt-2 uppercase tracking-widest">{new Date(reviewExam.timestamp).toLocaleDateString()}</p>
                       </div>
-                      <button onClick={() => setExamState('history')} className="text-lime-600 hover:underline">Back to History</button>
+                      <button 
+                        onClick={() => setExamState('history')} 
+                        className="bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-colors text-white"
+                      >
+                        <XIcon className="w-5 h-5" />
+                      </button>
                   </div>
+
                   <div className="space-y-6">
                       {reviewExam.questions.map((q, index) => (
-                          <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                              <p className="text-gray-500 text-sm">Question {index + 1}</p>
-                              <p className="font-semibold text-gray-800 mt-1">{q.question}</p>
-                              <div className="mt-3 space-y-2 text-sm">
-                                  <p><span className="font-semibold text-gray-600">Your Answer: </span><span className={q.isCorrect ? 'text-green-600' : 'text-red-600'}>{q.userAnswer}</span></p>
-                                  {!q.isCorrect && <p><span className="font-semibold text-gray-600">Correct Answer: </span><span className="text-green-600">{q.correctAnswer}</span></p>}
-                                  <p className="text-gray-600 pt-2 border-t border-gray-200 mt-2">{q.explanation}</p>
+                          <div key={index} className="group bg-white p-8 rounded-[2.5rem] border border-gray-100 hover:shadow-xl transition-all duration-500">
+                              <div className="flex justify-between items-start mb-6">
+                                  <div>
+                                      <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">Observation {index + 1}</p>
+                                      <h4 className="text-xl font-black text-gray-900 leading-tight pr-8">{q.question}</h4>
+                                  </div>
+                                  <div className={`p-2 rounded-xl shrink-0 ${q.isCorrect ? 'bg-lime-50 text-lime-600' : 'bg-red-50 text-red-600'}`}>
+                                      {q.isCorrect ? <CheckIcon className="w-5 h-5" /> : <XIcon className="w-5 h-5" />}
+                                  </div>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className={`p-5 rounded-2xl ${q.isCorrect ? 'bg-lime-50/50 border border-lime-100' : 'bg-red-50/50 border border-red-100'}`}>
+                                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Your Answer</p>
+                                          <p className={`text-sm font-black ${q.isCorrect ? 'text-lime-700' : 'text-red-700'}`}>{q.userAnswer}</p>
+                                      </div>
+                                      {!q.isCorrect && (
+                                          <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+                                              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Correct Answer</p>
+                                              <p className="text-sm font-black text-gray-900">{q.correctAnswer}</p>
+                                          </div>
+                                      )}
+                                  </div>
+                                  
+                                  <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100/50">
+                                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Explanation</p>
+                                      <p className="text-sm font-bold text-gray-600 leading-relaxed">{q.explanation}</p>
+                                  </div>
                               </div>
                           </div>
                       ))}
@@ -480,14 +583,17 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       default: // 'start'
         if (isTopicDataLoading) {
             return (
-                <LoadingSpinner text="Checking your completed topics..." />
+                <div className="flex flex-col items-center justify-center min-h-[400px]">
+                    <LoadingSpinner text="" />
+                    <p className="mt-8 text-xs font-black text-gray-400 uppercase tracking-widest animate-pulse">Syncing topic data...</p>
+                </div>
             );
         }
         
         const canStartExam = completedTopicNames.length > 0;
 
         return (
-          <div className="max-w-2xl mx-auto w-full text-center space-y-8 py-8">
+          <div className="max-w-4xl mx-auto w-full text-center space-y-12 py-12 animate-in fade-in zoom-in-95 duration-700">
             <h3 className="text-2xl font-bold text-gray-900">Ready for your exam?</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

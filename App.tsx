@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
@@ -38,47 +39,31 @@ const App: React.FC = () => {
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     
+    const location = useLocation();
+    const navigate = useNavigate();
+
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(true);
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
-    const [activeItem, setActiveItem] = useState(() => {
-        const isHashAdmin = window.location.hash === '#/admin';
-        const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
-        const isPathAdmin = window.location.pathname === '/admin';
-        return (isHashAdmin || isQueryAdmin || isPathAdmin) ? 'admin' : 'dashboard';
-    });
+    // Derived state from URL
+    const activeItem = location.pathname === '/' || location.pathname === '/dashboard' 
+        ? 'dashboard' 
+        : location.pathname.substring(1).split('/')[0];
+    
+    const setActiveItem = (item: string) => {
+        if (item === 'dashboard') navigate('/dashboard');
+        else navigate(`/${item}`);
+    };
+
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    // Simple Router for Admin access (handles #/admin and ?admin=true)
-    useEffect(() => {
-        const checkRoute = () => {
-            if (isAdminAuthenticated) return;
-
-            const isHashAdmin = window.location.hash === '#/admin';
-            const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
-            const isPathAdmin = window.location.pathname === '/admin';
-
-            if ((isHashAdmin || isQueryAdmin || isPathAdmin) && userProfile?.is_admin) {
-                setActiveItem('admin');
-            } else if ((isHashAdmin || isQueryAdmin || isPathAdmin) && userProfile && !userProfile.is_admin) {
-                // Only redirect if we are sure the user is NOT an admin
-                if (isHashAdmin) window.location.hash = '';
-                if (isQueryAdmin || isPathAdmin) {
-                     // We don't want to reload the whole page, but we should clean up
-                     window.history.replaceState({}, '', '/');
-                }
-                setActiveItem('dashboard');
-            }
-        };
-
-        window.addEventListener('hashchange', checkRoute);
-        checkRoute();
-
-        return () => window.removeEventListener('hashchange', checkRoute);
-    }, [userProfile]);
+    // Breadcrumbs logic based on activeItem
+    const currentPageLabel = activeItem === 'messenger' 
+        ? 'Messenger' 
+        : (navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard');
 
     const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
@@ -91,24 +76,15 @@ const App: React.FC = () => {
     const presenceRef = useRef<any>(null);
 
     const startTour = useCallback(() => {
-        setActiveItem('dashboard'); // Reset to a known state for the tour
+        navigate('/dashboard'); // Reset to a known state for the tour
         setTimeout(() => setIsTourOpen(true), 300); // Small delay to allow UI to settle
-    }, []);
+    }, [navigate]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
           setUser(currentUser);
           if (!currentUser) {
             setUserProfile(null);
-            
-            // Only reset to dashboard if we're not on an admin route
-            const isHashAdmin = window.location.hash === '#/admin';
-            const isQueryAdmin = new URLSearchParams(window.location.search).has('admin');
-            const isPathAdmin = window.location.pathname === '/admin';
-            if (!(isHashAdmin || isQueryAdmin || isPathAdmin)) {
-                setActiveItem('dashboard');
-            }
-            
             tourStatusRef.current = 'unknown';
           }
           setIsLoading(false);
@@ -599,9 +575,6 @@ const App: React.FC = () => {
     }
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
-    const currentPageLabel = activeItem === 'messenger' 
-        ? 'Messenger' 
-        : (navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard');
 
     return (
         <div className="h-full flex flex-col md:flex-row bg-gray-100 p-2 md:p-4 gap-4">
@@ -625,7 +598,6 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
-                            activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
                             userProgress={userProgress}
@@ -634,7 +606,6 @@ const App: React.FC = () => {
                             handleProfileUpdate={handleProfileUpdate}
                             handleDeleteAccount={handleAccountDeletion}
                             startTour={startTour}
-
                         />
                     )}
                 </div>

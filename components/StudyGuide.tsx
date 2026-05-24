@@ -14,6 +14,7 @@ import { useApiLimiter } from '../hooks/useApiLimiter';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
+import { LockIcon } from './icons/LockIcon';
 
 declare var __app_id: string;
 // @ts-ignore
@@ -653,30 +654,57 @@ Student: "${tempInput}"
 
 // --- NEW LEARNING PATH COMPONENTS ---
 const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, index: number, pathColor: string }> = ({ topic, isCompleted, onSelect, index, pathColor }) => {
-    const alignment = index % 2 === 0 ? 'justify-start' : 'justify-end';
-    const flexDirection = index % 2 === 0 ? 'flex-row' : 'flex-row-reverse';
-
+    const isEven = index % 2 === 0;
+    
     return (
-        <div className={`flex items-center w-full relative ${alignment}`} style={{ animationDelay: `${index * 50}ms`}}>
-            {/* Vertical Path Connector */}
-            <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 ${pathColor} opacity-50`}></div>
+        <div className="relative w-full py-12 flex items-center justify-center">
+            {/* Vertical Connector Line */}
+            <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1.5 ${isCompleted ? 'bg-lime-500 shadow-[0_0_15px_rgba(132,204,22,0.3)]' : 'bg-gray-100'} z-0`}></div>
 
-            <div className={`w-1/2 p-4 flex items-center ${flexDirection}`}>
-                {/* Horizontal Path Connector */}
-                <div className={`flex-1 h-1 ${pathColor} opacity-50`}></div>
-                
-                {/* The Node */}
-                <button 
-                    onClick={onSelect}
-                    className="group flex flex-col items-center flex-shrink-0 w-24"
-                >
-                    <div className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 transform group-hover:scale-110 group-hover:shadow-xl
-                        ${isCompleted ? 'bg-lime-500 border-4 border-white shadow-lg' : 'bg-white border-4 border-dashed border-gray-300 group-hover:border-solid group-hover:border-lime-400'}`}
-                    >
-                        {isCompleted ? <CheckIcon className="w-8 h-8 text-white"/> : <BookIcon className="w-8 h-8 text-gray-400 group-hover:text-lime-500 transition-colors" />}
+            <div className={`w-full max-w-2xl flex items-center ${isEven ? 'flex-row' : 'flex-row-reverse'} relative z-10`}>
+                {/* Content Side */}
+                <div className={`w-1/2 px-8 ${isEven ? 'text-right' : 'text-left'}`}>
+                    <div className="group cursor-pointer inline-block" onClick={onSelect}>
+                        <h4 className={`text-sm font-black uppercase tracking-widest ${isCompleted ? 'text-lime-600' : 'text-gray-400 group-hover:text-gray-900'} transition-colors duration-300`}>
+                            {isCompleted ? 'Mastered' : 'Locked'}
+                        </h4>
+                        <p className={`mt-1 text-lg font-bold leading-tight ${isCompleted ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-700'} transition-colors duration-300`}>
+                            {topic.topic_name}
+                        </p>
                     </div>
-                    <p className="mt-2 text-center text-sm font-medium text-gray-700 w-32">{topic.topic_name}</p>
-                </button>
+                </div>
+
+                {/* Node Side */}
+                <div className="relative flex items-center justify-center">
+                    <button 
+                        onClick={onSelect}
+                        className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 transform hover:scale-110 active:scale-95 shadow-xl
+                            ${isCompleted 
+                                ? 'bg-lime-500 text-white ring-8 ring-lime-500/20' 
+                                : 'bg-white border-2 border-gray-200 text-gray-300 ring-8 ring-transparent hover:ring-gray-100'}`}
+                    >
+                        {isCompleted ? (
+                            <CheckIcon className="w-8 h-8"/>
+                        ) : (
+                            <LockIcon className="w-7 h-7" />
+                        )}
+                        
+                        {/* Status Tooltip/Indicator */}
+                        {!isCompleted && (
+                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-[10px] font-black uppercase tracking-tighter rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                                Start Learning
+                            </div>
+                        )}
+                    </button>
+                    
+                    {/* Pulsing indicator for current topic (not yet completed but first in list) */}
+                    {!isCompleted && index === 0 && (
+                        <div className="absolute inset-0 w-16 h-16 rounded-full bg-lime-500/20 animate-ping pointer-events-none"></div>
+                    )}
+                </div>
+
+                {/* Empty Side for alignment */}
+                <div className="w-1/2"></div>
             </div>
         </div>
     );
@@ -800,59 +828,67 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full bg-white p-4 sm:p-6 md:p-8 rounded-xl border border-gray-200">
-        <div className="flex-shrink-0 mb-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Study Guide</h2>
-            <p className="text-gray-600">Explore courses, learn with your AI Tutor, and earn XP.</p>
-            
-            <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 relative">
-                    <input 
-                        type="text" 
-                        placeholder="Search topics..."
-                        value={filter.searchTerm}
-                        onChange={(e) => setFilter(f => ({ ...f, searchTerm: e.target.value }))}
-                        className="w-full bg-gray-100 border border-transparent rounded-lg py-2 pl-10 pr-4 text-gray-900 focus:ring-2 focus:ring-lime-500 focus:outline-none"
-                    />
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                       <SearchIcon />
-                    </div>
+    <div className="flex-1 flex flex-col w-full bg-white md:rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in duration-700">
+        <div className="flex-shrink-0 px-8 py-10 bg-gradient-to-b from-gray-50/50 to-white border-b border-gray-100">
+            <div className="max-w-4xl mx-auto flex flex-col items-center text-center">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-lime-50 text-lime-700 text-[10px] font-black uppercase tracking-widest mb-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-lime-500 animate-pulse"></div>
+                    Your Learning Path
                 </div>
-                <div className="bg-gray-100 p-1 rounded-lg flex">
-                    <button onClick={() => setFilter(f => ({ ...f, semester: 'first' }))} className={`px-3 py-1 rounded-md font-semibold text-sm transition-colors ${filter.semester === 'first' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'}`}>1st Semester</button>
-                    <button onClick={() => setFilter(f => ({ ...f, semester: 'second' }))} className={`px-3 py-1 rounded-md font-semibold text-sm transition-colors ${filter.semester === 'second' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'}`}>2nd Semester</button>
-                    <button onClick={() => setFilter(f => ({ ...f, semester: 'all' }))} className={`px-3 py-1 rounded-md font-semibold text-sm transition-colors ${filter.semester === 'all' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'}`}>All</button>
+                <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Knowledge Roadmap</h2>
+                <p className="text-gray-500 text-lg max-w-lg">Master your curriculum topic by topic with personalized AI guidance.</p>
+                
+                <div className="mt-8 w-full flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1 relative group">
+                        <input 
+                            type="text" 
+                            placeholder="Find a topic..."
+                            value={filter.searchTerm}
+                            onChange={(e) => setFilter(f => ({ ...f, searchTerm: e.target.value }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-gray-900 placeholder:text-gray-400 focus:ring-4 focus:ring-lime-500/10 focus:border-lime-500 focus:bg-white focus:outline-none transition-all shadow-sm group-hover:shadow-md"
+                        />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-lime-500 transition-colors">
+                           <SearchIcon className="w-5 h-5" />
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 p-1.5 rounded-2xl flex border border-gray-200">
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'first' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'first' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>1st Sem</button>
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'second' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'second' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>2nd Sem</button>
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'all' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>All</button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2 -mr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isLoading ? (
                 <StudyGuideSkeleton />
             ) : (
                 filteredCourses.length > 0 ? (
-                    <div className="relative space-y-0">
+                    <div className="max-w-4xl mx-auto space-y-6">
                         {filteredCourses.map(course => {
                             const isExpanded = expandedCourses.has(course.course_id);
                             return (
-                                <div key={course.course_id}>
+                                <div key={course.course_id} className="relative">
                                     <CourseHeader
                                         course={course}
                                         isExpanded={isExpanded}
                                         onClick={() => toggleCourse(course.course_id)}
                                     />
-                                    <div className={`grid transition-all duration-500 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                                    <div className={`grid transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-8' : 'grid-rows-[0fr] opacity-0'}`}>
                                         <div className="overflow-hidden">
-                                            {course.topics.map((topic, index) => (
-                                                <TopicNode
-                                                    key={topic.topic_id}
-                                                    topic={topic}
-                                                    isCompleted={userProgress[topic.topic_id]?.is_complete || false}
-                                                    onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
-                                                    index={index}
-                                                    pathColor={getSubjectVisuals(course.course_name).pathColor}
-                                                />
-                                            ))}
+                                            <div className="relative pb-12">
+                                                {course.topics.map((topic, index) => (
+                                                    <TopicNode
+                                                        key={topic.topic_id}
+                                                        topic={topic}
+                                                        isCompleted={userProgress[topic.topic_id]?.is_complete || false}
+                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
+                                                        index={index}
+                                                        pathColor="bg-gray-100"
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -860,8 +896,12 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                         })}
                     </div>
                 ) : (
-                    <div className="text-center p-8 text-gray-500">
-                        <p>No topics found matching your filters.</p>
+                    <div className="flex flex-col items-center justify-center p-20 text-center">
+                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-300">
+                            <SearchIcon className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-1">No topics found</h3>
+                        <p className="text-gray-500">Try adjusting your filters or search term.</p>
                     </div>
                 )
             )}
