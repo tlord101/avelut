@@ -5,6 +5,13 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import type { UserProfile, Question, Course, Topic } from '../types';
+import { LogoIcon } from './icons/LogoIcon';
+import { MenuIcon } from './icons/MenuIcon';
+import { XIcon } from './icons/XIcon';
+import { StackIcon } from './icons/StackIcon';
+import { StudyGuideIcon } from './icons/StudyGuideIcon';
+import { ExamIcon } from './icons/ExamIcon';
+import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // @ts-ignore
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -14,7 +21,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
-    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'textbooks' | 'departments'>('departments');
+    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const { addToast } = useToast();
@@ -23,6 +30,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
     const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
+
+    // Textbook course selection state
+    const [selectedCourseId, setSelectedCourseId] = useState('');
 
     const fetchDepartments = async () => {
         try {
@@ -116,6 +126,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     setCoursesList([]);
                 }
             });
+            // Reset course selection when department changes
+            setSelectedCourseId('');
         }
     }, [departmentId]);
 
@@ -220,17 +232,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const handleTextbookUpload = async () => {
-        if (!textbookFile || !uploadDepartmentId || !uploadLevel || !uploadCourseName) {
-            addToast("Please select a file and enter Department ID, Level, and Course Name", "error");
+        // Find selected course details from coursesList
+        const selectedCourse = coursesList.find(c => c.course_id === selectedCourseId);
+        
+        if (!textbookFile || !departmentId || !selectedCourse) {
+            addToast("Please select a file, department, and course", "error");
             return;
         }
+
+        const { course_name, level } = selectedCourse;
 
         setIsUploading(true);
         setExtractionProgress('Uploading to storage...');
 
         try {
             // 1. Upload to Firebase Storage
-            const fileRef = storageRef(storage, `textbooks/${uploadDepartmentId}/${uploadLevel}/${uploadCourseName}/${textbookFile.name}`);
+            const fileRef = storageRef(storage, `textbooks/${departmentId}/${level}/${course_name}/${textbookFile.name}`);
             const uploadResult = await uploadBytes(fileRef, textbookFile);
             const downloadURL = await getDownloadURL(uploadResult.ref);
 
@@ -242,7 +259,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 reader.onload = () => resolve((reader.result as string).split(',')[1]);
             });
 
-            const prompt = `Analyze this PDF textbook for "${uploadCourseName}" at "${uploadLevel}" level.
+            const prompt = `Analyze this PDF textbook for "${course_name}" at "${level}" level.
             Extract a comprehensive syllabus/course outline into a structured JSON array of topics.
             
             RULES:
@@ -279,41 +296,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             setExtractionProgress('Saving to database...');
 
             // 3. Save to Textbook Contexts (for AI grounding)
-            const textbookContextRef = dbRef(db, `textbook_contexts/${uploadDepartmentId}/${uploadLevel}/${uploadCourseName}`);
+            const textbookContextRef = dbRef(db, `textbook_contexts/${departmentId}/${level}/${course_name}`);
             await set(textbookContextRef, {
                 pdf_url: downloadURL,
                 syllabus: syllabusData,
                 uploaded_at: Date.now()
             });
 
-            // 4. Update Department Course List (for UI)
-            const deptRef = dbRef(db, `departments_data/${uploadDepartmentId}`);
-            const deptSnap = await get(deptRef);
-            let currentCourses = [];
-            if (deptSnap.exists()) {
-                currentCourses = deptSnap.val().course_list || [];
-            }
+            // 4. Update the local coursesList and then database
+            const updatedCoursesList = coursesList.map(c => {
+                if (c.course_id === selectedCourseId) {
+                    return {
+                        ...c,
+                        topics: syllabusData,
+                        textbook_url: downloadURL
+                    };
+                }
+                return c;
+            });
 
-            const newCourse: Course = {
-                course_id: uploadCourseName.toLowerCase().replace(/\s+/g, '_'),
-                course_name: uploadCourseName,
-                level: uploadLevel,
-                topics: syllabusData,
-                textbook_url: downloadURL
-            };
+            setCoursesList(updatedCoursesList);
+            
+            // Save to DB
+            await update(dbRef(db, `departments_data/${departmentId}`), {
+                course_list: updatedCoursesList
+            });
 
-            const existingIndex = currentCourses.findIndex((c: any) => c.course_id === newCourse.course_id);
-            if (existingIndex > -1) {
-                currentCourses[existingIndex] = newCourse;
-            } else {
-                currentCourses.push(newCourse);
-            }
-
-            await update(deptRef, { course_list: currentCourses });
-
-            addToast("Textbook processed and course added successfully!", "success");
+            addToast(`Textbook for ${course_name} processed successfully!`, "success");
             setTextbookFile(null);
-            setUploadCourseName('');
+            setSelectedCourseId('');
         } catch (error: any) {
             console.error(error);
             addToast(`Error: ${error.message}`, "error");
@@ -351,34 +362,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         <div className="flex-1 flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
-            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2">
+            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button 
                     onClick={() => setActiveTab('departments')}
-                    className={`px-4 py-2 font-medium ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
                     Departments
                 </button>
                 <button 
-                    onClick={() => setActiveTab('questions')}
-                    className={`px-4 py-2 font-medium ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Past Questions
-                </button>
-                <button 
                     onClick={() => setActiveTab('courses')}
-                    className={`px-4 py-2 font-medium ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
                     Department Outlines
                 </button>
                 <button 
-                    onClick={() => setActiveTab('textbooks')}
-                    className={`px-4 py-2 font-medium ${activeTab === 'textbooks' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    onClick={() => setActiveTab('questions')}
+                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
-                    Textbooks
+                    Past Questions
                 </button>
                 <button 
                     onClick={() => setActiveTab('users')}
-                    className={`px-4 py-2 font-medium ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
                     User Management
                 </button>
@@ -571,179 +576,202 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
             {activeTab === 'courses' && (
                 <div className="space-y-6">
-                    <select 
-                        value={departmentId} 
-                        onChange={e => setDepartmentId(e.target.value)}
-                        className="w-full max-w-md p-2 border rounded-lg block bg-white"
-                    >
-                        <option value="">Select Department</option>
-                        {allDepartments.map(dept => (
-                            <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                        ))}
-                    </select>
-                    
-                    <div className="space-y-4">
-                        <h3 className="font-bold text-lg">Courses in this Department</h3>
-                        {coursesList.map((s, sIdx) => (
-                            <div key={sIdx} className="p-4 border rounded-xl bg-gray-50 relative">
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <input 
-                                        type="text" placeholder="Course Name"
-                                        value={s.course_name} 
-                                        onChange={e => {
-                                            const list = [...coursesList];
-                                            list[sIdx].course_name = e.target.value;
-                                            list[sIdx].course_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
-                                            setCoursesList(list);
-                                        }}
-                                        className="p-2 border rounded-lg"
-                                    />
-                                    <select 
-                                        value={s.level} 
-                                        onChange={e => {
-                                            const list = [...coursesList];
-                                            list[sIdx].level = e.target.value;
-                                            setCoursesList(list);
-                                        }}
-                                        className="p-2 border rounded-lg"
-                                    >
-                                        {LEVELS.map(lvl => (
-                                            <option key={lvl} value={lvl}>{lvl}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                
-                                <div className="ml-6 space-y-2 mb-4">
-                                    <h4 className="text-sm font-bold text-gray-700">Topics</h4>
-                                    {s.topics?.map((t, tIdx) => (
-                                        <div key={tIdx} className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                placeholder="Topic Name"
-                                                value={t.topic_name}
-                                                onChange={e => {
-                                                    const list = [...coursesList];
-                                                    list[sIdx].topics[tIdx].topic_name = e.target.value;
-                                                    list[sIdx].topics[tIdx].topic_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
-                                                    setCoursesList(list);
-                                                }}
-                                                className="flex-1 p-2 border rounded-lg text-sm"
-                                            />
-                                            <button onClick={() => {
-                                                const list = [...coursesList];
-                                                list[sIdx].topics = list[sIdx].topics.filter((_, i) => i !== tIdx);
-                                                setCoursesList(list);
-                                            }} className="text-red-400">✕</button>
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                        <h3 className="font-bold text-gray-800 mb-4">Manage Department Content</h3>
+                        <select 
+                            value={departmentId} 
+                            onChange={e => setDepartmentId(e.target.value)}
+                            className="w-full max-w-md p-3 border rounded-xl block bg-gray-50 mb-6"
+                        >
+                            <option value="">Select Department</option>
+                            {allDepartments.map(dept => (
+                                <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                            ))}
+                        </select>
+
+                        {departmentId && (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* Left side: Textbook Upload */}
+                                <div className="space-y-6">
+                                    <div className="bg-lime-50 p-6 rounded-2xl border border-lime-100">
+                                        <h4 className="font-bold text-lime-800 mb-2 flex items-center gap-2">
+                                            <span>📚</span> Upload Course Textbook
+                                        </h4>
+                                        <p className="text-sm text-lime-700 mb-4">
+                                            Select a course to upload its textbook. Gemini will automatically extract topics and syllabus.
+                                        </p>
+
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-lime-700 uppercase mb-1 ml-1">Select Course</label>
+                                                <select 
+                                                    value={selectedCourseId} 
+                                                    onChange={e => setSelectedCourseId(e.target.value)}
+                                                    className="w-full p-3 border rounded-xl bg-white focus:ring-2 focus:ring-lime-500 transition-all outline-none"
+                                                >
+                                                    <option value="">Select a course from list...</option>
+                                                    {coursesList.map(c => (
+                                                        <option key={c.course_id} value={c.course_id}>
+                                                            {c.course_name} ({c.level})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div 
+                                                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${textbookFile ? 'border-lime-500 bg-lime-50' : 'border-gray-300 hover:border-lime-400 bg-gray-50'}`}
+                                            >
+                                                <input 
+                                                    type="file" 
+                                                    accept="application/pdf"
+                                                    onChange={e => setTextbookFile(e.target.files?.[0] || null)}
+                                                    className="hidden" 
+                                                    id="textbook-upload-inline"
+                                                />
+                                                <label htmlFor="textbook-upload-inline" className="cursor-pointer block">
+                                                    {textbookFile ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <div className="text-lime-600 font-bold mb-1 truncate max-w-full px-2">{textbookFile.name}</div>
+                                                            <div className="text-xs text-lime-500">{(textbookFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-gray-400">
+                                                            <div className="text-2xl mb-1">📄</div>
+                                                            <span className="text-sm font-medium">Click to select PDF textbook</span>
+                                                        </div>
+                                                    )}
+                                                </label>
+                                            </div>
+
+                                            {isUploading && (
+                                                <div className="flex items-center justify-center gap-3 text-lime-600 font-bold py-2">
+                                                    <span className="animate-spin text-xl">⏳</span>
+                                                    <span className="text-sm animate-pulse">{extractionProgress}</span>
+                                                </div>
+                                            )}
+
+                                            <button 
+                                                onClick={handleTextbookUpload}
+                                                disabled={isUploading || !textbookFile || !selectedCourseId}
+                                                className={`w-full py-3.5 rounded-xl font-bold transition-all transform active:scale-95 ${isUploading || !textbookFile || !selectedCourseId ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-md shadow-lime-200'}`}
+                                            >
+                                                {isUploading ? 'Processing...' : 'Upload & Digest Textbook'}
+                                            </button>
                                         </div>
-                                    ))}
+                                    </div>
+                                </div>
+
+                                {/* Right side: Outline Management */}
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="font-bold text-gray-700">Course List & Topics</h4>
+                                        <button 
+                                            onClick={addCourseField}
+                                            className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg font-bold transition-colors text-gray-600"
+                                        >
+                                            + Add New Course
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 [scrollbar-width:thin] scrollbar-thumb-gray-300">
+                                        {coursesList.map((s, sIdx) => (
+                                            <div key={sIdx} className="p-4 border rounded-2xl bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                                                    <input 
+                                                        type="text" placeholder="Course Name"
+                                                        value={s.course_name} 
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].course_name = e.target.value;
+                                                            list[sIdx].course_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="p-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white transition-colors"
+                                                    />
+                                                    <select 
+                                                        value={s.level} 
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].level = e.target.value;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="p-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white"
+                                                    >
+                                                        {LEVELS.map(lvl => (
+                                                            <option key={lvl} value={lvl}>{lvl}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                
+                                                <div className="pl-4 border-l-2 border-gray-100 space-y-2 mb-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Topics</span>
+                                                        <span className="text-[10px] text-gray-400">{s.topics?.length || 0} topics</span>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {s.topics?.map((t, tIdx) => (
+                                                            <div key={tIdx} className="flex gap-2">
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Topic Name"
+                                                                    value={t.topic_name}
+                                                                    onChange={e => {
+                                                                        const list = [...coursesList];
+                                                                        list[sIdx].topics[tIdx].topic_name = e.target.value;
+                                                                        list[sIdx].topics[tIdx].topic_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                                                        setCoursesList(list);
+                                                                    }}
+                                                                    className="flex-1 p-2 border border-gray-100 rounded-lg text-xs bg-gray-50 focus:bg-white"
+                                                                />
+                                                                <button onClick={() => {
+                                                                    const list = [...coursesList];
+                                                                    list[sIdx].topics = list[sIdx].topics.filter((_, i) => i !== tIdx);
+                                                                    setCoursesList(list);
+                                                                }} className="text-gray-300 hover:text-red-500 transition-colors">
+                                                                    <XIcon className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const list = [...coursesList];
+                                                            if(!list[sIdx].topics) list[sIdx].topics = [];
+                                                            list[sIdx].topics.push({ topic_id: '', topic_name: '', is_complete: false });
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="text-[10px] font-bold text-lime-600 hover:text-lime-700 mt-1 uppercase"
+                                                    >
+                                                        + Add Topic
+                                                    </button>
+                                                </div>
+
+                                                <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+                                                    {s.textbook_url ? (
+                                                        <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold uppercase flex items-center gap-1">
+                                                            <span>✓</span> Textbook Ready
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full font-bold uppercase">No Textbook</span>
+                                                    )}
+                                                    <button className="text-red-400 hover:text-red-600 text-xs font-bold transition-colors" onClick={() => {
+                                                        const list = coursesList.filter((_, i) => i !== sIdx);
+                                                        setCoursesList(list);
+                                                    }}>Delete Course</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
                                     <button 
-                                        onClick={() => {
-                                            const list = [...coursesList];
-                                            if(!list[sIdx].topics) list[sIdx].topics = [];
-                                            list[sIdx].topics.push({ topic_id: '', topic_name: '', is_complete: false });
-                                            setCoursesList(list);
-                                        }}
-                                        className="text-xs text-lime-600 hover:underline"
+                                        onClick={handleUpdateCourseOutline}
+                                        className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold hover:bg-black transition-all shadow-lg active:scale-95"
                                     >
-                                        + Add Topic
+                                        Save & Publish All Changes
                                     </button>
                                 </div>
-
-                                <button className="text-red-500 text-sm mb-4" onClick={() => {
-                                    const list = coursesList.filter((_, i) => i !== sIdx);
-                                    setCoursesList(list);
-                                }}>Remove Course</button>
-                            </div>
-                        ))}
-                        <button 
-                            onClick={addCourseField}
-                            className="bg-gray-200 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition"
-                        >
-                            + Add Course
-                        </button>
-                    </div>
-
-                    <button 
-                        onClick={handleUpdateCourseOutline}
-                        className="w-full max-w-md bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition"
-                    >
-                        Publish Department Outline
-                    </button>
-                </div>
-            )}
-
-            {activeTab === 'textbooks' && (
-                <div className="space-y-6 max-w-2xl">
-                    <div className="bg-lime-50 p-4 rounded-xl border border-lime-200">
-                        <h3 className="font-bold text-lime-800 mb-2">Textbook Digestion Flow</h3>
-                        <p className="text-sm text-lime-700">
-                            Upload a PDF textbook to automatically extract a structured syllabus and ground AI tutoring in its content.
-                        </p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <select 
-                                value={uploadDepartmentId} 
-                                onChange={e => setUploadDepartmentId(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Department</option>
-                                {allDepartments.map(dept => (
-                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                                ))}
-                            </select>
-                            <select 
-                                value={uploadLevel} 
-                                onChange={e => setUploadLevel(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Level</option>
-                                {LEVELS.map(lvl => (
-                                    <option key={lvl} value={lvl}>{lvl}</option>
-                                ))}
-                            </select>
-                            <input 
-                                type="text" placeholder="Course Name (e.g., CSC 101)" 
-                                value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
-                                className="p-2 border rounded-lg col-span-2"
-                            />
-                        </div>
-
-                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-lime-500 transition cursor-pointer">
-                            <input 
-                                type="file" 
-                                accept="application/pdf"
-                                onChange={e => setTextbookFile(e.target.files?.[0] || null)}
-                                className="hidden" 
-                                id="textbook-upload"
-                            />
-                            <label htmlFor="textbook-upload" className="cursor-pointer">
-                                {textbookFile ? (
-                                    <div className="text-lime-600 font-medium">{textbookFile.name}</div>
-                                ) : (
-                                    <div className="text-gray-500">
-                                        <div className="text-3xl mb-2">📄</div>
-                                        <span>Click to select PDF textbook</span>
-                                    </div>
-                                )}
-                            </label>
-                        </div>
-
-                        {isUploading && (
-                            <div className="flex items-center gap-3 text-lime-600 font-medium">
-                                <span className="animate-spin text-xl">⏳</span>
-                                <span>{extractionProgress}</span>
                             </div>
                         )}
-
-                        <button 
-                            onClick={handleTextbookUpload}
-                            disabled={isUploading || !textbookFile}
-                            className={`w-full py-4 rounded-xl font-bold transition ${isUploading || !textbookFile ? 'bg-gray-300 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-lg shadow-lime-200'}`}
-                        >
-                            {isUploading ? 'Processing...' : 'Upload & Digest Textbook'}
-                        </button>
                     </div>
                 </div>
             )}

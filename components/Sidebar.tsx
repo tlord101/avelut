@@ -2,7 +2,7 @@ import React from 'react';
 import type { NavItem, UserProfile } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { navigationItems, secondaryNavigationItems } from '../constants';
+import { navigationItems, secondaryNavigationItems, adminNavigationItems } from '../constants';
 import { Avatar } from './Avatar';
 
 
@@ -20,6 +20,8 @@ interface SidebarProps {
   onLogout: () => void;
   isMobileSidebarOpen: boolean;
   onCloseMobileSidebar: () => void;
+  items?: NavItem[];
+  secondaryItems?: NavItem[];
 }
 
 const NavButton: React.FC<{
@@ -55,7 +57,9 @@ const SidebarContent: React.FC<{
     onItemClick: (id: string) => void;
     userProfile: UserProfile | null;
     onLogout: () => void;
-}> = ({ isExpanded, activeItem, onItemClick, userProfile, onLogout }) => (
+    items?: NavItem[];
+    secondaryItems?: NavItem[];
+}> = ({ isExpanded, activeItem, onItemClick, userProfile, onLogout, items = navigationItems, secondaryItems = secondaryNavigationItems }) => (
     <div className="h-full p-4 flex flex-col">
       {/* Top Section: Logo */}
       <div className="flex items-center mb-10 flex-shrink-0">
@@ -69,7 +73,7 @@ const SidebarContent: React.FC<{
       <nav className="flex-grow overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <p className={`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 transition-opacity duration-300 ease-in-out ${isExpanded ? 'pl-3 opacity-100' : 'opacity-0'}`}>Menu</p>
         <ul className="space-y-2">
-          {navigationItems.map((item) => (
+          {items.map((item) => (
               <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
           ))}
         </ul>
@@ -78,7 +82,7 @@ const SidebarContent: React.FC<{
       {/* Bottom Section: Profile & Logout */}
       <div className="flex-shrink-0">
          <ul className="space-y-2 pt-4 border-t border-gray-200">
-              {secondaryNavigationItems.map((item) => (
+              {secondaryItems.map((item) => (
                   <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
               ))}
                <li>
@@ -105,7 +109,7 @@ const SidebarContent: React.FC<{
 );
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userProfile, onLogout, isMobileSidebarOpen, onCloseMobileSidebar }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userProfile, onLogout, isMobileSidebarOpen, onCloseMobileSidebar, items, secondaryItems }) => {
   const handleMobileItemClick = (id: string) => {
     onItemClick(id);
     onCloseMobileSidebar();
@@ -115,6 +119,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
     onLogout();
     onCloseMobileSidebar();
   };
+
+  const navItems = items || (userProfile?.is_admin ? adminNavigationItems : navigationItems);
 
   return (
     <>
@@ -128,6 +134,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
             onItemClick={handleMobileItemClick}
             userProfile={userProfile}
             onLogout={handleMobileLogout}
+            items={navItems}
+            secondaryItems={secondaryItems}
            />
         </aside>
       </div>
@@ -142,6 +150,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
             onItemClick={onItemClick}
             userProfile={userProfile}
             onLogout={onLogout}
+            items={navItems}
+            secondaryItems={secondaryItems}
         />
       </aside>
     </>

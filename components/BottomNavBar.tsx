@@ -23,7 +23,12 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     { id: 'messenger', icon: <MessengerIcon className="w-7 h-7" />, label: 'Connect' },
   ];
 
-  const navItems = baseNavItems;
+  const adminNavItems = [
+    { id: 'admin', icon: <ShieldCheckIcon />, label: 'Admin' },
+    { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
+  ];
+
+  const navItems = userProfile?.is_admin ? adminNavItems : baseNavItems;
 
   const [activeIndex, setActiveIndex] = useState(2); // Default to 'Home'
 

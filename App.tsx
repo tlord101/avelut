@@ -525,7 +525,8 @@ const App: React.FC = () => {
         } as UserProfile;
 
         return (
-            <div className="h-full flex flex-col md:flex-row bg-gray-100 p-2 md:p-4 gap-4">
+            <div className="h-full flex flex-col md:flex-row bg-gray-50 overflow-hidden">
+                {/* Admin-specific Sidebar */}
                 <Sidebar
                     activeItem="admin"
                     onItemClick={setActiveItem}
@@ -536,33 +537,41 @@ const App: React.FC = () => {
                     }}
                     isMobileSidebarOpen={isMobileSidebarOpen}
                     onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+                    items={adminNavigationItems}
+                    secondaryItems={[]} // Less secondary items for admin
                 />
-                <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                
+                <main className="flex-1 flex flex-col min-w-0">
                     <Header 
-                        currentPageLabel="Admin Panel"
-                        unreadCount={0}
-                        onNotificationsClick={() => {}}
+                        currentPageLabel="Admin Control Panel"
                         onMenuClick={() => setIsMobileSidebarOpen(true)}
-                        onMessengerClick={() => {}}
-                        unreadMessagesCount={0}
+                        rightActions={
+                            <div className="flex items-center gap-4">
+                                <span className="text-xs font-semibold px-2 py-1 bg-lime-100 text-lime-700 rounded-full uppercase">Admin Workspace</span>
+                                <button 
+                                    onClick={() => {
+                                        setIsAdminAuthenticated(false);
+                                        setActiveItem('dashboard');
+                                    }}
+                                    className="text-sm font-medium text-gray-500 hover:text-gray-900"
+                                >
+                                    Exit Admin
+                                </button>
+                            </div>
+                        }
                     />
-                    <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
-                        <MainContent
-                            activeItem="admin"
-                            user={null}
-                            userProfile={mockAdminProfile}
-                            userProgress={{}}
-                            dashboardData={null}
-                            handleLogout={() => {
-                                setIsAdminAuthenticated(false);
-                                setActiveItem('dashboard');
-                            }}
-                            handleProfileUpdate={async () => ({ success: false })}
-                            handleDeleteAccount={async () => ({ success: false })}
-                            startTour={() => {}}
-                        />
+                    <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-20 md:pb-8">
+                        <AdminPanel userProfile={mockAdminProfile} />
                     </div>
                 </main>
+
+                <BottomNavBar
+                    activeItem="admin"
+                    onItemClick={setActiveItem}
+                    isVisible={!isMobileSidebarOpen}
+                    userProfile={mockAdminProfile}
+                    items={adminNavigationItems}
+                />
             </div>
         );
     }
