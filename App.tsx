@@ -31,6 +31,8 @@ const AppLoader: React.FC = () => {
   );
 };
 
+const normalizeRouteSegment = (segment: string): string => segment.toLowerCase().replace(/-/g, '_');
+
 const ALLOWED_ROUTE_ITEMS = new Set([
     'dashboard',
     ...navigationItems.map(item => item.id),
@@ -38,7 +40,20 @@ const ALLOWED_ROUTE_ITEMS = new Set([
     'settings',
     'help',
     'admin'
-]);
+].map(normalizeRouteSegment));
+
+const resolveActiveItemFromPath = (pathname: string): string => {
+    if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
+    const rawSegment = pathname.substring(1).split('/')[0] || '';
+    let decodedSegment = rawSegment;
+    try {
+        decodedSegment = decodeURIComponent(rawSegment);
+    } catch {
+        return 'dashboard';
+    }
+    const normalizedSegment = normalizeRouteSegment(decodedSegment);
+    return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
+};
 
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -56,19 +71,6 @@ const App: React.FC = () => {
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
-    const resolveActiveItemFromPath = (pathname: string): string => {
-        if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
-        const rawSegment = pathname.substring(1).split('/')[0] || '';
-        let decodedSegment = rawSegment;
-        try {
-            decodedSegment = decodeURIComponent(rawSegment);
-        } catch {
-            return 'dashboard';
-        }
-        const normalizedSegment = decodedSegment.toLowerCase().replace(/-/g, '_');
-        return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
-    };
-
     // Derived state from URL
     const activeItem = resolveActiveItemFromPath(location.pathname);
     
