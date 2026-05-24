@@ -910,7 +910,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                 </button>
                                             </div>
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                                 
                                 <button 
