@@ -44,18 +44,19 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 ].map(normalizeRouteSegment));
 
 const resolveActiveItemFromPath = (pathname: string): string => {
-    if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
+    if (pathname === '/') return 'visual_solver';
+    if (pathname === '/dashboard') return 'dashboard';
     const rawSegment = pathname.substring(1).split('/')[0];
-    if (!rawSegment) return 'dashboard';
+    if (!rawSegment) return 'visual_solver';
     let decodedSegment = rawSegment;
     try {
         decodedSegment = decodeURIComponent(rawSegment);
     } catch (error) {
         console.warn('Invalid route segment encoding:', rawSegment, error);
-        return 'dashboard';
+        return 'visual_solver';
     }
     const normalizedSegment = normalizeRouteSegment(decodedSegment);
-    return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
+    return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'visual_solver';
 };
 
 const normalizeLevelValue = (value?: string): string => {
