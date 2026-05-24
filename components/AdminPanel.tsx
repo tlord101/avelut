@@ -353,7 +353,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     }
 
     return (
-        <div className="flex-1 flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto">
+        <div className="flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

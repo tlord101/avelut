@@ -545,7 +545,7 @@ const App: React.FC = () => {
         } as UserProfile;
 
         return (
-            <div className="h-full flex flex-col md:flex-row bg-gray-50 overflow-hidden">
+            <div className="min-h-screen md:h-screen flex flex-col md:flex-row bg-gray-50 overflow-x-hidden md:overflow-hidden">
                 {/* Admin-specific Sidebar */}
                 <Sidebar
                     activeItem="admin"
@@ -580,7 +580,7 @@ const App: React.FC = () => {
                             </div>
                         }
                     />
-                    <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-20 md:pb-8">
+                    <div className="flex-1 min-h-0 px-4 pb-20 md:pb-8 md:overflow-y-auto">
                         <AdminPanel userProfile={mockAdminProfile} />
                     </div>
                 </main>
