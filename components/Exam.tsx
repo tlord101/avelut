@@ -318,7 +318,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         }
       });
 
-      const responseData = JSON.parse(response.text || '{}');
+      if (!response.text) {
+        throw new Error('AI returned an empty response while generating exam questions.');
+      }
+      const responseData = JSON.parse(response.text);
       if (responseData.questions && responseData.questions.length > 0) {
         const newQuestions = responseData.questions;
         setQuestions(newQuestions);

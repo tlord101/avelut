@@ -200,7 +200,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 }
             });
 
-            const responseData = JSON.parse(response.text || '{}');
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting questions.");
+            }
+            const responseData = JSON.parse(response.text);
             const extractedQuestions = responseData.questions || [];
 
             if (extractedQuestions.length === 0) throw new Error("No questions found in the PDF.");
@@ -286,7 +289,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 }
             });
 
-            const responseData = JSON.parse(response.text || '{}');
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting syllabus.");
+            }
+            const responseData = JSON.parse(response.text);
             const syllabusData = responseData.syllabus || [];
 
             setExtractionProgress('Saving to database...');

@@ -357,7 +357,7 @@ Student: "${tempInput}"
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.5-flash',
                     config: { systemInstruction },
-                    contents: { parts }
+                    contents: [{ parts }]
                 });
                 const botResponseText = response.text || '';
                 
