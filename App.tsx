@@ -73,13 +73,32 @@ const App: React.FC = () => {
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
-    // Derived state from URL
-    const activeItem = resolveActiveItemFromPath(location.pathname);
+    // Derived state from URL or internal state for PWA feel
+    const [activeItem, setActiveItemState] = useState<string>(() => {
+        const item = resolveActiveItemFromPath(location.pathname);
+        return item === 'admin' ? 'admin' : item;
+    });
     
     const setActiveItem = (item: string) => {
-        if (item === 'dashboard') navigate('/dashboard');
-        else navigate(`/${item}`);
+        setActiveItemState(item);
+        if (item === 'admin') {
+            navigate('/admin');
+        } else if (location.pathname === '/admin') {
+            navigate('/');
+        }
     };
+
+    // Sync state with URL only for admin or to reset to root
+    useEffect(() => {
+        const item = resolveActiveItemFromPath(location.pathname);
+        if (item === 'admin') {
+            setActiveItemState('admin');
+        } else if (location.pathname !== '/' && location.pathname !== '/dashboard') {
+            // For PWA feel, we redirect any non-admin paths back to root but keep the item state
+            navigate('/', { replace: true });
+            setActiveItemState(item);
+        }
+    }, [location.pathname]);
 
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -100,9 +119,9 @@ const App: React.FC = () => {
     const presenceRef = useRef<any>(null);
 
     const startTour = useCallback(() => {
-        navigate('/dashboard'); // Reset to a known state for the tour
+        setActiveItem('dashboard'); // Reset to a known state for the tour
         setTimeout(() => setIsTourOpen(true), 300); // Small delay to allow UI to settle
-    }, [navigate]);
+    }, []);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
