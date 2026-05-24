@@ -12,9 +12,10 @@ interface BottomNavBarProps {
   onItemClick: (id: string) => void;
   isVisible: boolean;
   userProfile: UserProfile | null;
+  items?: { id: string, icon: JSX.Element, label: string }[];
 }
 
-export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile }) => {
+export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items }) => {
   const baseNavItems = [
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
     { id: 'chat', icon: <ChatIcon />, label: 'Chat' },
@@ -28,14 +29,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
   ];
 
-  const navItems = userProfile?.is_admin ? adminNavItems : baseNavItems;
+  const navItems = items || (userProfile?.is_admin ? adminNavItems : baseNavItems);
 
-  const [activeIndex, setActiveIndex] = useState(2); // Default to 'Home'
-
-  useEffect(() => {
-    const currentIndex = navItems.findIndex(item => item.id === activeItem);
-    setActiveIndex(currentIndex); // Will be -1 if the activeItem is not in our nav array
-  }, [activeItem, navItems]);
+  const activeIndex = navItems.findIndex(item => item.id === activeItem);
 
   if (!isVisible || activeIndex === -1) {
       return null;
@@ -53,22 +49,18 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       <div className="relative w-full max-w-md h-16 bg-white/80 backdrop-blur-xl rounded-full shadow-2xl border border-white/30">
         
         {/* The moving bubble that provides the "cutout" effect */}
-        {activeIndex !== -1 && (
-            <div 
-              className={`absolute -top-3 w-14 h-14 bg-gray-100 rounded-full transition-all duration-500 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]`}
-              style={{ left: `calc(${(activeIndex + 0.5) * (100 / navItems.length)}% - 1.75rem)` }}
-            />
-        )}
+        <div 
+          className={`absolute -top-3 w-14 h-14 bg-gray-100 rounded-full transition-all duration-500 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]`}
+          style={{ left: `calc(${(activeIndex + 0.5) * (100 / navItems.length)}% - 1.75rem)` }}
+        />
 
         {/* The active icon that moves with the bubble */}
-        {activeIndex !== -1 && (
-            <div
-              className={`absolute -top-3 w-14 h-14 rounded-full bg-gradient-to-tr from-lime-500 to-teal-500 flex items-center justify-center text-white shadow-lg transition-all duration-500 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]`}
-              style={{ left: `calc(${(activeIndex + 0.5) * (100 / navItems.length)}% - 1.75rem)` }}
-            >
-              {React.cloneElement(navItems[activeIndex].icon, { className: 'w-8 h-8' })}
-            </div>
-        )}
+        <div
+          className={`absolute -top-3 w-14 h-14 rounded-full bg-gradient-to-tr from-lime-500 to-teal-500 flex items-center justify-center text-white shadow-lg transition-all duration-500 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]`}
+          style={{ left: `calc(${(activeIndex + 0.5) * (100 / navItems.length)}% - 1.75rem)` }}
+        >
+          {navItems[activeIndex] && React.cloneElement(navItems[activeIndex].icon, { className: 'w-8 h-8' })}
+        </div>
         
         {/* The static, clickable placeholders */}
         <div className="flex items-center h-full">
