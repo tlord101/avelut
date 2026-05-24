@@ -3,7 +3,6 @@ import type { FirebaseUser } from './firebase';
 import type { UserProfile, UserProgress, DashboardData } from './types';
 import { Dashboard } from './components/Dashboard';
 import { StudyGuide } from './components/StudyGuide';
-import { Chat } from './components/Chat';
 import { VisualSolver } from './components/VisualSolver';
 import { Exam } from './components/Exam';
 import { Leaderboard } from './components/Leaderboard';
@@ -44,8 +43,6 @@ export const MainContent: React.FC<MainContentProps> = ({
             return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
         case 'leaderboard':
             return <Leaderboard userProfile={userProfile} />;
-        case 'chat':
-            return <Chat userProfile={userProfile} />;
         case 'visual_solver':
             return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />;
         case 'exam':

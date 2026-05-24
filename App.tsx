@@ -501,12 +501,6 @@ const App: React.FC = () => {
         placement: isMobile ? 'top' : 'right',
       },
       {
-        target: isMobile ? '[data-tour-id="bottomnav-chat"]' : '[data-tour-id="sidebar-chat"]',
-        title: '💬 AI Tutor Chat',
-        content: 'Chat with your AI tutor and ask any questions.',
-        placement: isMobile ? 'top' : 'right',
-      },
-      {
         target: isMobile ? '[data-tour-id="bottomnav-visual_solver"]' : '[data-tour-id="sidebar-visual_solver"]',
         title: '📸 Visual Solver',
         content: 'Scan any problem and get instant or detailed tutorials.',
@@ -640,17 +634,15 @@ const App: React.FC = () => {
                 onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
             />
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                {activeItem !== 'chat' && (
-                    <Header 
-                        currentPageLabel={currentPageLabel}
-                        unreadCount={unreadCount}
-                        onNotificationsClick={() => setIsNotificationsPanelOpen(true)}
-                        onMenuClick={() => setIsMobileSidebarOpen(true)}
-                        onMessengerClick={() => setActiveItem('messenger')}
-                        unreadMessagesCount={unreadMessagesCount}
-                    />
-                )}
-                <div className={`flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${activeItem !== 'chat' ? 'content-with-bottom-nav' : ''}`}>
+                <Header 
+                    currentPageLabel={currentPageLabel}
+                    unreadCount={unreadCount}
+                    onNotificationsClick={() => setIsNotificationsPanelOpen(true)}
+                    onMenuClick={() => setIsMobileSidebarOpen(true)}
+                    onMessengerClick={() => setActiveItem('messenger')}
+                    unreadMessagesCount={unreadMessagesCount}
+                />
+                <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
                             key={location.pathname}
