@@ -36,29 +36,26 @@ export const MainContent: React.FC<MainContentProps> = ({
 }) => {
     if (!userProfile) return null;
 
-    if (activeItem === 'study_guide') {
-        return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
+    switch (activeItem) {
+        case 'study_guide':
+            return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
+        case 'chat':
+            return <Chat userProfile={userProfile} />;
+        case 'visual_solver':
+            return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />;
+        case 'exam':
+            return <Exam userProfile={userProfile} userProgress={userProgress} />;
+        case 'settings':
+            return <Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
+        case 'help':
+            return <Help onStartTour={startTour} />;
+        case 'messenger':
+            return <Messenger userProfile={userProfile} />;
+        case 'admin':
+            return userProfile.is_admin
+                ? <AdminPanel userProfile={userProfile} />
+                : <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
+        default:
+            return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
     }
-    if (activeItem === 'chat') {
-        return <Chat userProfile={userProfile} />;
-    }
-    if (activeItem === 'visual_solver') {
-        return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />;
-    }
-    if (activeItem === 'exam') {
-        return <Exam userProfile={userProfile} userProgress={userProgress} />;
-    }
-    if (activeItem === 'settings') {
-        return <Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
-    }
-    if (activeItem === 'help') {
-        return <Help onStartTour={startTour} />;
-    }
-    if (activeItem === 'messenger') {
-        return <Messenger userProfile={userProfile} />;
-    }
-    if (activeItem === 'admin' && userProfile.is_admin) {
-        return <AdminPanel userProfile={userProfile} />;
-    }
-    return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
 };
