@@ -78,6 +78,7 @@ export interface Course {
   level: string; // 100lvl, 200lvl, etc.
   semester?: 'first' | 'second';
   textbook_url?: string;
+  textbook_urls?: string[];
 }
 
 export interface Department {
