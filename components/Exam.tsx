@@ -22,7 +22,7 @@ const getCourseNameById = (id: string) => {
 }
 
 const sanitizePromptInput = (value: string): string =>
-  value.replace(/[<>{}`$]/g, ' ').replace(/\s+/g, ' ').trim();
+  value.replace(/[^a-zA-Z0-9 ,.\-_/()]/g, ' ').replace(/\s+/g, ' ').trim();
 
 const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
   <div className="flex flex-col items-center justify-center text-center p-8">
@@ -297,7 +297,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     try {
       const safeDepartment = sanitizePromptInput(getCourseNameById(userProfile.department_id));
       const safeLevel = sanitizePromptInput(userProfile.level);
-      const safeTopics = completedTopicNames.map(sanitizePromptInput).filter(Boolean);
+      const safeTopics = completedTopicNames.map((topicName, index) => {
+        const sanitizedTopic = sanitizePromptInput(topicName);
+        return sanitizedTopic || `Topic ${index + 1}`;
+      });
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.5-flash',
