@@ -44,11 +44,13 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 
 const resolveActiveItemFromPath = (pathname: string): string => {
     if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
-    const rawSegment = pathname.substring(1).split('/')[0] || '';
+    const rawSegment = pathname.substring(1).split('/')[0];
+    if (!rawSegment) return 'dashboard';
     let decodedSegment = rawSegment;
     try {
         decodedSegment = decodeURIComponent(rawSegment);
-    } catch {
+    } catch (error) {
+        console.warn('Invalid route segment encoding:', rawSegment, error);
         return 'dashboard';
     }
     const normalizedSegment = normalizeRouteSegment(decodedSegment);
