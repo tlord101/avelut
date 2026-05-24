@@ -184,8 +184,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-            const response = await model.generateContent({
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
                 contents: [
                     {
                         role: 'user',
@@ -195,12 +195,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         ]
                     }
                 ],
-                generationConfig: {
+                config: {
                     responseMimeType: "application/json"
                 }
             });
 
-            const responseData = JSON.parse(response.response.text());
+            const responseData = JSON.parse(response.text || '{}');
             const extractedQuestions = responseData.questions || [];
 
             if (extractedQuestions.length === 0) throw new Error("No questions found in the PDF.");
@@ -270,8 +270,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-            const response = await model.generateContent({
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
                 contents: [
                     {
                         role: 'user',
@@ -281,12 +281,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         ]
                     }
                 ],
-                generationConfig: {
+                config: {
                     responseMimeType: "application/json"
                 }
             });
 
-            const responseData = JSON.parse(response.response.text());
+            const responseData = JSON.parse(response.text || '{}');
             const syllabusData = responseData.syllabus || [];
 
             setExtractionProgress('Saving to database...');

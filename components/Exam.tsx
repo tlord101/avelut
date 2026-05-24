@@ -292,10 +292,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const generateQuestions = async () => {
     setExamState('generating');
     try {
-      const model = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
-      const response = await model.generateContent({
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
         contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${getCourseNameById(userProfile.department_id)}" at a "${userProfile.level}" level, focusing on the following topics they have completed: ${completedTopicNames.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
-        generationConfig: {
+        config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -318,7 +318,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         }
       });
 
-      const responseData = JSON.parse(response.response.text());
+      const responseData = JSON.parse(response.text || '{}');
       if (responseData.questions && responseData.questions.length > 0) {
         const newQuestions = responseData.questions;
         setQuestions(newQuestions);

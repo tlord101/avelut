@@ -163,9 +163,11 @@ const TextChat: React.FC<{
             update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
             // Call Gemini
-            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-            const result = await model.generateContent(currentInput);
-            const responseText = result.response.text();
+            const result = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
+                contents: currentInput
+            });
+            const responseText = result.text;
 
             await push(messagesRef, {
                 text: responseText,

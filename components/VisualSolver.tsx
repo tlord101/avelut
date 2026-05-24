@@ -420,15 +420,15 @@ $$
 
 Make it visually engaging, well-spaced, and easy to follow!`;
 
-            const model = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
-            const result = await model.generateContent({
+            const result = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
                 ]}],
             });
 
-            setAnalysisResult(result.response.text());
+            setAnalysisResult(result.text || '');
         });
         
         if (result.success) {
@@ -452,15 +452,15 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const model = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
-            const result = await model.generateContent({
+            const result = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
                 ]}],
             });
     
-            setAnalysisResult(result.response.text());
+            setAnalysisResult(result.text || '');
         });
         
         if (result.success) {
@@ -484,15 +484,15 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const model = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
-            const result = await model.generateContent({
+            const result = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
                 ]}],
             });
     
-            setAnalysisResult(result.response.text());
+            setAnalysisResult(result.text || '');
         });
         
         if (result.success) {
