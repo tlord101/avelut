@@ -7,6 +7,7 @@ import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
 import { AdminLogin } from './components/AdminLogin';
 import { Onboarding } from './components/Onboarding';
+import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { MainContent } from './MainContent';
