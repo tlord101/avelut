@@ -49,7 +49,7 @@ const normalizeTextbookUrls = (course: Partial<Course>) => {
     return Array.from(new Set(urls));
 };
 
-const mergeTopics = (existingTopics: any[], newTopics: Topic[]) => {
+const mergeTopics = (existingTopics: unknown[], newTopics: Topic[]) => {
     const topicMap = new Map<string, Topic>();
     [...existingTopics, ...newTopics].forEach((topic, index) => {
         const sanitized = sanitizeTopicMetadata(topic, index);
@@ -386,8 +386,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 Array.isArray(existingContext?.syllabus) ? existingContext.syllabus : [],
                 extractedTopicGroups.flat()
             );
+            const primaryPdfUrl = uploadedUrls[uploadedUrls.length - 1] || existingContext?.pdf_url || mergedPdfUrls[0] || '';
             await set(textbookContextRef, {
-                pdf_url: mergedPdfUrls[mergedPdfUrls.length - 1] || '',
+                pdf_url: primaryPdfUrl,
                 pdf_urls: mergedPdfUrls,
                 syllabus: mergedSyllabus,
                 uploaded_at: Date.now()
