@@ -41,6 +41,26 @@ const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
     };
 };
 
+const normalizeTextbookUrls = (course: Partial<Course>) => {
+    const urls: string[] = Array.isArray(course?.textbook_urls) ? course.textbook_urls.filter(Boolean) : [];
+    if (course?.textbook_url && !urls.includes(course.textbook_url)) {
+        urls.unshift(course.textbook_url);
+    }
+    return Array.from(new Set(urls));
+};
+
+const mergeTopics = (existingTopics: any[], newTopics: Topic[]) => {
+    const topicMap = new Map<string, Topic>();
+    [...existingTopics, ...newTopics].forEach((topic, index) => {
+        const sanitized = sanitizeTopicMetadata(topic, index);
+        const topicId = sanitized.topic_id || normalizeTopicId(sanitized.topic_name);
+        if (!topicMap.has(topicId)) {
+            topicMap.set(topicId, { ...sanitized, topic_id: topicId });
+        }
+    });
+    return Array.from(topicMap.values());
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -255,35 +275,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         }
     };
 
-    const handleTextbookUpload = async (courseId: string, file: File) => {
+    const handleTextbookUpload = async (courseId: string, files: File[]) => {
         // Find selecting course details from coursesList
         const selectedCourse = coursesList.find(c => c.course_id === courseId);
         
-        if (!file || !departmentId || !selectedCourse) {
+        if (!files.length || !departmentId || !selectedCourse) {
             addToast("Missing file or course information", "error");
+            return;
+        }
+
+        const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+        if (!pdfFiles.length) {
+            addToast("Please select valid PDF textbook files", "error");
             return;
         }
 
         const { course_name, level } = selectedCourse;
 
         setIsUploading(true);
-        setExtractionProgress('Uploading to storage...');
+        setExtractionProgress(`Uploading 1/${pdfFiles.length} to storage...`);
 
         try {
-            // 1. Upload to Firebase Storage
-            const fileRef = storageRef(storage, `textbooks/${departmentId}/${level}/${course_name}/${file.name}`);
-            const uploadResult = await uploadBytes(fileRef, file);
-            const downloadURL = await getDownloadURL(uploadResult.ref);
+            const uploadedUrls: string[] = [];
+            const extractedTopicGroups: Topic[][] = [];
 
-            setExtractionProgress('Extracting syllabus with Gemini 3.5 Flash...');
-            
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            const base64PDF = await new Promise<string>((resolve) => {
-                reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            });
+            for (let index = 0; index < pdfFiles.length; index++) {
+                const file = pdfFiles[index];
+                setExtractionProgress(`Uploading ${index + 1}/${pdfFiles.length} to storage...`);
 
-            const prompt = `Analyze this PDF textbook for "${course_name}" at "${level}" level.
+                // 1. Upload to Firebase Storage
+                const fileRef = storageRef(storage, `textbooks/${departmentId}/${level}/${course_name}/${file.name}`);
+                const uploadResult = await uploadBytes(fileRef, file);
+                const downloadURL = await getDownloadURL(uploadResult.ref);
+                uploadedUrls.push(downloadURL);
+
+                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with Gemini 3.5 Flash...`);
+                
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                const base64PDF = await new Promise<string>((resolve) => {
+                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                });
+
+                const prompt = `Analyze this PDF textbook for "${course_name}" at "${level}" level.
             Extract a comprehensive syllabus/course outline into a structured JSON array of topics with concise grounding context.
             
             RULES:
@@ -311,47 +345,64 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const response = await ai.models.generateContent({
-                model: "gemini-3.5-flash",
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
-                        ]
+                const response = await ai.models.generateContent({
+                    model: "gemini-3.5-flash",
+                    contents: [
+                        {
+                            role: 'user',
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
+                            ]
+                        }
+                    ],
+                    config: {
+                        responseMimeType: "application/json"
                     }
-                ],
-                config: {
-                    responseMimeType: "application/json"
-                }
-            });
+                });
 
-            if (!response.text) {
-                throw new Error("AI returned an empty response while extracting syllabus.");
+                if (!response.text) {
+                    throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
+                }
+                const responseData = JSON.parse(response.text);
+                const syllabusData = Array.isArray(responseData?.syllabus)
+                    ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
+                    : [];
+                extractedTopicGroups.push(syllabusData);
             }
-            const responseData = JSON.parse(response.text);
-            const syllabusData = Array.isArray(responseData?.syllabus)
-                ? responseData.syllabus.map((topic: any, index: number) => sanitizeTopicMetadata(topic, index))
-                : [];
 
             setExtractionProgress('Saving to database...');
 
             // 3. Save to Textbook Contexts (for AI grounding)
             const textbookContextRef = dbRef(db, `textbook_contexts/${departmentId}/${level}/${course_name}`);
+            const textbookContextSnapshot = await get(textbookContextRef);
+            const existingContext = textbookContextSnapshot.exists() ? textbookContextSnapshot.val() : {};
+            const existingPdfUrls: string[] = Array.isArray(existingContext?.pdf_urls) ? existingContext.pdf_urls.filter(Boolean) : [];
+            if (existingContext?.pdf_url && !existingPdfUrls.includes(existingContext.pdf_url)) {
+                existingPdfUrls.unshift(existingContext.pdf_url);
+            }
+            const mergedPdfUrls = Array.from(new Set([...existingPdfUrls, ...uploadedUrls]));
+            const mergedSyllabus = mergeTopics(
+                Array.isArray(existingContext?.syllabus) ? existingContext.syllabus : [],
+                extractedTopicGroups.flat()
+            );
             await set(textbookContextRef, {
-                pdf_url: downloadURL,
-                syllabus: syllabusData,
+                pdf_url: mergedPdfUrls[mergedPdfUrls.length - 1] || '',
+                pdf_urls: mergedPdfUrls,
+                syllabus: mergedSyllabus,
                 uploaded_at: Date.now()
             });
 
             // 4. Update the local coursesList and then database
             const updatedCoursesList = coursesList.map(c => {
                 if (c.course_id === courseId) {
+                    const existingCourseUrls = normalizeTextbookUrls(c);
+                    const mergedCourseUrls = Array.from(new Set([...existingCourseUrls, ...uploadedUrls]));
                     return {
                         ...c,
-                        topics: syllabusData,
-                        textbook_url: downloadURL
+                        topics: mergedSyllabus,
+                        textbook_url: mergedCourseUrls[mergedCourseUrls.length - 1],
+                        textbook_urls: mergedCourseUrls
                     };
                 }
                 return c;
@@ -364,7 +415,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 course_list: updatedCoursesList
             });
 
-            addToast(`Textbook for ${course_name} processed successfully!`, "success");
+            addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} processed successfully!`, "success");
         } catch (error: any) {
             console.error(error);
             addToast(`Error: ${error.message}`, "error");
@@ -655,7 +706,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {coursesList.map((s, sIdx) => (
+                                    {coursesList.map((s, sIdx) => {
+                                        const textbookUrls = normalizeTextbookUrls(s);
+                                        const hasTextbooks = textbookUrls.length > 0;
+                                        return (
                                         <div key={sIdx} className="group p-6 border border-gray-100 rounded-[2rem] bg-white shadow-sm hover:shadow-xl hover:border-lime-200 transition-all duration-300">
                                             <div className="space-y-4 mb-6">
                                                 <div className="flex items-center gap-3">
@@ -711,23 +765,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
                                                 {/* INLINE TEXTBOOK UPLOAD */}
                                                 <div className="relative pt-2">
-                                                    <div className={`p-4 rounded-2xl border ${s.textbook_url ? 'bg-lime-50 border-lime-100' : 'bg-gray-50 border-dashed border-gray-200'} transition-all`}>
-                                                        {s.textbook_url ? (
+                                                    <div className={`p-4 rounded-2xl border ${hasTextbooks ? 'bg-lime-50 border-lime-100' : 'bg-gray-50 border-dashed border-gray-200'} transition-all`}>
+                                                        {hasTextbooks ? (
                                                             <div className="flex items-center justify-between">
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-lime-600 shadow-sm">
                                                                         <CheckIcon className="w-4 h-4" />
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-[10px] font-black text-lime-600 uppercase tracking-widest">Textbook Active</p>
-                                                                        <a href={s.textbook_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-gray-800 hover:underline">View Document</a>
+                                                                        <p className="text-[10px] font-black text-lime-600 uppercase tracking-widest">
+                                                                            {textbookUrls.length} Textbook{textbookUrls.length > 1 ? 's' : ''} Active
+                                                                        </p>
+                                                                        <div className="max-h-16 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-lime-200">
+                                                                            {textbookUrls.map((url, urlIndex) => (
+                                                                                <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-xs font-bold text-gray-800 hover:underline">
+                                                                                    View Document {urlIndex + 1}
+                                                                                </a>
+                                                                            ))}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                                 <label className="cursor-pointer text-[10px] font-black text-gray-400 hover:text-gray-900 uppercase">
-                                                                    Replace
-                                                                    <input type="file" className="hidden" accept="application/pdf" onChange={e => {
-                                                                        const file = e.target.files?.[0];
-                                                                        if(file) handleTextbookUpload(s.course_id, file);
+                                                                    Add More
+                                                                    <input type="file" multiple className="hidden" accept="application/pdf" onChange={e => {
+                                                                        const files = e.target.files ? Array.from(e.target.files) : [];
+                                                                        if(files.length) handleTextbookUpload(s.course_id, files);
+                                                                        e.currentTarget.value = '';
                                                                     }} />
                                                                 </label>
                                                             </div>
@@ -737,10 +800,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                                     <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-300 shadow-sm mb-1 group-hover:text-lime-500 transition-colors">
                                                                         <GraduationCapIcon className="w-5 h-5" />
                                                                     </div>
-                                                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Upload Textbook</span>
-                                                                    <input type="file" className="hidden" accept="application/pdf" onChange={e => {
-                                                                        const file = e.target.files?.[0];
-                                                                        if(file) handleTextbookUpload(s.course_id, file);
+                                                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Upload Textbooks</span>
+                                                                    <input type="file" multiple className="hidden" accept="application/pdf" onChange={e => {
+                                                                        const files = e.target.files ? Array.from(e.target.files) : [];
+                                                                        if(files.length) handleTextbookUpload(s.course_id, files);
+                                                                        e.currentTarget.value = '';
                                                                     }} />
                                                                 </label>
                                                             </div>
