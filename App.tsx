@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
-import { ref as dbRef, onValue, off, set, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
@@ -622,7 +622,7 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
-                            key={activeItem}
+                            key={location.pathname}
                             activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
