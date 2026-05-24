@@ -31,6 +31,32 @@ const AppLoader: React.FC = () => {
   );
 };
 
+const normalizeRouteSegment = (segment: string): string => segment.toLowerCase().replace(/-/g, '_');
+
+const ALLOWED_ROUTE_ITEMS = new Set([
+    'dashboard',
+    ...navigationItems.map(item => item.id),
+    'messenger',
+    'settings',
+    'help',
+    'admin'
+].map(normalizeRouteSegment));
+
+const resolveActiveItemFromPath = (pathname: string): string => {
+    if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
+    const rawSegment = pathname.substring(1).split('/')[0];
+    if (!rawSegment) return 'dashboard';
+    let decodedSegment = rawSegment;
+    try {
+        decodedSegment = decodeURIComponent(rawSegment);
+    } catch (error) {
+        console.warn('Invalid route segment encoding:', rawSegment, error);
+        return 'dashboard';
+    }
+    const normalizedSegment = normalizeRouteSegment(decodedSegment);
+    return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
+};
+
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -48,9 +74,7 @@ const App: React.FC = () => {
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
     // Derived state from URL
-    const activeItem = location.pathname === '/' || location.pathname === '/dashboard' 
-        ? 'dashboard' 
-        : location.pathname.substring(1).split('/')[0];
+    const activeItem = resolveActiveItemFromPath(location.pathname);
     
     const setActiveItem = (item: string) => {
         if (item === 'dashboard') navigate('/dashboard');
@@ -598,6 +622,7 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
+                            key={activeItem}
                             activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
