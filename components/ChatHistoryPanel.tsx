@@ -6,6 +6,7 @@ import { MoreVerticalIcon } from './icons/MoreVerticalIcon';
 import { PencilIcon } from './icons/PencilIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { ChatBubbleIcon } from './icons/ChatBubbleIcon';
 
 const timeAgo = (timestamp: number): string => {
   const now = Date.now();
@@ -43,6 +44,8 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
   onNewChat,
   onDeleteConversation,
   onRenameConversation,
+  onClearAll,
+  isDeleting,
   isMobilePanelOpen,
   onCloseMobilePanel,
   userProfile,
@@ -50,7 +53,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, convoId: string } | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
-    const [isConvosOpen, setIsConvosOpen] = useState(true);
+    const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
     const openContextMenu = (e: React.MouseEvent, convoId: string) => {
         e.preventDefault();
@@ -78,174 +81,28 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
         }
     };
 
-    return (
-        <aside className={`${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} fixed md:relative z-40 w-80 h-full bg-[#0F0F0F] text-gray-300 flex flex-col transition-transform duration-300 border-r border-white/5`}>
-            {/* Header: User Profile */}
-            <div className="p-4 flex items-center justify-between group">
-                <div className="flex items-center gap-3">
-                    <Avatar 
-                        display_name={userProfile.display_name} 
-                        photo_url={userProfile.photo_url} 
-                        className="w-9 h-9 border border-white/10" 
-                    />
-                    <span className="font-bold text-sm text-white truncate max-w-[140px]">{userProfile.display_name}</span>
-                </div>
-                <button 
-                  onClick={onCloseMobilePanel}
-                  className="p-2 hover:bg-white/5 rounded-xl transition-colors opacity-0 group-hover:opacity-100 md:opacity-100"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                  </svg>
-                </button>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="px-3 space-y-2 mb-6">
-                <button 
-                    onClick={onNewChat}
-                    className="w-full flex items-center gap-3 p-4 bg-white/5 hover:bg-white/10 rounded-2xl transition-all group"
-                >
-                    <div className="p-1.5 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">
-                        <PencilIcon className="w-4 h-4 text-white" />
-                    </div>
-                    <span className="font-bold text-sm text-white">New Conversation</span>
-                </button>
-                <button className="w-full flex items-center gap-3 p-4 hover:bg-white/5 rounded-2xl transition-all group">
-                    <div className="p-1.5 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </div>
-                    <span className="font-bold text-sm text-white">Tasks</span>
-                </button>
-            </div>
-
-            {/* Upgrade Banner */}
-            <div className="px-3 mb-8">
-                <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-500 rounded-3xl flex items-center justify-between shadow-lg shadow-blue-500/20">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <p className="font-black text-xs text-white uppercase tracking-wider">SuperGrok</p>
-                            <p className="text-[10px] text-white/70 font-bold">Premium AI Tutor</p>
-                        </div>
-                    </div>
-                    <button className="px-4 py-2 bg-white text-blue-600 rounded-full text-xs font-black shadow-sm active:scale-95 transition-transform">
-                        Upgrade
-                    </button>
-                </div>
-            </div>
-
-            {/* Conversations List */}
-            <div className="flex-1 overflow-y-auto px-1 space-y-1 custom-scrollbar">
-                <button 
-                    onClick={() => setIsConvosOpen(!isConvosOpen)}
-                    className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 hover:text-white transition-colors"
-                >
-                    <span>Conversations</span>
-                    <ChevronDownIcon className={`w-3 h-3 transition-transform ${isConvosOpen ? '' : '-rotate-90'}`} />
-                </button>
-
-                {isConvosOpen && (
-                    <div className="space-y-0.5 px-2">
-                        {conversations.map((convo) => (
-                            <div key={convo.id} className="relative group">
-                                <button
-                                    onClick={() => onSelectConversation(convo.id)}
-                                    className={`w-full text-left p-4 rounded-2xl transition-all flex flex-col gap-1 ${
-                                        activeConversationId === convo.id 
-                                            ? 'bg-white/5 ring-1 ring-white/10' 
-                                            : 'hover:bg-white/5'
-                                    }`}
-                                >
-                                    {renamingId === convo.id ? (
-                                        <input
-                                            autoFocus
-                                            className="bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-white w-full"
-                                            value={renameValue}
-                                            onChange={(e) => setRenameValue(e.target.value)}
-                                            onBlur={handleRenameSubmit}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
-                                        />
-                                    ) : (
-                                        <span className={`text-sm font-bold truncate pr-6 ${
-                                            activeConversationId === convo.id ? 'text-white' : 'text-gray-400 group-hover:text-white'
-                                        }`}>
-                                            {convo.title}
-                                        </span>
-                                    )}
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                                        {timeAgo(convo.updatedAt)}
-                                    </span>
-                                </button>
-                                <button 
-                                    onClick={(e) => openContextMenu(e, convo.id)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white transition-opacity"
-                                >
-                                    <MoreVerticalIcon className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Bottom Section: Search & Settings */}
-            <div className="p-4 border-t border-white/5 flex items-center gap-2">
-                <div className="flex-1 relative group">
-                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input 
-                        type="text" 
-                        placeholder="Search History" 
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-bold placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/10 focus:bg-white/10 transition-all text-white"
-                    />
-                </div>
-                <button className="p-4 bg-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                </button>
-            </div>
-
-            {/* Mini Context Menu */}
-            {contextMenu && (
-                <div 
-                    className="fixed z-50 bg-[#1A1A1A] border border-white/10 rounded-2xl shadow-2xl p-1 w-48 animate-in fade-in zoom-in duration-200"
-                    style={{ left: contextMenu.x, top: contextMenu.y }}
-                >
-                    <button 
-                        onClick={() => {
-                            const convo = conversations.find(c => c.id === contextMenu.convoId);
-                            if (convo) {
-                                setRenamingId(convo.id);
-                                setRenameValue(convo.title);
-                            }
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-sm font-bold text-gray-300 transition-colors"
-                    >
-                        <PencilIcon className="w-4 h-4" /> Rename
-                    </button>
-                    <button 
-                        onClick={() => onDeleteConversation(contextMenu.convoId)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 rounded-xl text-sm font-bold text-red-500 transition-colors"
-                    >
-                        <TrashIcon className="w-4 h-4" /> Delete
-                    </button>
-                </div>
-            )}
-        </aside>
-    );
-};
-        setRenamingId(null);
+    const startRename = (convo: ChatConversation) => {
+        setRenamingId(convo.id);
+        setRenameValue(convo.title);
+        setContextMenu(null);
     };
+
+    const handleTouchStart = (e: React.TouchEvent, convoId: string) => {
+        const touch = e.touches[0];
+        longPressTimer.current = setTimeout(() => {
+            setContextMenu({ x: touch.clientX, y: touch.clientY, convoId });
+        }, 500);
+    };
+
+    const handleTouchEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+
+
 
     const handleMobileSelect = (id: string) => {
         if (renamingId !== id) {
