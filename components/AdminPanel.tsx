@@ -184,7 +184,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
             const response = await model.generateContent({
                 contents: [
                     {
@@ -270,7 +270,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
             const response = await model.generateContent({
                 contents: [
                     {

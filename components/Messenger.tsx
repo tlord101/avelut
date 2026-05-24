@@ -170,9 +170,10 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 const base64Audio = (reader.result as string).split(',')[1];
                 
                 // Send voice message to Gemini for live response
-                const result = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
+                const result = await model.generateContent({
                     contents: [{
+                        role: 'user',
                         parts: [
                             { text: 'Please respond conversationally to this voice message. Keep your response natural and friendly for a chat conversation.' },
                             { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
@@ -180,7 +181,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                     }]
                 });
 
-                const responseText = result.text.trim();
+                const responseText = result.response.text();
                 if (responseText) {
                     // Add the AI's response as a text message in the chat
                     setInput(responseText);

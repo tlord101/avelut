@@ -186,12 +186,14 @@ Task:
 Please start teaching me about "${topic.topic_name}". Give me a simple and clear introduction to the topic.
 `;
         const result = await attemptApiCall(async () => {
-            const response = await ai.models.generateContent({
+            const model = ai.getGenerativeModel({ 
                 model: 'gemini-3.5-flash',
-                contents: { parts: [{ text: prompt }] },
-                config: { systemInstruction }
+                systemInstruction 
             });
-            const botResponseText = response.text;
+            const response = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }]
+            });
+            const botResponseText = response.response.text();
 
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
             const newMsgRef = push(messagesRef);
@@ -354,12 +356,14 @@ Student: "${tempInput}"
                     }
                 }
 
-                const response = await ai.models.generateContent({ 
-                    model: 'gemini-3.5-flash', 
-                    contents: { parts },
-                    config: { systemInstruction } 
+                const model = ai.getGenerativeModel({ 
+                    model: 'gemini-3.5-flash',
+                    systemInstruction 
                 });
-                const botResponseText = response.text;
+                const response = await model.generateContent({ 
+                    contents: { parts }
+                });
+                const botResponseText = response.response.text();
                 
                 const newBotMsgRef = push(messagesRef);
                 const botMessageData = {
@@ -405,15 +409,16 @@ Student: "${tempInput}"
             const maxRetries = 2;
             for (let i = 0; i <= maxRetries; i++) {
                 try {
-                    response = await ai.models.generateContent({
-                        model: 'gemini-3.5-flash',
+                    const model = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
+                    const result = await model.generateContent({
                         contents: {
                             parts: [{ text: prompt }],
                         },
-                        config: {
+                        generationConfig: {
                             responseModalities: [Modality.IMAGE, Modality.TEXT],
                         },
                     });
+                    response = result.response;
                     
                     const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
                     if (imagePart?.inlineData) {
