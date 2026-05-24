@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type, Modality } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
@@ -585,47 +585,19 @@ Student: "${tempInput}"
         addToast("Creating a visualization for you...", "info");
 
         const result = await attemptApiCall(async () => {
-            const prompt = `Create a photorealistic and visually clear image that illustrates the following educational concept for a student. The image should be a helpful visual aid for learning. Crucially, the image must not contain any text, words, letters, numbers, or labels. Focus purely on the visual representation. Concept: "${promptText}"`;
-            
-            let response;
-            const maxRetries = 2;
-            for (let i = 0; i <= maxRetries; i++) {
-                try {
-                    const result = await ai.models.generateContent({
-                        model: 'gemini-3.5-flash',
-                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        config: {
-                            responseModalities: [Modality.IMAGE, Modality.TEXT],
-                        },
-                    });
-                    response = result;
-                    
-                    const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                    if (imagePart?.inlineData) {
-                        break; 
-                    } else {
-                        if (i === maxRetries) {
-                           throw new Error("API returned response without image data.");
-                        }
-                    }
-                } catch (error) {
-                    console.error(`Image generation attempt ${i + 1} failed:`, error);
-                    if (i === maxRetries) {
-                        throw error;
-                    }
-                    await new Promise(res => setTimeout(res, 1000 * (i + 1))); 
+            const response = await ai.models.generateImages({
+                model: 'imagen-3.0-generate-002',
+                prompt: 'A sleek, modern login interface for a FinTech app, Flat Outline Vector style',
+                config: {
+                    numberOfImages: 1,
+                    outputMimeType: 'image/jpeg',
                 }
-            }
+            });
 
-            if (!response) {
-                throw new Error("API call failed to return a response after retries.");
-            }
-    
-            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (imagePart?.inlineData) {
-                const base64ImageBytes = imagePart.inlineData.data;
-                const mimeType = imagePart.inlineData.mimeType || 'image/png';
-                const fileExtension = mimeType.split('/')[1] || 'png';
+            const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+            if (base64ImageBytes) {
+                const mimeType = 'image/jpeg';
+                const fileExtension = 'jpeg';
 
                 const imageBlob = base64ToBlob(base64ImageBytes, mimeType);
                 const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}.${fileExtension}`);
