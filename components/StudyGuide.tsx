@@ -178,6 +178,22 @@ const base64ToBlob = (base64: string, mimeType: string): Blob => {
     return new Blob([byteArray], { type: mimeType });
 };
 
+const createUniqueId = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    const perfPart = typeof performance !== 'undefined' ? performance.now().toString().replace('.', '') : '0';
+    return `${Date.now()}-${perfPart}`;
+};
+
 // --- SKELETON LOADER ---
 const StudyGuideSkeleton: React.FC = () => (
     <div className="w-full animate-pulse space-y-12 p-4">
@@ -589,7 +605,7 @@ Student: "${tempInput}"
             const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
             const response = await ai.models.generateContent({
                 model: "gemini-3.1-flash-image-preview",
-                contents: prompt,
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
             });
 
             const parts = response.candidates?.[0]?.content?.parts ?? [];
@@ -605,7 +621,8 @@ Student: "${tempInput}"
                 const mimeType = part.inlineData.mimeType || 'image/png';
                 const fileExtension = mimeType.split('/')[1] || 'png';
                 const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
-                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}-${imageUrls.length}.${fileExtension}`);
+                const uniqueImageId = createUniqueId();
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
                 const uploadResult = await uploadBytes(storageRefObj, imageBlob);
                 const publicUrl = await getDownloadURL(uploadResult.ref);
                 imageUrls.push(publicUrl);
@@ -634,9 +651,12 @@ Student: "${tempInput}"
                 });
             }
 
-            for (const [index, publicUrl] of imageUrls.entries()) {
+            for (const publicUrl of imageUrls) {
                 const imageMsgRef = push(messagesRef);
-                const imageMessageText = generatedText ? undefined : (index === 0 ? 'Here is a visualization to help you understand:' : undefined);
+                let imageMessageText: string | undefined;
+                if (!generatedText) {
+                    imageMessageText = 'Here is a visualization to help you understand:';
+                }
                 const imageMessageData = {
                     sender: 'bot',
                     image_url: publicUrl,
