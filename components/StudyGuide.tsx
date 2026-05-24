@@ -410,9 +410,9 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         if (!result.success) {
             addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
+            setIsLoading(false);
             onClose();
         }
-        setIsLoading(false);
     };
 
     useEffect(() => {
@@ -660,9 +660,9 @@ Student: "${tempInput}"
                 {isInitialChatLoading ? (
                     <div className="h-full min-h-[200px] flex items-center justify-center">
                         <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                             <span className="ml-1">Loading lesson...</span>
                         </div>
                     </div>
