@@ -49,6 +49,12 @@ const normalizeTextbookUrls = (course: Partial<Course>) => {
     return Array.from(new Set(urls));
 };
 
+const getPrimaryTextbookUrl = (urls: string[]) => urls[urls.length - 1] || '';
+
+const selectPrimaryPdfUrl = (uploadedUrls: string[], existingPdfUrl: string | undefined, mergedPdfUrls: string[]) => (
+    getPrimaryTextbookUrl(uploadedUrls) || existingPdfUrl || getPrimaryTextbookUrl(mergedPdfUrls)
+);
+
 const mergeTopics = (existingTopics: unknown[], newTopics: Topic[]) => {
     const topicMap = new Map<string, Topic>();
     [...existingTopics, ...newTopics].forEach((topic, index) => {
@@ -386,7 +392,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 Array.isArray(existingContext?.syllabus) ? existingContext.syllabus : [],
                 extractedTopicGroups.flat()
             );
-            const primaryPdfUrl = uploadedUrls[uploadedUrls.length - 1] || existingContext?.pdf_url || mergedPdfUrls[0] || '';
+            const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingContext?.pdf_url, mergedPdfUrls);
             await set(textbookContextRef, {
                 pdf_url: primaryPdfUrl,
                 pdf_urls: mergedPdfUrls,
@@ -402,7 +408,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     return {
                         ...c,
                         topics: mergedSyllabus,
-                        textbook_url: mergedCourseUrls[mergedCourseUrls.length - 1],
+                        textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
                         textbook_urls: mergedCourseUrls
                     };
                 }
