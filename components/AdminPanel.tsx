@@ -184,8 +184,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-            const response = await model.generateContent({
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
                 contents: [
                     {
                         role: 'user',
@@ -195,12 +195,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         ]
                     }
                 ],
-                generationConfig: {
+                config: {
                     responseMimeType: "application/json"
                 }
             });
 
-            const responseData = JSON.parse(response.response.text());
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting questions.");
+            }
+            const responseData = JSON.parse(response.text);
             const extractedQuestions = responseData.questions || [];
 
             if (extractedQuestions.length === 0) throw new Error("No questions found in the PDF.");
@@ -270,8 +273,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ]
             }`;
 
-            const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-            const response = await model.generateContent({
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
                 contents: [
                     {
                         role: 'user',
@@ -281,12 +284,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         ]
                     }
                 ],
-                generationConfig: {
+                config: {
                     responseMimeType: "application/json"
                 }
             });
 
-            const responseData = JSON.parse(response.response.text());
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting syllabus.");
+            }
+            const responseData = JSON.parse(response.text);
             const syllabusData = responseData.syllabus || [];
 
             setExtractionProgress('Saving to database...');
@@ -353,7 +359,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     }
 
     return (
-        <div className="flex-1 flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto">
+        <div className="flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

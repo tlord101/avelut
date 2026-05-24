@@ -170,8 +170,8 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 const base64Audio = (reader.result as string).split(',')[1];
                 
                 // Send voice message to Gemini for live response
-                const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-                const result = await model.generateContent({
+                const result = await ai.models.generateContent({
+                    model: "gemini-3.5-flash",
                     contents: [{
                         role: 'user',
                         parts: [
@@ -181,7 +181,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                     }]
                 });
 
-                const responseText = result.response.text();
+                const responseText = result.text || '';
                 if (responseText) {
                     // Add the AI's response as a text message in the chat
                     setInput(responseText);
