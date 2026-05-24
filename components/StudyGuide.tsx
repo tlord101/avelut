@@ -109,10 +109,8 @@ const normalizeDepartmentValue = (value?: string): string => {
     return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w_]/g, '');
 };
 
-const BASE_XP_PER_TOPIC = 40;
-const XP_PER_MINUTE = 2;
-const MAX_REWARDED_MINUTES_PER_TOPIC = 120;
-const IDLE_GAP_THRESHOLD_SECONDS = 15 * 60;
+const CHAT_XP_INTERVAL_SECONDS = 30;
+const CHAT_XP_REWARD = 1;
 
 const getWeekId = (date: Date): string => {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -120,24 +118,6 @@ const getWeekId = (date: Date): string => {
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-${weekNo}`;
-};
-
-const calculateStudyDurationSeconds = (messagesData: any): number => {
-    if (!messagesData || typeof messagesData !== 'object') return 0;
-    const timestamps = Object.values(messagesData)
-        .map((entry: any) => (typeof entry?.timestamp === 'number' ? entry.timestamp : null))
-        .filter((ts): ts is number => ts !== null)
-        .sort((a, b) => a - b);
-
-    if (timestamps.length === 0) return 0;
-    if (timestamps.length === 1) return 0;
-
-    let activeDurationSeconds = 0;
-    for (let i = 1; i < timestamps.length; i += 1) {
-        const gapSeconds = Math.max(0, Math.floor((timestamps[i] - timestamps[i - 1]) / 1000));
-        activeDurationSeconds += Math.min(gapSeconds, IDLE_GAP_THRESHOLD_SECONDS);
-    }
-    return activeDurationSeconds;
 };
 
 const readNumericValue = (value: unknown, fallback = 0): number => (
@@ -213,12 +193,10 @@ const StudyGuideSkeleton: React.FC = () => (
 interface LearningInterfaceProps {
     userProfile: UserProfile;
     topic: Topic & { courseName: string };
-    isCompleted: boolean;
     onClose: () => void;
-    onMarkComplete: (topicId: string) => Promise<void>;
 }
 
-const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, isCompleted, onClose, onMarkComplete }) => {
+const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [file, setFile] = useState<File | null>(null);
@@ -281,6 +259,63 @@ Scope control (very important):
 - If the topic is completed within its boundaries, clearly state completion and ask if the student wants revision or the next topic.
 ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}` : ''}${textbookContext}`;
 
+    useEffect(() => {
+        let isAwarding = false;
+
+        const awardTimeBasedXp = async () => {
+            if (isAwarding) return;
+            isAwarding = true;
+
+            try {
+                const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
+                const xpTxnResult = await runTransaction(userXpRef, (currentXp) => {
+                    const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+                    return numericXp + CHAT_XP_REWARD;
+                });
+                const totalXp = readNumericValue(xpTxnResult.snapshot.val());
+
+                const weekId = getWeekId(new Date());
+                const weeklyXpRef = dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}/xp`);
+                const weeklyTxnResult = await runTransaction(weeklyXpRef, (currentXp) => {
+                    const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+                    return numericXp + CHAT_XP_REWARD;
+                });
+                const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
+
+                const leaderboardEntryData = {
+                    display_name: userProfile.display_name || 'Learner',
+                    photo_url: userProfile.photo_url || '',
+                    department_id: userProfile.department_id,
+                    level: userProfile.level,
+                    last_updated_at: serverTimestamp(),
+                };
+
+                await update(dbRef(db, `leaderboard_overall/${userProfile.department_id}/${userProfile.uid}`), {
+                    ...leaderboardEntryData,
+                    xp: totalXp,
+                });
+
+                await update(dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}`), {
+                    ...leaderboardEntryData,
+                    xp: weeklyXp,
+                });
+            } catch (error) {
+                console.error('Failed to award time-based XP:', error);
+            } finally {
+                isAwarding = false;
+            }
+        };
+
+        const intervalId = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') return;
+            void awardTimeBasedXp();
+        }, CHAT_XP_INTERVAL_SECONDS * 1000);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [userProfile.uid, userProfile.department_id, userProfile.display_name, userProfile.photo_url, userProfile.level]);
+
     const initiateAutoTeach = async () => {
         const prompt = `
 Context:
@@ -295,7 +330,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 `;
         const result = await attemptApiCall(async () => {
             const response = await ai.models.generateContent({
-                model: 'gemini-3.1-flash-image-preview',
+                model: 'gemini-3.5-flash',
                 config: { systemInstruction },
                 contents: [{ role: 'user', parts: [{ text: prompt }] }]
             });
@@ -471,7 +506,7 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                    model: 'gemini-3.1-flash-image-preview',
                     config: { systemInstruction },
                     contents: [{ role: 'user', parts }]
                 });
@@ -761,7 +796,6 @@ Student: "${tempInput}"
                 </div>
                 {file && <div className="text-xs text-gray-600 mt-2 flex items-center gap-2 bg-gray-200 p-1 px-2 rounded-md w-fit"><FileIcon /><span>{file.name}</span><button onClick={() => { setFile(null); setFileData(null); }} className="text-red-500 hover:text-red-400">&times;</button></div>}
                 
-                {!isCompleted && <button onClick={() => onMarkComplete(topic.topic_id)} disabled={isIllustrating || isLoading} className="mt-4 w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">Mark as Complete</button>}
             </footer>
         </div>
     );
@@ -919,76 +953,6 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     });
   };
 
-  const handleMarkComplete = async (topicId: string) => {
-    if (userProgress[topicId]?.is_complete) {
-        addToast("You've already completed this topic!", 'info');
-        return;
-    }
-    
-    try {
-        const topicProgressRef = dbRef(db, `user_progress/${userProfile.uid}/${topicId}`);
-        const existingProgressSnap = await get(topicProgressRef);
-        if (existingProgressSnap.exists() && existingProgressSnap.val()?.is_complete) {
-            addToast("You've already completed this topic!", 'info');
-            return;
-        }
-
-        const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topicId}`);
-        const messagesSnap = await get(messagesRef);
-        const studyDurationSeconds = calculateStudyDurationSeconds(messagesSnap.val());
-        const rewardedMinutes = Math.min(MAX_REWARDED_MINUTES_PER_TOPIC, Math.floor(studyDurationSeconds / 60));
-        const xpEarned = BASE_XP_PER_TOPIC + (rewardedMinutes * XP_PER_MINUTE);
-
-        const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
-        const xpTxnResult = await runTransaction(userXpRef, (currentXp) => {
-            const numericXp = typeof currentXp === 'number' ? currentXp : 0;
-            return numericXp + xpEarned;
-        });
-
-        const totalXp = readNumericValue(xpTxnResult.snapshot.val());
-        const weekId = getWeekId(new Date());
-        const weeklyXpRef = dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}/xp`);
-        const weeklyTxnResult = await runTransaction(weeklyXpRef, (currentXp) => {
-            const numericXp = typeof currentXp === 'number' ? currentXp : 0;
-            return numericXp + xpEarned;
-        });
-        const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
-
-        await update(topicProgressRef, {
-            is_complete: true,
-            timestamp: serverTimestamp(),
-            study_duration_seconds: studyDurationSeconds,
-            xp_earned: xpEarned,
-        });
-
-        const leaderboardEntryData = {
-            display_name: userProfile.display_name || 'Learner',
-            photo_url: userProfile.photo_url || '',
-            department_id: userProfile.department_id,
-            level: userProfile.level,
-            last_updated_at: serverTimestamp(),
-        };
-
-        await update(dbRef(db, `leaderboard_overall/${userProfile.department_id}/${userProfile.uid}`), {
-            ...leaderboardEntryData,
-            xp: totalXp,
-        });
-
-        await update(dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}`), {
-            ...leaderboardEntryData,
-            xp: weeklyXp,
-        });
-        
-        addToast(`Topic complete! +${xpEarned} XP earned.`, 'success');
-        
-        // Close the learning interface to trigger a refresh of the study guide
-        setSelectedTopic(null);
-    } catch (err: any) {
-        console.error("Failed to mark topic as complete:", err);
-        addToast("Could not save your progress. Please check your connection or try again later.", 'error');
-    }
-  };
-
   const filteredCourses = courses
     .map(course => {
         if (filter.semester !== 'all' && course.semester !== filter.semester) {
@@ -1012,9 +976,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
       <LearningInterface
         userProfile={userProfile}
         topic={selectedTopic}
-        isCompleted={userProgress[selectedTopic.topic_id]?.is_complete || false}
         onClose={() => setSelectedTopic(null)}
-        onMarkComplete={handleMarkComplete}
       />
     );
   }
