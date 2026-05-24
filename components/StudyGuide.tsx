@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import { db } from '../firebase';
-import { ref as dbRef, onValue, off, set, update, get, push } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
@@ -108,6 +108,41 @@ const normalizeDepartmentValue = (value?: string): string => {
     if (!value) return '';
     return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w_]/g, '');
 };
+
+const BASE_XP_PER_TOPIC = 40;
+const XP_PER_MINUTE = 2;
+const MAX_REWARDED_MINUTES_PER_TOPIC = 120;
+const IDLE_GAP_THRESHOLD_SECONDS = 15 * 60;
+
+const getWeekId = (date: Date): string => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-${weekNo}`;
+};
+
+const calculateStudyDurationSeconds = (messagesData: any): number => {
+    if (!messagesData || typeof messagesData !== 'object') return 0;
+    const timestamps = Object.values(messagesData)
+        .map((entry: any) => (typeof entry?.timestamp === 'number' ? entry.timestamp : null))
+        .filter((ts): ts is number => ts !== null)
+        .sort((a, b) => a - b);
+
+    if (timestamps.length === 0) return 0;
+    if (timestamps.length === 1) return 0;
+
+    let activeDurationSeconds = 0;
+    for (let i = 1; i < timestamps.length; i += 1) {
+        const gapSeconds = Math.max(0, Math.floor((timestamps[i] - timestamps[i - 1]) / 1000));
+        activeDurationSeconds += Math.min(gapSeconds, IDLE_GAP_THRESHOLD_SECONDS);
+    }
+    return activeDurationSeconds;
+};
+
+const readNumericValue = (value: unknown, fallback = 0): number => (
+    typeof value === 'number' ? value : fallback
+);
 
 const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
     if (!course || typeof course !== 'object') return null;
@@ -884,12 +919,60 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     }
     
     try {
-        await update(dbRef(db, `user_progress/${userProfile.uid}/${topicId}`), {
+        const topicProgressRef = dbRef(db, `user_progress/${userProfile.uid}/${topicId}`);
+        const existingProgressSnap = await get(topicProgressRef);
+        if (existingProgressSnap.exists() && existingProgressSnap.val()?.is_complete) {
+            addToast("You've already completed this topic!", 'info');
+            return;
+        }
+
+        const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topicId}`);
+        const messagesSnap = await get(messagesRef);
+        const studyDurationSeconds = calculateStudyDurationSeconds(messagesSnap.val());
+        const rewardedMinutes = Math.min(MAX_REWARDED_MINUTES_PER_TOPIC, Math.floor(studyDurationSeconds / 60));
+        const xpEarned = BASE_XP_PER_TOPIC + (rewardedMinutes * XP_PER_MINUTE);
+
+        const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
+        const xpTxnResult = await runTransaction(userXpRef, (currentXp) => {
+            const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+            return numericXp + xpEarned;
+        });
+
+        const totalXp = readNumericValue(xpTxnResult.snapshot.val());
+        const weekId = getWeekId(new Date());
+        const weeklyXpRef = dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}/xp`);
+        const weeklyTxnResult = await runTransaction(weeklyXpRef, (currentXp) => {
+            const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+            return numericXp + xpEarned;
+        });
+        const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
+
+        await update(topicProgressRef, {
             is_complete: true,
             timestamp: serverTimestamp(),
+            study_duration_seconds: studyDurationSeconds,
+            xp_earned: xpEarned,
+        });
+
+        const leaderboardEntryData = {
+            display_name: userProfile.display_name || 'Learner',
+            photo_url: userProfile.photo_url || '',
+            department_id: userProfile.department_id,
+            level: userProfile.level,
+            last_updated_at: serverTimestamp(),
+        };
+
+        await update(dbRef(db, `leaderboard_overall/${userProfile.department_id}/${userProfile.uid}`), {
+            ...leaderboardEntryData,
+            xp: totalXp,
+        });
+
+        await update(dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}`), {
+            ...leaderboardEntryData,
+            xp: weeklyXp,
         });
         
-        addToast(`Topic complete!`, 'success');
+        addToast(`Topic complete! +${xpEarned} XP earned.`, 'success');
         
         // Close the learning interface to trigger a refresh of the study guide
         setSelectedTopic(null);

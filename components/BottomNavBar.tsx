@@ -5,6 +5,7 @@ import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ChatIcon } from './icons/ChatIcon';
 import { MessengerIcon } from './icons/MessengerIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { LeaderboardIcon } from './icons/LeaderboardIcon';
 import type { UserProfile } from '../types';
 
 interface BottomNavBarProps {
@@ -20,6 +21,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
     { id: 'chat', icon: <ChatIcon />, label: 'Chat' },
     { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
+    { id: 'leaderboard', icon: <LeaderboardIcon />, label: 'Rank' },
     { id: 'visual_solver', icon: <CameraIcon />, label: 'Solver' },
     { id: 'messenger', icon: <MessengerIcon className="w-7 h-7" />, label: 'Connect' },
   ];
