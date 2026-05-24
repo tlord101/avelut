@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { FirebaseUser } from './firebase';
 import type { UserProfile, UserProgress, DashboardData } from './types';
 import { Dashboard } from './components/Dashboard';
@@ -34,9 +34,10 @@ export const MainContent: React.FC<MainContentProps> = ({
     startTour,
 }) => {
     if (!userProfile) return null;
+    const location = useLocation();
 
     return (
-        <Routes>
+        <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard userProfile={userProfile} dashboardData={dashboardData} />} />
             <Route path="/study_guide" element={<StudyGuide userProfile={userProfile} userProgress={userProgress} />} />
