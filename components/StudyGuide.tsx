@@ -104,6 +104,53 @@ const normalizeLevelValue = (value?: string): string => {
     return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
 };
 
+const normalizeDepartmentValue = (value?: string): string => {
+    if (!value) return '';
+    return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w]/g, '');
+};
+
+const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
+    if (!course || typeof course !== 'object') return null;
+    const course_name = (course.course_name || '').toString().trim();
+    if (!course_name) return null;
+    const course_id = (course.course_id || fallbackCourseId || course_name.toLowerCase().replace(/\s+/g, '_')).toString();
+    return {
+        ...course,
+        course_id,
+        course_name,
+        level: (course.level || fallbackLevel || '').toString(),
+        topics: Array.isArray(course.topics) ? course.topics : [],
+    } as Course;
+};
+
+const extractCoursesFromDepartmentData = (departmentData: any): Course[] => {
+    if (!departmentData || typeof departmentData !== 'object') return [];
+
+    if (Array.isArray(departmentData.course_list)) {
+        return departmentData.course_list
+            .map((course: any) => normalizeCourse(course))
+            .filter((course: Course | null): course is Course => course !== null);
+    }
+
+    if (departmentData.course_list && typeof departmentData.course_list === 'object') {
+        return Object.entries(departmentData.course_list)
+            .map(([courseId, course]) => normalizeCourse(course, courseId))
+            .filter((course: Course | null): course is Course => course !== null);
+    }
+
+    if (departmentData.levels && typeof departmentData.levels === 'object') {
+        return Object.entries(departmentData.levels).flatMap(([levelKey, levelValue]: [string, any]) => {
+            const courseMap = levelValue?.courses;
+            if (!courseMap || typeof courseMap !== 'object') return [];
+            return Object.entries(courseMap)
+                .map(([courseId, course]) => normalizeCourse(course, courseId, levelKey))
+                .filter((course: Course | null): course is Course => course !== null);
+        });
+    }
+
+    return [];
+};
+
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -772,16 +819,27 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const fetchCourses = async () => {
       setIsLoading(true);
       try {
-        const snapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
-        const data = snapshot.val();
-        
-        if (data && data.course_list) {
-            const normalizedUserLevel = normalizeLevelValue(userProfile.level);
-            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => (
-                normalizeLevelValue(c.level) === normalizedUserLevel
-            ));
-            setCourses(coursesForLevel);
+        const snapshot = await get(dbRef(db, 'departments_data'));
+        const departmentsData = snapshot.val();
+        const normalizedUserDepartment = normalizeDepartmentValue(userProfile.department_id);
+        const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+
+        if (!departmentsData || !normalizedUserDepartment) {
+            setCourses([]);
+            return;
         }
+
+        const resolvedDepartmentData = Object.entries(departmentsData).find(([departmentId, departmentData]: [string, any]) => (
+            normalizeDepartmentValue(departmentId) === normalizedUserDepartment ||
+            normalizeDepartmentValue(departmentData?.department_name) === normalizedUserDepartment
+        ))?.[1];
+
+        const allDepartmentCourses = extractCoursesFromDepartmentData(resolvedDepartmentData);
+        const coursesForLevel = allDepartmentCourses.filter((course) => (
+            normalizeLevelValue(course.level) === normalizedUserLevel
+        ));
+
+        setCourses(coursesForLevel);
       } catch (err) {
         console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');
