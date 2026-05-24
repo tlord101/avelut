@@ -585,16 +585,36 @@ Student: "${tempInput}"
         addToast("Creating a visualization for you...", "info");
 
         const result = await attemptApiCall(async () => {
-            const response = await ai.models.generateImages({
-                model: 'imagen-3.0-generate-002',
-                prompt: 'A sleek, modern login interface for a FinTech app, Flat Outline Vector style',
-                config: {
-                    numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                }
-            });
+            let response;
+            const maxRetries = 2;
+            for (let i = 0; i <= maxRetries; i++) {
+                try {
+                    response = await ai.models.generateImages({
+                        model: 'imagen-3.0-generate-002',
+                        prompt: 'A sleek, modern login interface for a FinTech app, Flat Outline Vector style',
+                        config: {
+                            numberOfImages: 1,
+                            outputMimeType: 'image/jpeg',
+                        }
+                    });
 
-            const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+                    if (response.generatedImages?.[0]?.image?.imageBytes) {
+                        break;
+                    }
+
+                    if (i === maxRetries) {
+                        throw new Error("API returned response without image data.");
+                    }
+                } catch (error) {
+                    console.error(`Image generation attempt ${i + 1} failed:`, error);
+                    if (i === maxRetries) {
+                        throw error;
+                    }
+                    await new Promise(res => setTimeout(res, 1000 * (i + 1)));
+                }
+            }
+
+            const base64ImageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
             if (base64ImageBytes) {
                 const mimeType = 'image/jpeg';
                 const fileExtension = 'jpeg';
