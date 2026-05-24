@@ -572,13 +572,6 @@ Student: "${tempInput}"
                 };
                 await set(newBotMsgRef, botMessageData);
 
-                const botMessage: Message = { 
-                    id: newBotMsgRef.key!, 
-                    text: botResponseText, 
-                    sender: 'bot', 
-                    timestamp: Date.now()
-                };
-                setMessages(prev => [...prev, botMessage]);
             });
 
             if (!result.success) {
@@ -609,10 +602,6 @@ Student: "${tempInput}"
             });
 
             const parts = response.candidates?.[0]?.content?.parts ?? [];
-            const generatedText = parts
-                .map(part => part.text?.trim())
-                .filter((text): text is string => Boolean(text))
-                .join('\n\n');
 
             const imageUrls: string[] = [];
             for (const part of parts) {
@@ -628,54 +617,22 @@ Student: "${tempInput}"
                 imageUrls.push(publicUrl);
             }
 
-            if (!generatedText && imageUrls.length === 0) {
-                throw new Error("No visualization content was returned by the API.");
+            if (imageUrls.length === 0) {
+                throw new Error("No image visualization was returned by the API.");
             }
 
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-            const botMessagesToAdd: Message[] = [];
-
-            if (generatedText) {
-                const textMsgRef = push(messagesRef);
-                const textMessageData = {
-                    sender: 'bot',
-                    text: generatedText,
-                    timestamp: serverTimestamp(),
-                };
-                await set(textMsgRef, textMessageData);
-                botMessagesToAdd.push({
-                    id: textMsgRef.key!,
-                    text: generatedText,
-                    sender: 'bot',
-                    timestamp: Date.now(),
-                });
-            }
 
             for (const publicUrl of imageUrls) {
                 const imageMsgRef = push(messagesRef);
-                let imageMessageText: string | undefined;
-                if (!generatedText) {
-                    imageMessageText = 'Here is a visualization to help you understand:';
-                }
                 const imageMessageData = {
                     sender: 'bot',
                     image_url: publicUrl,
                     timestamp: serverTimestamp(),
-                    ...(imageMessageText ? { text: imageMessageText } : {}),
                 };
                 await set(imageMsgRef, imageMessageData);
-                botMessagesToAdd.push({
-                    id: imageMsgRef.key!,
-                    text: imageMessageText,
-                    sender: 'bot',
-                    timestamp: Date.now(),
-                    image_url: publicUrl,
-                });
             }
 
-            if (botMessagesToAdd.length > 0) {
-                setMessages(prev => [...prev, ...botMessagesToAdd]);
-            }
         });
 
         if (!result.success) {
