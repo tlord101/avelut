@@ -6,6 +6,7 @@ import { StudyGuide } from './components/StudyGuide';
 import { Chat } from './components/Chat';
 import { VisualSolver } from './components/VisualSolver';
 import { Exam } from './components/Exam';
+import { Leaderboard } from './components/Leaderboard';
 import { Settings } from './components/Settings';
 import Help from './components/Help';
 import { Messenger } from './components/Messenger';
@@ -41,6 +42,8 @@ export const MainContent: React.FC<MainContentProps> = ({
             return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
         case 'study_guide':
             return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
+        case 'leaderboard':
+            return <Leaderboard userProfile={userProfile} />;
         case 'chat':
             return <Chat userProfile={userProfile} />;
         case 'visual_solver':

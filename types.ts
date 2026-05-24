@@ -10,6 +10,7 @@ export interface UserProfile {
   uid: string;
   display_name: string;
   photo_url?: string;
+  xp?: number;
   department_id: string;
   level: string;
   current_streak: number;
@@ -94,8 +95,23 @@ export interface Department {
 export interface UserProgress {
   [topic_id: string]: {
     is_complete: boolean;
+    timestamp?: number;
+    study_duration_seconds?: number;
+    xp_earned?: number;
   };
 }
+
+export interface LeaderboardEntry {
+  user_id: string;
+  display_name: string;
+  photo_url?: string;
+  department_id?: string;
+  level?: string;
+  xp: number;
+  last_updated_at?: number;
+}
+
+export interface WeeklyLeaderboardEntry extends LeaderboardEntry {}
 
 // Type for the Dashboard data
 export interface DashboardData {
