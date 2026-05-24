@@ -21,6 +21,12 @@ interface AdminPanelProps {
     userProfile: UserProfile;
 }
 
+const SEMESTERS = ['first', 'second'] as const;
+const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
+const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
+    semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
+);
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -118,7 +124,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             const departmentRef = dbRef(db, `departments_data/${departmentId}`);
             get(departmentRef).then(snap => {
                 if (snap.exists()) {
-                    setCoursesList(snap.val().course_list || []);
+                    const rawCourseList = snap.val().course_list || [];
+                    const normalizedCourseList = rawCourseList.map((course: Course) => ({
+                        ...course,
+                        semester: normalizeSemester(course.semester),
+                    }));
+                    setCoursesList(normalizedCourseList);
                 } else {
                     setCoursesList([]);
                 }
@@ -352,7 +363,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const addCourseField = () => {
-        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: 'first' }]);
+        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: DEFAULT_SEMESTER }]);
     };
 
     if (!userProfile.is_admin) {
@@ -647,6 +658,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                         >
                                                             {LEVELS.map(lvl => (
                                                                 <option key={lvl} value={lvl}>{lvl}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="w-28">
+                                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Semester</label>
+                                                        <select
+                                                            value={normalizeSemester(s.semester)}
+                                                            onChange={e => {
+                                                                const list = [...coursesList];
+                                                                list[sIdx].semester = e.target.value as 'first' | 'second';
+                                                                setCoursesList(list);
+                                                            }}
+                                                            className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none"
+                                                        >
+                                                            {SEMESTERS.map(semester => (
+                                                                <option key={semester} value={semester}>
+                                                                    {semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                                </option>
                                                             ))}
                                                         </select>
                                                     </div>
