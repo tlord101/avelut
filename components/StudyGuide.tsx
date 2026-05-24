@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import { db } from '../firebase';
-import { ref as dbRef, onValue, off, set, update, get } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, update, get, push } from 'firebase/database';
 import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
