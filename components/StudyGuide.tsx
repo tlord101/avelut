@@ -614,7 +614,11 @@ Student: "${tempInput}"
                 }
             }
 
-            const base64ImageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
+            if (!response) {
+                throw new Error("API call failed to return a response after retries.");
+            }
+
+            const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
             if (base64ImageBytes) {
                 const mimeType = 'image/jpeg';
                 const fileExtension = 'jpeg';
