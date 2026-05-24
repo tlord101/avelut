@@ -47,10 +47,23 @@ const App: React.FC = () => {
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     
+    const resolveActiveItemFromPath = (pathname: string): string => {
+        if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
+        const rawSegment = pathname.substring(1).split('/')[0] || '';
+        const normalizedSegment = decodeURIComponent(rawSegment).toLowerCase().replace(/-/g, '_');
+        const allowedItems = new Set([
+            'dashboard',
+            ...navigationItems.map(item => item.id),
+            'messenger',
+            'settings',
+            'help',
+            'admin'
+        ]);
+        return allowedItems.has(normalizedSegment) ? normalizedSegment : 'dashboard';
+    };
+
     // Derived state from URL
-    const activeItem = location.pathname === '/' || location.pathname === '/dashboard' 
-        ? 'dashboard' 
-        : location.pathname.substring(1).split('/')[0];
+    const activeItem = resolveActiveItemFromPath(location.pathname);
     
     const setActiveItem = (item: string) => {
         if (item === 'dashboard') navigate('/dashboard');
@@ -598,6 +611,7 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
+                            key={activeItem}
                             activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
