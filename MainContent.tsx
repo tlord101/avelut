@@ -1,5 +1,4 @@
 import React from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { FirebaseUser } from './firebase';
 import type { UserProfile, UserProgress, DashboardData } from './types';
 import { Dashboard } from './components/Dashboard';
@@ -13,6 +12,7 @@ import { Messenger } from './components/Messenger';
 import { AdminPanel } from './components/AdminPanel';
 
 interface MainContentProps {
+    activeItem: string;
     user: FirebaseUser | null;
     userProfile: UserProfile;
     userProgress: UserProgress;
@@ -24,6 +24,7 @@ interface MainContentProps {
 }
 
 export const MainContent: React.FC<MainContentProps> = ({
+    activeItem,
     user,
     userProfile,
     userProgress,
@@ -34,21 +35,30 @@ export const MainContent: React.FC<MainContentProps> = ({
     startTour,
 }) => {
     if (!userProfile) return null;
-    const location = useLocation();
 
-    return (
-        <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard userProfile={userProfile} dashboardData={dashboardData} />} />
-            <Route path="/study_guide" element={<StudyGuide userProfile={userProfile} userProgress={userProgress} />} />
-            <Route path="/chat" element={<Chat userProfile={userProfile} />} />
-            <Route path="/visual_solver" element={<VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />} />
-            <Route path="/exam" element={<Exam userProfile={userProfile} userProgress={userProgress} />} />
-            <Route path="/settings" element={<Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />} />
-            <Route path="/help" element={<Help onStartTour={startTour} />} />
-            <Route path="/messenger" element={<Messenger userProfile={userProfile} />} />
-            <Route path="/admin" element={userProfile.is_admin ? <AdminPanel userProfile={userProfile} /> : <Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-    );
+    if (activeItem === 'study_guide') {
+        return <StudyGuide userProfile={userProfile} userProgress={userProgress} />;
+    }
+    if (activeItem === 'chat') {
+        return <Chat userProfile={userProfile} />;
+    }
+    if (activeItem === 'visual_solver') {
+        return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />;
+    }
+    if (activeItem === 'exam') {
+        return <Exam userProfile={userProfile} userProgress={userProgress} />;
+    }
+    if (activeItem === 'settings') {
+        return <Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
+    }
+    if (activeItem === 'help') {
+        return <Help onStartTour={startTour} />;
+    }
+    if (activeItem === 'messenger') {
+        return <Messenger userProfile={userProfile} />;
+    }
+    if (activeItem === 'admin' && userProfile.is_admin) {
+        return <AdminPanel userProfile={userProfile} />;
+    }
+    return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
 };

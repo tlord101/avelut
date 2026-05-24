@@ -598,7 +598,7 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
-                            key={location.pathname}
+                            activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
                             userProgress={userProgress}
