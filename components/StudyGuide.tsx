@@ -819,20 +819,35 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const fetchCourses = async () => {
       setIsLoading(true);
       try {
-        const snapshot = await get(dbRef(db, 'departments_data'));
-        const departmentsData = snapshot.val();
         const normalizedUserDepartment = normalizeDepartmentValue(userProfile.department_id);
         const normalizedUserLevel = normalizeLevelValue(userProfile.level);
 
-        if (!departmentsData || !normalizedUserDepartment) {
+        if (!normalizedUserDepartment) {
             setCourses([]);
             return;
         }
 
-        const resolvedDepartmentData = Object.entries(departmentsData).find(([departmentId, departmentData]: [string, any]) => (
-            normalizeDepartmentValue(departmentId) === normalizedUserDepartment ||
-            normalizeDepartmentValue(departmentData?.department_name) === normalizedUserDepartment
-        ))?.[1];
+        let resolvedDepartmentData: any = null;
+
+        const directDepartmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+        const directDepartmentData = directDepartmentSnapshot.val();
+        if (directDepartmentData) {
+            resolvedDepartmentData = directDepartmentData;
+        }
+
+        if (!resolvedDepartmentData) {
+            const snapshot = await get(dbRef(db, 'departments_data'));
+            const departmentsData = snapshot.val();
+            if (!departmentsData) {
+                setCourses([]);
+                return;
+            }
+
+            resolvedDepartmentData = Object.entries(departmentsData).find(([departmentId, departmentData]: [string, any]) => (
+                normalizeDepartmentValue(departmentId) === normalizedUserDepartment ||
+                normalizeDepartmentValue(departmentData?.department_name) === normalizedUserDepartment
+            ))?.[1];
+        }
 
         const allDepartmentCourses = extractCoursesFromDepartmentData(resolvedDepartmentData);
         const coursesForLevel = allDepartmentCourses.filter((course) => (
