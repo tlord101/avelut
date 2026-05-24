@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'firebase/database';
-import type { UserProfile, LeaderboardEntry, WeeklyLeaderboardEntry } from '../types';
+import type { UserProfile, LeaderboardEntry } from '../types';
 import { Avatar } from './Avatar';
 
 const getWeekId = (date: Date): string => {
@@ -72,7 +72,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
             if (activeTab === 'overall') {
                 setOverallData(sortedData as LeaderboardEntry[]);
             } else {
-                setWeeklyData(sortedData as WeeklyLeaderboardEntry[]);
+                setWeeklyData(sortedData as LeaderboardEntry[]);
             }
         } else {
             if (activeTab === 'overall') setOverallData([]);

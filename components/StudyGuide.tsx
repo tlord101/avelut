@@ -112,6 +112,7 @@ const normalizeDepartmentValue = (value?: string): string => {
 const BASE_XP_PER_TOPIC = 40;
 const XP_PER_MINUTE = 2;
 const MAX_REWARDED_MINUTES_PER_TOPIC = 120;
+const IDLE_GAP_THRESHOLD_SECONDS = 15 * 60;
 
 const getWeekId = (date: Date): string => {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -129,9 +130,19 @@ const calculateStudyDurationSeconds = (messagesData: any): number => {
         .sort((a, b) => a - b);
 
     if (timestamps.length === 0) return 0;
-    if (timestamps.length === 1) return Math.max(0, Math.floor((Date.now() - timestamps[0]) / 1000));
-    return Math.max(0, Math.floor((timestamps[timestamps.length - 1] - timestamps[0]) / 1000));
+    if (timestamps.length === 1) return 0;
+
+    let activeDurationSeconds = 0;
+    for (let i = 1; i < timestamps.length; i += 1) {
+        const gapSeconds = Math.max(0, Math.floor((timestamps[i] - timestamps[i - 1]) / 1000));
+        activeDurationSeconds += Math.min(gapSeconds, IDLE_GAP_THRESHOLD_SECONDS);
+    }
+    return activeDurationSeconds;
 };
+
+const readNumericValue = (value: unknown, fallback = 0): number => (
+    typeof value === 'number' ? value : fallback
+);
 
 const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
     if (!course || typeof course !== 'object') return null;
@@ -918,7 +929,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topicId}`);
         const messagesSnap = await get(messagesRef);
         const studyDurationSeconds = calculateStudyDurationSeconds(messagesSnap.val());
-        const rewardedMinutes = Math.min(MAX_REWARDED_MINUTES_PER_TOPIC, Math.max(1, Math.floor(studyDurationSeconds / 60)));
+        const rewardedMinutes = Math.min(MAX_REWARDED_MINUTES_PER_TOPIC, Math.floor(studyDurationSeconds / 60));
         const xpEarned = BASE_XP_PER_TOPIC + (rewardedMinutes * XP_PER_MINUTE);
 
         const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
@@ -927,14 +938,14 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             return numericXp + xpEarned;
         });
 
-        const totalXp = typeof xpTxnResult.snapshot.val() === 'number' ? xpTxnResult.snapshot.val() : 0;
+        const totalXp = readNumericValue(xpTxnResult.snapshot.val());
         const weekId = getWeekId(new Date());
         const weeklyXpRef = dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}/xp`);
         const weeklyTxnResult = await runTransaction(weeklyXpRef, (currentXp) => {
             const numericXp = typeof currentXp === 'number' ? currentXp : 0;
             return numericXp + xpEarned;
         });
-        const weeklyXp = typeof weeklyTxnResult.snapshot.val() === 'number' ? weeklyTxnResult.snapshot.val() : xpEarned;
+        const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
 
         await update(topicProgressRef, {
             is_complete: true,

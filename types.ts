@@ -107,11 +107,9 @@ export interface LeaderboardEntry {
   photo_url?: string;
   department_id?: string;
   level?: string;
-  xp: number;
+  xp?: number;
   last_updated_at?: number;
 }
-
-export interface WeeklyLeaderboardEntry extends LeaderboardEntry {}
 
 // Type for the Dashboard data
 export interface DashboardData {
