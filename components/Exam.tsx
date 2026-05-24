@@ -21,6 +21,9 @@ const getCourseNameById = (id: string) => {
     return mockCourses.find(c => c.id === id)?.name || 'your department';
 }
 
+const sanitizePromptInput = (value: string): string =>
+  value.replace(/[<>{}`$]/g, ' ').replace(/\s+/g, ' ').trim();
+
 const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
   <div className="flex flex-col items-center justify-center text-center p-8">
     <svg className="w-12 h-12 loader-logo" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -292,9 +295,13 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const generateQuestions = async () => {
     setExamState('generating');
     try {
+      const safeDepartment = sanitizePromptInput(getCourseNameById(userProfile.department_id));
+      const safeLevel = sanitizePromptInput(userProfile.level);
+      const safeTopics = completedTopicNames.map(sanitizePromptInput).filter(Boolean);
+
       const response = await ai.models.generateContent({
         model: 'gemini-3.5-flash',
-        contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${getCourseNameById(userProfile.department_id)}" at a "${userProfile.level}" level, focusing on the following topics they have completed: ${completedTopicNames.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
+        contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
         config: {
           responseMimeType: "application/json",
           responseSchema: {

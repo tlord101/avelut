@@ -165,7 +165,7 @@ const TextChat: React.FC<{
             // Call Gemini
             const result = await ai.models.generateContent({
                 model: "gemini-3.5-flash",
-                contents: currentInput
+                contents: [{ role: 'user', parts: [{ text: currentInput }] }]
             });
             const responseText = result.text || '';
 

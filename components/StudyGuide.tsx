@@ -357,7 +357,7 @@ Student: "${tempInput}"
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.5-flash',
                     config: { systemInstruction },
-                    contents: [{ parts }]
+                    contents: [{ role: 'user', parts }]
                 });
                 const botResponseText = response.text || '';
                 
@@ -407,9 +407,7 @@ Student: "${tempInput}"
                 try {
                     const result = await ai.models.generateContent({
                         model: 'gemini-3.5-flash',
-                        contents: {
-                            parts: [{ text: prompt }],
-                        },
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
                         config: {
                             responseModalities: [Modality.IMAGE, Modality.TEXT],
                         },
