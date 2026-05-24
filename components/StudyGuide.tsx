@@ -622,7 +622,6 @@ Student: "${tempInput}"
             }
 
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-            const botMessagesToAdd: Message[] = [];
 
             for (const publicUrl of imageUrls) {
                 const imageMsgRef = push(messagesRef);
@@ -632,12 +631,6 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(imageMsgRef, imageMessageData);
-                botMessagesToAdd.push({
-                    id: imageMsgRef.key!,
-                    sender: 'bot',
-                    timestamp: Date.now(),
-                    image_url: publicUrl,
-                });
             }
 
             if (botMessagesToAdd.length > 0) {
