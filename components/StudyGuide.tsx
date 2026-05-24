@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
@@ -175,6 +176,22 @@ const base64ToBlob = (base64: string, mimeType: string): Blob => {
     }
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
+};
+
+const createUniqueId = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    const perfPart = typeof performance !== 'undefined' ? performance.now().toString().replace('.', '') : '0';
+    return `${Date.now()}-${perfPart}`;
 };
 
 // --- SKELETON LOADER ---
@@ -585,71 +602,79 @@ Student: "${tempInput}"
         addToast("Creating a visualization for you...", "info");
 
         const result = await attemptApiCall(async () => {
-            let response: Awaited<ReturnType<typeof ai.models.generateImages>> | null = null;
-            const maxRetries = 2;
-            for (let i = 0; i <= maxRetries; i++) {
-                try {
-                    response = await ai.models.generateImages({
-                        model: 'imagen-3.0-generate-002',
-                        prompt: 'A sleek, modern login interface for a FinTech app, Flat Outline Vector style',
-                        config: {
-                            numberOfImages: 1,
-                            outputMimeType: 'image/jpeg',
-                        }
-                    });
+            const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
+            const response = await ai.models.generateContent({
+                model: "gemini-3.1-flash-image-preview",
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            });
 
-                    if (response.generatedImages?.[0]?.image?.imageBytes) {
-                        break;
-                    }
+            const parts = response.candidates?.[0]?.content?.parts ?? [];
+            const generatedText = parts
+                .map(part => part.text?.trim())
+                .filter((text): text is string => Boolean(text))
+                .join('\n\n');
 
-                    if (i === maxRetries) {
-                        throw new Error("API returned response without image data.");
-                    }
-                } catch (error) {
-                    console.error(`Image generation attempt ${i + 1} failed:`, error);
-                    if (i === maxRetries) {
-                        throw error;
-                    }
-                    await new Promise(res => setTimeout(res, 1000 * (i + 1)));
-                }
-            }
+            const imageUrls: string[] = [];
+            for (const part of parts) {
+                if (!part.inlineData?.data) continue;
 
-            if (!response) {
-                throw new Error("API call failed to return a response after retries.");
-            }
-
-            const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-            if (base64ImageBytes) {
-                const mimeType = 'image/jpeg';
-                const fileExtension = 'jpeg';
-
-                const imageBlob = base64ToBlob(base64ImageBytes, mimeType);
-                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}.${fileExtension}`);
-                
+                const mimeType = part.inlineData.mimeType || 'image/png';
+                const fileExtension = mimeType.split('/')[1] || 'png';
+                const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
+                const uniqueImageId = createUniqueId();
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
                 const uploadResult = await uploadBytes(storageRefObj, imageBlob);
                 const publicUrl = await getDownloadURL(uploadResult.ref);
-    
-                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-                const newBotMsgRef = push(messagesRef);
-                const botMessageData = {
+                imageUrls.push(publicUrl);
+            }
+
+            if (!generatedText && imageUrls.length === 0) {
+                throw new Error("No visualization content was returned by the API.");
+            }
+
+            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+            const botMessagesToAdd: Message[] = [];
+
+            if (generatedText) {
+                const textMsgRef = push(messagesRef);
+                const textMessageData = {
                     sender: 'bot',
-                    text: 'Here is a visualization to help you understand:',
-                    image_url: publicUrl,
+                    text: generatedText,
                     timestamp: serverTimestamp(),
                 };
-                await set(newBotMsgRef, botMessageData);
-
-                const botMessage: Message = {
-                    id: newBotMsgRef.key!,
-                    text: botMessageData.text,
+                await set(textMsgRef, textMessageData);
+                botMessagesToAdd.push({
+                    id: textMsgRef.key!,
+                    text: generatedText,
                     sender: 'bot',
                     timestamp: Date.now(),
-                    image_url: publicUrl
+                });
+            }
+
+            for (const publicUrl of imageUrls) {
+                const imageMsgRef = push(messagesRef);
+                let imageMessageText: string | undefined;
+                if (!generatedText) {
+                    imageMessageText = 'Here is a visualization to help you understand:';
+                }
+                const imageMessageData = {
+                    sender: 'bot',
+                    image_url: publicUrl,
+                    timestamp: serverTimestamp(),
+                    ...(imageMessageText ? { text: imageMessageText } : {}),
                 };
-                setMessages(prev => [...prev, botMessage]);
-    
-            } else {
-                throw new Error("No image data received from the API.");
+                await set(imageMsgRef, imageMessageData);
+                botMessagesToAdd.push({
+                    id: imageMsgRef.key!,
+                    text: imageMessageText,
+                    sender: 'bot',
+                    timestamp: Date.now(),
+                    image_url: publicUrl,
+                });
+            }
+
+            if (botMessagesToAdd.length > 0) {
+                setMessages(prev => [...prev, ...botMessagesToAdd]);
             }
         });
 
