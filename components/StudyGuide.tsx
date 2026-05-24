@@ -585,7 +585,7 @@ Student: "${tempInput}"
         addToast("Creating a visualization for you...", "info");
 
         const result = await attemptApiCall(async () => {
-            let response;
+            let response: Awaited<ReturnType<typeof ai.models.generateImages>> | null = null;
             const maxRetries = 2;
             for (let i = 0; i <= maxRetries; i++) {
                 try {
