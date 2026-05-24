@@ -44,7 +44,7 @@ const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
 const normalizeTextbookUrls = (course: Partial<Course>) => {
     const urls: string[] = Array.isArray(course?.textbook_urls) ? course.textbook_urls.filter(Boolean) : [];
     if (course?.textbook_url && !urls.includes(course.textbook_url)) {
-        urls.unshift(course.textbook_url);
+        urls.push(course.textbook_url);
     }
     return Array.from(new Set(urls));
 };
@@ -55,7 +55,7 @@ const selectPrimaryPdfUrl = (uploadedUrls: string[], existingPdfUrl: string | un
     getPrimaryTextbookUrl(uploadedUrls) || existingPdfUrl || getPrimaryTextbookUrl(mergedPdfUrls)
 );
 
-const mergeTopics = (existingTopics: unknown[], newTopics: Topic[]) => {
+const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]) => {
     const topicMap = new Map<string, Topic>();
     [...existingTopics, ...newTopics].forEach((topic, index) => {
         const sanitized = sanitizeTopicMetadata(topic, index);
@@ -385,7 +385,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             const existingContext = textbookContextSnapshot.exists() ? textbookContextSnapshot.val() : {};
             const existingPdfUrls: string[] = Array.isArray(existingContext?.pdf_urls) ? existingContext.pdf_urls.filter(Boolean) : [];
             if (existingContext?.pdf_url && !existingPdfUrls.includes(existingContext.pdf_url)) {
-                existingPdfUrls.unshift(existingContext.pdf_url);
+                existingPdfUrls.push(existingContext.pdf_url);
             }
             const mergedPdfUrls = Array.from(new Set([...existingPdfUrls, ...uploadedUrls]));
             const mergedSyllabus = mergeTopics(
@@ -793,7 +793,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                                     </div>
                                                                 </div>
                                                                 <label className="cursor-pointer text-[10px] font-black text-gray-400 hover:text-gray-900 uppercase">
-                                                                    Add More
+                                                                    Add More Textbooks
                                                                     <input type="file" multiple className="hidden" accept="application/pdf" onChange={e => {
                                                                         const files = e.target.files ? Array.from(e.target.files) : [];
                                                                         if(files.length) handleTextbookUpload(s.course_id, files);
