@@ -231,6 +231,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     });
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
+    const isInitialChatLoading = isLoading && messages.length === 0;
 
     useEffect(() => {
         profileSnapshotRef.current = {
@@ -369,6 +370,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
     }, [userProfile.uid, userProfile.department_id]);
 
     const initiateAutoTeach = async () => {
+        setIsLoading(true);
         const prompt = `
 Context:
 Department: ${userProfile.department_id}
@@ -408,6 +410,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         if (!result.success) {
             addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
+            setIsLoading(false);
             onClose();
         }
     };
@@ -419,7 +422,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                initiateAutoTeach();
+                void initiateAutoTeach();
             } else {
                 const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
                     id,
@@ -429,8 +432,8 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                     image_url: msg.image_url,
                 })).sort((a,b) => a.timestamp - b.timestamp);
                 setMessages(fetchedMessages);
+                setIsLoading(false);
             }
-            setIsLoading(false);
         }, (error) => {
             console.error("Error initializing lesson:", error);
             addToast("Could not start the lesson. Please try again.", "error");
@@ -654,6 +657,17 @@ Student: "${tempInput}"
 
             {/* Scrollable Message Area */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {isInitialChatLoading ? (
+                    <div className="h-full min-h-[200px] flex items-center justify-center">
+                        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <span className="ml-1">Loading lesson...</span>
+                        </div>
+                    </div>
+                ) : (
+                <>
                 {messages.map((message, index) => {
                     const showIllustrateButton = index === lastBotMessageIndex && !!message.text && !isLoading && !isIllustrating;
 
@@ -768,6 +782,8 @@ Student: "${tempInput}"
                     </div>
                 }
                 <div ref={messagesEndRef} />
+                </>
+                )}
             </div>
             
             {/* Fixed Input Area */}
