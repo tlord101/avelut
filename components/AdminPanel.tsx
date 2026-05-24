@@ -12,6 +12,7 @@ import { StackIcon } from './icons/StackIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
+import { CheckIcon } from './icons/CheckIcon';
 
 // @ts-ignore
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });

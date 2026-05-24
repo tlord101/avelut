@@ -4,6 +4,11 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course } from '../types';
 import { useToast } from '../hooks/useToast';
+import { GraduationCapIcon } from './icons/GraduationCapIcon';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { CheckIcon } from './icons/CheckIcon';
+import { XIcon } from './icons/XIcon';
+import { ListIcon } from './icons/ListIcon';
 
 declare var __app_id: string;
 // @ts-ignore
