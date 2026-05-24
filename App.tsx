@@ -13,7 +13,7 @@ import { MainContent } from './MainContent';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { BottomNavBar } from './components/BottomNavBar';
 import { useToast } from './hooks/useToast';
-import { navigationItems } from './constants';
+import { navigationItems, adminNavigationItems } from './constants';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
 
