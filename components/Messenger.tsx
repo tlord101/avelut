@@ -181,7 +181,7 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                     }]
                 });
 
-                const responseText = result.text;
+                const responseText = result.text || '';
                 if (responseText) {
                     // Add the AI's response as a text message in the chat
                     setInput(responseText);

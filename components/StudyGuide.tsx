@@ -191,7 +191,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 config: { systemInstruction },
                 contents: [{ role: 'user', parts: [{ text: prompt }] }]
             });
-            const botResponseText = response.text;
+            const botResponseText = response.text || '';
 
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
             const newMsgRef = push(messagesRef);
@@ -359,7 +359,7 @@ Student: "${tempInput}"
                     config: { systemInstruction },
                     contents: { parts }
                 });
-                const botResponseText = response.text;
+                const botResponseText = response.text || '';
                 
                 const newBotMsgRef = push(messagesRef);
                 const botMessageData = {

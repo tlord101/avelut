@@ -167,7 +167,7 @@ const TextChat: React.FC<{
                 model: "gemini-3.5-flash",
                 contents: currentInput
             });
-            const responseText = result.text;
+            const responseText = result.text || '';
 
             await push(messagesRef, {
                 text: responseText,
