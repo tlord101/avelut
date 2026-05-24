@@ -295,7 +295,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 `;
         const result = await attemptApiCall(async () => {
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: 'gemini-3.1-flash-image-preview',
                 config: { systemInstruction },
                 contents: [{ role: 'user', parts: [{ text: prompt }] }]
             });
