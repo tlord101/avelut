@@ -31,6 +31,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
     const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
+    const SEMESTERS: Array<NonNullable<Course['semester']>> = ['first', 'second'];
 
     const fetchDepartments = async () => {
         try {
@@ -121,7 +122,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     const rawCourseList = snap.val().course_list || [];
                     const normalizedCourseList = rawCourseList.map((course: Course) => ({
                         ...course,
-                        semester: course.semester === 'first' || course.semester === 'second'
+                        semester: course.semester && SEMESTERS.includes(course.semester)
                             ? course.semester
                             : 'first',
                     }));
@@ -668,8 +669,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                             }}
                                                             className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none"
                                                         >
-                                                            <option value="first">1st Sem</option>
-                                                            <option value="second">2nd Sem</option>
+                                                            {SEMESTERS.map(semester => (
+                                                                <option key={semester} value={semester}>
+                                                                    {semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                                </option>
+                                                            ))}
                                                         </select>
                                                     </div>
                                                 </div>
