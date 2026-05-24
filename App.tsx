@@ -58,6 +58,11 @@ const resolveActiveItemFromPath = (pathname: string): string => {
     return ALLOWED_ROUTE_ITEMS.has(normalizedSegment) ? normalizedSegment : 'dashboard';
 };
 
+const normalizeLevelValue = (value?: string): string => {
+    if (!value) return '';
+    return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
+};
+
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -287,7 +292,10 @@ const App: React.FC = () => {
                 const departmentData = departmentSnapshot.val();
                 if (!departmentData) return;
 
-                const coursesForLevel = (departmentData.course_list || []).filter((course: Course) => course.level === userProfile.level);
+                const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+                const coursesForLevel = (departmentData.course_list || []).filter((course: Course) => (
+                    normalizeLevelValue(course.level) === normalizedUserLevel
+                ));
                 
                 const totalTopics = coursesForLevel.reduce((acc: number, course: Course) => acc + (course.topics?.length || 0), 0) || 0;
 

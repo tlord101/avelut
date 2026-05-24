@@ -99,14 +99,11 @@ const getSubjectVisuals = (subjectName: string) => {
     };
 };
 
+const normalizeLevelValue = (value?: string): string => {
+    if (!value) return '';
+    return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
+};
 
-// --- HELPER & MOCK DATA ---
-const mockCourses = [
-  { id: 'math_algebra_1', name: 'Math - Algebra 1' },
-  { id: 'science_biology', name: 'Science - Biology' },
-  { id: 'history_us', name: 'History - U.S. History' },
-];
-const getCourseNameById = (id: string) => mockCourses.find(c => c.id === id)?.name || 'your department';
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -147,6 +144,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [isLoading, setIsLoading] = useState(false);
     const [isIllustrating, setIsIllustrating] = useState(false);
     const [textbookContext, setTextbookContext] = useState<string>('');
+    const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
@@ -157,11 +155,32 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
             const snap = await get(textbookRef);
             if (snap.exists()) {
                 const data = snap.val();
+                const syllabusTopics = Array.isArray(data.syllabus) ? data.syllabus : [];
+                const matchedTopic = syllabusTopics.find((entry: any) => (
+                    (entry?.topic_id && entry.topic_id === topic.topic_id) ||
+                    (entry?.topic_name && entry.topic_name === topic.topic_name)
+                ));
+                const topicContext = (topic.topic_context || matchedTopic?.topic_context || '').trim();
+                const startPoint = (topic.start_point || matchedTopic?.start_point || '').trim();
+                const endPoint = (topic.end_point || matchedTopic?.end_point || '').trim();
+                const contextBlock = [
+                    topicContext ? `Topic context: ${topicContext}` : '',
+                    startPoint ? `Start teaching from: ${startPoint}` : '',
+                    endPoint ? `Stop teaching at: ${endPoint}` : '',
+                ].filter(Boolean).join('\n');
+                setSelectedTopicContext(contextBlock);
                 setTextbookContext(`\n\nCOURSE TEXTBOOK CONTEXT:\nThis lesson must be strictly grounded in the following textbook syllabus and objectives:\n${JSON.stringify(data.syllabus)}`);
+            } else {
+                const contextBlock = [
+                    topic.topic_context ? `Topic context: ${topic.topic_context}` : '',
+                    topic.start_point ? `Start teaching from: ${topic.start_point}` : '',
+                    topic.end_point ? `Stop teaching at: ${topic.end_point}` : '',
+                ].filter(Boolean).join('\n');
+                setSelectedTopicContext(contextBlock);
             }
         };
         fetchTextbook();
-    }, [userProfile.department_id, userProfile.level, topic.courseName]);
+    }, [userProfile.department_id, userProfile.level, topic.courseName, topic.topic_id, topic.topic_name, topic.topic_context, topic.start_point, topic.end_point]);
 
     const systemInstruction = `You are VANTUTOR, an expert AI educator. Your primary goal is to provide a comprehensive and complete understanding of the given topic for a student at their specified level.
 
@@ -172,15 +191,22 @@ Your Method:
 4. After explaining a small concept, you MUST end your message with a simple question to check for understanding before proceeding. This is crucial.
 5. NEVER deliver long lectures. Keep it interactive and conversational.
 
-Use simple language, analogies, and Markdown for clarity. For mathematical formulas and symbols, use LaTeX syntax (e.g., $...$ for inline and $$...$$ for block). Be patient and encouraging.${textbookContext}`;
+Use simple language, analogies, and Markdown for clarity. For mathematical formulas and symbols, use LaTeX syntax (e.g., $...$ for inline and $$...$$ for block). Be patient and encouraging.
+
+Scope control (very important):
+- Stay strictly within the selected topic context and boundaries.
+- Do not jump to unrelated chapters unless the student explicitly asks.
+- If the topic is completed within its boundaries, clearly state completion and ask if the student wants revision or the next topic.
+${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}` : ''}${textbookContext}`;
 
     const initiateAutoTeach = async () => {
         const prompt = `
 Context:
-Department: ${getCourseNameById(userProfile.department_id)}
+Department: ${userProfile.department_id}
 Course: ${topic.courseName}
 Topic: ${topic.topic_name}
 User Level: ${userProfile.level}
+${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 
 Task:
 Please start teaching me about "${topic.topic_name}". Give me a simple and clear introduction to the topic.
@@ -334,10 +360,11 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 
                 const prompt = `
 Context:
-Course: ${getCourseNameById(userProfile.course_id)}
-Subject: ${topic.subjectName}
+Department: ${userProfile.department_id}
+Course: ${topic.courseName}
 Topic: ${topic.topic_name}
 User Level: ${userProfile.level}
+${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 
 Conversation History:
 ${history}
@@ -749,7 +776,10 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         const data = snapshot.val();
         
         if (data && data.course_list) {
-            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => c.level === userProfile.level);
+            const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => (
+                normalizeLevelValue(c.level) === normalizedUserLevel
+            ));
             setCourses(coursesForLevel);
         }
       } catch (err) {
