@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, storage } from '../firebase';
 import { ref as dbRef, set, push, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -89,6 +89,9 @@ const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]) 
 };
 
 const getUniqueIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
+const getCourseMergeKey = (course: Partial<Course>) => (
+    normalizeTopicId((course?.course_name || course?.course_id || '').toString().trim())
+);
 
 const mergeCourseRecord = (
     existingCourse: Partial<Course> | undefined,
@@ -109,9 +112,14 @@ const mergeCourseRecord = (
         ...appendedTextbookUrls
     ]));
 
+    const mergedCourseName = (sourceCourse.course_name || baseCourse.course_name || '').toString().trim();
+    const mergedCourseId = (baseCourse.course_id || sourceCourse.course_id || getCourseMergeKey({ course_name: mergedCourseName }))?.toString();
+
     return {
         ...baseCourse,
         ...sourceCourse,
+        course_id: mergedCourseId || '',
+        course_name: mergedCourseName || sourceCourse.course_name,
         topics: resolvedTopics,
         textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
         textbook_urls: mergedCourseUrls,
@@ -125,10 +133,42 @@ const upsertCourseInList = (
     mergedTopics?: Topic[],
     appendedTextbookUrls: string[] = []
 ): Course[] => {
-    const courseMap = new Map(courseList.map(course => [course.course_id, course]));
-    const existingCourse = courseMap.get(sourceCourse.course_id);
-    courseMap.set(sourceCourse.course_id, mergeCourseRecord(existingCourse, sourceCourse, mergedTopics, appendedTextbookUrls));
+    const sourceKey = getCourseMergeKey(sourceCourse);
+    if (!sourceKey) return courseList;
+
+    const normalizedCourseList = courseList.filter(course => Boolean(getCourseMergeKey(course)));
+    const existingCourse = normalizedCourseList.find(course => {
+        const existingKey = getCourseMergeKey(course);
+        return existingKey === sourceKey || Boolean(sourceCourse.course_id && course.course_id === sourceCourse.course_id);
+    });
+
+    const nextCourse = mergeCourseRecord(
+        existingCourse,
+        { ...sourceCourse, course_id: sourceCourse.course_id || sourceKey },
+        mergedTopics,
+        appendedTextbookUrls
+    );
+
+    const filteredCourses = normalizedCourseList.filter(course => getCourseMergeKey(course) !== sourceKey);
+    const courseMap = new Map(filteredCourses.map(course => [getCourseMergeKey(course), course]));
+    courseMap.set(sourceKey, nextCourse);
     return Array.from(courseMap.values());
+};
+
+const normalizeCourseList = (rawCourseList: any): Course[] => {
+    if (!Array.isArray(rawCourseList)) return [];
+    return rawCourseList
+        .map((course: Course) => ({
+            ...course,
+            course_name: (course?.course_name || '').toString().trim(),
+            course_id: (course?.course_id || getCourseMergeKey(course) || '').toString(),
+            semester: normalizeSemester(course?.semester),
+            topics: Array.isArray(course?.topics) ? course.topics : [],
+            textbook_urls: normalizeTextbookUrls(course),
+            textbook_url: getPrimaryTextbookUrl(normalizeTextbookUrls(course)),
+        }))
+        .filter((course: Course) => Boolean(getCourseMergeKey(course)))
+        .reduce((acc: Course[], course: Course) => upsertCourseInList(acc, course), []);
 };
 
 const mergeCourseListsIntoTarget = (existingCourses: Course[], incomingCourses: Course[]) => {
@@ -158,7 +198,7 @@ const sanitizeCourseFromRegistrationForm = (
     const parsedUnit = Number.parseInt((course?.course_unit ?? course?.unit ?? '').toString().trim(), 10);
     const normalizedUnit = Number.isFinite(parsedUnit) ? parsedUnit : undefined;
     const status = normalizeCourseStatus(course?.course_status || course?.status);
-    const idSource = courseCode || `${courseName}_${semester}_${session || level}`;
+    const idSource = courseTitle || courseCode || `${fallbackName}_${semester}_${session || level}`;
     const courseId = normalizeTopicId(idSource);
 
     return {
@@ -373,6 +413,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [departmentId, setDepartmentId] = useState('');
     const [targetDepartmentIds, setTargetDepartmentIds] = useState<string[]>([]);
     const [coursesList, setCoursesList] = useState<Course[]>([]);
+    const [selectedCatalogCourseKey, setSelectedCatalogCourseKey] = useState('');
+    const [catalogDepartmentSelection, setCatalogDepartmentSelection] = useState<string[]>([]);
     const [courseRegistrationFile, setCourseRegistrationFile] = useState<File | null>(null);
     const [isCourseImporting, setIsCourseImporting] = useState(false);
     const [courseImportProgress, setCourseImportProgress] = useState('');
@@ -387,26 +429,87 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [uploadLevel, setUploadLevel] = useState('');
     const [uploadCourseName, setUploadCourseName] = useState('');
 
+    const loadDepartmentCourses = async (selectedDepartmentId: string) => {
+        if (!selectedDepartmentId) {
+            setCoursesList([]);
+            return;
+        }
+
+        const departmentRef = dbRef(db, `departments_data/${selectedDepartmentId}`);
+        const snap = await get(departmentRef);
+        if (snap.exists()) {
+            setCoursesList(normalizeCourseList(snap.val()?.course_list));
+            return;
+        }
+        setCoursesList([]);
+    };
+
     useEffect(() => {
         if (departmentId) {
-            const departmentRef = dbRef(db, `departments_data/${departmentId}`);
-            get(departmentRef).then(snap => {
-                if (snap.exists()) {
-                    const rawCourseList = snap.val().course_list || [];
-                    const normalizedCourseList = rawCourseList.map((course: Course) => ({
-                        ...course,
-                        semester: normalizeSemester(course.semester),
-                    }));
-                    setCoursesList(normalizedCourseList);
-                } else {
-                    setCoursesList([]);
-                }
-            });
+            loadDepartmentCourses(departmentId);
             setTargetDepartmentIds([departmentId]);
         } else {
             setTargetDepartmentIds([]);
+            setCoursesList([]);
         }
     }, [departmentId]);
+
+    const courseCatalog = useMemo(() => {
+        const catalogMap = new Map<string, { course: Course; departmentIds: Set<string> }>();
+
+        allDepartments.forEach((department: any) => {
+            const departmentCourses = normalizeCourseList(department?.course_list);
+            departmentCourses.forEach((course) => {
+                const courseKey = getCourseMergeKey(course);
+                if (!courseKey) return;
+
+                const existingEntry = catalogMap.get(courseKey);
+                if (existingEntry) {
+                    existingEntry.course = mergeCourseRecord(
+                        existingEntry.course,
+                        { ...course, course_id: existingEntry.course.course_id || course.course_id || courseKey }
+                    );
+                    existingEntry.departmentIds.add(department.id);
+                    return;
+                }
+
+                catalogMap.set(courseKey, {
+                    course: { ...course, course_id: course.course_id || courseKey },
+                    departmentIds: new Set([department.id]),
+                });
+            });
+        });
+
+        return Array.from(catalogMap.entries())
+            .map(([key, value]) => ({
+                key,
+                course: value.course,
+                departmentIds: Array.from(value.departmentIds),
+            }))
+            .sort((a, b) => a.course.course_name.localeCompare(b.course.course_name));
+    }, [allDepartments]);
+
+    const selectedCatalogCourse = courseCatalog.find(courseEntry => courseEntry.key === selectedCatalogCourseKey) || null;
+
+    useEffect(() => {
+        if (!courseCatalog.length) {
+            setSelectedCatalogCourseKey('');
+            setCatalogDepartmentSelection([]);
+            return;
+        }
+
+        const hasSelection = courseCatalog.some(courseEntry => courseEntry.key === selectedCatalogCourseKey);
+        if (!hasSelection) {
+            const firstCourse = courseCatalog[0];
+            setSelectedCatalogCourseKey(firstCourse.key);
+            setCatalogDepartmentSelection(firstCourse.departmentIds);
+        }
+    }, [courseCatalog, selectedCatalogCourseKey]);
+
+    useEffect(() => {
+        if (!selectedCatalogCourse) return;
+        setCatalogDepartmentSelection(selectedCatalogCourse.departmentIds);
+    }, [selectedCatalogCourse?.key]);
 
     const toggleTargetDepartment = (targetId: string) => {
         // Keep a defensive guard even though primary checkbox is disabled in UI.
@@ -416,6 +519,123 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                 ? prev.filter(id => id !== targetId)
                 : [...prev, targetId]
         ));
+    };
+
+    const toggleCatalogDepartment = (targetId: string) => {
+        setCatalogDepartmentSelection(prev => (
+            prev.includes(targetId)
+                ? prev.filter(id => id !== targetId)
+                : [...prev, targetId]
+        ));
+    };
+
+    const handleSaveCatalogCourseDepartments = async () => {
+        if (!selectedCatalogCourse) {
+            addToast("Select a course first", "error");
+            return;
+        }
+        if (!catalogDepartmentSelection.length) {
+            addToast("Select at least one department", "error");
+            return;
+        }
+
+        try {
+            const departmentSnapshot = await get(dbRef(db, 'departments_data'));
+            const departmentsData = departmentSnapshot.exists() ? departmentSnapshot.val() : {};
+            const updates: Record<string, Course[]> = {};
+            const selectedDepartmentSet = new Set(catalogDepartmentSelection);
+            const selectedCourseKey = selectedCatalogCourse.key;
+            const selectedCourseRecord = {
+                ...selectedCatalogCourse.course,
+                course_id: selectedCatalogCourse.course.course_id || selectedCourseKey,
+            };
+
+            Object.entries(departmentsData).forEach(([deptKey, deptValue]: [string, any]) => {
+                const existingCourses = normalizeCourseList(deptValue?.course_list);
+                const hasSelectedCourse = existingCourses.some(course => getCourseMergeKey(course) === selectedCourseKey);
+                const shouldIncludeCourse = selectedDepartmentSet.has(deptKey);
+                let nextCourses = existingCourses;
+
+                if (shouldIncludeCourse) {
+                    nextCourses = upsertCourseInList(existingCourses, selectedCourseRecord);
+                } else if (hasSelectedCourse) {
+                    nextCourses = existingCourses.filter(course => getCourseMergeKey(course) !== selectedCourseKey);
+                }
+
+                if (JSON.stringify(existingCourses) !== JSON.stringify(nextCourses)) {
+                    updates[`departments_data/${deptKey}/course_list`] = nextCourses;
+                }
+            });
+
+            if (!Object.keys(updates).length) {
+                addToast("No department changes to save", "info");
+                return;
+            }
+
+            await update(dbRef(db), updates);
+            await fetchDepartments();
+            if (departmentId) {
+                await loadDepartmentCourses(departmentId);
+            }
+            addToast("Course department access updated successfully!", "success");
+        } catch (error: any) {
+            console.error("Error updating course department access:", error);
+            addToast(error?.message || "Failed to update course departments", "error");
+        }
+    };
+
+    const handleMergeDuplicateCoursesAcrossDepartments = async () => {
+        try {
+            const departmentSnapshot = await get(dbRef(db, 'departments_data'));
+            const departmentsData = departmentSnapshot.exists() ? departmentSnapshot.val() : {};
+            const canonicalCoursesByKey = new Map<string, Course>();
+            const updates: Record<string, Course[]> = {};
+
+            Object.entries(departmentsData).forEach(([, deptValue]: [string, any]) => {
+                const departmentCourses = normalizeCourseList(deptValue?.course_list);
+                departmentCourses.forEach((course) => {
+                    const courseKey = getCourseMergeKey(course);
+                    if (!courseKey) return;
+                    const existing = canonicalCoursesByKey.get(courseKey);
+                    if (existing) {
+                        canonicalCoursesByKey.set(courseKey, mergeCourseRecord(existing, {
+                            ...course,
+                            course_id: existing.course_id || course.course_id || courseKey,
+                        }));
+                        return;
+                    }
+                    canonicalCoursesByKey.set(courseKey, { ...course, course_id: course.course_id || courseKey });
+                });
+            });
+
+            Object.entries(departmentsData).forEach(([deptKey, deptValue]: [string, any]) => {
+                const existingCourses = normalizeCourseList(deptValue?.course_list);
+                const nextCourses = normalizeCourseList(
+                    existingCourses
+                        .map((course) => canonicalCoursesByKey.get(getCourseMergeKey(course)))
+                        .filter(Boolean) as Course[]
+                );
+
+                if (JSON.stringify(existingCourses) !== JSON.stringify(nextCourses)) {
+                    updates[`departments_data/${deptKey}/course_list`] = nextCourses;
+                }
+            });
+
+            if (!Object.keys(updates).length) {
+                addToast("No duplicate same-title courses found to merge", "info");
+                return;
+            }
+
+            await update(dbRef(db), updates);
+            await fetchDepartments();
+            if (departmentId) {
+                await loadDepartmentCourses(departmentId);
+            }
+            addToast("Merged duplicate same-title courses across departments!", "success");
+        } catch (error: any) {
+            console.error("Error merging duplicate courses:", error);
+            addToast(error?.message || "Failed to merge duplicate courses", "error");
+        }
     };
 
     const handleAddQuestion = async () => {
@@ -642,12 +862,18 @@ FORMAT:
         }
     };
 
-    const handleTextbookUpload = async (courseId: string, files: File[]) => {
-        // Find selected course details from coursesList
-        const selectedCourse = coursesList.find(c => c.course_id === courseId);
-        const syncDepartmentIds = getUniqueIds([departmentId, ...targetDepartmentIds]);
+    const handleTextbookUpload = async (
+        courseId: string,
+        files: File[],
+        overrideDepartmentIds?: string[],
+        overrideCourseList?: Course[]
+    ) => {
+        const sourceCourseList = overrideCourseList || coursesList;
+        const selectedCourse = sourceCourseList.find(c => c.course_id === courseId || getCourseMergeKey(c) === courseId);
+        const syncDepartmentIds = getUniqueIds(overrideDepartmentIds || [departmentId, ...targetDepartmentIds]);
         
-        if (!files.length || !departmentId || !selectedCourse || !syncDepartmentIds.length) {
+        const primaryDepartmentId = syncDepartmentIds[0] || departmentId;
+        if (!files.length || !primaryDepartmentId || !selectedCourse || !syncDepartmentIds.length) {
             addToast("Missing file or course information", "error");
             return;
         }
@@ -672,7 +898,7 @@ FORMAT:
                 setExtractionProgress(`Uploading ${index + 1}/${pdfFiles.length} to storage...`);
 
                 // 1. Upload to Firebase Storage
-                const fileRef = storageRef(storage, `textbooks/${departmentId}/${level}/${course_name}/${file.name}`);
+                const fileRef = storageRef(storage, `textbooks/${primaryDepartmentId}/${level}/${course_name}/${file.name}`);
                 const uploadResult = await uploadBytes(fileRef, file);
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
@@ -769,31 +995,29 @@ FORMAT:
 
                 const departmentRef = dbRef(db, `departments_data/${targetDepartmentId}`);
                 const departmentSnapshot = await get(departmentRef);
-                const existingDepartmentCourses: Course[] = departmentSnapshot.exists() && Array.isArray(departmentSnapshot.val()?.course_list)
-                    ? departmentSnapshot.val().course_list.map((course: Course) => ({
-                        ...course,
-                        semester: normalizeSemester(course.semester),
-                    }))
-                    : [];
+                const existingDepartmentCourses = normalizeCourseList(departmentSnapshot.val()?.course_list);
 
-                const isPrimaryDepartmentTarget = targetDepartmentId === departmentId;
-                const coursesForTargetDepartment = isPrimaryDepartmentTarget ? coursesList : existingDepartmentCourses;
+                const isPrimaryDepartmentTarget = targetDepartmentId === primaryDepartmentId;
+                const coursesForTargetDepartment = isPrimaryDepartmentTarget ? sourceCourseList : existingDepartmentCourses;
                 const updatedCourseList = upsertCourseInList(coursesForTargetDepartment, selectedCourse, mergedSyllabus, uploadedUrls);
 
                 await update(departmentRef, {
                     course_list: updatedCourseList
                 });
 
-                if (targetDepartmentId === departmentId) {
+                if (targetDepartmentId === primaryDepartmentId) {
                     primaryDepartmentCourses = updatedCourseList;
                 }
             }
 
             if (primaryDepartmentCourses) {
-                setCoursesList(primaryDepartmentCourses);
+                if (!overrideCourseList) {
+                    setCoursesList(primaryDepartmentCourses);
+                }
             }
 
             addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} synced to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
+            await fetchDepartments();
         } catch (error: any) {
             console.error(error);
             addToast(`Error: ${error.message}`, "error");
@@ -811,6 +1035,7 @@ FORMAT:
 
         try {
             const syncDepartmentIds = getUniqueIds([departmentId, ...targetDepartmentIds]);
+            const normalizedPrimaryCourses = normalizeCourseList(coursesList);
 
             if (!syncDepartmentIds.length) {
                 addToast("Please select at least one department", "error");
@@ -818,21 +1043,17 @@ FORMAT:
             }
 
             await update(dbRef(db, `departments_data/${departmentId}`), {
-                course_list: coursesList
+                course_list: normalizedPrimaryCourses
             });
+            setCoursesList(normalizedPrimaryCourses);
 
             const additionalDepartments = syncDepartmentIds.filter(id => id !== departmentId);
             for (const targetDepartmentId of additionalDepartments) {
                 const targetDepartmentRef = dbRef(db, `departments_data/${targetDepartmentId}`);
                 const targetDepartmentSnapshot = await get(targetDepartmentRef);
-                const existingCourses: Course[] = targetDepartmentSnapshot.exists() && Array.isArray(targetDepartmentSnapshot.val()?.course_list)
-                    ? targetDepartmentSnapshot.val().course_list.map((course: Course) => ({
-                        ...course,
-                        semester: normalizeSemester(course.semester),
-                    }))
-                    : [];
+                const existingCourses = normalizeCourseList(targetDepartmentSnapshot.val()?.course_list);
 
-                const mergedCourses = mergeCourseListsIntoTarget(existingCourses, coursesList);
+                const mergedCourses = mergeCourseListsIntoTarget(existingCourses, normalizedPrimaryCourses);
 
                 await update(targetDepartmentRef, {
                     course_list: mergedCourses
@@ -840,6 +1061,7 @@ FORMAT:
             }
 
             addToast(`Course outline published to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
+            await fetchDepartments();
         } catch (error: any) {
             addToast(error.message, "error");
         }
@@ -868,7 +1090,7 @@ FORMAT:
                     onClick={() => setActiveTab('courses')}
                     className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                 >
-                    Department Outlines
+                    Courses
                 </button>
                 <button 
                     onClick={() => setActiveTab('questions')}
@@ -1072,6 +1294,106 @@ FORMAT:
             {activeTab === 'courses' && (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900">Courses Catalog</h3>
+                                <p className="text-sm text-gray-500">Manage one shared course title across all departments.</p>
+                            </div>
+                            <button
+                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
+                            >
+                                Merge Same-Title Courses
+                            </button>
+                        </div>
+
+                        {courseCatalog.length ? (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="border border-gray-100 rounded-2xl p-3 max-h-80 overflow-y-auto space-y-2">
+                                    {courseCatalog.map(courseEntry => {
+                                        const isSelected = selectedCatalogCourseKey === courseEntry.key;
+                                        const departmentNames = courseEntry.departmentIds
+                                            .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
+                                            .join(', ');
+                                        return (
+                                            <button
+                                                key={courseEntry.key}
+                                                onClick={() => setSelectedCatalogCourseKey(courseEntry.key)}
+                                                className={`w-full text-left rounded-xl border px-3 py-2 transition ${isSelected ? 'border-lime-300 bg-lime-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}
+                                            >
+                                                <p className="font-bold text-sm text-gray-900">{courseEntry.course.course_name}</p>
+                                                <p className="text-[11px] text-gray-500 mt-1">
+                                                    {courseEntry.departmentIds.length} department{courseEntry.departmentIds.length !== 1 ? 's' : ''}: {departmentNames}
+                                                </p>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="border border-gray-100 rounded-2xl p-4 space-y-4">
+                                    {selectedCatalogCourse ? (
+                                        <>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Selected Course</p>
+                                                <h4 className="text-lg font-black text-gray-900">{selectedCatalogCourse.course.course_name}</h4>
+                                            </div>
+
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Departments Offering This Course</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                                                    {allDepartments.map(dept => (
+                                                        <label key={dept.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 border text-xs ${catalogDepartmentSelection.includes(dept.id) ? 'border-lime-200 bg-lime-50 text-gray-800' : 'border-gray-100 text-gray-500 bg-white'}`}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={catalogDepartmentSelection.includes(dept.id)}
+                                                                onChange={() => toggleCatalogDepartment(dept.id)}
+                                                                className="accent-lime-600"
+                                                            />
+                                                            <span className="font-medium">{dept.department_name}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                                <button
+                                                    onClick={handleSaveCatalogCourseDepartments}
+                                                    className="mt-3 w-full bg-gray-900 text-white py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-black"
+                                                >
+                                                    Save Department Access
+                                                </button>
+                                            </div>
+
+                                            <div className="pt-2 border-t border-gray-100">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Upload Textbooks for This Course</p>
+                                                <label className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-dashed border-lime-200 bg-lime-50 text-lime-700 text-[11px] font-black uppercase tracking-widest cursor-pointer hover:bg-lime-100">
+                                                    Upload PDF Textbooks
+                                                    <input
+                                                        type="file"
+                                                        multiple
+                                                        accept="application/pdf"
+                                                        className="hidden"
+                                                        onChange={e => {
+                                                            const files = e.target.files ? Array.from(e.target.files) : [];
+                                                            if (files.length) {
+                                                                const catalogCourseId = selectedCatalogCourse.course.course_id || selectedCatalogCourse.key;
+                                                                handleTextbookUpload(catalogCourseId, files, catalogDepartmentSelection, [selectedCatalogCourse.course]);
+                                                            }
+                                                            e.currentTarget.value = '';
+                                                        }}
+                                                    />
+                                                </label>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">Select a course to manage departments and upload textbooks.</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-6 border border-dashed border-gray-200 rounded-2xl text-sm text-gray-500">
+                                No courses available yet. Add courses in a department below or import from a registration form.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                             <div>
                                 <h3 className="text-xl font-black text-gray-900 mb-1">Department Content Manager</h3>
@@ -1194,8 +1516,9 @@ FORMAT:
                                                             value={s.course_name} 
                                                             onChange={e => {
                                                                 const list = [...coursesList];
-                                                                list[sIdx].course_name = e.target.value;
-                                                                list[sIdx].course_id = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                                                const nextName = e.target.value;
+                                                                list[sIdx].course_name = nextName;
+                                                                list[sIdx].course_id = normalizeTopicId(nextName);
                                                                 setCoursesList(list);
                                                             }}
                                                             className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white focus:border-lime-500 transition-all outline-none"
@@ -1245,9 +1568,9 @@ FORMAT:
                                                             const list = [...coursesList];
                                                             const normalizedCode = e.target.value.toUpperCase();
                                                             list[sIdx].course_code = normalizedCode;
-                                                            list[sIdx].course_id = normalizedCode.trim()
-                                                                ? normalizeTopicId(normalizedCode)
-                                                                : list[sIdx].course_id;
+                                                            if (!list[sIdx].course_name?.trim() && normalizedCode.trim()) {
+                                                                list[sIdx].course_id = normalizeTopicId(normalizedCode);
+                                                            }
                                                             setCoursesList(list);
                                                         }}
                                                         className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
