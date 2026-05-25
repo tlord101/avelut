@@ -25,6 +25,7 @@ const SEMESTERS = ['first', 'second'] as const;
 const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'] as const;
 const MAX_SKIPPED_USERS_PREVIEW = 3;
 const MAX_MAILTO_LINK_LENGTH = 1900;
+const MAX_COURSE_STATUS_LENGTH = 12;
 const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
 const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
     semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
@@ -45,7 +46,7 @@ const normalizeLevel = (value?: string) => {
 const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
 const normalizeCourseStatus = (value?: string) => {
     const normalized = (value || '').toString().trim().toUpperCase();
-    return normalized ? normalized.slice(0, 12) : '';
+    return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
 const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
@@ -305,7 +306,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             const successfulSends = targetUsers.length - skippedUsers.length;
             if (skippedUsers.length > 0) {
                 const skippedPreview = skippedUsers.slice(0, MAX_SKIPPED_USERS_PREVIEW).join(', ');
-                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped: ${skippedPreview}${skippedUsers.length > MAX_SKIPPED_USERS_PREVIEW ? ', ...' : ''}.`, "info");
+                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped (failed ID generation): ${skippedPreview}${skippedUsers.length > MAX_SKIPPED_USERS_PREVIEW ? ', ...' : ''}.`, "info");
             } else {
                 addToast(`Push notification sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}.`, "success");
             }
@@ -343,7 +344,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
             : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
         if (mailtoLink.length > MAX_MAILTO_LINK_LENGTH) {
-            addToast("Too many recipients for one email draft. Please use single-user mode or smaller batches.", "error");
+            addToast("Too many recipients for one email draft. Please send emails in multiple single-user sends.", "error");
             return;
         }
 
@@ -1242,10 +1243,11 @@ FORMAT:
                                                         value={s.course_code || ''}
                                                         onChange={e => {
                                                             const list = [...coursesList];
-                                                            list[sIdx].course_code = e.target.value.toUpperCase();
-                                                            if (!list[sIdx].course_id && e.target.value.trim()) {
-                                                                list[sIdx].course_id = normalizeTopicId(e.target.value);
-                                                            }
+                                                            const normalizedCode = e.target.value.toUpperCase();
+                                                            list[sIdx].course_code = normalizedCode;
+                                                            list[sIdx].course_id = normalizedCode.trim()
+                                                                ? normalizeTopicId(normalizedCode)
+                                                                : list[sIdx].course_id;
                                                             setCoursesList(list);
                                                         }}
                                                         className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
