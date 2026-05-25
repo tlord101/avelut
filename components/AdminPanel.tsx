@@ -225,11 +225,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         setIsSendingPush(true);
         try {
             const updates: Record<string, any> = {};
-            let skippedUsers = 0;
+            const skippedUsers: string[] = [];
             targetUsers.forEach(user => {
                 const notificationId = push(dbRef(db, `notifications/${user.uid}`)).key;
                 if (!notificationId) {
-                    skippedUsers += 1;
+                    skippedUsers.push(user.display_name || user.uid);
                     return;
                 }
                 updates[`notifications/${user.uid}/${notificationId}`] = {
@@ -249,9 +249,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             await update(dbRef(db), updates);
             setAnnouncementTitle('');
             setAnnouncementMessage('');
-            const successfulSends = targetUsers.length - skippedUsers;
-            if (skippedUsers > 0) {
-                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. ${skippedUsers} skipped.`, "info");
+            const successfulSends = targetUsers.length - skippedUsers.length;
+            if (skippedUsers.length > 0) {
+                const skippedPreview = skippedUsers.slice(0, 3).join(', ');
+                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped: ${skippedPreview}${skippedUsers.length > 3 ? ', ...' : ''}.`, "info");
             } else {
                 addToast(`Push notification sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}.`, "success");
             }
@@ -288,9 +289,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         const mailtoLink = recipientMode === 'single'
             ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
             : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
+        if (mailtoLink.length > 1900) {
+            addToast("Too many recipients for one email draft. Please use single-user mode or smaller batches.", "error");
+            return;
+        }
 
         try {
-            window.location.href = mailtoLink;
+            window.open(mailtoLink, '_blank', 'noopener,noreferrer');
             addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''}.`, "success");
         } catch (error: any) {
             console.error("Error opening email client:", error);
