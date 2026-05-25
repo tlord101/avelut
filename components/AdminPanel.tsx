@@ -127,6 +127,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [selectedRecipientId, setSelectedRecipientId] = useState('');
     const [announcementTitle, setAnnouncementTitle] = useState('');
     const [announcementMessage, setAnnouncementMessage] = useState('');
+    const [notificationType, setNotificationType] = useState<'study_update' | 'exam_reminder' | 'welcome'>('study_update');
     const [emailSubject, setEmailSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
     const [isSendingPush, setIsSendingPush] = useState(false);
@@ -232,7 +233,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     return;
                 }
                 updates[`notifications/${user.uid}/${notificationId}`] = {
-                    type: 'study_update',
+                    type: notificationType,
                     title,
                     message,
                     is_read: false,
@@ -250,9 +251,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             setAnnouncementMessage('');
             const successfulSends = targetUsers.length - skippedUsers;
             if (skippedUsers > 0) {
-                addToast(`Push sent to ${successfulSends} user${successfulSends > 1 ? 's' : ''}. ${skippedUsers} skipped.`, "info");
+                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. ${skippedUsers} skipped.`, "info");
             } else {
-                addToast(`Push notification sent to ${successfulSends} user${successfulSends > 1 ? 's' : ''}.`, "success");
+                addToast(`Push notification sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}.`, "success");
             }
         } catch (error: any) {
             console.error("Error sending push notifications:", error);
@@ -290,7 +291,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
         try {
             window.location.href = mailtoLink;
-            addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length > 1 ? 's' : ''}.`, "success");
+            addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''}.`, "success");
         } catch (error: any) {
             console.error("Error opening email client:", error);
             addToast(error?.message || "Could not open your email client.", "error");
@@ -1229,6 +1230,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                     rows={4}
                                     className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
                                 />
+                                <select
+                                    value={notificationType}
+                                    onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                >
+                                    <option value="study_update">Study Update</option>
+                                    <option value="exam_reminder">Exam Reminder</option>
+                                    <option value="welcome">Welcome</option>
+                                </select>
                                 <button
                                     onClick={handleSendPushNotification}
                                     disabled={isSendingPush}
