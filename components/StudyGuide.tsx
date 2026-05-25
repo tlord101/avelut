@@ -19,7 +19,7 @@ import { LockIcon } from './icons/LockIcon';
 
 declare var __app_id: string;
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 // --- INLINE ICONS ---
 const CheckCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (

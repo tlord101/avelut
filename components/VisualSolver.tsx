@@ -10,7 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (

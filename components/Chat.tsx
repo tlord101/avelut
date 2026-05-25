@@ -18,7 +18,7 @@ import { PlusIcon } from './icons/PlusIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const timeAgo = (timestamp: number): string => {
     const now = Date.now();
