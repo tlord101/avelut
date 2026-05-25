@@ -58,6 +58,8 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
+const DEFAULT_VISIBLE_TABS: Array<'departments' | 'courses' | 'questions' | 'users'> = ['departments', 'courses', 'questions', 'users'];
+
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
     if (segments[0] !== 'admin' || segments[1] !== 'courses') {
@@ -94,6 +96,10 @@ const buildCourseManagerPath = (departmentId?: string, level?: string, courseId?
     const encodedCourse = courseId ? `/${encodeURIComponent(courseId)}` : '';
     return `/admin/courses/manager/${encodedDepartment}/${encodedLevel}${encodedCourse}`;
 };
+
+const matchesCourseIdentifier = (course: Partial<Course>, courseId: string) => (
+    course.course_id === courseId || getCourseMergeKey(course) === courseId
+);
 
 const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
     const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
@@ -263,9 +269,9 @@ const sanitizeCourseFromRegistrationForm = (
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab = 'departments', allowedTabs }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const [activeTab, setActiveTabState] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
+    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
     const visibleTabs = useMemo(
-        () => (allowedTabs && allowedTabs.length ? allowedTabs : ['departments', 'courses', 'questions', 'users']),
+        () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
         [allowedTabs]
     );
     const courseAdminView = useMemo(() => getCourseAdminView(location.pathname), [location.pathname]);
@@ -487,8 +493,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab 
 
     useEffect(() => {
         const pathTab = location.pathname.split('/').filter(Boolean)[1];
-        const normalizedTab = (pathTab === 'courses' || pathTab === 'questions' || pathTab === 'users') ? pathTab : 'departments';
-        setActiveTabState(visibleTabs.includes(normalizedTab) ? normalizedTab : visibleTabs[0]);
+        const selectedTab = (pathTab && visibleTabs.includes(pathTab) ? pathTab : (visibleTabs[0] || 'departments')) as 'departments' | 'courses' | 'questions' | 'users';
+        setActiveTab(selectedTab);
     }, [location.pathname, visibleTabs]);
 
     useEffect(() => {
@@ -504,7 +510,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab 
             setCoursesList([]);
             setCourseDetailFiles([]);
         }
-    }, [courseAdminView.mode, courseAdminView.departmentId]);
+    }, [courseAdminView]);
 
     const loadDepartmentCourses = async (selectedDepartmentId: string) => {
         if (!selectedDepartmentId) {
@@ -1178,7 +1184,7 @@ FORMAT:
         () => (
             courseAdminView.mode === 'manager-detail'
                 ? managerCoursesForLevel.find((course) => (
-                    course.course_id === courseAdminView.courseId || getCourseMergeKey(course) === courseAdminView.courseId
+                    matchesCourseIdentifier(course, courseAdminView.courseId)
                 )) || null
                 : null
         ),
@@ -1487,6 +1493,7 @@ FORMAT:
                                                         .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
                                                         .join(', ');
                                                     const firstDepartmentId = departmentIds[0] || '';
+                                                    const hasMultipleDepartments = departmentIds.length > 1;
                                                     return (
                                                         <tr key={course.course_id} className="hover:bg-gray-50">
                                                             <td className="px-6 py-4">
@@ -1503,9 +1510,10 @@ FORMAT:
                                                             <td className="px-6 py-4 text-right">
                                                                 <button
                                                                     onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, course.course_id))}
+                                                                    title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
                                                                     className="text-sm font-bold text-lime-600 hover:text-lime-700"
                                                                 >
-                                                                    Open
+                                                                    {hasMultipleDepartments ? 'Open Primary' : 'Open'}
                                                                 </button>
                                                             </td>
                                                         </tr>
