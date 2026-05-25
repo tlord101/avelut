@@ -509,7 +509,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     useEffect(() => {
         if (!selectedCatalogCourse) return;
         setCatalogDepartmentSelection(selectedCatalogCourse.departmentIds);
-    }, [selectedCatalogCourse?.key]);
+    }, [selectedCatalogCourseKey, courseCatalog]);
 
     const toggleTargetDepartment = (targetId: string) => {
         // Keep a defensive guard even though primary checkbox is disabled in UI.
@@ -1297,7 +1297,7 @@ FORMAT:
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
                             <div>
                                 <h3 className="text-xl font-black text-gray-900">Courses Catalog</h3>
-                                <p className="text-sm text-gray-500">Manage one shared course title across all departments.</p>
+                                <p className="text-sm text-gray-500">Manage shared course titles across all departments.</p>
                             </div>
                             <button
                                 onClick={handleMergeDuplicateCoursesAcrossDepartments}
