@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { db, storage } from '../firebase';
 import { ref as dbRef, set, push, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -15,10 +16,12 @@ import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { CheckIcon } from './icons/CheckIcon';
 
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 interface AdminPanelProps {
     userProfile: UserProfile;
+    initialTab?: 'questions' | 'courses' | 'users' | 'departments';
+    allowedTabs?: Array<'questions' | 'courses' | 'users' | 'departments'>;
 }
 
 const SEMESTERS = ['first', 'second'] as const;
@@ -48,6 +51,55 @@ const normalizeCourseStatus = (value?: string) => {
     const normalized = (value || '').toString().trim().toUpperCase();
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
+
+type CourseAdminView =
+    | { mode: 'global' }
+    | { mode: 'manager-root' }
+    | { mode: 'manager-list'; departmentId: string; level: string }
+    | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
+
+const DEFAULT_VISIBLE_TABS: Array<'departments' | 'courses' | 'questions' | 'users'> = ['departments', 'courses', 'questions', 'users'];
+
+const getCourseAdminView = (pathname: string): CourseAdminView => {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments[0] !== 'admin' || segments[1] !== 'courses') {
+        return { mode: 'global' };
+    }
+
+    if (segments.length <= 2 || segments[2] === 'all') {
+        return { mode: 'global' };
+    }
+
+    if (segments[2] !== 'manager') {
+        return { mode: 'global' };
+    }
+
+    const departmentId = segments[3] ? decodeURIComponent(segments[3]) : '';
+    const level = segments[4] ? decodeURIComponent(segments[4]) : '';
+    const courseId = segments[5] ? decodeURIComponent(segments[5]) : '';
+
+    if (!departmentId || !level) {
+        return { mode: 'manager-root' };
+    }
+
+    if (!courseId) {
+        return { mode: 'manager-list', departmentId, level };
+    }
+
+    return { mode: 'manager-detail', departmentId, level, courseId };
+};
+
+const buildCourseManagerPath = (departmentId?: string, level?: string, courseId?: string) => {
+    if (!departmentId || !level) return '/admin/courses/manager';
+    const encodedDepartment = encodeURIComponent(departmentId);
+    const encodedLevel = encodeURIComponent(level);
+    const encodedCourse = courseId ? `/${encodeURIComponent(courseId)}` : '';
+    return `/admin/courses/manager/${encodedDepartment}/${encodedLevel}${encodedCourse}`;
+};
+
+const matchesCourseIdentifier = (course: Partial<Course>, courseId: string) => (
+    course.course_id === courseId || getCourseMergeKey(course) === courseId
+);
 
 const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
     const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
@@ -214,8 +266,15 @@ const sanitizeCourseFromRegistrationForm = (
     };
 };
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
-    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
+export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab = 'departments', allowedTabs }) => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
+    const visibleTabs = useMemo(
+        () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
+        [allowedTabs]
+    );
+    const courseAdminView = useMemo(() => getCourseAdminView(location.pathname), [location.pathname]);
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
@@ -231,6 +290,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     // Departments State
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
+    const [courseSearchQuery, setCourseSearchQuery] = useState('');
+    const [managerSelectionDepartmentId, setManagerSelectionDepartmentId] = useState('');
+    const [managerSelectionLevel, setManagerSelectionLevel] = useState('');
+    const [courseDetailFiles, setCourseDetailFiles] = useState<File[]>([]);
 
     const fetchDepartments = async () => {
         try {
@@ -398,7 +461,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     // Past Questions State
-    const [courseSearch, setCourseSearch] = useState('');
     const [year, setYear] = useState('');
     const [newQuestion, setNewQuestion] = useState<Question>({
         question: '',
@@ -428,6 +490,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [uploadDepartmentId, setUploadDepartmentId] = useState('');
     const [uploadLevel, setUploadLevel] = useState('');
     const [uploadCourseName, setUploadCourseName] = useState('');
+
+    useEffect(() => {
+        const pathTab = location.pathname.split('/').filter(Boolean)[1];
+        const selectedTab = (pathTab && visibleTabs.includes(pathTab) ? pathTab : (visibleTabs[0] || 'departments')) as 'departments' | 'courses' | 'questions' | 'users';
+        setActiveTab(selectedTab);
+    }, [location.pathname, visibleTabs]);
+
+    useEffect(() => {
+        if (courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail') {
+            setDepartmentId(courseAdminView.departmentId);
+            setTargetDepartmentIds([courseAdminView.departmentId]);
+            return;
+        }
+
+        if (courseAdminView.mode === 'manager-root') {
+            setDepartmentId('');
+            setTargetDepartmentIds([]);
+            setCoursesList([]);
+            setCourseDetailFiles([]);
+        }
+    }, [courseAdminView]);
 
     const loadDepartmentCourses = async (selectedDepartmentId: string) => {
         if (!selectedDepartmentId) {
@@ -665,6 +748,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             addToast("Please select a PDF file and enter Department, Level, Course Name and Year", "error");
             return;
         }
+        if (!ai) {
+            addToast("AI features are unavailable because API_KEY is missing.", "error");
+            return;
+        }
 
         setIsPQProcessing(true);
         setExtractionProgress('Extracting questions with Gemini 3.5 Flash...');
@@ -749,6 +836,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         }
         if (!courseRegistrationFile) {
             addToast("Please select a course registration PDF", "error");
+            return;
+        }
+        if (!ai) {
+            addToast("AI features are unavailable because API_KEY is missing.", "error");
             return;
         }
 
@@ -868,6 +959,10 @@ FORMAT:
         overrideDepartmentIds?: string[],
         overrideCourseList?: Course[]
     ) => {
+        if (!ai) {
+            addToast("AI features are unavailable because API_KEY is missing.", "error");
+            return;
+        }
         const sourceCourseList = overrideCourseList || coursesList;
         const selectedCourse = sourceCourseList.find(c => c.course_id === courseId || getCourseMergeKey(c) === courseId);
         const syncDepartmentIds = getUniqueIds(overrideDepartmentIds || [departmentId, ...targetDepartmentIds]);
@@ -1071,6 +1166,53 @@ FORMAT:
         setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: LEVELS[0], semester: DEFAULT_SEMESTER }]);
     };
 
+    const selectedManagerDepartment = useMemo(
+        () => allDepartments.find((dept) => dept.id === courseAdminView.departmentId) || null,
+        [allDepartments, courseAdminView]
+    );
+
+    const managerCoursesForLevel = useMemo(
+        () => (
+            courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail'
+                ? coursesList.filter((course) => course.level === courseAdminView.level)
+                : []
+        ),
+        [courseAdminView, coursesList]
+    );
+
+    const selectedManagerCourse = useMemo(
+        () => (
+            courseAdminView.mode === 'manager-detail'
+                ? managerCoursesForLevel.find((course) => (
+                    matchesCourseIdentifier(course, courseAdminView.courseId)
+                )) || null
+                : null
+        ),
+        [courseAdminView, managerCoursesForLevel]
+    );
+
+    const filteredGlobalCourses = useMemo(() => {
+        const query = courseSearchQuery.trim().toLowerCase();
+        return courseCatalog.filter(({ course, departmentIds }) => {
+            if (!query) return true;
+            const departmentNames = departmentIds
+                .map((id) => allDepartments.find((dept) => dept.id === id)?.department_name || id)
+                .join(' ');
+            return [
+                course.course_name,
+                course.course_code,
+                course.course_id,
+                course.level,
+                course.semester,
+                departmentNames,
+            ].some((value) => (value || '').toString().toLowerCase().includes(query));
+        });
+    }, [allDepartments, courseCatalog, courseSearchQuery]);
+
+    const handleCourseTabNavigate = (path: string) => {
+        navigate(path);
+    };
+
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
     }
@@ -1080,30 +1222,38 @@ FORMAT:
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button 
-                    onClick={() => setActiveTab('departments')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Departments
-                </button>
-                <button 
-                    onClick={() => setActiveTab('courses')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Courses
-                </button>
-                <button 
-                    onClick={() => setActiveTab('questions')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Past Questions
-                </button>
-                <button 
-                    onClick={() => setActiveTab('users')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    User Management
-                </button>
+                {visibleTabs.includes('departments') && (
+                    <button 
+                        onClick={() => handleCourseTabNavigate('/admin')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Departments
+                    </button>
+                )}
+                {visibleTabs.includes('courses') && (
+                    <button 
+                        onClick={() => handleCourseTabNavigate('/admin/courses')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Courses
+                    </button>
+                )}
+                {visibleTabs.includes('questions') && (
+                    <button 
+                        onClick={() => handleCourseTabNavigate('/admin/questions')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Past Questions
+                    </button>
+                )}
+                {visibleTabs.includes('users') && (
+                    <button 
+                        onClick={() => handleCourseTabNavigate('/admin/users')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        User Management
+                    </button>
+                )}
             </div>
 
             {activeTab === 'departments' && (
@@ -1293,497 +1443,280 @@ FORMAT:
 
             {activeTab === 'courses' && (
                 <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
-                            <div>
-                                <h3 className="text-xl font-black text-gray-900">Courses Catalog</h3>
-                                <p className="text-sm text-gray-500">Manage shared course titles across all departments.</p>
-                            </div>
-                            <button
-                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
-                                className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
-                            >
-                                Merge Same-Title Courses
-                            </button>
-                        </div>
-
-                        {courseCatalog.length ? (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div className="border border-gray-100 rounded-2xl p-3 max-h-80 overflow-y-auto space-y-2">
-                                    {courseCatalog.map(courseEntry => {
-                                        const isSelected = selectedCatalogCourseKey === courseEntry.key;
-                                        const departmentNames = courseEntry.departmentIds
-                                            .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
-                                            .join(', ');
-                                        return (
-                                            <button
-                                                key={courseEntry.key}
-                                                onClick={() => setSelectedCatalogCourseKey(courseEntry.key)}
-                                                className={`w-full text-left rounded-xl border px-3 py-2 transition ${isSelected ? 'border-lime-300 bg-lime-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}
-                                            >
-                                                <p className="font-bold text-sm text-gray-900">{courseEntry.course.course_name}</p>
-                                                <p className="text-[11px] text-gray-500 mt-1">
-                                                    {courseEntry.departmentIds.length} department{courseEntry.departmentIds.length !== 1 ? 's' : ''}: {departmentNames}
-                                                </p>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                <div className="border border-gray-100 rounded-2xl p-4 space-y-4">
-                                    {selectedCatalogCourse ? (
-                                        <>
-                                            <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Selected Course</p>
-                                                <h4 className="text-lg font-black text-gray-900">{selectedCatalogCourse.course.course_name}</h4>
-                                            </div>
-
-                                            <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Departments Offering This Course</p>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
-                                                    {allDepartments.map(dept => (
-                                                        <label key={dept.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 border text-xs ${catalogDepartmentSelection.includes(dept.id) ? 'border-lime-200 bg-lime-50 text-gray-800' : 'border-gray-100 text-gray-500 bg-white'}`}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={catalogDepartmentSelection.includes(dept.id)}
-                                                                onChange={() => toggleCatalogDepartment(dept.id)}
-                                                                className="accent-lime-600"
-                                                            />
-                                                            <span className="font-medium">{dept.department_name}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                                <button
-                                                    onClick={handleSaveCatalogCourseDepartments}
-                                                    className="mt-3 w-full bg-gray-900 text-white py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-black"
-                                                >
-                                                    Save Department Access
-                                                </button>
-                                            </div>
-
-                                            <div className="pt-2 border-t border-gray-100">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Upload Textbooks for This Course</p>
-                                                <label className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-dashed border-lime-200 bg-lime-50 text-lime-700 text-[11px] font-black uppercase tracking-widest cursor-pointer hover:bg-lime-100">
-                                                    Upload PDF Textbooks
-                                                    <input
-                                                        type="file"
-                                                        multiple
-                                                        accept="application/pdf"
-                                                        className="hidden"
-                                                        onChange={e => {
-                                                            const files = e.target.files ? Array.from(e.target.files) : [];
-                                                            if (files.length) {
-                                                                const catalogCourseId = selectedCatalogCourse.course.course_id || selectedCatalogCourse.key;
-                                                                handleTextbookUpload(catalogCourseId, files, catalogDepartmentSelection, [selectedCatalogCourse.course]);
-                                                            }
-                                                            e.currentTarget.value = '';
-                                                        }}
-                                                    />
-                                                </label>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <p className="text-sm text-gray-500">Select a course to manage departments and upload textbooks.</p>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-6 border border-dashed border-gray-200 rounded-2xl text-sm text-gray-500">
-                                No courses available yet. Add courses in a department below or import from a registration form.
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                            <div>
-                                <h3 className="text-xl font-black text-gray-900 mb-1">Department Content Manager</h3>
-                                <p className="text-sm text-gray-500 font-medium">Define course outlines and upload textbooks for grounding.</p>
-                            </div>
-                            <select 
-                                value={departmentId} 
-                                onChange={e => setDepartmentId(e.target.value)}
-                                className="w-full md:w-64 p-3 border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-700 outline-none focus:bg-white focus:ring-4 focus:ring-lime-500/10 transition-all"
-                            >
-                                <option value="">Select Department</option>
-                                {allDepartments.map(dept => (
-                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="mb-8 p-4 bg-white border border-gray-200 rounded-2xl">
-                            <h4 className="text-sm font-black text-gray-800 uppercase tracking-wider mb-3">Import Courses from Registration PDF</h4>
-                            <p className="text-xs text-gray-500 mb-4">Upload a course registration form and auto-create first/second semester courses, then edit manually if needed.</p>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                                <select
-                                    value={courseImportLevelOverride}
-                                    onChange={e => setCourseImportLevelOverride(e.target.value)}
-                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none"
-                                >
-                                    <option value="">Use Extracted Level</option>
-                                    {LEVELS.map(lvl => (
-                                        <option key={lvl} value={lvl}>{lvl}</option>
-                                    ))}
-                                </select>
-                                <input
-                                    type="text"
-                                    value={courseImportSessionOverride}
-                                    onChange={e => setCourseImportSessionOverride(e.target.value)}
-                                    placeholder="Session override (e.g. 2025/2026)"
-                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none md:col-span-2"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-3">
-                                <input
-                                    type="file"
-                                    accept="application/pdf"
-                                    onChange={e => setCourseRegistrationFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
-                                />
-                                {isCourseImporting && (
-                                    <div className="flex items-center gap-1.5 text-lime-600 text-sm font-medium">
-                                        <span className="animate-spin">⏳</span>
-                                        <span>{courseImportProgress || 'Importing courses...'}</span>
+                    {courseAdminView.mode === 'global' && (
+                        <div className="space-y-6">
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900">All Courses</h3>
+                                        <p className="text-sm text-gray-500">Search every course across departments.</p>
                                     </div>
-                                )}
-                                <button
-                                    onClick={handleCourseRegistrationImport}
-                                    disabled={isCourseImporting || !courseRegistrationFile || !departmentId}
-                                    className={`w-full py-3 rounded-xl font-bold transition ${isCourseImporting || !courseRegistrationFile || !departmentId ? 'bg-gray-300 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-sm'}`}
-                                >
-                                    {isCourseImporting ? 'Importing Courses...' : 'Extract Courses from PDF'}
-                                </button>
-                            </div>
-                        </div>
-                        {departmentId && (
-                            <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-2xl">
-                                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Course Access Departments</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {allDepartments.map(dept => {
-                                        const isSelected = targetDepartmentIds.includes(dept.id);
-                                        const isPrimary = dept.id === departmentId;
-                                        return (
-                                            <label key={dept.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 border text-sm ${isSelected ? 'bg-white border-lime-200 text-gray-800' : 'bg-white border-gray-100 text-gray-500'}`}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    disabled={isPrimary}
-                                                    onChange={() => toggleTargetDepartment(dept.id)}
-                                                    className="accent-lime-600"
-                                                />
-                                                <span className="font-medium">
-                                                    {dept.department_name}
-                                                    {isPrimary ? ' (primary)' : ''}
-                                                </span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {departmentId ? (
-                            <div className="max-w-4xl mx-auto space-y-8">
-                                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-gray-400 shadow-sm">
-                                            <StackIcon className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Department</p>
-                                            <p className="font-bold text-gray-800">{allDepartments.find(d => d.id === departmentId)?.department_name}</p>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={addCourseField}
-                                        className="inline-flex items-center gap-2 bg-white hover:bg-gray-100 px-5 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all border border-gray-100 shadow-sm"
+                                    <button
+                                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
                                     >
-                                        <span>+</span> New Course
+                                        Open Course Manager
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {coursesList.map((s, sIdx) => {
-                                        const textbookUrls = normalizeTextbookUrls(s);
-                                        const hasTextbooks = textbookUrls.length > 0;
-                                        return (
-                                        <div key={sIdx} className="group p-6 border border-gray-100 rounded-[2rem] bg-white shadow-sm hover:shadow-xl hover:border-lime-200 transition-all duration-300">
-                                            <div className="space-y-4 mb-6">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex-1">
-                                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Course Details</label>
-                                                        <input 
-                                                            type="text" placeholder="Course Name (e.g., Algebra)"
-                                                            value={s.course_name} 
-                                                            onChange={e => {
-                                                                const list = [...coursesList];
-                                                                const nextName = e.target.value;
-                                                                list[sIdx].course_name = nextName;
-                                                                if (!list[sIdx].course_id?.trim()) {
-                                                                    list[sIdx].course_id = normalizeTopicId(nextName);
-                                                                }
-                                                                setCoursesList(list);
-                                                            }}
-                                                            className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white focus:border-lime-500 transition-all outline-none"
-                                                        />
-                                                    </div>
-                                                    <div className="w-24">
-                                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Level</label>
-                                                        <select 
-                                                            value={s.level} 
-                                                            onChange={e => {
-                                                                const list = [...coursesList];
-                                                                list[sIdx].level = e.target.value;
-                                                                setCoursesList(list);
-                                                            }}
-                                                            className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none"
-                                                        >
-                                                            {LEVELS.map(lvl => (
-                                                                <option key={lvl} value={lvl}>{lvl}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div className="w-28">
-                                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Semester</label>
-                                                        <select
-                                                            value={normalizeSemester(s.semester)}
-                                                            onChange={e => {
-                                                                const list = [...coursesList];
-                                                                list[sIdx].semester = e.target.value as 'first' | 'second';
-                                                                setCoursesList(list);
-                                                            }}
-                                                            className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none"
-                                                        >
-                                                            {SEMESTERS.map(semester => (
-                                                                <option key={semester} value={semester}>
-                                                                    {semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Course Code"
-                                                        value={s.course_code || ''}
-                                                        onChange={e => {
-                                                            const list = [...coursesList];
-                                                            const normalizedCode = e.target.value.toUpperCase();
-                                                            list[sIdx].course_code = normalizedCode;
-                                                            if (!list[sIdx].course_name?.trim() && normalizedCode.trim()) {
-                                                                list[sIdx].course_id = normalizeTopicId(normalizedCode);
-                                                            }
-                                                            setCoursesList(list);
-                                                        }}
-                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Session (e.g. 2025/2026)"
-                                                        value={s.academic_session || ''}
-                                                        onChange={e => {
-                                                            const list = [...coursesList];
-                                                            list[sIdx].academic_session = e.target.value;
-                                                            setCoursesList(list);
-                                                        }}
-                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                    />
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        placeholder="Unit"
-                                                        value={s.course_unit ?? ''}
-                                                        onChange={e => {
-                                                            const list = [...coursesList];
-                                                            const nextValue = e.target.value === '' ? undefined : Number(e.target.value);
-                                                            list[sIdx].course_unit = Number.isFinite(nextValue as number) ? (nextValue as number) : undefined;
-                                                            setCoursesList(list);
-                                                        }}
-                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Status (e.g. C/R)"
-                                                        value={s.course_status || ''}
-                                                        onChange={e => {
-                                                            const list = [...coursesList];
-                                                            list[sIdx].course_status = normalizeCourseStatus(e.target.value) || undefined;
-                                                            setCoursesList(list);
-                                                        }}
-                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                    />
-                                                </div>
+                                <div className="flex flex-col md:flex-row gap-3">
+                                    <input
+                                        type="text"
+                                        value={courseSearchQuery}
+                                        onChange={e => setCourseSearchQuery(e.target.value)}
+                                        placeholder="Search by course name, code, level, or department..."
+                                        className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none"
+                                    />
+                                    <button
+                                        onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                        className="px-4 py-3 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
+                                    >
+                                        Merge Same-Title Courses
+                                    </button>
+                                </div>
 
-                                                {/* INLINE TEXTBOOK UPLOAD */}
-                                                <div className="relative pt-2">
-                                                    <div className={`p-4 rounded-2xl border ${hasTextbooks ? 'bg-lime-50 border-lime-100' : 'bg-gray-50 border-dashed border-gray-200'} transition-all`}>
-                                                        {hasTextbooks ? (
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-lime-600 shadow-sm">
-                                                                        <CheckIcon className="w-4 h-4" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-[10px] font-black text-lime-600 uppercase tracking-widest">
-                                                                            {textbookUrls.length} Textbook{textbookUrls.length > 1 ? 's' : ''} Active
-                                                                        </p>
-                                                                        <div tabIndex={0} aria-label="Uploaded textbook documents" className="max-h-16 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-lime-200">
-                                                                            {textbookUrls.map((url, urlIndex) => (
-                                                                                <a key={url} href={url} target="_blank" rel="noopener noreferrer" aria-label={`View textbook document ${urlIndex + 1}`} className="block text-xs font-bold text-gray-800 hover:underline">
-                                                                                    View Document {urlIndex + 1}
-                                                                                </a>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <label className="cursor-pointer text-[10px] font-black text-gray-400 hover:text-gray-900 uppercase">
-                                                                    Add More Textbooks
-                                                                    <input type="file" multiple className="hidden" accept="application/pdf" onChange={e => {
-                                                                        const files = e.target.files ? Array.from(e.target.files) : [];
-                                                                        if(files.length) handleTextbookUpload(s.course_id, files);
-                                                                        e.currentTarget.value = '';
-                                                                    }} />
-                                                                </label>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex flex-col items-center gap-2">
-                                                                <label className="cursor-pointer flex flex-col items-center">
-                                                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-300 shadow-sm mb-1 group-hover:text-lime-500 transition-colors">
-                                                                        <GraduationCapIcon className="w-5 h-5" />
-                                                                    </div>
-                                                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Upload Textbooks</span>
-                                                                    <input type="file" multiple className="hidden" accept="application/pdf" onChange={e => {
-                                                                        const files = e.target.files ? Array.from(e.target.files) : [];
-                                                                        if(files.length) handleTextbookUpload(s.course_id, files);
-                                                                        e.currentTarget.value = '';
-                                                                    }} />
-                                                                </label>
-                                                            </div>
-                                                        )}
-                                                        {isUploading && (
-                                                            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl flex items-center justify-center gap-2">
-                                                                <div className="w-4 h-4 border-2 border-lime-500 border-t-transparent rounded-full animate-spin"></div>
-                                                                <span className="text-[10px] font-black uppercase text-lime-600 animate-pulse">{extractionProgress}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                {filteredGlobalCourses.length ? (
+                                    <div className="overflow-hidden rounded-2xl border border-gray-100">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                                <tr>
+                                                    <th className="px-6 py-3">Course</th>
+                                                    <th className="px-6 py-3">Departments</th>
+                                                    <th className="px-6 py-3">Level</th>
+                                                    <th className="px-6 py-3">Semester</th>
+                                                    <th className="px-6 py-3 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {filteredGlobalCourses.map(({ course, departmentIds }) => {
+                                                    const departmentNames = departmentIds
+                                                        .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
+                                                        .join(', ');
+                                                    const firstDepartmentId = departmentIds[0] || '';
+                                                    const hasMultipleDepartments = departmentIds.length > 1;
+                                                    return (
+                                                        <tr key={course.course_id} className="hover:bg-gray-50">
+                                                            <td className="px-6 py-4">
+                                                                <div className="font-bold text-gray-900">{course.course_name}</div>
+                                                                <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm text-gray-600">{departmentNames}</td>
+                                                            <td className="px-6 py-4 text-sm text-gray-600">{course.level}</td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button
+                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, course.course_id))}
+                                                                    title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
+                                                                    className="text-sm font-bold text-lime-600 hover:text-lime-700"
+                                                                >
+                                                                    {hasMultipleDepartments ? 'Open Primary' : 'Open'}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="p-10 border border-dashed border-gray-200 rounded-2xl text-sm text-gray-500">
+                                        No courses found yet.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {courseAdminView.mode === 'manager-root' && (
+                        <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5 max-w-3xl">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900">Course Manager</h3>
+                                <p className="text-sm text-gray-500">Choose a department and level, then drill into a course.</p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <select
+                                    value={managerSelectionDepartmentId}
+                                    onChange={e => setManagerSelectionDepartmentId(e.target.value)}
+                                    className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                                >
+                                    <option value="">Select Department</option>
+                                    {allDepartments.map(dept => (
+                                        <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={managerSelectionLevel}
+                                    onChange={e => setManagerSelectionLevel(e.target.value)}
+                                    className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none"
+                                >
+                                    <option value="">Select Level</option>
+                                    {LEVELS.map(level => (
+                                        <option key={level} value={level}>{level}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button
+                                disabled={!managerSelectionDepartmentId || !managerSelectionLevel}
+                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel))}
+                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${!managerSelectionDepartmentId || !managerSelectionLevel ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
+                            >
+                                View Courses
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/courses')}
+                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                            >
+                                Back to All Courses
+                            </button>
+                        </div>
+                    )}
+
+                    {courseAdminView.mode === 'manager-list' && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-widest text-gray-400">Course Manager</p>
+                                    <h3 className="text-2xl font-black text-gray-900">
+                                        {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
+                                    </h3>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleCourseTabNavigate('/admin/courses')}
+                                        className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-widest text-gray-700 hover:bg-gray-50"
+                                    >
+                                        All Courses
+                                    </button>
+                                    <button
+                                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                    >
+                                        Change Department
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-2xl border border-gray-200">
+                                {managerCoursesForLevel.length ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {managerCoursesForLevel.map((course) => (
+                                            <button
+                                                key={course.course_id}
+                                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, course.course_id))}
+                                                className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
+                                            >
+                                                <div>
+                                                    <div className="font-bold text-gray-900">{course.course_name}</div>
+                                                    <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No courses found for this department and level.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {courseAdminView.mode === 'manager-detail' && (
+                        <div className="space-y-6">
+                            <button
+                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level))}
+                                className="text-sm font-black text-gray-500 hover:text-gray-900"
+                            >
+                                ← Back to Course List
+                            </button>
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-6 max-w-4xl">
+                                {selectedManagerCourse ? (
+                                    <>
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs font-black uppercase tracking-widest text-gray-400">
+                                                    {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
+                                                </p>
+                                                <h3 className="text-2xl font-black text-gray-900 mt-1">{selectedManagerCourse.course_name}</h3>
+                                                <p className="text-sm text-gray-500 mt-1">{selectedManagerCourse.course_code || selectedManagerCourse.course_id}</p>
+                                            </div>
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${selectedManagerCourse.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                {selectedManagerCourse.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <p className="text-xs font-black uppercase tracking-widest text-gray-400">Upload Textbook PDFs</p>
+                                            <input
+                                                type="file"
+                                                multiple
+                                                accept="application/pdf"
+                                                onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
+                                            />
+                                            <button
+                                                disabled={!courseDetailFiles.length || isUploading}
+                                                onClick={async () => {
+                                                    if (!selectedManagerCourse) return;
+                                                    await handleTextbookUpload(selectedManagerCourse.course_id || selectedManagerCourse.course_name, courseDetailFiles);
+                                                    setCourseDetailFiles([]);
+                                                }}
+                                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${!courseDetailFiles.length || isUploading ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
+                                            >
+                                                {isUploading ? 'Uploading...' : 'Upload Textbooks'}
+                                            </button>
+                                            {isUploading && (
+                                                <p className="text-sm font-medium text-lime-600">{extractionProgress || 'Uploading textbooks...'}</p>
+                                            )}
+                                        </div>
+
+                                        {selectedManagerCourse.textbook_urls?.length ? (
+                                            <div className="space-y-2">
+                                                <p className="text-xs font-black uppercase tracking-widest text-gray-400">Uploaded Textbooks</p>
+                                                <div className="space-y-1">
+                                                    {selectedManagerCourse.textbook_urls.map((url) => (
+                                                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-sm text-lime-700 hover:underline">
+                                                            {url}
+                                                        </a>
+                                                    ))}
                                                 </div>
                                             </div>
-                                            
-                                            <div className="space-y-3 mb-6">
-                                                <div className="flex justify-between items-center px-1">
-                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Course Topics</span>
-                                                    <span className="bg-gray-100 px-2 py-0.5 rounded-full text-[9px] font-black text-gray-500 uppercase">{s.topics?.length || 0} ITEMS</span>
-                                                </div>
-                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 [scrollbar-width:thin] scrollbar-thumb-gray-200">
-                                                    {s.topics?.map((t, tIdx) => (
-                                                        <div key={tIdx} className="space-y-2 animate-in slide-in-from-left-2 duration-300">
-                                                            <div className="flex gap-2">
-                                                                <input 
-                                                                    type="text" 
-                                                                    placeholder="Topic Name"
-                                                                    value={t.topic_name}
-                                                                    onChange={e => {
-                                                                        const list = [...coursesList];
-                                                                        list[sIdx].topics[tIdx].topic_name = e.target.value;
-                                                                        if (!list[sIdx].topics[tIdx].topic_id) {
-                                                                            list[sIdx].topics[tIdx].topic_id = normalizeTopicId(e.target.value);
-                                                                        }
-                                                                        setCoursesList(list);
-                                                                    }}
-                                                                    className="flex-1 p-2.5 border border-gray-100 rounded-xl text-xs font-bold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                                />
-                                                                <button onClick={() => {
-                                                                    const list = [...coursesList];
-                                                                    list[sIdx].topics = list[sIdx].topics.filter((_, i) => i !== tIdx);
-                                                                    setCoursesList(list);
-                                                                }} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                                                    <XIcon className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                            <textarea
-                                                                placeholder="Topic context (what this topic should cover in this course)"
-                                                                value={t.topic_context || ''}
-                                                                onChange={e => {
-                                                                    const list = [...coursesList];
-                                                                    list[sIdx].topics[tIdx].topic_context = e.target.value;
-                                                                    setCoursesList(list);
-                                                                }}
-                                                                rows={2}
-                                                                className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none resize-y"
-                                                            />
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder="Start point"
-                                                                    value={t.start_point || ''}
-                                                                    onChange={e => {
-                                                                        const list = [...coursesList];
-                                                                        list[sIdx].topics[tIdx].start_point = e.target.value;
-                                                                        setCoursesList(list);
-                                                                    }}
-                                                                    className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                                />
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder="End point"
-                                                                    value={t.end_point || ''}
-                                                                    onChange={e => {
-                                                                        const list = [...coursesList];
-                                                                        list[sIdx].topics[tIdx].end_point = e.target.value;
-                                                                        setCoursesList(list);
-                                                                    }}
-                                                                    className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-medium bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
-                                                                />
-                                                            </div>
+                                        ) : null}
+
+                                        <div className="space-y-3">
+                                            <p className="text-xs font-black uppercase tracking-widest text-gray-400">Course Topics</p>
+                                            {selectedManagerCourse.topics?.length ? (
+                                                <div className="space-y-3">
+                                                    {selectedManagerCourse.topics.map((topic) => (
+                                                        <div key={topic.topic_id} className="rounded-2xl border border-gray-100 p-4 bg-gray-50">
+                                                            <div className="font-bold text-gray-900">{topic.topic_name}</div>
+                                                            {topic.topic_context ? <p className="text-sm text-gray-600 mt-1">{topic.topic_context}</p> : null}
                                                         </div>
                                                     ))}
                                                 </div>
-                                                <button 
-                                                    onClick={() => {
-                                                        const list = [...coursesList];
-                                                        if(!list[sIdx].topics) list[sIdx].topics = [];
-                                                        list[sIdx].topics.push({ topic_id: '', topic_name: '', topic_context: '', start_point: '', end_point: '', is_complete: false });
-                                                        setCoursesList(list);
-                                                    }}
-                                                    className="w-full py-2.5 border-2 border-dashed border-gray-100 rounded-xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:border-lime-200 hover:text-lime-600 transition-all"
-                                                >
-                                                    + Add Topic
-                                                </button>
-                                            </div>
-
-                                            <div className="flex justify-end pt-4 border-t border-gray-50">
-                                                <button className="text-red-400 hover:text-red-600 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5" onClick={() => {
-                                                    const list = coursesList.filter((_, i) => i !== sIdx);
-                                                    setCoursesList(list);
-                                                }}>
-                                                    <XIcon className="w-3 h-3" /> Remove Course
-                                                </button>
-                                            </div>
+                                            ) : (
+                                                <div className="p-6 rounded-2xl border border-dashed border-gray-200 text-sm text-gray-500">
+                                                    No course outline yet. Upload textbooks to generate the course topics.
+                                                </div>
+                                            )}
                                         </div>
-                                    )})}
-                                </div>
-                                
-                                <button 
-                                    onClick={handleUpdateCourseOutline}
-                                    className="w-full bg-gray-900 text-white py-5 rounded-[2rem] font-black text-[13px] uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl shadow-gray-200 active:scale-95"
-                                >
-                                    Publish All Changes
-                                </button>
+                                    </>
+                                ) : (
+                                    <div className="p-8 text-center text-gray-500">
+                                        Course not found.
+                                    </div>
+                                )}
                             </div>
-                        ) : (
-                            <div className="p-20 text-center flex flex-col items-center">
-                                <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center text-gray-300 mb-6 border border-gray-100">
-                                    <StackIcon className="w-10 h-10" />
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">No Department Selected</h3>
-                                <p className="text-gray-500 max-w-xs mx-auto">Please select a department from the menu above to manage its learning roadmap.</p>
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             )}
-
             {activeTab === 'users' && (
                 <div className="space-y-6">
                     <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
