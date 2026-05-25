@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { db, storage } from '../firebase';
 import { ref as dbRef, set, push, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -14,6 +13,7 @@ import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { CheckIcon } from './icons/CheckIcon';
+import { getWindowPathname } from '../utils/pathname';
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
@@ -22,6 +22,8 @@ interface AdminPanelProps {
     userProfile: UserProfile;
     initialTab?: 'questions' | 'courses' | 'users' | 'departments';
     allowedTabs?: Array<'questions' | 'courses' | 'users' | 'departments'>;
+    pathname?: string;
+    onNavigate?: (path: string) => void;
 }
 
 const SEMESTERS = ['first', 'second'] as const;
@@ -266,15 +268,21 @@ const sanitizeCourseFromRegistrationForm = (
     };
 };
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab = 'departments', allowedTabs }) => {
-    const location = useLocation();
-    const navigate = useNavigate();
+export const AdminPanel: React.FC<AdminPanelProps> = ({
+    userProfile,
+    initialTab = 'departments',
+    allowedTabs,
+    pathname,
+    onNavigate,
+}) => {
+    const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
     const visibleTabs = useMemo(
         () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
         [allowedTabs]
     );
-    const courseAdminView = useMemo(() => getCourseAdminView(location.pathname), [location.pathname]);
+    const resolvedPathname = pathname || internalPathname;
+    const courseAdminView = useMemo(() => getCourseAdminView(resolvedPathname), [resolvedPathname]);
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
@@ -492,10 +500,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab 
     const [uploadCourseName, setUploadCourseName] = useState('');
 
     useEffect(() => {
-        const pathTab = location.pathname.split('/').filter(Boolean)[1];
+        const pathTab = resolvedPathname.split('/').filter(Boolean)[1];
         const selectedTab = (pathTab && visibleTabs.includes(pathTab) ? pathTab : (visibleTabs[0] || 'departments')) as 'departments' | 'courses' | 'questions' | 'users';
         setActiveTab(selectedTab);
-    }, [location.pathname, visibleTabs]);
+    }, [resolvedPathname, visibleTabs]);
+
+    useEffect(() => {
+        if (pathname) return;
+        const handlePopState = () => setInternalPathname(getWindowPathname());
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [pathname]);
 
     useEffect(() => {
         if (courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail') {
@@ -1210,7 +1225,14 @@ FORMAT:
     }, [allDepartments, courseCatalog, courseSearchQuery]);
 
     const handleCourseTabNavigate = (path: string) => {
-        navigate(path);
+        if (onNavigate) {
+            onNavigate(path);
+            return;
+        }
+        if (typeof window !== 'undefined') {
+            window.history.pushState(null, '', path);
+        }
+        setInternalPathname(path);
     };
 
     if (!userProfile.is_admin) {
