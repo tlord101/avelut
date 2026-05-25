@@ -123,6 +123,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
+    const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
+    const [selectedRecipientId, setSelectedRecipientId] = useState('');
+    const [announcementTitle, setAnnouncementTitle] = useState('');
+    const [announcementMessage, setAnnouncementMessage] = useState('');
+    const [emailSubject, setEmailSubject] = useState('');
+    const [emailBody, setEmailBody] = useState('');
+    const [isSendingPush, setIsSendingPush] = useState(false);
     const { addToast } = useToast();
 
     // Departments State
@@ -186,6 +193,95 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             fetchUsers();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (recipientMode === 'single' && selectedRecipientId && !allUsersList.some(u => u.uid === selectedRecipientId)) {
+            setSelectedRecipientId('');
+        }
+    }, [allUsersList, recipientMode, selectedRecipientId]);
+
+    const getTargetUsers = () => {
+        if (recipientMode === 'all') {
+            return allUsersList;
+        }
+        return allUsersList.filter(user => user.uid === selectedRecipientId);
+    };
+
+    const handleSendPushNotification = async () => {
+        const title = announcementTitle.trim();
+        const message = announcementMessage.trim();
+        if (!title || !message) {
+            addToast("Please enter both title and message", "error");
+            return;
+        }
+
+        const targetUsers = getTargetUsers();
+        if (targetUsers.length === 0) {
+            addToast("Please select a valid recipient", "error");
+            return;
+        }
+
+        setIsSendingPush(true);
+        try {
+            const updates: Record<string, any> = {};
+            targetUsers.forEach(user => {
+                const notificationId = push(dbRef(db, `notifications/${user.uid}`)).key;
+                if (!notificationId) return;
+                updates[`notifications/${user.uid}/${notificationId}`] = {
+                    type: 'study_update',
+                    title,
+                    message,
+                    is_read: false,
+                    timestamp: Date.now(),
+                };
+            });
+
+            if (Object.keys(updates).length === 0) {
+                addToast("Could not prepare notifications", "error");
+                return;
+            }
+
+            await update(dbRef(db), updates);
+            setAnnouncementTitle('');
+            setAnnouncementMessage('');
+            addToast(`Push notification sent to ${targetUsers.length} user${targetUsers.length > 1 ? 's' : ''}.`, "success");
+        } catch (error: any) {
+            console.error("Error sending push notifications:", error);
+            addToast(error?.message || "Failed to send push notification", "error");
+        } finally {
+            setIsSendingPush(false);
+        }
+    };
+
+    const handleSendEmail = () => {
+        const subject = emailSubject.trim();
+        const body = emailBody.trim();
+        if (!subject || !body) {
+            addToast("Please enter both email subject and body", "error");
+            return;
+        }
+
+        const targetUsers = getTargetUsers();
+        if (targetUsers.length === 0) {
+            addToast("Please select a valid recipient", "error");
+            return;
+        }
+
+        const emailList = Array.from(new Set(targetUsers.map(user => user.email?.trim()).filter(Boolean) as string[]));
+        if (emailList.length === 0) {
+            addToast("No email address found for selected recipient(s)", "error");
+            return;
+        }
+
+        const encodedSubject = encodeURIComponent(subject);
+        const encodedBody = encodeURIComponent(body);
+        const mailtoLink = recipientMode === 'single'
+            ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
+            : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
+
+        window.location.href = mailtoLink;
+        addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length > 1 ? 's' : ''}.`, "success");
+    };
 
     // Past Questions State
     const [courseSearch, setCourseSearch] = useState('');
@@ -1070,6 +1166,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
             {activeTab === 'users' && (
                 <div className="space-y-6">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
+                        <h3 className="font-bold text-gray-800">Broadcast Center</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Recipient Scope</label>
+                                <select
+                                    value={recipientMode}
+                                    onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                >
+                                    <option value="all">All Users</option>
+                                    <option value="single">Single User</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Target User</label>
+                                <select
+                                    value={selectedRecipientId}
+                                    onChange={(e) => setSelectedRecipientId(e.target.value)}
+                                    disabled={recipientMode === 'all'}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
+                                >
+                                    <option value="">Select a user</option>
+                                    {allUsersList.map(user => (
+                                        <option key={user.uid} value={user.uid}>
+                                            {user.display_name} ({user.email || 'no-email'})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
+                                <h4 className="font-semibold text-gray-800">Send Push Notification</h4>
+                                <input
+                                    type="text"
+                                    value={announcementTitle}
+                                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                                    placeholder="Notification title"
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                />
+                                <textarea
+                                    value={announcementMessage}
+                                    onChange={(e) => setAnnouncementMessage(e.target.value)}
+                                    placeholder="Notification message"
+                                    rows={4}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
+                                />
+                                <button
+                                    onClick={handleSendPushNotification}
+                                    disabled={isSendingPush}
+                                    className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-black transition disabled:opacity-60"
+                                >
+                                    {isSendingPush ? 'Sending...' : 'Send Push Notification'}
+                                </button>
+                            </div>
+
+                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
+                                <h4 className="font-semibold text-gray-800">Send Email</h4>
+                                <input
+                                    type="text"
+                                    value={emailSubject}
+                                    onChange={(e) => setEmailSubject(e.target.value)}
+                                    placeholder="Email subject"
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                />
+                                <textarea
+                                    value={emailBody}
+                                    onChange={(e) => setEmailBody(e.target.value)}
+                                    placeholder="Email body"
+                                    rows={4}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
+                                />
+                                <button
+                                    onClick={handleSendEmail}
+                                    className="w-full bg-lime-600 text-white py-3 rounded-xl font-semibold hover:bg-lime-700 transition"
+                                >
+                                    Open Email Draft
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200">
                             <p className="text-lime-800 text-sm font-medium uppercase">Total Registered Users</p>
@@ -1110,6 +1290,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                     <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                                         <tr>
                                             <th className="px-6 py-3">User</th>
+                                            <th className="px-6 py-3">Email</th>
                                             <th className="px-6 py-3">Dept / Level</th>
                                             <th className="px-6 py-3">Last Active</th>
                                             <th className="px-6 py-3">Role</th>
@@ -1127,6 +1308,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                         )}
                                                     </div>
                                                     <span className="font-medium text-gray-900">{user.display_name}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {user.email || 'Not Provided'}
                                                 </td>
                                                 <td className="px-6 py-4 text-gray-600">
                                                     {user.department_id || 'Not Set'} / {user.level || '?' }L
