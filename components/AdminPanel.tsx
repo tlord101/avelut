@@ -19,6 +19,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 interface AdminPanelProps {
     userProfile: UserProfile;
+    initialTab?: 'questions' | 'courses' | 'users' | 'departments';
+    allowedTabs?: Array<'questions' | 'courses' | 'users' | 'departments'>;
 }
 
 const SEMESTERS = ['first', 'second'] as const;
@@ -214,8 +216,8 @@ const sanitizeCourseFromRegistrationForm = (
     };
 };
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
-    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
+export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile, initialTab = 'departments', allowedTabs }) => {
+    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
@@ -398,7 +400,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     // Past Questions State
-    const [courseSearch, setCourseSearch] = useState('');
     const [year, setYear] = useState('');
     const [newQuestion, setNewQuestion] = useState<Question>({
         question: '',
@@ -1080,30 +1081,38 @@ FORMAT:
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button 
-                    onClick={() => setActiveTab('departments')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Departments
-                </button>
-                <button 
-                    onClick={() => setActiveTab('courses')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Courses
-                </button>
-                <button 
-                    onClick={() => setActiveTab('questions')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    Past Questions
-                </button>
-                <button 
-                    onClick={() => setActiveTab('users')}
-                    className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                >
-                    User Management
-                </button>
+                {visibleTabs.includes('departments') && (
+                    <button 
+                        onClick={() => setActiveTab('departments')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Departments
+                    </button>
+                )}
+                {visibleTabs.includes('courses') && (
+                    <button 
+                        onClick={() => setActiveTab('courses')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Courses
+                    </button>
+                )}
+                {visibleTabs.includes('questions') && (
+                    <button 
+                        onClick={() => setActiveTab('questions')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        Past Questions
+                    </button>
+                )}
+                {visibleTabs.includes('users') && (
+                    <button 
+                        onClick={() => setActiveTab('users')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        User Management
+                    </button>
+                )}
             </div>
 
             {activeTab === 'departments' && (
@@ -1964,3 +1973,17 @@ FORMAT:
         </div>
     );
 };
+    const visibleTabs = useMemo(
+        () => (allowedTabs && allowedTabs.length ? allowedTabs : ['departments', 'courses', 'questions', 'users']),
+        [allowedTabs]
+    );
+
+    useEffect(() => {
+        setActiveTab(initialTab);
+    }, [initialTab]);
+
+    useEffect(() => {
+        if (!visibleTabs.includes(activeTab)) {
+            setActiveTab(visibleTabs[0]);
+        }
+    }, [activeTab, visibleTabs]);
