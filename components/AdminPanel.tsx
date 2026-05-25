@@ -22,13 +22,31 @@ interface AdminPanelProps {
 }
 
 const SEMESTERS = ['first', 'second'] as const;
+const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'] as const;
 const MAX_SKIPPED_USERS_PREVIEW = 3;
 const MAX_MAILTO_LINK_LENGTH = 1900;
 const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
 const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
     semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
 );
+const normalizeLevel = (value?: string) => {
+    if (!value) return LEVELS[0];
+    const normalized = value.toLowerCase().replace(/\s+/g, '');
+    if (LEVELS.includes(normalized as (typeof LEVELS)[number])) {
+        return normalized as (typeof LEVELS)[number];
+    }
+    const digitsMatch = normalized.match(/\d+/);
+    if (digitsMatch?.[0]) {
+        const candidate = `${digitsMatch[0]}lvl` as (typeof LEVELS)[number];
+        if (LEVELS.includes(candidate)) return candidate;
+    }
+    return LEVELS[0];
+};
 const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+const normalizeCourseStatus = (value?: string) => {
+    const normalized = (value || '').toString().trim().toUpperCase();
+    return normalized ? normalized.slice(0, 12) : '';
+};
 
 const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
     const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
@@ -121,6 +139,40 @@ const mergeCourseListsIntoTarget = (existingCourses: Course[], incomingCourses: 
     return mergedCourses;
 };
 
+const sanitizeCourseFromRegistrationForm = (
+    course: any,
+    index: number,
+    extractedLevel?: string,
+    extractedSession?: string,
+    overrideLevel?: string,
+    overrideSession?: string
+): Course => {
+    const courseCode = (course?.course_code || course?.code || course?.courseCode || '').toString().trim().toUpperCase();
+    const courseTitle = (course?.course_title || course?.title || course?.course_name || course?.name || '').toString().trim();
+    const fallbackName = courseCode || `Course ${index + 1}`;
+    const courseName = courseTitle || fallbackName;
+    const level = normalizeLevel(overrideLevel || course?.level || extractedLevel);
+    const session = (overrideSession || course?.academic_session || course?.session || extractedSession || '').toString().trim();
+    const semester = normalizeSemester((course?.semester || '').toString().trim().toLowerCase() as Course['semester']);
+    const parsedUnit = Number.parseInt((course?.course_unit ?? course?.unit ?? '').toString().trim(), 10);
+    const normalizedUnit = Number.isFinite(parsedUnit) ? parsedUnit : undefined;
+    const status = normalizeCourseStatus(course?.course_status || course?.status);
+    const idSource = courseCode || `${courseName}_${semester}_${session || level}`;
+    const courseId = normalizeTopicId(idSource);
+
+    return {
+        course_id: courseId,
+        course_name: courseName,
+        course_code: courseCode || undefined,
+        course_unit: normalizedUnit,
+        course_status: status || undefined,
+        academic_session: session || undefined,
+        topics: [],
+        level,
+        semester,
+    };
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -138,7 +190,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     // Departments State
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
-    const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
 
     const fetchDepartments = async () => {
         try {
@@ -321,6 +372,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [departmentId, setDepartmentId] = useState('');
     const [targetDepartmentIds, setTargetDepartmentIds] = useState<string[]>([]);
     const [coursesList, setCoursesList] = useState<Course[]>([]);
+    const [courseRegistrationFile, setCourseRegistrationFile] = useState<File | null>(null);
+    const [isCourseImporting, setIsCourseImporting] = useState(false);
+    const [courseImportProgress, setCourseImportProgress] = useState('');
+    const [courseImportLevelOverride, setCourseImportLevelOverride] = useState('');
+    const [courseImportSessionOverride, setCourseImportSessionOverride] = useState('');
 
     // Textbook State
     const [isUploading, setIsUploading] = useState(false);
@@ -462,6 +518,126 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         } finally {
             setIsPQProcessing(false);
             setExtractionProgress('');
+        }
+    };
+
+    const handleCourseRegistrationImport = async () => {
+        if (!departmentId) {
+            addToast("Please select a department first", "error");
+            return;
+        }
+        if (!courseRegistrationFile) {
+            addToast("Please select a course registration PDF", "error");
+            return;
+        }
+
+        setIsCourseImporting(true);
+        setCourseImportProgress("Extracting course list from PDF...");
+
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(courseRegistrationFile);
+            const base64PDF = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            });
+
+            const prompt = `Analyze this university course-registration form PDF and extract all registered courses for both first and second semesters.
+
+RULES:
+1. Output ONLY valid JSON.
+2. Root object must include:
+   - academic_session (string, e.g. "2025/2026")
+   - level (string, e.g. "100lvl")
+   - courses (array)
+3. Each courses item must include:
+   - code (string)
+   - title (string)
+   - semester ("first" or "second")
+   - unit (number if available)
+   - status (string if available)
+4. If only one semester exists in the PDF, still return available courses.
+5. Normalize semester values strictly to "first" or "second".
+
+FORMAT:
+{
+  "academic_session": "2025/2026",
+  "level": "100lvl",
+  "courses": [
+    {
+      "code": "GST 111",
+      "title": "COMMUNICATION IN ENGLISH",
+      "semester": "first",
+      "unit": 2,
+      "status": "C"
+    }
+  ]
+}`;
+
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
+                        ]
+                    }
+                ],
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting courses.");
+            }
+
+            const responseData = JSON.parse(response.text);
+            const extractedCourses = Array.isArray(responseData?.courses) ? responseData.courses : [];
+            if (!extractedCourses.length) {
+                throw new Error("No courses found in the uploaded form.");
+            }
+
+            const normalizedCourses = extractedCourses
+                .map((course: any, index: number) => sanitizeCourseFromRegistrationForm(
+                    course,
+                    index,
+                    responseData?.level,
+                    responseData?.academic_session,
+                    courseImportLevelOverride,
+                    courseImportSessionOverride
+                ))
+                .filter((course: Course) => Boolean(course.course_id && course.course_name));
+
+            if (!normalizedCourses.length) {
+                throw new Error("Extracted courses were invalid after normalization.");
+            }
+
+            setCoursesList(prevCourses => {
+                let mergedCourses = [...prevCourses];
+                normalizedCourses.forEach(course => {
+                    mergedCourses = upsertCourseInList(mergedCourses, course);
+                });
+                return mergedCourses;
+            });
+
+            const sessionLabel = (courseImportSessionOverride || responseData?.academic_session || '').toString().trim();
+            addToast(
+                `Imported ${normalizedCourses.length} course${normalizedCourses.length !== 1 ? 's' : ''}${sessionLabel ? ` for ${sessionLabel}` : ''}. Review and publish changes.`,
+                "success"
+            );
+            setCourseRegistrationFile(null);
+            setCourseImportSessionOverride(sessionLabel);
+            if (!courseImportLevelOverride) {
+                setCourseImportLevelOverride(normalizeLevel(responseData?.level));
+            }
+        } catch (error: any) {
+            console.error("Error importing course registration form:", error);
+            addToast(error?.message || "Failed to import course registration form.", "error");
+        } finally {
+            setIsCourseImporting(false);
+            setCourseImportProgress('');
         }
     };
 
@@ -669,7 +845,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const addCourseField = () => {
-        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: DEFAULT_SEMESTER }]);
+        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: LEVELS[0], semester: DEFAULT_SEMESTER }]);
     };
 
     if (!userProfile.is_admin) {
@@ -911,6 +1087,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                 ))}
                             </select>
                         </div>
+                        <div className="mb-8 p-4 bg-white border border-gray-200 rounded-2xl">
+                            <h4 className="text-sm font-black text-gray-800 uppercase tracking-wider mb-3">Import Courses from Registration PDF</h4>
+                            <p className="text-xs text-gray-500 mb-4">Upload a course registration form and auto-create first/second semester courses, then edit manually if needed.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                                <select
+                                    value={courseImportLevelOverride}
+                                    onChange={e => setCourseImportLevelOverride(e.target.value)}
+                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none"
+                                >
+                                    <option value="">Use Extracted Level</option>
+                                    {LEVELS.map(lvl => (
+                                        <option key={lvl} value={lvl}>{lvl}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    value={courseImportSessionOverride}
+                                    onChange={e => setCourseImportSessionOverride(e.target.value)}
+                                    placeholder="Session override (e.g. 2025/2026)"
+                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none md:col-span-2"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    onChange={e => setCourseRegistrationFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
+                                />
+                                {isCourseImporting && (
+                                    <div className="flex items-center gap-1.5 text-lime-600 text-sm font-medium">
+                                        <span className="animate-spin">⏳</span>
+                                        <span>{courseImportProgress || 'Importing courses...'}</span>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleCourseRegistrationImport}
+                                    disabled={isCourseImporting || !courseRegistrationFile || !departmentId}
+                                    className={`w-full py-3 rounded-xl font-bold transition ${isCourseImporting || !courseRegistrationFile || !departmentId ? 'bg-gray-300 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-sm'}`}
+                                >
+                                    {isCourseImporting ? 'Importing Courses...' : 'Extract Courses from PDF'}
+                                </button>
+                            </div>
+                        </div>
                         {departmentId && (
                             <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-2xl">
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Course Access Departments</p>
@@ -1014,6 +1234,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                             ))}
                                                         </select>
                                                     </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Course Code"
+                                                        value={s.course_code || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].course_code = e.target.value.toUpperCase();
+                                                            if (!list[sIdx].course_id && e.target.value.trim()) {
+                                                                list[sIdx].course_id = normalizeTopicId(e.target.value);
+                                                            }
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Session (e.g. 2025/2026)"
+                                                        value={s.academic_session || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].academic_session = e.target.value;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        placeholder="Unit"
+                                                        value={s.course_unit ?? ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            const nextValue = e.target.value === '' ? undefined : Number(e.target.value);
+                                                            list[sIdx].course_unit = Number.isFinite(nextValue as number) ? (nextValue as number) : undefined;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Status (e.g. C/R)"
+                                                        value={s.course_status || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].course_status = normalizeCourseStatus(e.target.value) || undefined;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
                                                 </div>
 
                                                 {/* INLINE TEXTBOOK UPLOAD */}

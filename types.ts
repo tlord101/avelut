@@ -75,6 +75,10 @@ export interface Topic {
 export interface Course {
   course_id: string;
   course_name: string;
+  course_code?: string;
+  course_unit?: number;
+  course_status?: string;
+  academic_session?: string;
   topics: Topic[];
   level: string; // 100lvl, 200lvl, etc.
   semester?: 'first' | 'second';
