@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
@@ -64,6 +63,8 @@ const normalizeLevelValue = (value?: string): string => {
     return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
 };
 
+const getWindowPathname = () => (typeof window !== 'undefined' ? window.location.pathname || '/' : '/');
+
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -72,9 +73,6 @@ const App: React.FC = () => {
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     
-    const location = useLocation();
-    const navigate = useNavigate();
-
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(true);
     const [isOnboarding, setIsOnboarding] = useState(false);
@@ -82,30 +80,51 @@ const App: React.FC = () => {
     
     // Derived state from URL or internal state for PWA feel
     const [activeItem, setActiveItemState] = useState<string>(() => {
-        const item = resolveActiveItemFromPath(location.pathname);
+        const item = resolveActiveItemFromPath(getWindowPathname());
         return item === 'admin' ? 'admin' : item;
     });
-    
-    const setActiveItem = (item: string) => {
+    const [adminPath, setAdminPath] = useState<string>(() => {
+        const pathname = getWindowPathname();
+        return resolveActiveItemFromPath(pathname) === 'admin' ? pathname : '/admin';
+    });
+
+    const syncItemFromPath = useCallback((pathname: string) => {
+        const item = resolveActiveItemFromPath(pathname);
+        setActiveItemState(item === 'admin' ? 'admin' : item);
+        if (item === 'admin') {
+            setAdminPath(pathname.startsWith('/admin') ? pathname : '/admin');
+            return;
+        }
+        if (pathname !== '/' && pathname !== '/dashboard' && typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/');
+        }
+    }, []);
+
+    const setActiveItem = useCallback((item: string) => {
         setActiveItemState(item);
         if (item === 'admin') {
-            navigate('/admin');
-        } else if (location.pathname === '/admin') {
-            navigate('/');
+            const pathname = getWindowPathname();
+            const nextPath = pathname.startsWith('/admin') ? pathname : '/admin';
+            if (pathname !== nextPath && typeof window !== 'undefined') {
+                window.history.pushState(null, '', nextPath);
+            }
+            setAdminPath(nextPath);
+            return;
         }
-    };
+        const pathname = getWindowPathname();
+        if (pathname === '/admin' && typeof window !== 'undefined') {
+            window.history.pushState(null, '', '/');
+        } else if (pathname.startsWith('/admin') && typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/');
+        }
+    }, []);
 
-    // Sync state with URL only for admin or to reset to root
     useEffect(() => {
-        const item = resolveActiveItemFromPath(location.pathname);
-        if (item === 'admin') {
-            setActiveItemState('admin');
-        } else if (location.pathname !== '/' && location.pathname !== '/dashboard') {
-            // For PWA feel, we redirect any non-admin paths back to root but keep the item state
-            navigate('/', { replace: true });
-            setActiveItemState(item);
-        }
-    }, [location.pathname]);
+        const handlePopState = () => syncItemFromPath(getWindowPathname());
+        handlePopState();
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [syncItemFromPath]);
 
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -584,9 +603,18 @@ const App: React.FC = () => {
                         }
                     />
                     <div className="flex-1 min-h-0 px-4 pb-20 md:pb-8 md:overflow-y-auto">
-                        <AdminPanel userProfile={mockAdminProfile} />
-                    </div>
-                </main>
+                        <AdminPanel
+                            userProfile={mockAdminProfile}
+                            pathname={adminPath}
+                            onNavigate={(path) => {
+                                setAdminPath(path);
+                                if (typeof window !== 'undefined') {
+                                    window.history.pushState(null, '', path);
+                                }
+                            }}
+                        />
+                            </div>
+                        </main>
 
                 <BottomNavBar
                     activeItem="admin"
@@ -645,7 +673,7 @@ const App: React.FC = () => {
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (
                         <MainContent
-                            key={location.pathname}
+                            key={activeItem}
                             activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}

@@ -1,7 +1,6 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createBrowserRouter, Navigate } from 'react-router-dom';
 import App from './App';
 import { ToastProvider } from './hooks/useToast';
 import { LogoIcon } from './components/icons/LogoIcon';
@@ -47,18 +46,11 @@ const root = ReactDOM.createRoot(rootElement);
 const isConfigured = 
   typeof __firebase_config !== 'undefined' && __firebase_config.apiKey && __firebase_config.apiKey !== 'YOUR_FIREBASE_API_KEY';
 
-const router = createBrowserRouter([
-  {
-    path: '/*',
-    element: <App />,
-  }
-]);
-
 if (isConfigured) {
   root.render(
     <React.StrictMode>
       <ToastProvider>
-        <RouterProvider router={router} />
+        <App />
       </ToastProvider>
     </React.StrictMode>
   );
