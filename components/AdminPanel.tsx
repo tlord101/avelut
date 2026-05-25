@@ -22,6 +22,8 @@ interface AdminPanelProps {
 }
 
 const SEMESTERS = ['first', 'second'] as const;
+const MAX_SKIPPED_USERS_PREVIEW = 3;
+const MAX_MAILTO_LINK_LENGTH = 1900;
 const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
 const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
     semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
@@ -251,8 +253,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             setAnnouncementMessage('');
             const successfulSends = targetUsers.length - skippedUsers.length;
             if (skippedUsers.length > 0) {
-                const skippedPreview = skippedUsers.slice(0, 3).join(', ');
-                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped: ${skippedPreview}${skippedUsers.length > 3 ? ', ...' : ''}.`, "info");
+                const skippedPreview = skippedUsers.slice(0, MAX_SKIPPED_USERS_PREVIEW).join(', ');
+                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped: ${skippedPreview}${skippedUsers.length > MAX_SKIPPED_USERS_PREVIEW ? ', ...' : ''}.`, "info");
             } else {
                 addToast(`Push notification sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}.`, "success");
             }
@@ -289,7 +291,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         const mailtoLink = recipientMode === 'single'
             ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
             : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
-        if (mailtoLink.length > 1900) {
+        if (mailtoLink.length > MAX_MAILTO_LINK_LENGTH) {
             addToast("Too many recipients for one email draft. Please use single-user mode or smaller batches.", "error");
             return;
         }
