@@ -224,9 +224,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         setIsSendingPush(true);
         try {
             const updates: Record<string, any> = {};
+            let skippedUsers = 0;
             targetUsers.forEach(user => {
                 const notificationId = push(dbRef(db, `notifications/${user.uid}`)).key;
-                if (!notificationId) return;
+                if (!notificationId) {
+                    skippedUsers += 1;
+                    return;
+                }
                 updates[`notifications/${user.uid}/${notificationId}`] = {
                     type: 'study_update',
                     title,
@@ -244,7 +248,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             await update(dbRef(db), updates);
             setAnnouncementTitle('');
             setAnnouncementMessage('');
-            addToast(`Push notification sent to ${targetUsers.length} user${targetUsers.length > 1 ? 's' : ''}.`, "success");
+            const successfulSends = targetUsers.length - skippedUsers;
+            if (skippedUsers > 0) {
+                addToast(`Push sent to ${successfulSends} user${successfulSends > 1 ? 's' : ''}. ${skippedUsers} skipped.`, "info");
+            } else {
+                addToast(`Push notification sent to ${successfulSends} user${successfulSends > 1 ? 's' : ''}.`, "success");
+            }
         } catch (error: any) {
             console.error("Error sending push notifications:", error);
             addToast(error?.message || "Failed to send push notification", "error");
@@ -279,8 +288,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
             : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
 
-        window.location.href = mailtoLink;
-        addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length > 1 ? 's' : ''}.`, "success");
+        try {
+            window.location.href = mailtoLink;
+            addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length > 1 ? 's' : ''}.`, "success");
+        } catch (error: any) {
+            console.error("Error opening email client:", error);
+            addToast(error?.message || "Could not open your email client.", "error");
+        }
     };
 
     // Past Questions State
