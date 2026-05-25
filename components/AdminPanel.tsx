@@ -22,11 +22,32 @@ interface AdminPanelProps {
 }
 
 const SEMESTERS = ['first', 'second'] as const;
+const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'] as const;
+const MAX_SKIPPED_USERS_PREVIEW = 3;
+const MAX_MAILTO_LINK_LENGTH = 1900;
+const MAX_COURSE_STATUS_LENGTH = 12;
 const DEFAULT_SEMESTER: (typeof SEMESTERS)[number] = 'first';
 const normalizeSemester = (semester?: Course['semester']): (typeof SEMESTERS)[number] => (
     semester && SEMESTERS.includes(semester) ? semester : DEFAULT_SEMESTER
 );
+const normalizeLevel = (value?: string) => {
+    if (!value) return LEVELS[0];
+    const normalized = value.toLowerCase().replace(/\s+/g, '');
+    if (LEVELS.includes(normalized as (typeof LEVELS)[number])) {
+        return normalized as (typeof LEVELS)[number];
+    }
+    const digitsMatch = normalized.match(/\d+/);
+    if (digitsMatch?.[0]) {
+        const candidate = `${digitsMatch[0]}lvl` as (typeof LEVELS)[number];
+        if (LEVELS.includes(candidate)) return candidate;
+    }
+    return LEVELS[0];
+};
 const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+const normalizeCourseStatus = (value?: string) => {
+    const normalized = (value || '').toString().trim().toUpperCase();
+    return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
+};
 
 const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
     const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
@@ -119,16 +140,57 @@ const mergeCourseListsIntoTarget = (existingCourses: Course[], incomingCourses: 
     return mergedCourses;
 };
 
+const sanitizeCourseFromRegistrationForm = (
+    course: any,
+    index: number,
+    extractedLevel?: string,
+    extractedSession?: string,
+    overrideLevel?: string,
+    overrideSession?: string
+): Course => {
+    const courseCode = (course?.course_code || course?.code || course?.courseCode || '').toString().trim().toUpperCase();
+    const courseTitle = (course?.course_title || course?.title || course?.course_name || course?.name || '').toString().trim();
+    const fallbackName = courseCode || `Course ${index + 1}`;
+    const courseName = courseTitle || fallbackName;
+    const level = normalizeLevel(overrideLevel || course?.level || extractedLevel);
+    const session = (overrideSession || course?.academic_session || course?.session || extractedSession || '').toString().trim();
+    const semester = normalizeSemester((course?.semester || '').toString().trim().toLowerCase() as Course['semester']);
+    const parsedUnit = Number.parseInt((course?.course_unit ?? course?.unit ?? '').toString().trim(), 10);
+    const normalizedUnit = Number.isFinite(parsedUnit) ? parsedUnit : undefined;
+    const status = normalizeCourseStatus(course?.course_status || course?.status);
+    const idSource = courseCode || `${courseName}_${semester}_${session || level}`;
+    const courseId = normalizeTopicId(idSource);
+
+    return {
+        course_id: courseId,
+        course_name: courseName,
+        course_code: courseCode || undefined,
+        course_unit: normalizedUnit,
+        course_status: status || undefined,
+        academic_session: session || undefined,
+        topics: [],
+        level,
+        semester,
+    };
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
+    const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
+    const [selectedRecipientId, setSelectedRecipientId] = useState('');
+    const [announcementTitle, setAnnouncementTitle] = useState('');
+    const [announcementMessage, setAnnouncementMessage] = useState('');
+    const [notificationType, setNotificationType] = useState<'study_update' | 'exam_reminder' | 'welcome'>('study_update');
+    const [emailSubject, setEmailSubject] = useState('');
+    const [emailBody, setEmailBody] = useState('');
+    const [isSendingPush, setIsSendingPush] = useState(false);
     const { addToast } = useToast();
 
     // Departments State
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
     const [newDeptName, setNewDeptName] = useState('');
-    const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'];
 
     const fetchDepartments = async () => {
         try {
@@ -187,6 +249,114 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         }
     }, [activeTab]);
 
+    useEffect(() => {
+        if (recipientMode === 'single' && selectedRecipientId && !allUsersList.some(u => u.uid === selectedRecipientId)) {
+            setSelectedRecipientId('');
+        }
+    }, [allUsersList, recipientMode, selectedRecipientId]);
+
+    const getTargetUsers = () => {
+        if (recipientMode === 'all') {
+            return allUsersList;
+        }
+        return allUsersList.filter(user => user.uid === selectedRecipientId);
+    };
+
+    const handleSendPushNotification = async () => {
+        const title = announcementTitle.trim();
+        const message = announcementMessage.trim();
+        if (!title || !message) {
+            addToast("Please enter both title and message", "error");
+            return;
+        }
+
+        const targetUsers = getTargetUsers();
+        if (targetUsers.length === 0) {
+            addToast("Please select a valid recipient", "error");
+            return;
+        }
+
+        setIsSendingPush(true);
+        try {
+            const updates: Record<string, any> = {};
+            const skippedUsers: string[] = [];
+            targetUsers.forEach(user => {
+                const notificationId = push(dbRef(db, `notifications/${user.uid}`)).key;
+                if (!notificationId) {
+                    skippedUsers.push(user.display_name || user.uid);
+                    return;
+                }
+                updates[`notifications/${user.uid}/${notificationId}`] = {
+                    type: notificationType,
+                    title,
+                    message,
+                    is_read: false,
+                    timestamp: Date.now(),
+                };
+            });
+
+            if (Object.keys(updates).length === 0) {
+                addToast("Could not prepare notifications", "error");
+                return;
+            }
+
+            await update(dbRef(db), updates);
+            setAnnouncementTitle('');
+            setAnnouncementMessage('');
+            const successfulSends = targetUsers.length - skippedUsers.length;
+            if (skippedUsers.length > 0) {
+                const skippedPreview = skippedUsers.slice(0, MAX_SKIPPED_USERS_PREVIEW).join(', ');
+                addToast(`Push sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}. Skipped (failed ID generation): ${skippedPreview}${skippedUsers.length > MAX_SKIPPED_USERS_PREVIEW ? ', ...' : ''}.`, "info");
+            } else {
+                addToast(`Push notification sent to ${successfulSends} user${successfulSends !== 1 ? 's' : ''}.`, "success");
+            }
+        } catch (error: any) {
+            console.error("Error sending push notifications:", error);
+            addToast(error?.message || "Failed to send push notification", "error");
+        } finally {
+            setIsSendingPush(false);
+        }
+    };
+
+    const handleSendEmail = () => {
+        const subject = emailSubject.trim();
+        const body = emailBody.trim();
+        if (!subject || !body) {
+            addToast("Please enter both email subject and body", "error");
+            return;
+        }
+
+        const targetUsers = getTargetUsers();
+        if (targetUsers.length === 0) {
+            addToast("Please select a valid recipient", "error");
+            return;
+        }
+
+        const emailList = Array.from(new Set(targetUsers.map(user => user.email?.trim()).filter(Boolean) as string[]));
+        if (emailList.length === 0) {
+            addToast("No email address found for selected recipient(s)", "error");
+            return;
+        }
+
+        const encodedSubject = encodeURIComponent(subject);
+        const encodedBody = encodeURIComponent(body);
+        const mailtoLink = recipientMode === 'single'
+            ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
+            : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
+        if (mailtoLink.length > MAX_MAILTO_LINK_LENGTH) {
+            addToast("Too many recipients for one email draft. Please send emails in multiple single-user sends.", "error");
+            return;
+        }
+
+        try {
+            window.open(mailtoLink, '_blank', 'noopener,noreferrer');
+            addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''}.`, "success");
+        } catch (error: any) {
+            console.error("Error opening email client:", error);
+            addToast(error?.message || "Could not open your email client.", "error");
+        }
+    };
+
     // Past Questions State
     const [courseSearch, setCourseSearch] = useState('');
     const [year, setYear] = useState('');
@@ -203,6 +373,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [departmentId, setDepartmentId] = useState('');
     const [targetDepartmentIds, setTargetDepartmentIds] = useState<string[]>([]);
     const [coursesList, setCoursesList] = useState<Course[]>([]);
+    const [courseRegistrationFile, setCourseRegistrationFile] = useState<File | null>(null);
+    const [isCourseImporting, setIsCourseImporting] = useState(false);
+    const [courseImportProgress, setCourseImportProgress] = useState('');
+    const [courseImportLevelOverride, setCourseImportLevelOverride] = useState('');
+    const [courseImportSessionOverride, setCourseImportSessionOverride] = useState('');
 
     // Textbook State
     const [isUploading, setIsUploading] = useState(false);
@@ -344,6 +519,126 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
         } finally {
             setIsPQProcessing(false);
             setExtractionProgress('');
+        }
+    };
+
+    const handleCourseRegistrationImport = async () => {
+        if (!departmentId) {
+            addToast("Please select a department first", "error");
+            return;
+        }
+        if (!courseRegistrationFile) {
+            addToast("Please select a course registration PDF", "error");
+            return;
+        }
+
+        setIsCourseImporting(true);
+        setCourseImportProgress("Extracting course list from PDF...");
+
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(courseRegistrationFile);
+            const base64PDF = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            });
+
+            const prompt = `Analyze this university course-registration form PDF and extract all registered courses for both first and second semesters.
+
+RULES:
+1. Output ONLY valid JSON.
+2. Root object must include:
+   - academic_session (string, e.g. "2025/2026")
+   - level (string, e.g. "100lvl")
+   - courses (array)
+3. Each courses item must include:
+   - code (string)
+   - title (string)
+   - semester ("first" or "second")
+   - unit (number if available)
+   - status (string if available)
+4. If only one semester exists in the PDF, still return available courses.
+5. Normalize semester values strictly to "first" or "second".
+
+FORMAT:
+{
+  "academic_session": "2025/2026",
+  "level": "100lvl",
+  "courses": [
+    {
+      "code": "GST 111",
+      "title": "COMMUNICATION IN ENGLISH",
+      "semester": "first",
+      "unit": 2,
+      "status": "C"
+    }
+  ]
+}`;
+
+            const response = await ai.models.generateContent({
+                model: "gemini-3.5-flash",
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
+                        ]
+                    }
+                ],
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            if (!response.text) {
+                throw new Error("AI returned an empty response while extracting courses.");
+            }
+
+            const responseData = JSON.parse(response.text);
+            const extractedCourses = Array.isArray(responseData?.courses) ? responseData.courses : [];
+            if (!extractedCourses.length) {
+                throw new Error("No courses found in the uploaded form.");
+            }
+
+            const normalizedCourses = extractedCourses
+                .map((course: any, index: number) => sanitizeCourseFromRegistrationForm(
+                    course,
+                    index,
+                    responseData?.level,
+                    responseData?.academic_session,
+                    courseImportLevelOverride,
+                    courseImportSessionOverride
+                ))
+                .filter((course: Course) => Boolean(course.course_id && course.course_name));
+
+            if (!normalizedCourses.length) {
+                throw new Error("Extracted courses were invalid after normalization.");
+            }
+
+            setCoursesList(prevCourses => {
+                let mergedCourses = [...prevCourses];
+                normalizedCourses.forEach(course => {
+                    mergedCourses = upsertCourseInList(mergedCourses, course);
+                });
+                return mergedCourses;
+            });
+
+            const sessionLabel = (courseImportSessionOverride || responseData?.academic_session || '').toString().trim();
+            addToast(
+                `Imported ${normalizedCourses.length} course${normalizedCourses.length !== 1 ? 's' : ''}${sessionLabel ? ` for ${sessionLabel}` : ''}. Review and publish changes.`,
+                "success"
+            );
+            setCourseRegistrationFile(null);
+            setCourseImportSessionOverride(sessionLabel);
+            if (!courseImportLevelOverride) {
+                setCourseImportLevelOverride(normalizeLevel(responseData?.level));
+            }
+        } catch (error: any) {
+            console.error("Error importing course registration form:", error);
+            addToast(error?.message || "Failed to import course registration form.", "error");
+        } finally {
+            setIsCourseImporting(false);
+            setCourseImportProgress('');
         }
     };
 
@@ -551,7 +846,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const addCourseField = () => {
-        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: '100', semester: DEFAULT_SEMESTER }]);
+        setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: LEVELS[0], semester: DEFAULT_SEMESTER }]);
     };
 
     if (!userProfile.is_admin) {
@@ -793,6 +1088,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                 ))}
                             </select>
                         </div>
+                        <div className="mb-8 p-4 bg-white border border-gray-200 rounded-2xl">
+                            <h4 className="text-sm font-black text-gray-800 uppercase tracking-wider mb-3">Import Courses from Registration PDF</h4>
+                            <p className="text-xs text-gray-500 mb-4">Upload a course registration form and auto-create first/second semester courses, then edit manually if needed.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                                <select
+                                    value={courseImportLevelOverride}
+                                    onChange={e => setCourseImportLevelOverride(e.target.value)}
+                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none"
+                                >
+                                    <option value="">Use Extracted Level</option>
+                                    {LEVELS.map(lvl => (
+                                        <option key={lvl} value={lvl}>{lvl}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    value={courseImportSessionOverride}
+                                    onChange={e => setCourseImportSessionOverride(e.target.value)}
+                                    placeholder="Session override (e.g. 2025/2026)"
+                                    className="p-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none md:col-span-2"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    onChange={e => setCourseRegistrationFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
+                                />
+                                {isCourseImporting && (
+                                    <div className="flex items-center gap-1.5 text-lime-600 text-sm font-medium">
+                                        <span className="animate-spin">⏳</span>
+                                        <span>{courseImportProgress || 'Importing courses...'}</span>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleCourseRegistrationImport}
+                                    disabled={isCourseImporting || !courseRegistrationFile || !departmentId}
+                                    className={`w-full py-3 rounded-xl font-bold transition ${isCourseImporting || !courseRegistrationFile || !departmentId ? 'bg-gray-300 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-sm'}`}
+                                >
+                                    {isCourseImporting ? 'Importing Courses...' : 'Extract Courses from PDF'}
+                                </button>
+                            </div>
+                        </div>
                         {departmentId && (
                             <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-2xl">
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Course Access Departments</p>
@@ -896,6 +1235,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                             ))}
                                                         </select>
                                                     </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Course Code"
+                                                        value={s.course_code || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            const normalizedCode = e.target.value.toUpperCase();
+                                                            list[sIdx].course_code = normalizedCode;
+                                                            list[sIdx].course_id = normalizedCode.trim()
+                                                                ? normalizeTopicId(normalizedCode)
+                                                                : list[sIdx].course_id;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Session (e.g. 2025/2026)"
+                                                        value={s.academic_session || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].academic_session = e.target.value;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        placeholder="Unit"
+                                                        value={s.course_unit ?? ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            const nextValue = e.target.value === '' ? undefined : Number(e.target.value);
+                                                            list[sIdx].course_unit = Number.isFinite(nextValue as number) ? (nextValue as number) : undefined;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Status (e.g. C/R)"
+                                                        value={s.course_status || ''}
+                                                        onChange={e => {
+                                                            const list = [...coursesList];
+                                                            list[sIdx].course_status = normalizeCourseStatus(e.target.value) || undefined;
+                                                            setCoursesList(list);
+                                                        }}
+                                                        className="w-full p-2.5 border border-gray-100 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white focus:border-gray-300 transition-all outline-none"
+                                                    />
                                                 </div>
 
                                                 {/* INLINE TEXTBOOK UPLOAD */}
@@ -1070,6 +1461,99 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
 
             {activeTab === 'users' && (
                 <div className="space-y-6">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
+                        <h3 className="font-bold text-gray-800">Broadcast Center</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Recipient Scope</label>
+                                <select
+                                    value={recipientMode}
+                                    onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                >
+                                    <option value="all">All Users</option>
+                                    <option value="single">Single User</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Target User</label>
+                                <select
+                                    value={selectedRecipientId}
+                                    onChange={(e) => setSelectedRecipientId(e.target.value)}
+                                    disabled={recipientMode === 'all'}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
+                                >
+                                    <option value="">Select a user</option>
+                                    {allUsersList.map(user => (
+                                        <option key={user.uid} value={user.uid}>
+                                            {user.display_name} ({user.email || 'no-email'})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
+                                <h4 className="font-semibold text-gray-800">Send Push Notification</h4>
+                                <input
+                                    type="text"
+                                    value={announcementTitle}
+                                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                                    placeholder="Notification title"
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                />
+                                <textarea
+                                    value={announcementMessage}
+                                    onChange={(e) => setAnnouncementMessage(e.target.value)}
+                                    placeholder="Notification message"
+                                    rows={4}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
+                                />
+                                <select
+                                    value={notificationType}
+                                    onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                >
+                                    <option value="study_update">Study Update</option>
+                                    <option value="exam_reminder">Exam Reminder</option>
+                                    <option value="welcome">Welcome</option>
+                                </select>
+                                <button
+                                    onClick={handleSendPushNotification}
+                                    disabled={isSendingPush}
+                                    className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-black transition disabled:opacity-60"
+                                >
+                                    {isSendingPush ? 'Sending...' : 'Send Push Notification'}
+                                </button>
+                            </div>
+
+                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
+                                <h4 className="font-semibold text-gray-800">Send Email</h4>
+                                <input
+                                    type="text"
+                                    value={emailSubject}
+                                    onChange={(e) => setEmailSubject(e.target.value)}
+                                    placeholder="Email subject"
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
+                                />
+                                <textarea
+                                    value={emailBody}
+                                    onChange={(e) => setEmailBody(e.target.value)}
+                                    placeholder="Email body"
+                                    rows={4}
+                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
+                                />
+                                <button
+                                    onClick={handleSendEmail}
+                                    className="w-full bg-lime-600 text-white py-3 rounded-xl font-semibold hover:bg-lime-700 transition"
+                                >
+                                    Open Email Draft
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200">
                             <p className="text-lime-800 text-sm font-medium uppercase">Total Registered Users</p>
@@ -1110,6 +1594,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                     <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                                         <tr>
                                             <th className="px-6 py-3">User</th>
+                                            <th className="px-6 py-3">Email</th>
                                             <th className="px-6 py-3">Dept / Level</th>
                                             <th className="px-6 py-3">Last Active</th>
                                             <th className="px-6 py-3">Role</th>
@@ -1127,6 +1612,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                         )}
                                                     </div>
                                                     <span className="font-medium text-gray-900">{user.display_name}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {user.email || 'Not Provided'}
                                                 </td>
                                                 <td className="px-6 py-4 text-gray-600">
                                                     {user.department_id || 'Not Set'} / {user.level || '?' }L
