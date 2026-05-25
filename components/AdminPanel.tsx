@@ -1518,7 +1518,9 @@ FORMAT:
                                                                 const list = [...coursesList];
                                                                 const nextName = e.target.value;
                                                                 list[sIdx].course_name = nextName;
-                                                                list[sIdx].course_id = normalizeTopicId(nextName);
+                                                                if (!list[sIdx].course_id?.trim()) {
+                                                                    list[sIdx].course_id = normalizeTopicId(nextName);
+                                                                }
                                                                 setCoursesList(list);
                                                             }}
                                                             className="w-full p-3 border border-gray-100 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white focus:border-lime-500 transition-all outline-none"
