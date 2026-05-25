@@ -110,6 +110,15 @@ const upsertCourseInList = (
     return Array.from(courseMap.values());
 };
 
+const mergeCourseListsIntoTarget = (existingCourses: Course[], incomingCourses: Course[]) => {
+    let mergedCourses = [...existingCourses];
+    for (const course of incomingCourses) {
+        if (!course.course_id) continue;
+        mergedCourses = upsertCourseInList(mergedCourses, course);
+    }
+    return mergedCourses;
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -472,9 +481,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     }))
                     : [];
 
-                // Primary uses the live editor state; other departments merge into their stored lists.
-                const baseCourseList = targetDepartmentId === departmentId ? coursesList : existingDepartmentCourses;
-                const updatedCourseList = upsertCourseInList(baseCourseList, selectedCourse, mergedSyllabus, uploadedUrls);
+                const isPrimaryDepartmentTarget = targetDepartmentId === departmentId;
+                const coursesForTargetDepartment = isPrimaryDepartmentTarget ? coursesList : existingDepartmentCourses;
+                const updatedCourseList = upsertCourseInList(coursesForTargetDepartment, selectedCourse, mergedSyllabus, uploadedUrls);
 
                 await update(departmentRef, {
                     course_list: updatedCourseList
@@ -528,10 +537,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     }))
                     : [];
 
-                const mergedCourses = coursesList.reduce((acc, course) => {
-                    if (!course.course_id) return acc;
-                    return upsertCourseInList(acc, course);
-                }, existingCourses);
+                const mergedCourses = mergeCourseListsIntoTarget(existingCourses, coursesList);
 
                 await update(targetDepartmentRef, {
                     course_list: mergedCourses
@@ -789,7 +795,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                         </div>
                         {departmentId && (
                             <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-2xl">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Course Access Departments</p>
+                                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Course Access Departments</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                     {allDepartments.map(dept => {
                                         const isSelected = targetDepartmentIds.includes(dept.id);
