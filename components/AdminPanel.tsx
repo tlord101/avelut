@@ -69,6 +69,47 @@ const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]) 
 
 const getUniqueIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
 
+const mergeCourseRecord = (
+    existingCourse: Partial<Course> | undefined,
+    sourceCourse: Course,
+    mergedTopics?: Topic[],
+    appendedTextbookUrls: string[] = []
+): Course => {
+    const baseCourse = existingCourse || sourceCourse;
+    const sourceTopics = Array.isArray(sourceCourse.topics) ? sourceCourse.topics : [];
+    const baseTopics = Array.isArray(baseCourse.topics) ? (baseCourse.topics as Topic[]) : [];
+    const resolvedTopics = mergedTopics
+        ? mergeTopics(baseTopics, mergedTopics)
+        : (sourceTopics.length > 0 ? sourceTopics : baseTopics);
+
+    const mergedCourseUrls = Array.from(new Set([
+        ...normalizeTextbookUrls(baseCourse),
+        ...normalizeTextbookUrls(sourceCourse),
+        ...appendedTextbookUrls
+    ]));
+
+    return {
+        ...baseCourse,
+        ...sourceCourse,
+        topics: resolvedTopics,
+        textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
+        textbook_urls: mergedCourseUrls,
+        semester: normalizeSemester(sourceCourse.semester || (baseCourse as Course).semester),
+    };
+};
+
+const upsertCourseInList = (
+    courseList: Course[],
+    sourceCourse: Course,
+    mergedTopics?: Topic[],
+    appendedTextbookUrls: string[] = []
+): Course[] => {
+    const courseMap = new Map(courseList.map(course => [course.course_id, course]));
+    const existingCourse = courseMap.get(sourceCourse.course_id);
+    courseMap.set(sourceCourse.course_id, mergeCourseRecord(existingCourse, sourceCourse, mergedTopics, appendedTextbookUrls));
+    return Array.from(courseMap.values());
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>('departments');
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
@@ -184,6 +225,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     }, [departmentId]);
 
     const toggleTargetDepartment = (targetId: string) => {
+        // Keep a defensive guard even though primary checkbox is disabled in UI.
         if (!departmentId || targetId === departmentId) return;
         setTargetDepartmentIds(prev => (
             prev.includes(targetId)
@@ -297,7 +339,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
     };
 
     const handleTextbookUpload = async (courseId: string, files: File[]) => {
-        // Find selecting course details from coursesList
+        // Find selected course details from coursesList
         const selectedCourse = coursesList.find(c => c.course_id === courseId);
         const syncDepartmentIds = getUniqueIds([departmentId, ...targetDepartmentIds]);
         
@@ -396,7 +438,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
             setExtractionProgress('Saving to database...');
 
             // 3. Save textbook context + course updates to every selected department
-            let activeDepartmentUpdatedCourses: Course[] | null = null;
+            let primaryDepartmentCourses: Course[] | null = null;
 
             for (const targetDepartmentId of syncDepartmentIds) {
                 const textbookContextRef = dbRef(db, `textbook_contexts/${targetDepartmentId}/${level}/${course_name}`);
@@ -430,47 +472,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     }))
                     : [];
 
-                const updatedCourseList = targetDepartmentId === departmentId
-                    ? coursesList.map(c => {
-                        if (c.course_id === courseId) {
-                            const existingCourseUrls = normalizeTextbookUrls(c);
-                            const mergedCourseUrls = Array.from(new Set([...existingCourseUrls, ...uploadedUrls]));
-                            return {
-                                ...c,
-                                topics: mergedSyllabus,
-                                textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
-                                textbook_urls: mergedCourseUrls
-                            };
-                        }
-                        return c;
-                    })
-                    : (() => {
-                        const courseMap = new Map(existingDepartmentCourses.map(course => [course.course_id, course]));
-                        const existingTargetCourse = courseMap.get(courseId);
-                        const existingTargetUrls = normalizeTextbookUrls(existingTargetCourse || {});
-                        const mergedCourseUrls = Array.from(new Set([...existingTargetUrls, ...uploadedUrls]));
-                        courseMap.set(courseId, {
-                            ...(existingTargetCourse || selectedCourse),
-                            ...selectedCourse,
-                            topics: mergedSyllabus,
-                            textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
-                            textbook_urls: mergedCourseUrls,
-                            semester: normalizeSemester(selectedCourse.semester),
-                        });
-                        return Array.from(courseMap.values());
-                    })();
+                // Primary uses the live editor state; other departments merge into their stored lists.
+                const baseCourseList = targetDepartmentId === departmentId ? coursesList : existingDepartmentCourses;
+                const updatedCourseList = upsertCourseInList(baseCourseList, selectedCourse, mergedSyllabus, uploadedUrls);
 
                 await update(departmentRef, {
                     course_list: updatedCourseList
                 });
 
                 if (targetDepartmentId === departmentId) {
-                    activeDepartmentUpdatedCourses = updatedCourseList;
+                    primaryDepartmentCourses = updatedCourseList;
                 }
             }
 
-            if (activeDepartmentUpdatedCourses) {
-                setCoursesList(activeDepartmentUpdatedCourses);
+            if (primaryDepartmentCourses) {
+                setCoursesList(primaryDepartmentCourses);
             }
 
             addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} synced to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
@@ -512,17 +528,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                     }))
                     : [];
 
-                const mergedCoursesById = new Map(existingCourses.map(course => [course.course_id, course]));
-                coursesList.forEach(course => {
-                    if (!course.course_id) return;
-                    mergedCoursesById.set(course.course_id, {
-                        ...course,
-                        semester: normalizeSemester(course.semester),
-                    });
-                });
+                const mergedCourses = coursesList.reduce((acc, course) => {
+                    if (!course.course_id) return acc;
+                    return upsertCourseInList(acc, course);
+                }, existingCourses);
 
                 await update(targetDepartmentRef, {
-                    course_list: Array.from(mergedCoursesById.values())
+                    course_list: mergedCourses
                 });
             }
 
