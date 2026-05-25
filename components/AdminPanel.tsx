@@ -13,6 +13,7 @@ import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { CheckIcon } from './icons/CheckIcon';
+import { getWindowPathname } from '../utils/pathname';
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
@@ -145,7 +146,6 @@ const getUniqueIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)))
 const getCourseMergeKey = (course: Partial<Course>) => (
     normalizeTopicId((course?.course_name || course?.course_id || '').toString().trim())
 );
-const getWindowPathname = () => (typeof window !== 'undefined' ? window.location.pathname || '/' : '/');
 
 const mergeCourseRecord = (
     existingCourse: Partial<Course> | undefined,

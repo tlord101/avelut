@@ -16,6 +16,7 @@ import { useToast } from './hooks/useToast';
 import { navigationItems, adminNavigationItems } from './constants';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
+import { getWindowPathname } from './utils/pathname';
 
 declare var __app_id: string;
 
@@ -62,8 +63,6 @@ const normalizeLevelValue = (value?: string): string => {
     if (!value) return '';
     return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
 };
-
-const getWindowPathname = () => (typeof window !== 'undefined' ? window.location.pathname || '/' : '/');
 
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
