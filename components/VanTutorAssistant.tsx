@@ -4,7 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { onValue, push, ref as dbRef, serverTimestamp, set, update } from 'firebase/database';
 import 'katex/dist/katex.min.css';
+import { db } from '../firebase';
+import type { UserProfile } from '../types';
 import { ChatIcon } from './icons/ChatIcon';
 import { SendIcon } from './icons/SendIcon';
 import { PlusIcon } from './icons/PlusIcon';
@@ -16,23 +19,21 @@ interface AssistantMessage {
   id: string;
   sender: AssistantSender;
   text: string;
+  timestamp?: number;
 }
 
 interface HistoryItem {
-  id: number;
+  id: string;
   title: string;
+  lastUpdatedAt: number;
 }
 
-const apiKey = typeof process !== 'undefined'
-  ? (process.env.VANTUTOR_ASSISTANT_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY)
-  : undefined;
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
-const ASSISTANT_MODEL = 'gemini-2.5-flash';
+interface VanTutorAssistantProps {
+  userProfile: UserProfile;
+}
 
-const starterHistory: HistoryItem[] = [
-  { id: 1, title: 'Calculus III Equations' },
-  { id: 2, title: 'Thermodynamics Review' },
-];
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+const ASSISTANT_MODEL = 'gemini-2.5-flash';
 
 const quickPrompts = [
   'Explain the chain rule with a worked example.',
@@ -45,14 +46,16 @@ const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(
 const truncateTitle = (text: string) => {
   const cleaned = text.trim().replace(/\s+/g, ' ');
   if (!cleaned) return 'New Chat';
-  return cleaned.length > 34 ? `${cleaned.slice(0, 34).trim()}...` : cleaned;
+  return cleaned.length > 48 ? `${cleaned.slice(0, 48).trim()}...` : cleaned;
 };
 
-const generatePresentableChatTitle = () => {
-  const now = new Date();
-  const date = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return `Study Session • ${date} ${time}`;
+const normalizeTitle = (text: string) => {
+  const cleaned = text
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return truncateTitle(cleaned || 'New Chat');
 };
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -68,16 +71,25 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
   prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
 );
+
+const mapSender = (sender: string | undefined): AssistantSender => {
+  if (sender === 'user') return 'user';
+  if (sender === 'assistant' || sender === 'ai' || sender === 'bot') return 'assistant';
+  if (sender) console.warn('Unexpected chat sender value:', { sender, context: 'message mapping' });
+  return 'assistant';
+};
+
 const MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS = 'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))]';
 
-export default function VanTutorAssistant() {
+export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [history, setHistory] = useState<HistoryItem[]>(starterHistory);
-  const [activeHistoryId, setActiveHistoryId] = useState<number | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,40 +99,118 @@ export default function VanTutorAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
+  useEffect(() => {
+    setIsHistoryLoading(true);
+    const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+
+    const unsubscribe = onValue(conversationsRef, snapshot => {
+      if (!snapshot.exists()) {
+        setHistory([]);
+        setActiveHistoryId(null);
+        setIsHistoryLoading(false);
+        return;
+      }
+
+      const nextHistory: HistoryItem[] = [];
+      snapshot.forEach(child => {
+        const value = child.val() || {};
+        nextHistory.push({
+          id: child.key || '',
+          title: normalizeTitle(value.title || 'New Chat'),
+          lastUpdatedAt: Number(value.last_updated_at || value.created_at || 0),
+        });
+      });
+
+      nextHistory.sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt);
+      setHistory(nextHistory);
+      setIsHistoryLoading(false);
+      setActiveHistoryId(current => current && nextHistory.some(item => item.id === current) ? current : null);
+    });
+
+    return unsubscribe;
+  }, [userProfile.uid]);
+
+  useEffect(() => {
+    if (!activeHistoryId) {
+      setMessages([]);
+      return;
+    }
+
+    const messagesRef = dbRef(db, `chat_messages/${activeHistoryId}`);
+    const unsubscribe = onValue(messagesRef, snapshot => {
+      if (!snapshot.exists()) {
+        setMessages([]);
+        return;
+      }
+
+      const nextMessages: AssistantMessage[] = [];
+      snapshot.forEach(child => {
+        const value = child.val() || {};
+        nextMessages.push({
+          id: child.key || createMessageId(),
+          sender: mapSender(value.sender),
+          text: value.text || '',
+          timestamp: Number(value.timestamp || 0),
+        });
+      });
+
+      nextMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      setMessages(nextMessages);
+    });
+
+    return unsubscribe;
+  }, [activeHistoryId]);
+
   const conversationSummary = useMemo(() => {
     if (activeHistoryId) {
       const active = history.find(item => item.id === activeHistoryId);
       if (active) return active.title;
     }
-    if (!messages.length) return 'Fresh chat';
-    if (history.length > 0) return history[0].title;
-    return truncateTitle(messages[messages.length - 1].text);
-  }, [activeHistoryId, history, messages]);
 
-  const updateRecentHistory = (title: string) => {
-    const nextTitle = truncateTitle(title);
-    if (activeHistoryId) {
-      setHistory(prev => prev.map(item => item.id === activeHistoryId ? { ...item, title: nextTitle } : item).slice(0, 6));
-      return;
-    }
-    const createdId = Date.now();
-    setActiveHistoryId(createdId);
-    setHistory(prev => [
-      { id: createdId, title: nextTitle },
-      ...prev.filter(item => item.title !== nextTitle && item.title !== 'New Chat'),
-    ].slice(0, 6));
+    return messages.length > 0 ? 'Current chat' : 'New chat';
+  }, [activeHistoryId, history, messages.length]);
+
+  const clearAttachment = () => {
+    setAttachment(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   };
 
   const startNewChat = () => {
-    const id = Date.now();
-    setHistory(prev => [{ id, title: generatePresentableChatTitle() }, ...prev].slice(0, 6));
-    setActiveHistoryId(id);
+    setActiveHistoryId(null);
     setMessages([]);
     setInputValue('');
-    setAttachment(null);
+    clearAttachment();
     setStatusText('Started a new chat.');
     setIsSidebarOpen(false);
     inputRef.current?.focus();
+  };
+
+  const generateChatTitle = async (prompt: string, responseText: string) => {
+    const fallbackTitle = normalizeTitle(prompt);
+
+    if (!ai) return fallbackTitle;
+
+    try {
+      const result = await ai.models.generateContent({
+        model: ASSISTANT_MODEL,
+        contents: [{
+          role: 'user',
+          parts: [{
+            text: [
+              'Create a short, simple, readable chat title for this tutoring conversation.',
+              'Rules: maximum 6 words, no markdown, no quotes, no emojis, no trailing punctuation unless needed.',
+              `Student message: ${prompt}`,
+              `Assistant reply: ${responseText}`,
+            ].join('\n'),
+          }],
+        }],
+      });
+
+      return normalizeTitle((result.text || '').split('\n')[0] || fallbackTitle);
+    } catch (error) {
+      console.error('Failed to generate chat title:', error);
+      return fallbackTitle;
+    }
   };
 
   const handleSend = async (event?: React.FormEvent) => {
@@ -128,19 +218,24 @@ export default function VanTutorAssistant() {
     const prompt = inputValue.trim();
     if ((!prompt && !attachment) || isSending) return;
 
+    const userText = prompt || getHistoryFallbackTitle(prompt, attachment);
+    const previousMessages = messages;
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
-      text: prompt || getHistoryFallbackTitle(prompt, attachment),
+      text: userText,
+      timestamp: Date.now(),
     };
 
     const nextMessages = [...messages, userMessage];
+    const isNewConversation = !activeHistoryId;
+    const activeConversation = history.find(item => item.id === activeHistoryId);
+    const shouldGenerateTitle = isNewConversation || !activeConversation || activeConversation.title === 'New Chat';
+
     setMessages(nextMessages);
     setInputValue('');
     setIsSending(true);
     setStatusText('Thinking...');
-
-    if (!messages.length) updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
 
     try {
       if (!ai) {
@@ -149,12 +244,39 @@ export default function VanTutorAssistant() {
           {
             id: createMessageId(),
             sender: 'assistant',
-            text: 'Gemini is not configured yet. Add an API key to enable assistant replies.',
+            text: 'Gemini is not configured yet. Add the app GEMINI_API_KEY to the .env to enable assistant replies.',
           },
         ]);
         setStatusText('API key missing.');
         return;
       }
+
+      let conversationId = activeHistoryId;
+      const now = Date.now();
+
+      if (!conversationId) {
+        const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+        const newConversationRef = push(conversationsRef);
+        conversationId = newConversationRef.key;
+
+        if (!conversationId) {
+          throw new Error('Failed to create conversation: Firebase push() returned no key. Check database permissions and connection.');
+        }
+
+        await set(newConversationRef, {
+          title: 'New Chat',
+          created_at: now,
+          last_updated_at: now,
+        });
+        setActiveHistoryId(conversationId);
+      }
+
+      const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
+      await push(messagesRef, {
+        text: userText,
+        sender: 'user',
+        timestamp: serverTimestamp(),
+      });
 
       let attachmentPart:
         | { inlineData: { data: string; mimeType: string } }
@@ -194,21 +316,37 @@ export default function VanTutorAssistant() {
       });
 
       const responseText = (result.text || '').trim() || 'I could not generate a response right now. Please try again.';
-      setMessages(prev => [
-        ...prev,
-        {
-          id: createMessageId(),
-          sender: 'assistant',
-          text: responseText,
-        },
-      ]);
+      const assistantMessage: AssistantMessage = {
+        id: createMessageId(),
+        sender: 'assistant',
+        text: responseText,
+        timestamp: Date.now(),
+      };
+
+      await push(messagesRef, {
+        text: responseText,
+        sender: 'assistant',
+        timestamp: serverTimestamp(),
+      });
+
+      const updates: { title?: string; last_updated_at: number } = {
+        last_updated_at: 0,
+      };
+
+      if (shouldGenerateTitle) {
+        updates.title = await generateChatTitle(userText, responseText);
+      }
+
+      updates.last_updated_at = Date.now();
+      await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
+
+      setMessages([...nextMessages, assistantMessage]);
       setStatusText('Response ready.');
-      updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
       clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
-      setMessages(prev => [
-        ...prev,
+      setMessages([
+        ...previousMessages,
         {
           id: createMessageId(),
           sender: 'assistant',
@@ -233,14 +371,9 @@ export default function VanTutorAssistant() {
     setStatusText(`Attachment ready: ${file.name}`);
   };
 
-  const clearAttachment = () => {
-    setAttachment(null);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-  };
-
   return (
     <div className="min-h-full bg-gradient-to-br from-slate-50 via-white to-emerald-50/40">
-      <div className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-7xl overflow-hidden md:rounded-[2rem] md:border md:border-white/70 md:shadow-[0_20px_80px_rgba(15,23,42,0.08)] bg-white/90 backdrop-blur">
+      <div className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-7xl overflow-hidden bg-white/90 backdrop-blur md:rounded-[2rem] md:border md:border-white/70 md:shadow-[0_20px_80px_rgba(15,23,42,0.08)]">
         <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 md:static md:z-auto md:w-80 md:translate-x-0 md:shadow-none`}>
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -267,12 +400,31 @@ export default function VanTutorAssistant() {
           </button>
 
           <div className="space-y-3">
-            {history.map(item => (
-              <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Recent chat</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{item.title}</p>
+            {isHistoryLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                Loading chat history...
               </div>
-            ))}
+            ) : history.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                Your saved chats will appear here.
+              </div>
+            ) : (
+              history.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveHistoryId(item.id);
+                    setIsSidebarOpen(false);
+                    setStatusText(`Opened ${item.title}.`);
+                  }}
+                  className={`block w-full rounded-2xl border px-4 py-3 text-left transition ${activeHistoryId === item.id ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'}`}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Recent chat</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{item.title}</p>
+                </button>
+              ))
+            )}
           </div>
 
           <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
@@ -384,7 +536,6 @@ export default function VanTutorAssistant() {
             )}
           </section>
 
-          {/* 5.5rem aligns this composer directly above the mobile bottom nav bar height. */}
           <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-20 px-4 sm:px-6 md:static md:bottom-auto`}>
             <form onSubmit={handleSend} className="mx-auto max-w-3xl">
               <div className="rounded-full border border-white/70 bg-white/55 px-3 py-2 shadow-[0_10px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
