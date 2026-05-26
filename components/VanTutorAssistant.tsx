@@ -61,9 +61,14 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
     const result = typeof reader.result === 'string' ? reader.result : '';
     resolve(result.includes(',') ? result.split(',')[1] : result);
   };
-  reader.onerror = () => reject(new Error('Failed to read attachment.'));
+  reader.onerror = () => reject(new Error(`Failed to read attachment: ${reader.error?.message || 'Unknown error'}`));
   reader.readAsDataURL(file);
 });
+
+const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
+  prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
+);
+const MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS = 'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))]';
 
 export default function VanTutorAssistant() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -126,7 +131,7 @@ export default function VanTutorAssistant() {
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
-      text: prompt || (attachment ? `Attachment uploaded: ${attachment.name}` : ''),
+      text: prompt || getHistoryFallbackTitle(prompt, attachment),
     };
 
     const nextMessages = [...messages, userMessage];
@@ -135,9 +140,7 @@ export default function VanTutorAssistant() {
     setIsSending(true);
     setStatusText('Thinking...');
 
-    if (!messages.length) {
-      updateRecentHistory(prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat'));
-    }
+    if (!messages.length) updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
 
     try {
       if (!ai) {
@@ -179,7 +182,7 @@ export default function VanTutorAssistant() {
                   'Answer clearly, encourage the learner, and keep explanations concise but complete.',
                   'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
                   'If the question needs calculations, show the steps and final formula neatly.',
-                  attachment ? `An attachment is included (${attachment.name}). Use it as context.` : '',
+                  attachment ? 'An attachment is included. Use it as context.' : '',
                   '',
                   `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
                 ].filter(Boolean).join('\n'),
@@ -200,9 +203,8 @@ export default function VanTutorAssistant() {
         },
       ]);
       setStatusText('Response ready.');
-      updateRecentHistory(prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat'));
-      setAttachment(null);
-      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+      updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
+      clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages(prev => [
@@ -229,6 +231,11 @@ export default function VanTutorAssistant() {
     if (!file) return;
     setAttachment(file);
     setStatusText(`Attachment ready: ${file.name}`);
+  };
+
+  const clearAttachment = () => {
+    setAttachment(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   };
 
   return (
@@ -377,7 +384,8 @@ export default function VanTutorAssistant() {
             )}
           </section>
 
-          <footer className="fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))] z-20 px-4 sm:px-6 md:static md:bottom-auto">
+          {/* 5.5rem aligns this composer directly above the mobile bottom nav bar height. */}
+          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-20 px-4 sm:px-6 md:static md:bottom-auto`}>
             <form onSubmit={handleSend} className="mx-auto max-w-3xl">
               <div className="rounded-full border border-white/70 bg-white/55 px-3 py-2 shadow-[0_10px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
                 <div className="flex items-center gap-2">
@@ -392,7 +400,7 @@ export default function VanTutorAssistant() {
                   <input
                     ref={attachmentInputRef}
                     type="file"
-                    accept="image/*,.pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     className="hidden"
                     onChange={handleAttachmentChange}
                   />
@@ -421,10 +429,7 @@ export default function VanTutorAssistant() {
                 {attachment && (
                   <div className="mt-2 flex items-center justify-between rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600">
                     <span className="truncate">{attachment.name}</span>
-                    <button type="button" onClick={() => {
-                      setAttachment(null);
-                      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-                    }} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
+                    <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
                       <XIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
