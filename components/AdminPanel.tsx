@@ -69,7 +69,7 @@ const getCourseAdminView = (pathname: string): CourseAdminView => {
     }
 
     if (segments.length <= 2 || segments[2] === 'all') {
-        return { mode: 'global' };
+        return { mode: 'manager-root' };
     }
 
     if (segments[2] !== 'manager') {
@@ -1012,7 +1012,7 @@ FORMAT:
                 setExtractionProgress(`Uploading ${index + 1}/${pdfFiles.length} to storage...`);
 
                 // 1. Upload to Firebase Storage
-                const fileRef = storageRef(storage, `textbooks/${primaryDepartmentId}/${level}/${course_name}/${file.name}`);
+                const fileRef = storageRef(storage, `textbooks/${primaryDepartmentId}/${level}/${course_name}/${Date.now()}_${index}_${file.name}`);
                 const uploadResult = await uploadBytes(fileRef, file);
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
@@ -1266,7 +1266,7 @@ FORMAT:
                 )}
                 {visibleTabs.includes('courses') && (
                     <button 
-                        onClick={() => handleCourseTabNavigate('/admin/courses')}
+                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
                         className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
                     >
                         Courses
@@ -1601,10 +1601,10 @@ FORMAT:
                                 View Courses
                             </button>
                             <button
-                                onClick={() => handleCourseTabNavigate('/admin/courses')}
-                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs bg-lime-600 text-white hover:bg-lime-700 transition"
                             >
-                                Back to All Courses
+                                Merge Same-Title Courses
                             </button>
                         </div>
                     )}
@@ -1620,16 +1620,16 @@ FORMAT:
                                 </div>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => handleCourseTabNavigate('/admin/courses')}
-                                        className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-widest text-gray-700 hover:bg-gray-50"
-                                    >
-                                        All Courses
-                                    </button>
-                                    <button
                                         onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
                                         className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
                                     >
                                         Change Department
+                                    </button>
+                                    <button
+                                        onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                        className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
+                                    >
+                                        Merge Same-Title Courses
                                     </button>
                                 </div>
                             </div>
@@ -1694,6 +1694,7 @@ FORMAT:
                                                 onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
                                                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
                                             />
+                                            <p className="text-xs text-gray-500">You can select and upload multiple PDF textbooks at once.</p>
                                             <button
                                                 disabled={!courseDetailFiles.length || isUploading}
                                                 onClick={async () => {
