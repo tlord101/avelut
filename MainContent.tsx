@@ -9,6 +9,7 @@ import { Leaderboard } from './components/Leaderboard';
 import { Settings } from './components/Settings';
 import Help from './components/Help';
 import { Messenger } from './components/Messenger';
+import VanTutorAssistant from './components/VanTutorAssistant';
 import { AdminPanel } from './components/AdminPanel';
 
 interface MainContentProps {
@@ -53,6 +54,8 @@ export const MainContent: React.FC<MainContentProps> = ({
             return <Help onStartTour={startTour} />;
         case 'messenger':
             return <Messenger userProfile={userProfile} />;
+        case 'chat':
+            return <VanTutorAssistant />;
         case 'admin':
             return userProfile.is_admin
                 ? <AdminPanel userProfile={userProfile} />

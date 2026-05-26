@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { HomeIcon } from './icons/HomeIcon';
 import { CameraIcon } from './icons/CameraIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
+import { ChatIcon } from './icons/ChatIcon';
 import { MessengerIcon } from './icons/MessengerIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import type { UserProfile } from '../types';
@@ -19,6 +20,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
     { id: 'visual_solver', icon: <CameraIcon />, label: 'Solver' },
     { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
+    { id: 'chat', icon: <ChatIcon className="w-7 h-7" />, label: 'Chat' },
     { id: 'messenger', icon: <MessengerIcon className="w-7 h-7" />, label: 'Connect' },
   ];
 
