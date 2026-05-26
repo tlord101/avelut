@@ -1252,7 +1252,7 @@ FORMAT:
     }
 
     return (
-        <div className="flex flex-col p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="flex flex-col p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
             
             <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1294,7 +1294,7 @@ FORMAT:
                 <div className="space-y-6 max-w-2xl">
                     <div className="bg-white p-6 rounded-2xl border border-gray-200">
                         <h3 className="font-bold text-gray-800 mb-4">Add New Department</h3>
-                        <div className="flex gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4">
                             <input 
                                 type="text" 
                                 placeholder="Department Name (e.g., Computer Science)" 
@@ -1304,7 +1304,7 @@ FORMAT:
                             />
                             <button 
                                 onClick={handleAddDepartment}
-                                className="px-6 py-2 bg-lime-600 text-white rounded-lg font-bold hover:bg-lime-700"
+                                className="w-full sm:w-auto px-6 py-2 bg-lime-600 text-white rounded-lg font-bold hover:bg-lime-700"
                             >
                                 Add
                             </button>
@@ -1315,7 +1315,7 @@ FORMAT:
                         <h3 className="font-bold text-gray-800 mb-4">Existing Departments</h3>
                         <div className="space-y-2">
                             {allDepartments.map(dept => (
-                                <div key={dept.id} className="p-3 border rounded-lg flex justify-between items-center">
+                                <div key={dept.id} className="p-3 border rounded-lg flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
                                     <span>{dept.department_name}</span>
                                     <span className="text-xs text-gray-500">{dept.levels?.join(', ')}</span>
                                 </div>
@@ -1336,7 +1336,7 @@ FORMAT:
                             Upload a PDF of past questions to automatically populate the question bank.
                         </p>
                         
-                        <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                             <select 
                                 value={uploadDepartmentId} 
                                 onChange={e => setUploadDepartmentId(e.target.value)}
@@ -1402,7 +1402,7 @@ FORMAT:
                     </div>
 
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <select 
                                 value={uploadDepartmentId} 
                                 onChange={e => setUploadDepartmentId(e.target.value)}
@@ -1440,7 +1440,7 @@ FORMAT:
                             onChange={e => setNewQuestion({...newQuestion, question: e.target.value})}
                             className="w-full p-2 border rounded-lg h-24"
                         />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {newQuestion.options.map((opt, i) => (
                                 <input 
                                     key={i} type="text" placeholder={`Option ${String.fromCharCode(65+i)}`}
@@ -1510,8 +1510,8 @@ FORMAT:
                                 </div>
 
                                 {filteredGlobalCourses.length ? (
-                                    <div className="overflow-hidden rounded-2xl border border-gray-100">
-                                        <table className="w-full text-left">
+                                    <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                                        <table className="w-full min-w-[720px] text-left">
                                             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                                                 <tr>
                                                     <th className="px-6 py-3">Course</th>
@@ -1878,11 +1878,11 @@ FORMAT:
                                 Refresh List
                             </button>
                         </div>
-                        <div className="max-h-[500px] overflow-y-auto">
+                        <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
                             {isUsersLoading ? (
                                 <div className="p-10 text-center text-gray-500">Loading users...</div>
                             ) : (
-                                <table className="w-full text-left">
+                                <table className="w-full min-w-[820px] text-left">
                                     <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                                         <tr>
                                             <th className="px-6 py-3">User</th>
