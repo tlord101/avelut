@@ -23,8 +23,8 @@ interface HistoryItem {
   title: string;
 }
 
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 const starterHistory: HistoryItem[] = [
   { id: 1, title: 'Calculus III Equations' },
@@ -61,8 +61,17 @@ export default function VanTutorAssistant() {
 
   const conversationSummary = useMemo(() => {
     if (!messages.length) return 'Fresh chat';
+    if (history.length > 0) return history[0].title;
     return truncateTitle(messages[messages.length - 1].text);
-  }, [messages]);
+  }, [history, messages]);
+
+  const updateRecentHistory = (title: string) => {
+    const nextTitle = truncateTitle(title);
+    setHistory(prev => [
+      { id: Date.now(), title: nextTitle },
+      ...prev.filter(item => item.title !== nextTitle && item.title !== 'New Chat'),
+    ].slice(0, 6));
+  };
 
   const startNewChat = () => {
     setMessages([]);
@@ -89,12 +98,7 @@ export default function VanTutorAssistant() {
     setIsSending(true);
     setStatusText('Thinking...');
 
-    if (!messages.length) {
-      setHistory(prev => [
-        { id: Date.now(), title: truncateTitle(prompt) },
-        ...prev.filter(item => item.title !== 'New Chat'),
-      ].slice(0, 6));
-    }
+    if (!messages.length) updateRecentHistory(prompt);
 
     try {
       if (!ai) {
@@ -139,10 +143,7 @@ export default function VanTutorAssistant() {
         },
       ]);
       setStatusText('Response ready.');
-      setHistory(prev => [
-        { id: Date.now(), title: truncateTitle(prompt) },
-        ...prev.filter(item => item.title !== truncateTitle(prompt)),
-      ].slice(0, 6));
+      updateRecentHistory(prompt);
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages(prev => [
@@ -203,7 +204,7 @@ export default function VanTutorAssistant() {
 
           <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
             <p className="font-semibold">Math-ready replies</p>
-            <p className="mt-1 text-emerald-800">Use $x^2$ inline or $$\\int_0^1 x^2\\,dx$$ for display equations.</p>
+            <p className="mt-1 text-emerald-800">Use $x^2$ inline or $$\\int_0^1 x^2\\, dx$$ for display equations.</p>
           </div>
         </aside>
 
@@ -286,12 +287,7 @@ export default function VanTutorAssistant() {
                             ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5" {...props} />,
                             li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
                             strong: ({ node, ...props }) => <strong className="font-semibold text-slate-900" {...props} />,
-                            code: ({ node, inline, ...props }: any) =>
-                              inline ? (
-                                <code className="rounded bg-slate-100 px-1 py-0.5 text-sm text-emerald-700" {...props} />
-                              ) : (
-                                <code className="block overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100" {...props} />
-                              ),
+                            pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100" {...props} />,
                           }}
                         >
                           {message.text}
