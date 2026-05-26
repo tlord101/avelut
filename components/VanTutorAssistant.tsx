@@ -72,7 +72,12 @@ const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
   prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
 );
 
-const mapSender = (sender: string | undefined): AssistantSender => (sender === 'user' ? 'user' : 'assistant');
+const mapSender = (sender: string | undefined): AssistantSender => {
+  if (sender === 'user') return 'user';
+  if (sender === 'assistant' || sender === 'ai' || sender === 'bot') return 'assistant';
+  if (sender) console.warn('Unexpected chat sender value:', sender);
+  return 'assistant';
+};
 
 const MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS = 'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))]';
 
@@ -101,7 +106,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     onValue(conversationsRef, snapshot => {
       if (!snapshot.exists()) {
         setHistory([]);
-        setActiveHistoryId(current => current ? null : current);
+        setActiveHistoryId(null);
         setIsHistoryLoading(false);
         return;
       }
@@ -313,7 +318,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       await push(messagesRef, {
         text: responseText,
-        sender: 'ai',
+        sender: 'assistant',
         timestamp: serverTimestamp(),
       });
 
