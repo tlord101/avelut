@@ -57,6 +57,7 @@ const normalizeCourseStatus = (value?: string) => {
 type CourseAdminView =
     | { mode: 'global' }
     | { mode: 'manager-root' }
+    | { mode: 'add'; departmentId?: string; level?: string }
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
@@ -70,6 +71,12 @@ const getCourseAdminView = (pathname: string): CourseAdminView => {
 
     if (segments.length <= 2 || segments[2] === 'all') {
         return { mode: 'manager-root' };
+    }
+
+    if (segments[2] === 'add') {
+        const departmentId = segments[3] ? decodeURIComponent(segments[3]) : undefined;
+        const level = segments[4] ? decodeURIComponent(segments[4]) : undefined;
+        return { mode: 'add', departmentId, level };
     }
 
     if (segments[2] !== 'manager') {
@@ -97,6 +104,13 @@ const buildCourseManagerPath = (departmentId?: string, level?: string, courseId?
     const encodedLevel = encodeURIComponent(level);
     const encodedCourse = courseId ? `/${encodeURIComponent(courseId)}` : '';
     return `/admin/courses/manager/${encodedDepartment}/${encodedLevel}${encodedCourse}`;
+};
+
+const buildCourseAddPath = (departmentId?: string, level?: string) => {
+    if (!departmentId) return '/admin/courses/add';
+    const encodedDepartment = encodeURIComponent(departmentId);
+    if (!level) return `/admin/courses/add/${encodedDepartment}`;
+    return `/admin/courses/add/${encodedDepartment}/${encodeURIComponent(level)}`;
 };
 
 const matchesCourseIdentifier = (course: Partial<Course>, courseId: string) => (
@@ -143,9 +157,30 @@ const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]) 
 };
 
 const getUniqueIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
-const getCourseMergeKey = (course: Partial<Course>) => (
-    normalizeTopicId((course?.course_name || course?.course_id || '').toString().trim())
-);
+const getCourseMergeKey = (course: Partial<Course>) => {
+    const primaryLabel = (
+        course?.course_code ||
+        course?.course_name ||
+        course?.course_id ||
+        ''
+    ).toString().trim();
+    const normalizedPrimaryLabel = normalizeTopicId(primaryLabel);
+    if (!normalizedPrimaryLabel) return '';
+
+    const hasLevel = Boolean((course?.level || '').toString().trim());
+    const normalizedLevel = hasLevel ? normalizeLevel(course?.level) : 'alllvl';
+    const normalizedSemester = normalizeSemester(course?.semester);
+    return `${normalizedPrimaryLabel}_${normalizedLevel}_${normalizedSemester}`;
+};
+
+const getCourseRouteKey = (course: Partial<Course>) => {
+    const mergeKey = getCourseMergeKey(course);
+    if (mergeKey) return mergeKey;
+    const fallbackLabel = normalizeTopicId((course?.course_id || course?.course_name || 'course').toString().trim()) || 'course';
+    const hasLevel = Boolean((course?.level || '').toString().trim());
+    const normalizedLevel = hasLevel ? normalizeLevel(course?.level) : 'alllvl';
+    return `${fallbackLabel}_${normalizedLevel}_${normalizeSemester(course?.semester)}`;
+};
 
 const mergeCourseRecord = (
     existingCourse: Partial<Course> | undefined,
@@ -485,7 +520,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [coursesList, setCoursesList] = useState<Course[]>([]);
     const [selectedCatalogCourseKey, setSelectedCatalogCourseKey] = useState('');
     const [catalogDepartmentSelection, setCatalogDepartmentSelection] = useState<string[]>([]);
-    const [courseRegistrationFile, setCourseRegistrationFile] = useState<File | null>(null);
+    const [courseRegistrationFiles, setCourseRegistrationFiles] = useState<File[]>([]);
+    const [courseImportTargetMode, setCourseImportTargetMode] = useState<'selected' | 'all'>('selected');
+    const [courseImportDepartmentIds, setCourseImportDepartmentIds] = useState<string[]>([]);
     const [isCourseImporting, setIsCourseImporting] = useState(false);
     const [courseImportProgress, setCourseImportProgress] = useState('');
     const [courseImportLevelOverride, setCourseImportLevelOverride] = useState('');
@@ -518,6 +555,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             setTargetDepartmentIds([courseAdminView.departmentId]);
             setManagerSelectionDepartmentId(courseAdminView.departmentId);
             setManagerSelectionLevel(courseAdminView.level);
+            return;
+        }
+
+        if (courseAdminView.mode === 'add') {
+            const routeDepartmentId = courseAdminView.departmentId || '';
+            const routeLevel = courseAdminView.level || '';
+            if (routeDepartmentId) {
+                setCourseImportDepartmentIds([routeDepartmentId]);
+                setCourseImportTargetMode('selected');
+                setDepartmentId(routeDepartmentId);
+            }
+            if (routeLevel) {
+                setCourseImportLevelOverride(normalizeLevel(routeLevel));
+            }
             return;
         }
 
@@ -625,6 +676,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const toggleCatalogDepartment = (targetId: string) => {
         setCatalogDepartmentSelection(prev => (
+            prev.includes(targetId)
+                ? prev.filter(id => id !== targetId)
+                : [...prev, targetId]
+        ));
+    };
+
+    const toggleCourseImportDepartment = (targetId: string) => {
+        setCourseImportDepartmentIds(prev => (
             prev.includes(targetId)
                 ? prev.filter(id => id !== targetId)
                 : [...prev, targetId]
@@ -849,12 +908,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const handleCourseRegistrationImport = async () => {
-        if (!departmentId) {
-            addToast("Please select a department first", "error");
+        const selectedDepartmentIds = courseImportTargetMode === 'all'
+            ? allDepartments.map((dept) => dept.id)
+            : getUniqueIds(courseImportDepartmentIds);
+        if (!selectedDepartmentIds.length) {
+            addToast("Please select at least one target department", "error");
             return;
         }
-        if (!courseRegistrationFile) {
-            addToast("Please select a course registration PDF", "error");
+        if (!courseRegistrationFiles.length) {
+            addToast("Please select at least one course registration PDF", "error");
+            return;
+        }
+        if (!courseImportLevelOverride) {
+            addToast("Please select a target level", "error");
             return;
         }
         if (!ai) {
@@ -863,16 +929,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
 
         setIsCourseImporting(true);
-        setCourseImportProgress("Extracting course list from PDF...");
+        setCourseImportProgress(`Extracting courses from PDF 1/${courseRegistrationFiles.length}...`);
 
         try {
-            const reader = new FileReader();
-            reader.readAsDataURL(courseRegistrationFile);
-            const base64PDF = await new Promise<string>((resolve) => {
-                reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            });
+            let normalizedImportedCourses: Course[] = [];
+            let extractedSessionLabel = '';
 
-            const prompt = `Analyze this university course-registration form PDF and extract all registered courses for both first and second semesters.
+            for (let fileIndex = 0; fileIndex < courseRegistrationFiles.length; fileIndex++) {
+                const file = courseRegistrationFiles[fileIndex];
+                setCourseImportProgress(`Extracting courses from PDF ${fileIndex + 1}/${courseRegistrationFiles.length}...`);
+
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                const base64PDF = await new Promise<string>((resolve) => {
+                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                });
+
+                const prompt = `Analyze this university course-registration form PDF and extract all registered courses for both first and second semesters.
 
 RULES:
 1. Output ONLY valid JSON.
@@ -904,65 +977,90 @@ FORMAT:
   ]
 }`;
 
-            const response = await ai.models.generateContent({
-                model: "gemini-3.5-flash",
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
-                        ]
+                const response = await ai.models.generateContent({
+                    model: "gemini-3.5-flash",
+                    contents: [
+                        {
+                            role: 'user',
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
+                            ]
+                        }
+                    ],
+                    config: {
+                        responseMimeType: "application/json"
                     }
-                ],
-                config: {
-                    responseMimeType: "application/json"
+                });
+
+                if (!response.text) {
+                    throw new Error("AI returned an empty response while extracting courses.");
                 }
-            });
 
-            if (!response.text) {
-                throw new Error("AI returned an empty response while extracting courses.");
+                const responseData = JSON.parse(response.text);
+                const extractedSession = (responseData?.academic_session || '').toString().trim();
+                if (!extractedSessionLabel && extractedSession) {
+                    extractedSessionLabel = extractedSession;
+                }
+                const extractedCourses = Array.isArray(responseData?.courses) ? responseData.courses : [];
+                if (!extractedCourses.length) {
+                    continue;
+                }
+
+                const normalizedCourses = extractedCourses
+                    .map((course: any, index: number) => sanitizeCourseFromRegistrationForm(
+                        course,
+                        index,
+                        responseData?.level,
+                        responseData?.academic_session,
+                        courseImportLevelOverride,
+                        courseImportSessionOverride
+                    ))
+                    .filter((course: Course) => Boolean(course.course_id && course.course_name));
+
+                normalizedCourses.forEach((course) => {
+                    normalizedImportedCourses = upsertCourseInList(normalizedImportedCourses, course);
+                });
             }
 
-            const responseData = JSON.parse(response.text);
-            const extractedCourses = Array.isArray(responseData?.courses) ? responseData.courses : [];
-            if (!extractedCourses.length) {
-                throw new Error("No courses found in the uploaded form.");
-            }
-
-            const normalizedCourses = extractedCourses
-                .map((course: any, index: number) => sanitizeCourseFromRegistrationForm(
-                    course,
-                    index,
-                    responseData?.level,
-                    responseData?.academic_session,
-                    courseImportLevelOverride,
-                    courseImportSessionOverride
-                ))
-                .filter((course: Course) => Boolean(course.course_id && course.course_name));
-
-            if (!normalizedCourses.length) {
+            if (!normalizedImportedCourses.length) {
                 throw new Error("Extracted courses were invalid after normalization.");
             }
 
-            setCoursesList(prevCourses => {
-                let mergedCourses = [...prevCourses];
-                normalizedCourses.forEach(course => {
-                    mergedCourses = upsertCourseInList(mergedCourses, course);
-                });
-                return mergedCourses;
-            });
+            const semesterDistribution = normalizedImportedCourses.reduce(
+                (acc, course) => {
+                    acc[course.semester === 'second' ? 'second' : 'first'] += 1;
+                    return acc;
+                },
+                { first: 0, second: 0 }
+            );
+            const updates: Record<string, Course[]> = {};
+            setCourseImportProgress("Applying extracted courses to selected departments...");
 
-            const sessionLabel = (courseImportSessionOverride || responseData?.academic_session || '').toString().trim();
+            for (const targetDepartmentId of selectedDepartmentIds) {
+                const targetDepartmentRef = dbRef(db, `departments_data/${targetDepartmentId}`);
+                const targetDepartmentSnapshot = await get(targetDepartmentRef);
+                const existingCourses = normalizeCourseList(targetDepartmentSnapshot.val()?.course_list);
+                const mergedCourses = mergeCourseListsIntoTarget(existingCourses, normalizedImportedCourses);
+                updates[`departments_data/${targetDepartmentId}/course_list`] = mergedCourses;
+            }
+
+            await update(dbRef(db), updates);
+            await fetchDepartments();
+
+            if (selectedDepartmentIds.includes(departmentId)) {
+                await loadDepartmentCourses(departmentId);
+            }
+
+            const importedList = normalizeCourseList(normalizedImportedCourses);
+            setCoursesList(prevCourses => mergeCourseListsIntoTarget(prevCourses, importedList));
+
+            const sessionLabel = (courseImportSessionOverride || extractedSessionLabel || '').toString().trim();
             addToast(
-                `Imported ${normalizedCourses.length} course${normalizedCourses.length !== 1 ? 's' : ''}${sessionLabel ? ` for ${sessionLabel}` : ''}. Review and publish changes.`,
+                `Added ${importedList.length} merged course${importedList.length !== 1 ? 's' : ''} (${semesterDistribution.first} first-sem, ${semesterDistribution.second} second-sem) to ${selectedDepartmentIds.length} department${selectedDepartmentIds.length !== 1 ? 's' : ''}${sessionLabel ? ` for ${sessionLabel}` : ''}.`,
                 "success"
             );
-            setCourseRegistrationFile(null);
-            setCourseImportSessionOverride(sessionLabel);
-            if (!courseImportLevelOverride) {
-                setCourseImportLevelOverride(normalizeLevel(responseData?.level));
-            }
+            setCourseRegistrationFiles([]);
         } catch (error: any) {
             console.error("Error importing course registration form:", error);
             addToast(error?.message || "Failed to import course registration form.", "error");
@@ -1230,6 +1328,12 @@ FORMAT:
             ].some((value) => (value || '').toString().toLowerCase().includes(query));
         });
     }, [allDepartments, courseCatalog, courseSearchQuery]);
+    const isCourseImportDisabled = (
+        isCourseImporting ||
+        !courseRegistrationFiles.length ||
+        !courseImportLevelOverride ||
+        (courseImportTargetMode === 'selected' && !courseImportDepartmentIds.length)
+    );
 
     const handleCourseTabNavigate = useCallback((path: string) => {
         if (onNavigate) {
@@ -1488,12 +1592,20 @@ FORMAT:
                                         <h3 className="text-xl font-black text-gray-900">All Courses</h3>
                                         <p className="text-sm text-gray-500">Search every course across departments.</p>
                                     </div>
-                                    <button
-                                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
-                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
-                                    >
-                                        Open Course Manager
-                                    </button>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                            className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                        >
+                                            Open Course Manager
+                                        </button>
+                                        <button
+                                            onClick={() => handleCourseTabNavigate('/admin/courses/add')}
+                                            className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
+                                        >
+                                            Course Addition
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-col md:flex-row gap-3">
@@ -1531,8 +1643,9 @@ FORMAT:
                                                         .join(', ');
                                                     const firstDepartmentId = departmentIds[0] || '';
                                                     const hasMultipleDepartments = departmentIds.length > 1;
+                                                    const courseRouteIdentifier = getCourseRouteKey(course);
                                                     return (
-                                                        <tr key={course.course_id} className="hover:bg-gray-50">
+                                                        <tr key={courseRouteIdentifier} className="hover:bg-gray-50">
                                                             <td className="px-6 py-4">
                                                                 <div className="font-bold text-gray-900">{course.course_name}</div>
                                                                 <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
@@ -1546,7 +1659,7 @@ FORMAT:
                                                             </td>
                                                             <td className="px-6 py-4 text-right">
                                                                 <button
-                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, course.course_id))}
+                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, courseRouteIdentifier))}
                                                                     title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
                                                                     className="text-sm font-bold text-lime-600 hover:text-lime-700"
                                                                 >
@@ -1604,11 +1717,118 @@ FORMAT:
                                 View Courses
                             </button>
                             <button
+                                onClick={() => handleCourseTabNavigate(buildCourseAddPath(managerSelectionDepartmentId || undefined, managerSelectionLevel || undefined))}
+                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs bg-gray-900 text-white hover:bg-black transition"
+                            >
+                                Course Addition
+                            </button>
+                            <button
                                 onClick={handleMergeDuplicateCoursesAcrossDepartments}
                                 className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs bg-lime-600 text-white hover:bg-lime-700 transition"
                             >
                                 Merge Same-Title Courses
                             </button>
+                        </div>
+                    )}
+
+                    {courseAdminView.mode === 'add' && (
+                        <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-6 max-w-4xl">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="text-xl font-black text-gray-900">Course Addition</h3>
+                                    <p className="text-sm text-gray-500">Upload course-form PDF(s), auto-extract courses with AI, then add to selected departments and level.</p>
+                                </div>
+                                <button
+                                    onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                >
+                                    Back to Manager
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 rounded-2xl border border-gray-100 p-4 bg-gray-50">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-gray-500">Department Scope</label>
+                                        <select
+                                            value={courseImportTargetMode}
+                                            onChange={e => setCourseImportTargetMode(e.target.value as 'selected' | 'all')}
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
+                                        >
+                                            <option value="selected">Selected Department(s)</option>
+                                            <option value="all">All Departments</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-gray-500">Target Level</label>
+                                        <select
+                                            value={courseImportLevelOverride}
+                                            onChange={e => setCourseImportLevelOverride(e.target.value)}
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
+                                        >
+                                            <option value="">Select Level</option>
+                                            {LEVELS.map(level => (
+                                                <option key={level} value={level}>{level}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {courseImportTargetMode === 'selected' && (
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">Select Department(s)</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                            {allDepartments.map((dept) => (
+                                                <label key={dept.id} className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl bg-white">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={courseImportDepartmentIds.includes(dept.id)}
+                                                        onChange={() => toggleCourseImportDepartment(dept.id)}
+                                                        className="rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                                    />
+                                                    <span className="text-sm text-gray-700">{dept.department_name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black uppercase tracking-widest text-gray-500">Academic Session (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={courseImportSessionOverride}
+                                        onChange={e => setCourseImportSessionOverride(e.target.value)}
+                                        placeholder="e.g. 2025/2026"
+                                        className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black uppercase tracking-widest text-gray-500">Course Form PDF(s)</label>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept="application/pdf"
+                                        onChange={e => setCourseRegistrationFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
+                                    />
+                                    <p className="text-xs text-gray-500">
+                                        Duplicate courses are merged automatically, and first/second semester values are preserved for semester badges.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleCourseRegistrationImport}
+                                disabled={isCourseImportDisabled}
+                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${isCourseImportDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
+                            >
+                                {isCourseImporting ? 'Importing Courses...' : 'Extract & Add Courses'}
+                            </button>
+                            {isCourseImporting && (
+                                <p className="text-sm font-medium text-lime-600">{courseImportProgress || 'Importing course registration forms...'}</p>
+                            )}
                         </div>
                     )}
 
@@ -1629,6 +1849,12 @@ FORMAT:
                                         Change Department
                                     </button>
                                     <button
+                                        onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
+                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                    >
+                                        Course Addition
+                                    </button>
+                                    <button
                                         onClick={handleMergeDuplicateCoursesAcrossDepartments}
                                         className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
                                     >
@@ -1639,21 +1865,24 @@ FORMAT:
                             <div className="bg-white p-4 rounded-2xl border border-gray-200">
                                 {managerCoursesForLevel.length ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {managerCoursesForLevel.map((course) => (
-                                            <button
-                                                key={course.course_id}
-                                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, course.course_id))}
-                                                className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
-                                            >
-                                                <div>
-                                                    <div className="font-bold text-gray-900">{course.course_name}</div>
-                                                    <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
-                                                </div>
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                </span>
-                                            </button>
-                                        ))}
+                                        {managerCoursesForLevel.map((course) => {
+                                            const courseRouteIdentifier = getCourseRouteKey(course);
+                                            return (
+                                                <button
+                                                    key={courseRouteIdentifier}
+                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier))}
+                                                    className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
+                                                >
+                                                    <div>
+                                                        <div className="font-bold text-gray-900">{course.course_name}</div>
+                                                        <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                        {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="p-8 text-center text-gray-500">
@@ -1666,12 +1895,20 @@ FORMAT:
 
                     {courseAdminView.mode === 'manager-detail' && (
                         <div className="space-y-6">
-                            <button
-                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level))}
-                                className="text-sm font-black text-gray-500 hover:text-gray-900"
-                            >
-                                ← Back to Course List
-                            </button>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level))}
+                                    className="text-sm font-black text-gray-500 hover:text-gray-900"
+                                >
+                                    ← Back to Course List
+                                </button>
+                                <button
+                                    onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
+                                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                >
+                                    Course Addition
+                                </button>
+                            </div>
                             <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-6 max-w-4xl">
                                 {selectedManagerCourse ? (
                                     <>
