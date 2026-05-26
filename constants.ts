@@ -6,6 +6,7 @@ import { DashboardIcon } from './components/icons/DashboardIcon';
 import { StudyGuideIcon } from './components/icons/StudyGuideIcon';
 import { ExamIcon } from './components/icons/ExamIcon';
 import { CameraIcon } from './components/icons/CameraIcon';
+import { ChatIcon } from './components/icons/ChatIcon';
 import { HelpIcon } from './components/icons/HelpIcon';
 import { GraduationCapIcon } from './components/icons/GraduationCapIcon';
 import { LeaderboardIcon } from './components/icons/LeaderboardIcon';
@@ -40,6 +41,7 @@ export const navigationItems: NavItem[] = [
   { id: 'leaderboard', label: 'Leaderboard', icon: React.createElement(LeaderboardIcon) },
   { id: 'study_guide', label: 'Study Guide', icon: React.createElement(StudyGuideIcon) },
   { id: 'visual_solver', label: 'Visual Solver', icon: React.createElement(CameraIcon) },
+  { id: 'chat', label: 'Chat', icon: React.createElement(ChatIcon) },
   { id: 'exam', label: 'Exam', icon: React.createElement(ExamIcon) },
 ];
 
