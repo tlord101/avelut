@@ -1242,8 +1242,9 @@ FORMAT:
     useEffect(() => {
         if (courseAdminView.mode !== 'manager-root') return;
         if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
-        handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel));
-    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate, buildCourseManagerPath]);
+        const managerPath = `/admin/courses/manager/${encodeURIComponent(managerSelectionDepartmentId)}/${encodeURIComponent(managerSelectionLevel)}`;
+        handleCourseTabNavigate(managerPath);
+    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate]);
 
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
