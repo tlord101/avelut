@@ -516,6 +516,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail') {
             setDepartmentId(courseAdminView.departmentId);
             setTargetDepartmentIds([courseAdminView.departmentId]);
+            setManagerSelectionDepartmentId(courseAdminView.departmentId);
+            setManagerSelectionLevel(courseAdminView.level);
             return;
         }
 
@@ -524,6 +526,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             setTargetDepartmentIds([]);
             setCoursesList([]);
             setCourseDetailFiles([]);
+            setManagerSelectionDepartmentId('');
+            setManagerSelectionLevel('');
         }
     }, [courseAdminView]);
 
@@ -1234,6 +1238,12 @@ FORMAT:
         }
         setInternalPathname(path);
     };
+
+    useEffect(() => {
+        if (courseAdminView.mode !== 'manager-root') return;
+        if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
+        handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel));
+    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel]);
 
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
