@@ -1012,7 +1012,10 @@ FORMAT:
                 setExtractionProgress(`Uploading ${index + 1}/${pdfFiles.length} to storage...`);
 
                 // 1. Upload to Firebase Storage
-                const fileRef = storageRef(storage, `textbooks/${primaryDepartmentId}/${level}/${course_name}/${Date.now()}_${index}_${file.name}`);
+                const uploadToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                    ? crypto.randomUUID()
+                    : `${Date.now()}_${typeof performance !== 'undefined' ? performance.now().toString().replace('.', '_') : '0'}_${index}_${file.lastModified}_${file.size}`;
+                const fileRef = storageRef(storage, `textbooks/${primaryDepartmentId}/${level}/${course_name}/${uploadToken}_${file.name}`);
                 const uploadResult = await uploadBytes(fileRef, file);
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
