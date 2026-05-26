@@ -74,9 +74,9 @@ const getCourseAdminView = (pathname: string): CourseAdminView => {
     }
 
     if (segments[2] === 'add') {
-        const departmentId = segments[3] ? decodeURIComponent(segments[3]) : '';
-        const level = segments[4] ? decodeURIComponent(segments[4]) : '';
-        return { mode: 'add', departmentId: departmentId || undefined, level: level || undefined };
+        const departmentId = segments[3] ? decodeURIComponent(segments[3]) : undefined;
+        const level = segments[4] ? decodeURIComponent(segments[4]) : undefined;
+        return { mode: 'add', departmentId, level };
     }
 
     if (segments[2] !== 'manager') {
@@ -171,6 +171,15 @@ const getCourseMergeKey = (course: Partial<Course>) => {
     const normalizedLevel = hasLevel ? normalizeLevel(course?.level) : 'alllvl';
     const normalizedSemester = normalizeSemester(course?.semester);
     return `${normalizedPrimaryLabel}_${normalizedLevel}_${normalizedSemester}`;
+};
+
+const getCourseRouteKey = (course: Partial<Course>) => {
+    const mergeKey = getCourseMergeKey(course);
+    if (mergeKey) return mergeKey;
+    const fallbackLabel = normalizeTopicId((course?.course_id || course?.course_name || 'course').toString().trim()) || 'course';
+    const hasLevel = Boolean((course?.level || '').toString().trim());
+    const normalizedLevel = hasLevel ? normalizeLevel(course?.level) : 'alllvl';
+    return `${fallbackLabel}_${normalizedLevel}_${normalizeSemester(course?.semester)}`;
 };
 
 const mergeCourseRecord = (
@@ -924,6 +933,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         try {
             let normalizedImportedCourses: Course[] = [];
+            let extractedSessionLabel = '';
 
             for (let fileIndex = 0; fileIndex < courseRegistrationFiles.length; fileIndex++) {
                 const file = courseRegistrationFiles[fileIndex];
@@ -988,6 +998,10 @@ FORMAT:
                 }
 
                 const responseData = JSON.parse(response.text);
+                const extractedSession = (responseData?.academic_session || '').toString().trim();
+                if (!extractedSessionLabel && extractedSession) {
+                    extractedSessionLabel = extractedSession;
+                }
                 const extractedCourses = Array.isArray(responseData?.courses) ? responseData.courses : [];
                 if (!extractedCourses.length) {
                     continue;
@@ -1041,7 +1055,7 @@ FORMAT:
             const importedList = normalizeCourseList(normalizedImportedCourses);
             setCoursesList(prevCourses => mergeCourseListsIntoTarget(prevCourses, importedList));
 
-            const sessionLabel = courseImportSessionOverride.toString().trim();
+            const sessionLabel = (courseImportSessionOverride || extractedSessionLabel || '').toString().trim();
             addToast(
                 `Added ${importedList.length} merged course${importedList.length !== 1 ? 's' : ''} (${semesterDistribution.first} first-sem, ${semesterDistribution.second} second-sem) to ${selectedDepartmentIds.length} department${selectedDepartmentIds.length !== 1 ? 's' : ''}${sessionLabel ? ` for ${sessionLabel}` : ''}.`,
                 "success"
@@ -1314,6 +1328,12 @@ FORMAT:
             ].some((value) => (value || '').toString().toLowerCase().includes(query));
         });
     }, [allDepartments, courseCatalog, courseSearchQuery]);
+    const isCourseImportDisabled = (
+        isCourseImporting ||
+        !courseRegistrationFiles.length ||
+        !courseImportLevelOverride ||
+        (courseImportTargetMode === 'selected' && !courseImportDepartmentIds.length)
+    );
 
     const handleCourseTabNavigate = useCallback((path: string) => {
         if (onNavigate) {
@@ -1623,9 +1643,9 @@ FORMAT:
                                                         .join(', ');
                                                     const firstDepartmentId = departmentIds[0] || '';
                                                     const hasMultipleDepartments = departmentIds.length > 1;
-                                                    const coursePathId = getCourseMergeKey(course) || course.course_id;
+                                                    const courseRouteIdentifier = getCourseRouteKey(course);
                                                     return (
-                                                        <tr key={coursePathId} className="hover:bg-gray-50">
+                                                        <tr key={courseRouteIdentifier} className="hover:bg-gray-50">
                                                             <td className="px-6 py-4">
                                                                 <div className="font-bold text-gray-900">{course.course_name}</div>
                                                                 <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
@@ -1639,7 +1659,7 @@ FORMAT:
                                                             </td>
                                                             <td className="px-6 py-4 text-right">
                                                                 <button
-                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, coursePathId))}
+                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, courseRouteIdentifier))}
                                                                     title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
                                                                     className="text-sm font-bold text-lime-600 hover:text-lime-700"
                                                                 >
@@ -1801,8 +1821,8 @@ FORMAT:
 
                             <button
                                 onClick={handleCourseRegistrationImport}
-                                disabled={isCourseImporting || !courseRegistrationFiles.length || !courseImportLevelOverride || (courseImportTargetMode === 'selected' && !courseImportDepartmentIds.length)}
-                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${(isCourseImporting || !courseRegistrationFiles.length || !courseImportLevelOverride || (courseImportTargetMode === 'selected' && !courseImportDepartmentIds.length)) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
+                                disabled={isCourseImportDisabled}
+                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${isCourseImportDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
                             >
                                 {isCourseImporting ? 'Importing Courses...' : 'Extract & Add Courses'}
                             </button>
@@ -1845,21 +1865,24 @@ FORMAT:
                             <div className="bg-white p-4 rounded-2xl border border-gray-200">
                                 {managerCoursesForLevel.length ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {managerCoursesForLevel.map((course) => (
-                                            <button
-                                                key={getCourseMergeKey(course) || course.course_id}
-                                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, getCourseMergeKey(course) || course.course_id))}
-                                                className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
-                                            >
-                                                <div>
-                                                    <div className="font-bold text-gray-900">{course.course_name}</div>
-                                                    <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
-                                                </div>
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                </span>
-                                            </button>
-                                        ))}
+                                        {managerCoursesForLevel.map((course) => {
+                                            const courseRouteIdentifier = getCourseRouteKey(course);
+                                            return (
+                                                <button
+                                                    key={courseRouteIdentifier}
+                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier))}
+                                                    className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
+                                                >
+                                                    <div>
+                                                        <div className="font-bold text-gray-900">{course.course_name}</div>
+                                                        <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                        {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="p-8 text-center text-gray-500">
