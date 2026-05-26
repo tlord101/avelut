@@ -1243,8 +1243,9 @@ FORMAT:
         if (courseAdminView.mode !== 'manager-root') return;
         if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
         const managerPath = `/admin/courses/manager/${encodeURIComponent(managerSelectionDepartmentId)}/${encodeURIComponent(managerSelectionLevel)}`;
+        if (resolvedPathname === managerPath) return;
         handleCourseTabNavigate(managerPath);
-    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate]);
+    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate, resolvedPathname]);
 
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
