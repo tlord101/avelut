@@ -55,7 +55,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'messenger':
             return <Messenger userProfile={userProfile} />;
         case 'chat':
-            return <VanTutorAssistant />;
+            return <VanTutorAssistant userProfile={userProfile} />;
         case 'admin':
             return userProfile.is_admin
                 ? <AdminPanel userProfile={userProfile} />
