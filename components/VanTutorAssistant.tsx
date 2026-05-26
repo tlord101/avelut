@@ -219,6 +219,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     if ((!prompt && !attachment) || isSending) return;
 
     const userText = prompt || getHistoryFallbackTitle(prompt, attachment);
+    const previousMessages = messages;
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
@@ -243,7 +244,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           {
             id: createMessageId(),
             sender: 'assistant',
-            text: 'Gemini is not configured yet. Add GEMINI_API_KEY to the app .env to enable assistant replies.',
+            text: 'Gemini is not configured yet. Add the app GEMINI_API_KEY to the .env to enable assistant replies.',
           },
         ]);
         setStatusText('API key missing.');
@@ -315,6 +316,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       });
 
       const responseText = (result.text || '').trim() || 'I could not generate a response right now. Please try again.';
+      const assistantMessage: AssistantMessage = {
+        id: createMessageId(),
+        sender: 'assistant',
+        text: responseText,
+        timestamp: Date.now(),
+      };
 
       await push(messagesRef, {
         text: responseText,
@@ -323,21 +330,23 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       });
 
       const updates: { title?: string; last_updated_at: number } = {
-        last_updated_at: Date.now(),
+        last_updated_at: 0,
       };
 
       if (shouldGenerateTitle) {
         updates.title = await generateChatTitle(userText, responseText);
       }
 
+      updates.last_updated_at = Date.now();
       await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
 
+      setMessages([...nextMessages, assistantMessage]);
       setStatusText('Response ready.');
       clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
-      setMessages(prev => [
-        ...prev,
+      setMessages([
+        ...previousMessages,
         {
           id: createMessageId(),
           sender: 'assistant',
