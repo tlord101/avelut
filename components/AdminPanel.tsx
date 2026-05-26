@@ -1243,7 +1243,7 @@ FORMAT:
         if (courseAdminView.mode !== 'manager-root') return;
         if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
         handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel));
-    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate]);
+    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate, buildCourseManagerPath]);
 
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
