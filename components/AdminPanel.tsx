@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db, storage } from '../firebase';
 import { ref as dbRef, set, push, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1228,7 +1228,7 @@ FORMAT:
         });
     }, [allDepartments, courseCatalog, courseSearchQuery]);
 
-    const handleCourseTabNavigate = (path: string) => {
+    const handleCourseTabNavigate = useCallback((path: string) => {
         if (onNavigate) {
             onNavigate(path);
             return;
@@ -1237,13 +1237,13 @@ FORMAT:
             window.history.pushState(null, '', path);
         }
         setInternalPathname(path);
-    };
+    }, [onNavigate]);
 
     useEffect(() => {
         if (courseAdminView.mode !== 'manager-root') return;
         if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
         handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel));
-    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel]);
+    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate]);
 
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
