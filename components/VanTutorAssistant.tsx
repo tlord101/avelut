@@ -23,8 +23,11 @@ interface HistoryItem {
   title: string;
 }
 
-const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
+const apiKey = typeof process !== 'undefined'
+  ? (process.env.VANTUTOR_ASSISTANT_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY)
+  : undefined;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const ASSISTANT_MODEL = 'gemini-2.5-flash';
 
 const starterHistory: HistoryItem[] = [
   { id: 1, title: 'Calculus III Equations' },
@@ -45,37 +48,76 @@ const truncateTitle = (text: string) => {
   return cleaned.length > 34 ? `${cleaned.slice(0, 34).trim()}...` : cleaned;
 };
 
+const generatePresentableChatTitle = () => {
+  const now = new Date();
+  const date = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `Study Session • ${date} ${time}`;
+};
+
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === 'string' ? reader.result : '';
+    resolve(result.includes(',') ? result.split(',')[1] : result);
+  };
+  reader.onerror = () => reject(new Error(`Failed to read attachment: ${reader.error?.message || 'Unknown error'}`));
+  reader.readAsDataURL(file);
+});
+
+const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
+  prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
+);
+const MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS = 'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))]';
+
 export default function VanTutorAssistant() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>(starterHistory);
+  const [activeHistoryId, setActiveHistoryId] = useState<number | null>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
   const conversationSummary = useMemo(() => {
+    if (activeHistoryId) {
+      const active = history.find(item => item.id === activeHistoryId);
+      if (active) return active.title;
+    }
     if (!messages.length) return 'Fresh chat';
     if (history.length > 0) return history[0].title;
     return truncateTitle(messages[messages.length - 1].text);
-  }, [history, messages]);
+  }, [activeHistoryId, history, messages]);
 
   const updateRecentHistory = (title: string) => {
     const nextTitle = truncateTitle(title);
+    if (activeHistoryId) {
+      setHistory(prev => prev.map(item => item.id === activeHistoryId ? { ...item, title: nextTitle } : item).slice(0, 6));
+      return;
+    }
+    const createdId = Date.now();
+    setActiveHistoryId(createdId);
     setHistory(prev => [
-      { id: Date.now(), title: nextTitle },
+      { id: createdId, title: nextTitle },
       ...prev.filter(item => item.title !== nextTitle && item.title !== 'New Chat'),
     ].slice(0, 6));
   };
 
   const startNewChat = () => {
+    const id = Date.now();
+    setHistory(prev => [{ id, title: generatePresentableChatTitle() }, ...prev].slice(0, 6));
+    setActiveHistoryId(id);
     setMessages([]);
     setInputValue('');
+    setAttachment(null);
     setStatusText('Started a new chat.');
     setIsSidebarOpen(false);
     inputRef.current?.focus();
@@ -84,12 +126,12 @@ export default function VanTutorAssistant() {
   const handleSend = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const prompt = inputValue.trim();
-    if (!prompt || isSending) return;
+    if ((!prompt && !attachment) || isSending) return;
 
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
-      text: prompt,
+      text: prompt || getHistoryFallbackTitle(prompt, attachment),
     };
 
     const nextMessages = [...messages, userMessage];
@@ -98,7 +140,7 @@ export default function VanTutorAssistant() {
     setIsSending(true);
     setStatusText('Thinking...');
 
-    if (!messages.length) updateRecentHistory(prompt);
+    if (!messages.length) updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
 
     try {
       if (!ai) {
@@ -114,21 +156,39 @@ export default function VanTutorAssistant() {
         return;
       }
 
+      let attachmentPart:
+        | { inlineData: { data: string; mimeType: string } }
+        | undefined;
+
+      if (attachment) {
+        const data = await fileToBase64(attachment);
+        attachmentPart = {
+          inlineData: {
+            data,
+            mimeType: attachment.type || 'application/octet-stream',
+          },
+        };
+      }
+
       const result = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: ASSISTANT_MODEL,
         contents: [
           {
             role: 'user',
-            parts: [{
-              text: [
-                'You are VanTutorAssistant, a friendly study companion for university students.',
-                'Answer clearly, encourage the learner, and keep explanations concise but complete.',
-                'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
-                'If the question needs calculations, show the steps and final formula neatly.',
-                '',
-                `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
-              ].join('\n'),
-            }],
+            parts: [
+              {
+                text: [
+                  'You are VanTutorAssistant, a friendly study companion for university students.',
+                  'Answer clearly, encourage the learner, and keep explanations concise but complete.',
+                  'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
+                  'If the question needs calculations, show the steps and final formula neatly.',
+                  attachment ? 'An attachment is included. Use it as context.' : '',
+                  '',
+                  `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
+                ].filter(Boolean).join('\n'),
+              },
+              ...(attachmentPart ? [attachmentPart] : []),
+            ],
           },
         ],
       });
@@ -143,7 +203,8 @@ export default function VanTutorAssistant() {
         },
       ]);
       setStatusText('Response ready.');
-      updateRecentHistory(prompt);
+      updateRecentHistory(getHistoryFallbackTitle(prompt, attachment));
+      clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages(prev => [
@@ -163,6 +224,18 @@ export default function VanTutorAssistant() {
   const handlePromptClick = (prompt: string) => {
     setInputValue(prompt);
     inputRef.current?.focus();
+  };
+
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setAttachment(file);
+    setStatusText(`Attachment ready: ${file.name}`);
+  };
+
+  const clearAttachment = () => {
+    setAttachment(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   };
 
   return (
@@ -238,7 +311,7 @@ export default function VanTutorAssistant() {
             </div>
           </header>
 
-          <section className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <section className="flex-1 overflow-y-auto px-4 py-5 pb-48 sm:px-6 md:pb-6">
             {messages.length === 0 ? (
               <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-6 py-16 text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-lg">
@@ -271,10 +344,10 @@ export default function VanTutorAssistant() {
                     className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-3xl px-4 py-3 shadow-sm sm:max-w-[75%] ${
+                      className={`px-4 py-3 shadow-sm ${
                         message.sender === 'user'
-                          ? 'bg-slate-900 text-white'
-                          : 'border border-slate-200 bg-white text-slate-800'
+                          ? 'max-w-[76%] rounded-full bg-slate-900 text-white'
+                          : 'w-[90%] max-w-[90%] rounded-3xl border border-slate-200 bg-white text-slate-800'
                       }`}
                     >
                       {message.sender === 'assistant' ? (
@@ -311,34 +384,56 @@ export default function VanTutorAssistant() {
             )}
           </section>
 
-          <footer className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
-            <form onSubmit={handleSend} className="mx-auto max-w-4xl">
-              <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                  rows={3}
-                  placeholder="Ask a question, paste a formula, or request a worked solution..."
-                  className="w-full resize-none bg-transparent px-1 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                />
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">Press Enter to send, Shift+Enter for a new line.</p>
+          {/* 5.5rem aligns this composer directly above the mobile bottom nav bar height. */}
+          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-20 px-4 sm:px-6 md:static md:bottom-auto`}>
+            <form onSubmit={handleSend} className="mx-auto max-w-3xl">
+              <div className="rounded-full border border-white/70 bg-white/55 px-3 py-2 shadow-[0_10px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 transition hover:bg-white"
+                    aria-label="Upload attachment"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                  </button>
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="hidden"
+                    onChange={handleAttachmentChange}
+                  />
+                  <input
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={e => setInputValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleSend();
+                      }
+                    }}
+                    placeholder="Ask a question..."
+                    className="h-10 flex-1 rounded-full bg-transparent px-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  />
                   <button
                     type="submit"
-                    disabled={!inputValue.trim() || isSending}
-                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={(!inputValue.trim() && !attachment) || isSending}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Send message"
                   >
                     <SendIcon className="h-4 w-4" />
-                    Send
                   </button>
                 </div>
+                {attachment && (
+                  <div className="mt-2 flex items-center justify-between rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600">
+                    <span className="truncate">{attachment.name}</span>
+                    <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
           </footer>
