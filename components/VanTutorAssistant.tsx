@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { off, onValue, push, ref as dbRef, serverTimestamp, set, update } from 'firebase/database';
+import { onValue, push, ref as dbRef, serverTimestamp, set, update } from 'firebase/database';
 import 'katex/dist/katex.min.css';
 import { db } from '../firebase';
 import type { UserProfile } from '../types';
@@ -75,7 +75,7 @@ const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
 const mapSender = (sender: string | undefined): AssistantSender => {
   if (sender === 'user') return 'user';
   if (sender === 'assistant' || sender === 'ai' || sender === 'bot') return 'assistant';
-  if (sender) console.warn('Unexpected chat sender value:', sender);
+  if (sender) console.warn('Unexpected chat sender value:', { sender, context: 'message mapping' });
   return 'assistant';
 };
 
@@ -103,7 +103,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     setIsHistoryLoading(true);
     const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
 
-    onValue(conversationsRef, snapshot => {
+    const unsubscribe = onValue(conversationsRef, snapshot => {
       if (!snapshot.exists()) {
         setHistory([]);
         setActiveHistoryId(null);
@@ -127,7 +127,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       setActiveHistoryId(current => current && nextHistory.some(item => item.id === current) ? current : null);
     });
 
-    return () => off(conversationsRef);
+    return unsubscribe;
   }, [userProfile.uid]);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
 
     const messagesRef = dbRef(db, `chat_messages/${activeHistoryId}`);
-    onValue(messagesRef, snapshot => {
+    const unsubscribe = onValue(messagesRef, snapshot => {
       if (!snapshot.exists()) {
         setMessages([]);
         return;
@@ -158,7 +158,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       setMessages(nextMessages);
     });
 
-    return () => off(messagesRef);
+    return unsubscribe;
   }, [activeHistoryId]);
 
   const conversationSummary = useMemo(() => {
@@ -259,7 +259,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         conversationId = newConversationRef.key;
 
         if (!conversationId) {
-          throw new Error('Failed to create conversation id.');
+          throw new Error('Failed to create conversation: Firebase push() returned no key. Check database permissions and connection.');
         }
 
         await set(newConversationRef, {
