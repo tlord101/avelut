@@ -464,6 +464,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
+        const handleSuggestAnnouncement = async () => {
+            if (!ai) {
+                addToast("AI features are unavailable because API_KEY is missing.", "error");
+                return;
+            }
+            setIsSendingPush(true);
+            try {
+                const prompt = `Create a short notification title (max 8 words) and a concise notification message (max 200 characters) for a ${notificationType.replace('_', ' ')} to students. Return only a JSON object with keys \"title\" and \"message\".`;
+
+                const response = await ai.models.generateContent({
+                    model: "gemini-3.5-flash",
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                message: { type: Type.STRING }
+                            },
+                            required: ['title', 'message']
+                        }
+                    }
+                });
+
+                if (!response.text) throw new Error('AI returned an empty suggestion.');
+                const data = JSON.parse(response.text);
+                setAnnouncementTitle((data.title || '').toString());
+                setAnnouncementMessage((data.message || '').toString());
+                addToast('Suggested announcement generated.', 'success');
+            } catch (error: any) {
+                console.error('Error generating suggestion:', error);
+                addToast(error?.message || 'Failed to generate suggestion', 'error');
+            } finally {
+                setIsSendingPush(false);
+            }
+        };
+
     const handleSendEmail = () => {
         const subject = emailSubject.trim();
         const body = emailBody.trim();
@@ -2113,13 +2151,22 @@ FORMAT:
                                     <option value="exam_reminder">Exam Reminder</option>
                                     <option value="welcome">Welcome</option>
                                 </select>
-                                <button
-                                    onClick={handleSendPushNotification}
-                                    disabled={isSendingPush}
-                                    className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-black transition disabled:opacity-60"
-                                >
-                                    {isSendingPush ? 'Sending...' : 'Send Push Notification'}
-                                </button>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={handleSuggestAnnouncement}
+                                        disabled={isSendingPush}
+                                        className="w-full bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-50 transition disabled:opacity-60"
+                                    >
+                                        Suggest Message
+                                    </button>
+                                    <button
+                                        onClick={handleSendPushNotification}
+                                        disabled={isSendingPush}
+                                        className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-black transition disabled:opacity-60"
+                                    >
+                                        {isSendingPush ? 'Sending...' : 'Send Push Notification'}
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
