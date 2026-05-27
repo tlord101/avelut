@@ -1348,14 +1348,6 @@ FORMAT:
         setInternalPathname(path);
     }, [onNavigate]);
 
-    useEffect(() => {
-        if (courseAdminView.mode !== 'manager-root') return;
-        if (!managerSelectionDepartmentId || !managerSelectionLevel) return;
-        const managerPath = `/admin/courses/manager/${encodeURIComponent(managerSelectionDepartmentId)}/${encodeURIComponent(managerSelectionLevel)}`;
-        if (resolvedPathname === managerPath) return;
-        handleCourseTabNavigate(managerPath);
-    }, [courseAdminView.mode, managerSelectionDepartmentId, managerSelectionLevel, handleCourseTabNavigate, resolvedPathname]);
-
     if (!userProfile.is_admin) {
         return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
     }
@@ -1845,7 +1837,11 @@ FORMAT:
                                 </div>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                        onClick={() => {
+                                            setManagerSelectionDepartmentId('');
+                                            setManagerSelectionLevel('');
+                                            handleCourseTabNavigate('/admin/courses/manager');
+                                        }}
                                         className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
                                     >
                                         Change Department

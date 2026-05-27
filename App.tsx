@@ -125,7 +125,10 @@ const App: React.FC = () => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, [syncItemFromPath]);
 
-    const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+    const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('vantutor_admin_authenticated') === 'true';
+    });
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
     // Breadcrumbs logic based on activeItem
@@ -160,6 +163,11 @@ const App: React.FC = () => {
     
         return () => unsubscribe();
     }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem('vantutor_admin_authenticated', isAdminAuthenticated ? 'true' : 'false');
+    }, [isAdminAuthenticated]);
 
     const handleProfileUpdate = useCallback(async (updatedData: Partial<UserProfile>): Promise<{ success: boolean; error?: string }> => {
         if (!user) return { success: false, error: 'User not authenticated.' };

@@ -4,6 +4,7 @@ import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { MoreVerticalIcon } from './icons/MoreVerticalIcon';
 import { PencilIcon } from './icons/PencilIcon';
+import { TrashIcon } from './icons/TrashIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { ChatBubbleIcon } from './icons/ChatBubbleIcon';
@@ -206,20 +207,42 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
                 <p className="text-sm font-medium text-gray-400">Your history will appear here.</p>
             </div>
         ) : (
-            <ul className="space-y-6 mt-4">
+            <ul className="space-y-3 mt-4">
                 {conversations.map((convo) => (
-                    <li key={convo.id} className="group flex items-center justify-between px-2 cursor-pointer" onClick={() => isMobile ? handleMobileSelect(convo.id) : onSelectConversation(convo.id)}>
-                        <div className="flex-1 min-w-0 mr-4">
-                            <p className={`text-[15px] font-medium leading-tight truncate ${activeConversationId === convo.id ? 'text-emerald' : 'text-charcoal'}`}>
+                    <li
+                        key={convo.id}
+                        className={`group flex items-center justify-between gap-3 px-3 py-3 rounded-2xl border transition-colors cursor-pointer ${activeConversationId === convo.id ? 'bg-white border-lime-200 shadow-sm' : 'bg-transparent border-transparent hover:bg-white/60'}`}
+                        onClick={() => isMobile ? handleMobileSelect(convo.id) : onSelectConversation(convo.id)}
+                    >
+                        <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold leading-tight truncate ${activeConversationId === convo.id ? 'text-emerald' : 'text-charcoal'}`}>
                                 {convo.title}
                             </p>
-                            <p className="text-[13px] text-gray-400 mt-1">
+                            <p className="text-[12px] text-gray-400 mt-1">
                                 {timeAgo(convo.last_updated_at)}
                             </p>
                         </div>
-                        <button className="text-gray-400 hover:text-charcoal opacity-0 group-hover:opacity-100 transition-opacity">
-                            <MoreVerticalIcon className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteConversation(convo.id);
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-600 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-50"
+                                aria-label={`Delete ${convo.title}`}
+                            >
+                                <TrashIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openContextMenu(e, convo.id); }}
+                                className="p-2 text-gray-400 hover:text-charcoal opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-gray-100"
+                                aria-label="More options"
+                            >
+                                <MoreVerticalIcon className="w-5 h-5" />
+                            </button>
+                        </div>
                     </li>
                 ))}
             </ul>
