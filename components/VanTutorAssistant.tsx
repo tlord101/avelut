@@ -427,10 +427,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </div>
 
-          <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
-            <p className="font-semibold">Math-ready replies</p>
-            <p className="mt-1 text-emerald-800">Use $x^2$ inline or $$\\int_0^1 x^2\\, dx$$ for display equations.</p>
-          </div>
         </aside>
 
         {isSidebarOpen && (

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db, storage } from '../firebase';
-import { ref as dbRef, set, push, update, get } from 'firebase/database';
+import { ref as dbRef, set, push, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import type { UserProfile, Question, Course, Topic } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { MenuIcon } from './icons/MenuIcon';
-import { XIcon } from './icons/XIcon';
+import { TrashIcon } from './icons/TrashIcon';
 import { StackIcon } from './icons/StackIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
@@ -798,6 +798,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             addToast(error?.message || "Failed to merge duplicate courses", "error");
         }
     };
+
+    const handleDeleteCourseFromDepartment = useCallback(async (course: Course) => {
+        if (!courseAdminView.departmentId || !courseAdminView.level) return;
+
+        const courseLabel = course.course_code || course.course_name || course.course_id;
+        const departmentLabel = selectedManagerDepartment?.department_name || courseAdminView.departmentId;
+        const confirmed = window.confirm(`Delete ${courseLabel} from ${departmentLabel} (${courseAdminView.level})? This will remove the course and its stored textbook outline for this department.`);
+        if (!confirmed) return;
+
+        try {
+            const departmentRef = dbRef(db, `departments_data/${courseAdminView.departmentId}`);
+            const departmentSnapshot = await get(departmentRef);
+            const existingCourses = normalizeCourseList(departmentSnapshot.val()?.course_list);
+            const targetCourseKey = getCourseMergeKey(course) || course.course_id;
+            const nextCourses = existingCourses.filter((item) => {
+                const itemKey = getCourseMergeKey(item) || item.course_id;
+                return itemKey !== targetCourseKey;
+            });
+
+            await update(departmentRef, { course_list: nextCourses });
+            if (course.course_name) {
+                await remove(dbRef(db, `textbook_contexts/${courseAdminView.departmentId}/${courseAdminView.level}/${course.course_name}`));
+            }
+
+            await fetchDepartments();
+            await loadDepartmentCourses(courseAdminView.departmentId);
+            handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level));
+            addToast(`Deleted ${course.course_name} from ${departmentLabel}.`, 'success');
+        } catch (error: any) {
+            console.error('Error deleting course:', error);
+            addToast(error?.message || 'Failed to delete course', 'error');
+        }
+    }, [addToast, courseAdminView.departmentId, courseAdminView.level, loadDepartmentCourses, selectedManagerDepartment]);
 
     const handleAddQuestion = async () => {
         if (!uploadDepartmentId || !uploadLevel || !uploadCourseName || !year || !newQuestion.question || !newQuestion.correctAnswer) {
@@ -1866,19 +1899,40 @@ FORMAT:
                                         {managerCoursesForLevel.map((course) => {
                                             const courseRouteIdentifier = getCourseRouteKey(course);
                                             return (
-                                                <button
+                                                <div
                                                     key={courseRouteIdentifier}
+                                                    role="button"
+                                                    tabIndex={0}
                                                     onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier))}
-                                                    className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier));
+                                                        }
+                                                    }}
+                                                    className="group flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition cursor-pointer"
                                                 >
                                                     <div>
                                                         <div className="font-bold text-gray-900">{course.course_name}</div>
                                                         <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
                                                     </div>
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                        {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                    </span>
-                                                </button>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                            {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                void handleDeleteCourseFromDepartment(course);
+                                                            }}
+                                                            className="rounded-full p-2 text-gray-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
+                                                            aria-label={`Delete ${course.course_name}`}
+                                                        >
+                                                            <TrashIcon className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -1962,12 +2016,13 @@ FORMAT:
                                             </div>
                                         ) : null}
 
-                                            <div className="flex justify-between items-center pt-4 border-t border-gray-50">
-                                                <button className="text-red-400 hover:text-red-600 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5" onClick={() => {
-                                                    const list = coursesList.filter((_, i) => i !== sIdx);
-                                                    setCoursesList(list);
-                                                }}>
-                                                    <XIcon className="w-3 h-3" /> Remove Course
+                                            <div className="flex justify-end items-center pt-4 border-t border-gray-50">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleDeleteCourseFromDepartment(selectedManagerCourse)}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-500 transition hover:border-red-200 hover:bg-red-100 hover:text-red-700"
+                                                >
+                                                    <TrashIcon className="w-3.5 h-3.5" /> Delete Course
                                                 </button>
                                             </div>
                                         <div className="space-y-3">
