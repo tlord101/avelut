@@ -12,10 +12,7 @@ import { SendIcon } from './icons/SendIcon';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ListIcon } from './icons/ListIcon';
 import { Avatar } from './Avatar';
-import { SparklesIcon } from './icons/SparklesIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
-import { PlusIcon } from './icons/PlusIcon';
-import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
@@ -36,6 +33,65 @@ const VoiceIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
     </svg>
+);
+
+const ChatComposer: React.FC<{
+    input: string;
+    setInput: (value: string) => void;
+    isLoading: boolean;
+    voiceStatus: 'idle' | 'listening' | 'processing';
+    onToggleVoice: () => void;
+    onAttach: () => void;
+    onSend: () => void;
+}> = ({ input, setInput, isLoading, voiceStatus, onToggleVoice, onAttach, onSend }) => (
+    <div className="fixed left-0 right-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:left-[320px] md:bottom-6 z-40 pointer-events-none">
+        <div className="mx-4 md:mx-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
+            <div
+                className="rounded-[28px] p-[1.5px] shadow-[0_20px_60px_rgba(15,23,42,0.14)]"
+                style={{ background: 'linear-gradient(90deg, #ff4d4d, #ffb84d, #4dff88, #4dd2ff, #b84dff)' }}
+            >
+                <div className="rounded-[27px] bg-white/95 backdrop-blur-xl border border-white/70 px-4 py-4 md:py-[18px]">
+                    <div className="flex items-end gap-3">
+                        <button className="mb-1.5 p-2 text-charcoal hover:text-emerald transition-colors rounded-full hover:bg-gray-100" onClick={onAttach} aria-label="Attach file">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        </button>
+                        <div className="flex-1 rounded-[22px] bg-gray-50 border border-gray-100 px-4 py-3 min-h-[72px] md:min-h-[76px] transition-all duration-300 focus-within:border-transparent focus-within:ring-0">
+                            <textarea
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        onSend();
+                                    }
+                                }}
+                                placeholder="Ask anything"
+                                className="w-full bg-transparent border-none focus:ring-0 text-charcoal placeholder-gray-500 resize-none min-h-[40px] max-h-36 text-base leading-6"
+                                rows={1}
+                            />
+                            <div className="mt-2 flex items-center justify-between gap-3">
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-gray-400">AI Assistant</span>
+                                <button
+                                    onClick={onToggleVoice}
+                                    className={`text-[11px] font-bold uppercase tracking-[0.28em] px-3 py-2 rounded-full transition-all ${voiceStatus !== 'idle' ? 'text-emerald bg-emerald/10 animate-pulse' : 'text-gray-500 bg-white hover:bg-gray-100'}`}
+                                >
+                                    {voiceStatus !== 'idle' ? 'Listening' : 'Voice'}
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onSend}
+                            disabled={!input.trim() || isLoading}
+                            className="mb-1.5 h-12 w-12 rounded-full bg-emerald text-white shadow-lg shadow-emerald/20 hover:bg-emerald-hover transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="Send message"
+                        >
+                            <SendIcon className="w-5 h-5 fill-current mx-auto" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 );
 
 
@@ -244,79 +300,22 @@ const TextChat: React.FC<{
                         </div>
                     </div>
 
-                    {!activeConversationId && messages.length === 0 ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
-                            {/* Watermark Logo - Stylized 'O' with orbit ring */}
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05]">
-                                <div className="relative w-64 h-64 md:w-96 md:h-96">
-                                    <div className="absolute inset-0 border-[8px] md:border-[12px] border-charcoal rounded-full"></div>
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[20%] border-[8px] md:border-[12px] border-charcoal rounded-[100%] rotate-[-35deg]"></div>
-                                </div>
-                            </div>
-                            
-                            <div className="mt-auto w-full max-w-2xl px-4 space-y-6">
-                                {/* Horizontal Scrollable Action Pills */}
-                                <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-2">
-                                    <button onClick={() => handleSendMessage("Explain my current syllabus")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
-                                        <GraduationCapIcon className="w-4 h-4 text-emerald" />
-                                        <span>Explain syllabus</span>
-                                    </button>
-                                    <button onClick={() => handleSendMessage("Solve a complex problem")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
-                                        <SparklesIcon className="w-4 h-4 text-emerald" />
-                                        <span>Solve problem</span>
-                                    </button>
-                                    <button onClick={() => toggleVoice()} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
-                                        <VoiceIcon className="w-4 h-4 text-emerald" />
-                                        <span>Voice tutorial</span>
-                                    </button>
-                                    <button onClick={() => handleSendMessage("Help me study")} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-off-white border border-gray-100 rounded-full text-sm font-medium text-charcoal hover:bg-gray-100 transition-all">
-                                        <PlusIcon className="w-4 h-4 text-emerald" />
-                                        <span>Study tips</span>
-                                    </button>
-                                </div>
-
-                                {/* Main Input Container */}
-                                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                                    <textarea
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleSendMessage();
-                                            }
-                                        }}
-                                        placeholder="Ask anything"
-                                        className="w-full bg-transparent border-none focus:ring-0 text-charcoal placeholder-gray-500 resize-none min-h-[40px] text-base"
-                                        rows={1}
-                                    />
-                                    <div className="flex items-center justify-between mt-4">
-                                        <button className="p-2 bg-gray-200 rounded-full text-charcoal hover:bg-gray-300 transition-colors">
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                                        </button>
-                                        <div className="flex items-center gap-3">
-                                            <button 
-                                                onClick={toggleVoice}
-                                                className={`p-2 text-charcoal hover:text-emerald transition-colors ${voiceStatus !== 'idle' ? 'text-emerald animate-pulse' : ''}`}
-                                            >
-                                                <VoiceIcon className="w-6 h-6" />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleSendMessage()}
-                                                disabled={!input.trim() || isLoading}
-                                                className="flex items-center gap-2 px-6 py-2.5 bg-emerald hover:bg-emerald-hover text-white rounded-full font-bold transition-all disabled:opacity-50"
-                                            >
-                                                <SendIcon className="w-4 h-4 fill-current" />
-                                                <span>Send</span>
-                                            </button>
+                    <div className="flex-1 flex flex-col min-h-0 bg-white">
+                        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-8 pb-44 space-y-8 scroll-smooth">
+                            {!activeConversationId && messages.length === 0 ? (
+                                <div className="flex h-full min-h-[48vh] items-center justify-center px-4 text-center">
+                                    <div className="max-w-md space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-lime-500 to-teal-500 text-white shadow-lg shadow-lime-500/20">
+                                            <ChatBubbleIcon className="w-7 h-7" />
                                         </div>
+                                        <h3 className="text-2xl font-black text-gray-900">Start a conversation</h3>
+                                        <p className="text-sm leading-6 text-gray-500">
+                                            Ask for explanations, solve problems, or study with the course context already available to you.
+                                        </p>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col min-h-0 bg-white">
-                            <div className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scroll-smooth">
+                            ) : (
+                                <>
                                 {messages.map((msg, i) => (
                                     <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
                                         <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -352,33 +351,20 @@ const TextChat: React.FC<{
                                     </div>
                                 )}
                                 <div ref={messagesEndRef} className="h-4" />
-                            </div>
-
-                            {/* Chat Input Fix for active state */}
-                            <div className="px-6 py-4 border-t border-gray-100 bg-white">
-                                <div className="p-3 bg-off-white rounded-3xl border border-gray-100 flex items-center gap-3">
-                                    <button className="p-2 text-charcoal hover:text-emerald transition-colors">
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                                    </button>
-                                    <input
-                                        type="text"
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                        placeholder="Type a message..."
-                                        className="flex-1 bg-transparent border-none focus:ring-0 text-charcoal placeholder-gray-500 py-2"
-                                    />
-                                    <button 
-                                        onClick={() => handleSendMessage()}
-                                        disabled={!input.trim() || isLoading}
-                                        className="p-2.5 bg-emerald text-white rounded-full hover:bg-emerald-hover transition-colors disabled:opacity-50"
-                                    >
-                                        <SendIcon className="w-4 h-4 fill-current" />
-                                    </button>
-                                </div>
-                            </div>
+                                </>
+                            )}
                         </div>
-                    )}
+                    </div>
+
+                    <ChatComposer
+                        input={input}
+                        setInput={setInput}
+                        isLoading={isLoading}
+                        voiceStatus={voiceStatus}
+                        onToggleVoice={toggleVoice}
+                        onAttach={() => setIsVoiceMode(false)}
+                        onSend={() => handleSendMessage()}
+                    />
 
                     {/* Mobile History Drawer (Controlled by Chat component state) */}
                     <div className={`fixed inset-0 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
