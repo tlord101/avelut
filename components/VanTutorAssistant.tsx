@@ -12,6 +12,8 @@ import { ChatIcon } from './icons/ChatIcon';
 import { SendIcon } from './icons/SendIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { XIcon } from './icons/XIcon';
+import { PromptInput, PromptInputActions, PromptInputTextarea } from './prompt-kit/prompt-input';
+import { PromptSuggestion } from './prompt-kit/prompt-suggestion';
 
 type AssistantSender = 'user' | 'assistant';
 
@@ -35,10 +37,47 @@ interface VanTutorAssistantProps {
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
 
-const quickPrompts = [
-  'Explain the chain rule with a worked example.',
-  'Solve this integral and show the steps.',
-  'Write the equation of a line in LaTeX.',
+const suggestionGroups = [
+  {
+    label: 'Summary',
+    highlight: 'Summarize',
+    items: [
+      'Summarize this topic for me',
+      'Summarize my lecture notes',
+      'Summarize the key formulas',
+      'Summarize this chapter in simple terms',
+    ],
+  },
+  {
+    label: 'Code',
+    highlight: 'Help me',
+    items: [
+      'Help me write React components',
+      'Help me debug code',
+      'Help me learn Python',
+      'Help me learn SQL',
+    ],
+  },
+  {
+    label: 'Design',
+    highlight: 'Design',
+    items: [
+      'Design a study plan',
+      'Design a revision timetable',
+      'Design a simple landing page',
+      'Design a clean dashboard layout',
+    ],
+  },
+  {
+    label: 'Research',
+    highlight: 'Research',
+    items: [
+      'Research the best study methods',
+      'Research how to revise faster',
+      'Research the best note-taking techniques',
+      'Research the most effective exam strategies',
+    ],
+  },
 ];
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -91,8 +130,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
+  const [activeCategory, setActiveCategory] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -170,6 +209,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     return messages.length > 0 ? 'Current chat' : 'New chat';
   }, [activeHistoryId, history, messages.length]);
 
+  const activeCategoryData = useMemo(
+    () => suggestionGroups.find(group => group.label === activeCategory),
+    [activeCategory]
+  );
+
+  const showCategorySuggestions = activeCategory !== '';
+
   const clearAttachment = () => {
     setAttachment(null);
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
@@ -179,10 +225,10 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     setActiveHistoryId(null);
     setMessages([]);
     setInputValue('');
+    setActiveCategory('');
     clearAttachment();
     setStatusText('Started a new chat.');
     setIsSidebarOpen(false);
-    inputRef.current?.focus();
   };
 
   const generateChatTitle = async (prompt: string, responseText: string) => {
@@ -361,7 +407,18 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const handlePromptClick = (prompt: string) => {
     setInputValue(prompt);
-    inputRef.current?.focus();
+    setActiveCategory('');
+  };
+
+  const handlePromptInputValueChange = (value: string) => {
+    setInputValue(value);
+    if (value.trim() === '') {
+      setActiveCategory('');
+      return;
+    }
+    if (activeCategory && !activeCategoryData?.items.includes(value)) {
+      setActiveCategory('');
+    }
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,18 +528,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                     Get step-by-step answers with clean LaTeX for equations, formulas, and proofs.
                   </p>
                 </div>
-                <div className="flex flex-wrap justify-center gap-3">
-                  {quickPrompts.map(prompt => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => handlePromptClick(prompt)}
-                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
               </div>
             ) : (
               <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -532,57 +577,88 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </section>
 
-          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-20 px-4 sm:px-6 md:static md:bottom-auto`}>
-            <form onSubmit={handleSend} className="mx-auto max-w-3xl">
-              <div className="rounded-full border border-white/70 bg-white/55 px-3 py-2 shadow-[0_10px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => attachmentInputRef.current?.click()}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 transition hover:bg-white"
-                    aria-label="Upload attachment"
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                  </button>
-                  <input
-                    ref={attachmentInputRef}
-                    type="file"
-                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                    className="hidden"
-                    onChange={handleAttachmentChange}
-                  />
-                  <input
-                    ref={inputRef}
-                    value={inputValue}
-                    onChange={e => setInputValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    placeholder="Ask a question..."
-                    className="h-10 flex-1 rounded-full bg-transparent px-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={(!inputValue.trim() && !attachment) || isSending}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Send message"
-                  >
-                    <SendIcon className="h-4 w-4" />
-                  </button>
-                </div>
-                {attachment && (
-                  <div className="mt-2 flex items-center justify-between rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600">
-                    <span className="truncate">{attachment.name}</span>
-                    <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
-                      <XIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-40 px-4 sm:px-6 md:static md:bottom-auto`}>
+            <div className="mx-auto max-w-4xl space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {showCategorySuggestions ? (
+                  activeCategoryData?.items.map((suggestion) => (
+                    <PromptSuggestion
+                      key={suggestion}
+                      highlight={activeCategoryData.highlight}
+                      onClick={() => handlePromptClick(suggestion)}
+                    >
+                      {suggestion}
+                    </PromptSuggestion>
+                  ))
+                ) : (
+                  suggestionGroups.map((suggestion) => (
+                    <PromptSuggestion
+                      key={suggestion.label}
+                      onClick={() => {
+                        setActiveCategory(suggestion.label);
+                        setInputValue('');
+                      }}
+                      className="capitalize"
+                    >
+                      {suggestion.label}
+                    </PromptSuggestion>
+                  ))
                 )}
               </div>
-            </form>
+
+              <PromptInput
+                className="!border-0 !bg-transparent !p-0 !shadow-none rounded-[28px]"
+                style={{ background: 'linear-gradient(90deg, #ff4d4d, #ffb84d, #4dff88, #4dd2ff, #b84dff)' }}
+                value={inputValue}
+                onValueChange={handlePromptInputValueChange}
+                onSubmit={() => { void handleSend(); }}
+              >
+                <div className="rounded-[27px] bg-white/95 backdrop-blur-xl border border-white/70 px-4 py-4 md:py-[18px] shadow-[0_10px_40px_rgba(15,23,42,0.12)]">
+                  <div className="flex items-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => attachmentInputRef.current?.click()}
+                      className="mb-1.5 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 transition hover:bg-white"
+                      aria-label="Upload attachment"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                    </button>
+                    <input
+                      ref={attachmentInputRef}
+                      type="file"
+                      accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                      className="hidden"
+                      onChange={handleAttachmentChange}
+                    />
+                    <div className="flex-1">
+                      <PromptInputTextarea
+                        placeholder="Ask anything..."
+                        className="min-h-[44px] pt-3 pl-4 pr-4 text-base leading-[1.3] sm:text-base md:text-base"
+                      />
+                      {attachment && (
+                        <div className="mt-2 flex items-center justify-between rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                          <span className="truncate">{attachment.name}</span>
+                          <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
+                            <XIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <PromptInputActions className="mb-1.5 flex items-end justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { void handleSend(); }}
+                        disabled={(!inputValue.trim() && !attachment) || isSending}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Send message"
+                      >
+                        <SendIcon className="h-4 w-4" />
+                      </button>
+                    </PromptInputActions>
+                  </div>
+                </div>
+              </PromptInput>
+            </div>
           </footer>
         </main>
       </div>
