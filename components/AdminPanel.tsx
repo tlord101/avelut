@@ -1337,7 +1337,9 @@ FORMAT:
 
     const handleCourseTabNavigate = useCallback((path: string) => {
         if (onNavigate) {
-            onNavigate(path);
+            // Let parent know, but also keep internal pathname in sync
+            try { onNavigate(path); } catch (err) { /* ignore parent handler errors */ }
+            setInternalPathname(path);
             return;
         }
         if (typeof window !== 'undefined') {

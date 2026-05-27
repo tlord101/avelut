@@ -831,7 +831,7 @@ Student: "${tempInput}"
 };
 
 // --- NEW LEARNING PATH COMPONENTS ---
-const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, index: number, pathColor: string }> = ({ topic, isCompleted, onSelect, index, pathColor }) => {
+const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, index: number, pathColor: string, studyDurationSeconds?: number }> = ({ topic, isCompleted, onSelect, index, pathColor, studyDurationSeconds = 0 }) => {
     const isEven = index % 2 === 0;
     
     return (
@@ -842,14 +842,21 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
             <div className={`w-full max-w-2xl flex items-center ${isEven ? 'flex-row' : 'flex-row-reverse'} relative z-10`}>
                 {/* Content Side */}
                 <div className={`w-1/2 px-8 ${isEven ? 'text-right' : 'text-left'}`}>
-                    <div className="group cursor-pointer inline-block" onClick={onSelect}>
-                        <h4 className={`text-sm font-bold uppercase tracking-widest ${isCompleted ? 'text-emerald' : 'text-gray-400 group-hover:text-gray-600'} transition-colors duration-300`}>
-                            {isCompleted ? 'Mastered' : 'Locked'}
-                        </h4>
-                        <p className={`mt-1 text-lg font-bold leading-tight ${isCompleted ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-700'} transition-colors duration-300`}>
-                            {topic.topic_name}
-                        </p>
-                    </div>
+                    <div className={`group cursor-pointer inline-block`} onClick={onSelect}>
+                            <div className={`flex items-center gap-3`}> 
+                                <div>
+                                    <h4 className={`text-sm font-bold uppercase tracking-widest ${isCompleted ? 'text-emerald' : 'text-gray-400 group-hover:text-gray-600'} transition-colors duration-300`}>
+                                        {isCompleted ? 'Mastered' : 'Topic'}
+                                    </h4>
+                                    <p className={`mt-1 text-lg font-semibold leading-tight ${isCompleted ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-700'} transition-colors duration-300`}>
+                                        {topic.topic_name}
+                                    </p>
+                                </div>
+                                <div className="ml-2">
+                                    <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-medium">{formatDuration(studyDurationSeconds)}</span>
+                                </div>
+                            </div>
+                        </div>
                 </div>
 
                 {/* Node Side */}
@@ -889,22 +896,32 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
 };
 
 const CourseHeader: React.FC<{ course: Course, isExpanded: boolean, onClick: () => void }> = ({ course, isExpanded, onClick }) => {
-    const { Icon, bgColor, borderColor, textColor } = getSubjectVisuals(course.course_name);
+    const courseLabel = course.course_code || course.course_id || course.course_name;
     return (
-        <div className="relative flex justify-center py-8">
+        <div className="w-full max-w-4xl mx-auto py-2">
             <button
                 onClick={onClick}
-                className={`flex items-center justify-between w-full max-w-xl gap-3 p-4 rounded-xl ${bgColor} border ${borderColor} hover:bg-gray-100 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald`}
+                className={`w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none`}
                 aria-expanded={isExpanded}
             >
                 <div className="flex items-center gap-3">
-                    <Icon className={`w-8 h-8 ${textColor}`} />
-                    <h3 className={`text-xl font-bold ${textColor}`}>{course.course_name}</h3>
+                    <div className="text-sm font-black text-gray-700">{courseLabel}</div>
+                    <div className="text-xs text-gray-500">{course.course_name}</div>
                 </div>
-                <ChevronDownIcon className={`w-6 h-6 ${textColor} transition-transform duration-300 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
             </button>
         </div>
     );
+}
+
+// utility to format seconds into H:MM or M:SS
+const formatDuration = (seconds: number): string => {
+    if (!seconds || seconds <= 0) return '0m';
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs}h ${remMins}m`;
 }
 
 // --- MAIN STUDY GUIDE COMPONENT ---
@@ -1065,6 +1082,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                         key={topic.topic_id}
                                                         topic={topic}
                                                         isCompleted={userProgress[topic.topic_id]?.is_complete || false}
+                                                        studyDurationSeconds={userProgress[topic.topic_id]?.study_duration_seconds || 0}
                                                         onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
                                                         index={index}
                                                         pathColor="bg-gray-100"
