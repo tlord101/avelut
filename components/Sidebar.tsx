@@ -126,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
     <>
       {/* Mobile Sidebar */}
       <div className={`fixed inset-0 z-[110] transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm" onClick={onCloseMobileSidebar} aria-hidden="true"></div>
+        <div className="absolute inset-0 bg-charcoal/40" onClick={onCloseMobileSidebar} aria-hidden="true"></div>
         <aside className="relative w-80 h-full bg-white border-r border-gray-100">
           <SidebarContent
             isExpanded={true}

@@ -22,26 +22,23 @@ interface DashboardProps {
 
 const StatCard: React.FC<{ title: string; value: string | number; description: string; icon: React.ReactNode; color: 'lime' | 'blue' | 'purple' }> = ({ title, value, description, icon, color }) => {
   const colorClasses = {
-    lime: 'from-lime-500 to-emerald-500 shadow-lime-100',
-    blue: 'from-blue-500 to-indigo-500 shadow-blue-100',
-    purple: 'from-purple-500 to-pink-500 shadow-purple-100'
+    lime: 'bg-emerald text-emerald',
+    blue: 'bg-blue-600 text-blue-600',
+    purple: 'bg-purple-600 text-purple-600'
   };
 
   return (
-    <div className="group relative bg-white p-6 rounded-[2rem] border border-gray-100 flex-1 min-w-[240px] transition-all duration-500 hover:shadow-3xl hover:-translate-y-1 overflow-hidden">
+    <div className="group relative bg-white p-6 rounded-2xl border border-gray-200 flex-1 min-w-[240px] transition-all duration-300 hover:border-gray-300 overflow-hidden">
         <div className="flex items-start justify-between mb-4">
-            <div className={`p-3 rounded-2xl bg-gray-50 text-gray-400 group-hover:scale-110 transition-transform duration-500`}>
+            <div className={`p-3 rounded-xl bg-gray-50 text-gray-500`}>
                 {icon}
             </div>
             <div className="text-right">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">{title}</p>
-                <p className={`text-3xl font-black bg-gradient-to-br ${colorClasses[color]} text-transparent bg-clip-text leading-tight`}>{value}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">{title}</p>
+                <p className={`text-3xl font-black ${colorClasses[color].split(' ')[1]} leading-tight`}>{value}</p>
             </div>
         </div>
-        <p className="text-xs font-bold text-gray-500 group-hover:text-gray-900 transition-colors uppercase tracking-tight">{description}</p>
-        
-        {/* Decorative background element */}
-        <div className={`absolute -bottom-6 -right-6 w-24 h-24 bg-gradient-to-br ${colorClasses[color]} opacity-[0.03] rounded-full group-hover:scale-150 transition-transform duration-700`}></div>
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-tight">{description}</p>
     </div>
   );
 };
@@ -114,7 +111,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-12 xl:col-span-7 space-y-8">
-          <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-gray-100 shadow-sm relative overflow-hidden group">
+          <div className="bg-white p-8 md:p-10 rounded-2xl border border-gray-200 relative overflow-hidden group">
             <div className="relative z-10">
                 <div className="flex justify-between items-end mb-8">
                     <div>
@@ -128,33 +125,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                 </div>
 
                 {/* Modern Progress Bar */}
-                <div className="h-4 w-full bg-gray-50 rounded-full overflow-hidden mb-4 p-1">
+                <div className="h-4 w-full bg-gray-100 rounded-full overflow-hidden mb-4 p-1 border border-gray-200">
                     <div 
-                        className="h-full bg-gradient-to-r from-lime-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-lime-500/20"
+                        className="h-full bg-emerald rounded-full transition-all duration-1000 ease-out"
                         style={{ width: `${progressPercent}%` }}
                     />
                 </div>
-                <p className="text-xs font-bold text-gray-400 leading-relaxed max-w-sm">
+                <p className="text-xs font-bold text-gray-500 leading-relaxed max-w-sm">
                     {progressPercent > 70 ? "Excellent progress! You're mastering the curriculum." : "Keep going! Each topic completed brings you closer to your goal."}
                 </p>
             </div>
             
             {/* Background design */}
-            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-110 transition-transform duration-700">
-                <svg className="w-32 h-32 text-lime-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+                <svg className="w-32 h-32 text-emerald" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-12 xl:col-span-5">
-          <div className="bg-[#F9FAFB] p-8 rounded-[2.5rem] h-full flex flex-col">
-            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-8">Recent Performance</h3>
+          <div className="bg-white border border-gray-200 p-8 rounded-2xl h-full flex flex-col">
+            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-8">Recent Performance</h3>
             {dashboardData && dashboardData.examHistory.length > 0 ? (
-                <div className="space-y-2 flex-1 overflow-y-auto max-h-[400px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pr-2">
+                <div className="space-y-2 flex-1 overflow-y-auto max-h-[400px] pr-2">
                     {dashboardData.examHistory.sort((a,b) => b.timestamp - a.timestamp).map(exam => <RecentActivityItem key={exam.id} exam={exam} />)}
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-white rounded-[2rem] border border-gray-100 shadow-sm">
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-gray-50 rounded-2xl border border-gray-200">
                     <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4">
                         <svg className="w-8 h-8 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                     </div>
