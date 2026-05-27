@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { GoogleGenAI } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
@@ -356,15 +357,8 @@ const TextChat: React.FC<{
                         </div>
                     </div>
 
-                    <ChatComposer
-                        input={input}
-                        setInput={setInput}
-                        isLoading={isLoading}
-                        voiceStatus={voiceStatus}
-                        onToggleVoice={toggleVoice}
-                        onAttach={() => setIsVoiceMode(false)}
-                        onSend={() => handleSendMessage()}
-                    />
+                    {/* ChatComposer rendered via portal to `document.body` so it's fixed to the viewport
+                        and not affected by ancestor transforms or scrolling containers. */}
 
                     {/* Mobile History Drawer (Controlled by Chat component state) */}
                     <div className={`fixed inset-0 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -399,6 +393,20 @@ const TextChat: React.FC<{
                 </div>
             </div>
         </div>
+
+        {typeof document !== 'undefined' && createPortal(
+            <ChatComposer
+                input={input}
+                setInput={setInput}
+                isLoading={isLoading}
+                voiceStatus={voiceStatus}
+                onToggleVoice={toggleVoice}
+                onAttach={() => setIsVoiceMode(false)}
+                onSend={() => handleSendMessage()}
+            />,
+            document.body
+        )}
+
     );
 };
 

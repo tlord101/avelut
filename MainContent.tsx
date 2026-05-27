@@ -11,6 +11,7 @@ import Help from './components/Help';
 import { Messenger } from './components/Messenger';
 import VanTutorAssistant from './components/VanTutorAssistant';
 import { AdminPanel } from './components/AdminPanel';
+import ErrorBoundary from './components/ErrorBoundary';
 
 interface MainContentProps {
     activeItem: string;
@@ -56,10 +57,14 @@ export const MainContent: React.FC<MainContentProps> = ({
             return <Messenger userProfile={userProfile} />;
         case 'chat':
             return <VanTutorAssistant userProfile={userProfile} />;
-        case 'admin':
-            return userProfile.is_admin
-                ? <AdminPanel userProfile={userProfile} />
-                : <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
+                case 'admin':
+                        return userProfile.is_admin
+                                ? (
+                                        <ErrorBoundary>
+                                            <AdminPanel userProfile={userProfile} />
+                                        </ErrorBoundary>
+                                    )
+                                : <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
         default:
             return <Dashboard userProfile={userProfile} dashboardData={dashboardData} />;
     }
