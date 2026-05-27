@@ -12,7 +12,7 @@ import { ListIcon } from './icons/ListIcon';
 
 declare var __app_id: string;
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const TIME_PER_QUESTION_SECONDS = 30;
 

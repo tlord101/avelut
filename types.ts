@@ -9,7 +9,9 @@ export interface NavItem {
 export interface UserProfile {
   uid: string;
   display_name: string;
+  email?: string;
   photo_url?: string;
+  xp?: number;
   department_id: string;
   level: string;
   current_streak: number;
@@ -73,10 +75,15 @@ export interface Topic {
 export interface Course {
   course_id: string;
   course_name: string;
+  course_code?: string;
+  course_unit?: number;
+  course_status?: string;
+  academic_session?: string;
   topics: Topic[];
   level: string; // 100lvl, 200lvl, etc.
   semester?: 'first' | 'second';
   textbook_url?: string;
+  textbook_urls?: string[];
 }
 
 export interface Department {
@@ -94,7 +101,20 @@ export interface Department {
 export interface UserProgress {
   [topic_id: string]: {
     is_complete: boolean;
+    timestamp?: number;
+    study_duration_seconds?: number;
+    xp_earned?: number;
   };
+}
+
+export interface LeaderboardEntry {
+  user_id: string;
+  display_name: string;
+  photo_url?: string;
+  department_id?: string;
+  level?: string;
+  xp?: number;
+  last_updated_at?: number;
 }
 
 // Type for the Dashboard data

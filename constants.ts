@@ -4,11 +4,12 @@ import React from 'react';
 import type { NavItem } from './types';
 import { DashboardIcon } from './components/icons/DashboardIcon';
 import { StudyGuideIcon } from './components/icons/StudyGuideIcon';
-import { ChatIcon } from './components/icons/ChatIcon';
 import { ExamIcon } from './components/icons/ExamIcon';
 import { CameraIcon } from './components/icons/CameraIcon';
+import { ChatIcon } from './components/icons/ChatIcon';
 import { HelpIcon } from './components/icons/HelpIcon';
 import { GraduationCapIcon } from './components/icons/GraduationCapIcon';
+import { LeaderboardIcon } from './components/icons/LeaderboardIcon';
 
 // Define SVG icons for secondary navigation
 const SettingsIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
@@ -37,9 +38,10 @@ const SettingsIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' 
 
 export const navigationItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: React.createElement(DashboardIcon) },
+  { id: 'leaderboard', label: 'Leaderboard', icon: React.createElement(LeaderboardIcon) },
   { id: 'study_guide', label: 'Study Guide', icon: React.createElement(StudyGuideIcon) },
-  { id: 'chat', label: 'Chat', icon: React.createElement(ChatIcon) },
   { id: 'visual_solver', label: 'Visual Solver', icon: React.createElement(CameraIcon) },
+  { id: 'chat', label: 'Chat', icon: React.createElement(ChatIcon) },
   { id: 'exam', label: 'Exam', icon: React.createElement(ExamIcon) },
 ];
 
