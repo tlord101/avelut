@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type, Modality } from '@google/genai';
-import { db } from '../firebase';
-import { ref as dbRef, onValue, off, set, update, get } from 'firebase/database';
+import { GoogleGenAI, Type } from '@google/genai';
+import { db, storage } from '../firebase';
+import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
@@ -18,7 +19,7 @@ import { LockIcon } from './icons/LockIcon';
 
 declare var __app_id: string;
 // @ts-ignore
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 // --- INLINE ICONS ---
 const CheckCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
@@ -104,6 +105,68 @@ const normalizeLevelValue = (value?: string): string => {
     return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
 };
 
+const normalizeDepartmentValue = (value?: string): string => {
+    if (!value) return '';
+    return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w_]/g, '');
+};
+
+const CHAT_XP_INTERVAL_SECONDS = 30;
+const CHAT_XP_REWARD = 1;
+
+const getWeekId = (date: Date): string => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-${weekNo}`;
+};
+
+const readNumericValue = (value: unknown, fallback = 0): number => (
+    typeof value === 'number' ? value : fallback
+);
+
+const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
+    if (!course || typeof course !== 'object') return null;
+    const course_name = (course.course_name || '').toString().trim();
+    if (!course_name) return null;
+    const course_id = (course.course_id || fallbackCourseId || course_name.toLowerCase().replace(/\s+/g, '_')).toString();
+    return {
+        ...course,
+        course_id,
+        course_name,
+        level: (course.level || fallbackLevel || '').toString(),
+        topics: Array.isArray(course.topics) ? course.topics : [],
+    } as Course;
+};
+
+const extractCoursesFromDepartmentData = (departmentData: any): Course[] => {
+    if (!departmentData || typeof departmentData !== 'object') return [];
+
+    if (Array.isArray(departmentData.course_list)) {
+        return departmentData.course_list
+            .map((course: any) => normalizeCourse(course))
+            .filter((course: Course | null): course is Course => course !== null);
+    }
+
+    if (departmentData.course_list && typeof departmentData.course_list === 'object') {
+        return Object.entries(departmentData.course_list)
+            .map(([courseId, course]) => normalizeCourse(course, courseId))
+            .filter((course: Course | null): course is Course => course !== null);
+    }
+
+    if (departmentData.levels && typeof departmentData.levels === 'object') {
+        return Object.entries(departmentData.levels).flatMap(([levelKey, levelValue]: [string, any]) => {
+            const courseMap = levelValue?.courses;
+            if (!courseMap || typeof courseMap !== 'object') return [];
+            return Object.entries(courseMap)
+                .map(([courseId, course]) => normalizeCourse(course, courseId, levelKey))
+                .filter((course: Course | null): course is Course => course !== null);
+        });
+    }
+
+    return [];
+};
+
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -113,6 +176,22 @@ const base64ToBlob = (base64: string, mimeType: string): Blob => {
     }
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
+};
+
+const createUniqueId = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    const perfPart = typeof performance !== 'undefined' ? performance.now().toString().replace('.', '') : '0';
+    return `${Date.now()}-${perfPart}`;
 };
 
 // --- SKELETON LOADER ---
@@ -131,12 +210,10 @@ const StudyGuideSkeleton: React.FC = () => (
 interface LearningInterfaceProps {
     userProfile: UserProfile;
     topic: Topic & { courseName: string };
-    isCompleted: boolean;
     onClose: () => void;
-    onMarkComplete: (topicId: string) => Promise<void>;
 }
 
-const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, isCompleted, onClose, onMarkComplete }) => {
+const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [file, setFile] = useState<File | null>(null);
@@ -146,8 +223,23 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [textbookContext, setTextbookContext] = useState<string>('');
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
+    const isAwardingTimeXpRef = useRef(false);
+    const profileSnapshotRef = useRef({
+        display_name: userProfile.display_name || 'Learner',
+        photo_url: userProfile.photo_url || '',
+        level: userProfile.level,
+    });
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
+    const isInitialChatLoading = isLoading && messages.length === 0;
+
+    useEffect(() => {
+        profileSnapshotRef.current = {
+            display_name: userProfile.display_name || 'Learner',
+            photo_url: userProfile.photo_url || '',
+            level: userProfile.level,
+        };
+    }, [userProfile.display_name, userProfile.photo_url, userProfile.level]);
 
     useEffect(() => {
         const fetchTextbook = async () => {
@@ -199,7 +291,86 @@ Scope control (very important):
 - If the topic is completed within its boundaries, clearly state completion and ask if the student wants revision or the next topic.
 ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}` : ''}${textbookContext}`;
 
+    useEffect(() => {
+        let intervalId: ReturnType<typeof window.setInterval> | null = null;
+
+        const awardTimeBasedXp = async () => {
+            if (isAwardingTimeXpRef.current) return;
+            isAwardingTimeXpRef.current = true;
+
+            try {
+                const userXpRef = dbRef(db, `users/${userProfile.uid}/xp`);
+                const xpTxnResult = await runTransaction(userXpRef, (currentXp) => {
+                    const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+                    return numericXp + CHAT_XP_REWARD;
+                });
+                const totalXp = readNumericValue(xpTxnResult.snapshot.val());
+
+                const weekId = getWeekId(new Date());
+                const weeklyXpRef = dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}/xp`);
+                const weeklyTxnResult = await runTransaction(weeklyXpRef, (currentXp) => {
+                    const numericXp = typeof currentXp === 'number' ? currentXp : 0;
+                    return numericXp + CHAT_XP_REWARD;
+                });
+                const weeklyXp = readNumericValue(weeklyTxnResult.snapshot.val());
+                const profile = profileSnapshotRef.current;
+
+                const leaderboardEntryData = {
+                    display_name: profile.display_name,
+                    photo_url: profile.photo_url,
+                    department_id: userProfile.department_id,
+                    level: profile.level,
+                    last_updated_at: serverTimestamp(),
+                };
+
+                await update(dbRef(db, `leaderboard_overall/${userProfile.department_id}/${userProfile.uid}`), {
+                    ...leaderboardEntryData,
+                    xp: totalXp,
+                });
+
+                await update(dbRef(db, `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.uid}`), {
+                    ...leaderboardEntryData,
+                    xp: weeklyXp,
+                });
+            } catch (error) {
+                console.error('Failed to award time-based XP:', error);
+            } finally {
+                isAwardingTimeXpRef.current = false;
+            }
+        };
+
+        const stopInterval = () => {
+            if (intervalId === null) return;
+            window.clearInterval(intervalId);
+            intervalId = null;
+        };
+
+        const startInterval = () => {
+            if (intervalId !== null) return;
+            intervalId = window.setInterval(() => {
+                void awardTimeBasedXp();
+            }, CHAT_XP_INTERVAL_SECONDS * 1000);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                startInterval();
+                return;
+            }
+            stopInterval();
+        };
+
+        handleVisibilityChange();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            stopInterval();
+        };
+    }, [userProfile.uid, userProfile.department_id]);
+
     const initiateAutoTeach = async () => {
+        setIsLoading(true);
         const prompt = `
 Context:
 Department: ${userProfile.department_id}
@@ -239,6 +410,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         if (!result.success) {
             addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
+            setIsLoading(false);
             onClose();
         }
     };
@@ -250,7 +422,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                initiateAutoTeach();
+                void initiateAutoTeach();
             } else {
                 const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
                     id,
@@ -260,8 +432,8 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                     image_url: msg.image_url,
                 })).sort((a,b) => a.timestamp - b.timestamp);
                 setMessages(fetchedMessages);
+                setIsLoading(false);
             }
-            setIsLoading(false);
         }, (error) => {
             console.error("Error initializing lesson:", error);
             addToast("Could not start the lesson. Please try again.", "error");
@@ -325,12 +497,19 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             // Save user message to DB
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
             const newUserMsgRef = push(messagesRef);
-            const userMessageData = {
+            const userMessageData: {
+                sender: 'user';
+                text: string;
+                image_url?: string;
+                timestamp: object;
+            } = {
                 sender: 'user',
                 text: tempInput || '',
-                image_url: imageUrl,
                 timestamp: serverTimestamp(),
             };
+            if (imageUrl) {
+                userMessageData.image_url = imageUrl;
+            }
             await set(newUserMsgRef, userMessageData);
             
             // Update the optimistic message with real data from database
@@ -382,7 +561,7 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                    model: 'gemini-3.1-flash-image-preview',
                     config: { systemInstruction },
                     contents: [{ role: 'user', parts }]
                 });
@@ -396,13 +575,6 @@ Student: "${tempInput}"
                 };
                 await set(newBotMsgRef, botMessageData);
 
-                const botMessage: Message = { 
-                    id: newBotMsgRef.key!, 
-                    text: botResponseText, 
-                    sender: 'bot', 
-                    timestamp: Date.now()
-                };
-                setMessages(prev => [...prev, botMessage]);
             });
 
             if (!result.success) {
@@ -426,76 +598,44 @@ Student: "${tempInput}"
         addToast("Creating a visualization for you...", "info");
 
         const result = await attemptApiCall(async () => {
-            const prompt = `Create a photorealistic and visually clear image that illustrates the following educational concept for a student. The image should be a helpful visual aid for learning. Crucially, the image must not contain any text, words, letters, numbers, or labels. Focus purely on the visual representation. Concept: "${promptText}"`;
-            
-            let response;
-            const maxRetries = 2;
-            for (let i = 0; i <= maxRetries; i++) {
-                try {
-                    const result = await ai.models.generateContent({
-                        model: 'gemini-3.5-flash',
-                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        config: {
-                            responseModalities: [Modality.IMAGE, Modality.TEXT],
-                        },
-                    });
-                    response = result;
-                    
-                    const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                    if (imagePart?.inlineData) {
-                        break; 
-                    } else {
-                        if (i === maxRetries) {
-                           throw new Error("API returned response without image data.");
-                        }
-                    }
-                } catch (error) {
-                    console.error(`Image generation attempt ${i + 1} failed:`, error);
-                    if (i === maxRetries) {
-                        throw error;
-                    }
-                    await new Promise(res => setTimeout(res, 1000 * (i + 1))); 
-                }
-            }
+            const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
+            const response = await ai.models.generateContent({
+                model: "gemini-3.1-flash-image-preview",
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            });
 
-            if (!response) {
-                throw new Error("API call failed to return a response after retries.");
-            }
-    
-            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (imagePart?.inlineData) {
-                const base64ImageBytes = imagePart.inlineData.data;
-                const mimeType = imagePart.inlineData.mimeType || 'image/png';
+            const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+            const imageUrls: string[] = [];
+            for (const part of parts) {
+                if (!part.inlineData?.data) continue;
+
+                const mimeType = part.inlineData.mimeType || 'image/png';
                 const fileExtension = mimeType.split('/')[1] || 'png';
-
-                const imageBlob = base64ToBlob(base64ImageBytes, mimeType);
-                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${Date.now()}.${fileExtension}`);
-                
+                const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
+                const uniqueImageId = createUniqueId();
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
                 const uploadResult = await uploadBytes(storageRefObj, imageBlob);
                 const publicUrl = await getDownloadURL(uploadResult.ref);
-    
-                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-                const newBotMsgRef = push(messagesRef);
-                const botMessageData = {
+                imageUrls.push(publicUrl);
+            }
+
+            if (imageUrls.length === 0) {
+                throw new Error("No image visualization was returned by the API.");
+            }
+
+            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+
+            for (const publicUrl of imageUrls) {
+                const imageMsgRef = push(messagesRef);
+                const imageMessageData = {
                     sender: 'bot',
-                    text: 'Here is a visualization to help you understand:',
                     image_url: publicUrl,
                     timestamp: serverTimestamp(),
                 };
-                await set(newBotMsgRef, botMessageData);
-
-                const botMessage: Message = {
-                    id: newBotMsgRef.key!,
-                    text: botMessageData.text,
-                    sender: 'bot',
-                    timestamp: Date.now(),
-                    image_url: publicUrl
-                };
-                setMessages(prev => [...prev, botMessage]);
-    
-            } else {
-                throw new Error("No image data received from the API.");
+                await set(imageMsgRef, imageMessageData);
             }
+
         });
 
         if (!result.success) {
@@ -517,6 +657,17 @@ Student: "${tempInput}"
 
             {/* Scrollable Message Area */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {isInitialChatLoading ? (
+                    <div className="h-full min-h-[200px] flex items-center justify-center">
+                        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <span className="ml-1">Loading lesson...</span>
+                        </div>
+                    </div>
+                ) : (
+                <>
                 {messages.map((message, index) => {
                     const showIllustrateButton = index === lastBotMessageIndex && !!message.text && !isLoading && !isIllustrating;
 
@@ -631,6 +782,8 @@ Student: "${tempInput}"
                     </div>
                 }
                 <div ref={messagesEndRef} />
+                </>
+                )}
             </div>
             
             {/* Fixed Input Area */}
@@ -672,7 +825,6 @@ Student: "${tempInput}"
                 </div>
                 {file && <div className="text-xs text-gray-600 mt-2 flex items-center gap-2 bg-gray-200 p-1 px-2 rounded-md w-fit"><FileIcon /><span>{file.name}</span><button onClick={() => { setFile(null); setFileData(null); }} className="text-red-500 hover:text-red-400">&times;</button></div>}
                 
-                {!isCompleted && <button onClick={() => onMarkComplete(topic.topic_id)} disabled={isIllustrating || isLoading} className="mt-4 w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">Mark as Complete</button>}
             </footer>
         </div>
     );
@@ -772,16 +924,42 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const fetchCourses = async () => {
       setIsLoading(true);
       try {
-        const snapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
-        const data = snapshot.val();
-        
-        if (data && data.course_list) {
-            const normalizedUserLevel = normalizeLevelValue(userProfile.level);
-            const coursesForLevel: Course[] = (data.course_list as Course[]).filter(c => (
-                normalizeLevelValue(c.level) === normalizedUserLevel
-            ));
-            setCourses(coursesForLevel);
+        const normalizedUserDepartment = normalizeDepartmentValue(userProfile.department_id);
+        const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+
+        if (!normalizedUserDepartment) {
+            setCourses([]);
+            return;
         }
+
+        let resolvedDepartmentData: any = null;
+
+        const directDepartmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+        const directDepartmentData = directDepartmentSnapshot.val();
+        if (directDepartmentData) {
+            resolvedDepartmentData = directDepartmentData;
+        }
+
+        if (!resolvedDepartmentData) {
+            const snapshot = await get(dbRef(db, 'departments_data'));
+            const departmentsData = snapshot.val();
+            if (!departmentsData) {
+                setCourses([]);
+                return;
+            }
+
+            resolvedDepartmentData = Object.entries(departmentsData).find(([departmentId, departmentData]: [string, any]) => (
+                normalizeDepartmentValue(departmentId) === normalizedUserDepartment ||
+                normalizeDepartmentValue(departmentData?.department_name) === normalizedUserDepartment
+            ))?.[1];
+        }
+
+        const allDepartmentCourses = extractCoursesFromDepartmentData(resolvedDepartmentData);
+        const coursesForLevel = allDepartmentCourses.filter((course) => (
+            normalizeLevelValue(course.level) === normalizedUserLevel
+        ));
+
+        setCourses(coursesForLevel);
       } catch (err) {
         console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');
@@ -802,28 +980,6 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         }
         return newSet;
     });
-  };
-
-  const handleMarkComplete = async (topicId: string) => {
-    if (userProgress[topicId]?.is_complete) {
-        addToast("You've already completed this topic!", 'info');
-        return;
-    }
-    
-    try {
-        await update(dbRef(db, `user_progress/${userProfile.uid}/${topicId}`), {
-            is_complete: true,
-            timestamp: serverTimestamp(),
-        });
-        
-        addToast(`Topic complete!`, 'success');
-        
-        // Close the learning interface to trigger a refresh of the study guide
-        setSelectedTopic(null);
-    } catch (err: any) {
-        console.error("Failed to mark topic as complete:", err);
-        addToast("Could not save your progress. Please check your connection or try again later.", 'error');
-    }
   };
 
   const filteredCourses = courses
@@ -849,9 +1005,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
       <LearningInterface
         userProfile={userProfile}
         topic={selectedTopic}
-        isCompleted={userProgress[selectedTopic.topic_id]?.is_complete || false}
         onClose={() => setSelectedTopic(null)}
-        onMarkComplete={handleMarkComplete}
       />
     );
   }

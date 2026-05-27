@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'firebase/database';
-import type { UserProfile, LeaderboardEntry, WeeklyLeaderboardEntry } from '../types';
+import type { UserProfile, LeaderboardEntry } from '../types';
 import { Avatar } from './Avatar';
 
 const getWeekId = (date: Date): string => {
@@ -34,7 +34,7 @@ const RankItem: React.FC<{rank: number, user: LeaderboardEntry, isCurrentUser: b
             <p className="font-semibold text-gray-800">{user.display_name}</p>
         </div>
         <div className="font-bold text-lime-600 text-lg">
-            {user.xp.toLocaleString()} XP
+            {(user.xp || 0).toLocaleString()} XP
         </div>
     </div>
 );
@@ -56,8 +56,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
     
     const weekId = getWeekId(new Date());
     const path = activeTab === 'overall' 
-        ? `leaderboard_overall/${userProfile.department_id}/${userProfile.level}` 
-        : `leaderboard_weekly/${weekId}/${userProfile.department_id}/${userProfile.level}`;
+        ? `leaderboard_overall/${userProfile.department_id}` 
+        : `leaderboard_weekly/${weekId}/${userProfile.department_id}`;
     const leaderboardRef = query(dbRef(db, path), orderByChild('xp'), limitToLast(100));
 
     const unsubscribe = onValue(leaderboardRef, (snapshot) => {
@@ -67,12 +67,12 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
                 data.push({ user_id: child.key, ...child.val() });
             });
             // Firebase sorts ascending by child, so we reverse for descending leaderboard
-            const sortedData = data.sort((a, b) => b.xp - a.xp);
+            const sortedData = data.sort((a, b) => (b.xp || 0) - (a.xp || 0));
             
             if (activeTab === 'overall') {
                 setOverallData(sortedData as LeaderboardEntry[]);
             } else {
-                setWeeklyData(sortedData as WeeklyLeaderboardEntry[]);
+                setWeeklyData(sortedData as LeaderboardEntry[]);
             }
         } else {
             if (activeTab === 'overall') setOverallData([]);
@@ -86,7 +86,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
     });
 
     return () => off(leaderboardRef);
-  }, [activeTab]);
+  }, [activeTab, userProfile.department_id]);
 
   const data = activeTab === 'overall' ? overallData : weeklyData;
   const currentUserRank = data.findIndex(u => u.user_id === userProfile.uid) + 1;
