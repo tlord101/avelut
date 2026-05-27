@@ -142,7 +142,7 @@ const TutorialDisplay: React.FC<TutorialDisplayProps> = ({ scannedImage, tutoria
                 <div className="max-w-4xl mx-auto">
                     <button 
                         onClick={onClose} 
-                        className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                        className="w-full bg-emerald hover:bg-emerald-hover text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-2"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -652,7 +652,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                                         </div>
                                         <button 
                                             onClick={handleAnalyze} 
-                                            className="w-full bg-gradient-to-r from-lime-600 to-lime-500 text-white font-bold py-4 px-6 rounded-xl hover:from-lime-700 hover:to-lime-600 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                            className="w-full bg-emerald text-white font-bold py-4 px-6 rounded-xl hover:bg-emerald-hover transition-all text-lg flex items-center justify-center gap-2 active:scale-95"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -661,7 +661,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                                         </button>
                                         <button 
                                             onClick={handleSolution} 
-                                            className="w-full bg-white/20 backdrop-blur-sm border-2 border-white text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                            className="w-full bg-white/20 border border-white/50 text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all text-lg flex items-center justify-center gap-2 active:scale-95"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -670,7 +670,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                                         </button>
                                         <button 
                                             onClick={handleQuickAnswer} 
-                                            className="w-full bg-white/20 backdrop-blur-sm border-2 border-white text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all shadow-xl text-lg flex items-center justify-center gap-2 active:scale-95"
+                                            className="w-full bg-white/20 border border-white/50 text-white font-bold py-4 px-6 rounded-xl hover:bg-white/30 transition-all text-lg flex items-center justify-center gap-2 active:scale-95"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />

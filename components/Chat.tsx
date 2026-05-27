@@ -276,7 +276,7 @@ const TextChat: React.FC<{
                                 </div>
 
                                 {/* Main Input Container */}
-                                <div className="p-4 bg-off-white rounded-[24px] border border-gray-100 shadow-sm">
+                                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200">
                                     <textarea
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
@@ -382,8 +382,8 @@ const TextChat: React.FC<{
 
                     {/* Mobile History Drawer (Controlled by Chat component state) */}
                     <div className={`fixed inset-0 z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsMobilePanelOpen(false)}></div>
-                        <div className="relative w-[320px] h-full shadow-2xl">
+                        <div className="absolute inset-0 bg-charcoal/40" onClick={() => setIsMobilePanelOpen(false)}></div>
+                        <div className="relative w-[320px] h-full shadow-lg">
                             <ChatHistoryPanel 
                                 conversations={conversations}
                                 activeConversationId={activeConversationId}
