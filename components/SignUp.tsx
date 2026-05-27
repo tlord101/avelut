@@ -22,7 +22,15 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
     setIsGoogleSubmitting(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      await set(dbRef(db, `users/${user.uid}`), {
+        uid: user.uid,
+        display_name: user.displayName || 'Learner',
+        email: user.email || '',
+        photo_url: user.photoURL || '',
+        created_at: Date.now()
+      });
       // On successful sign-in, onAuthStateChanged in App.tsx will trigger.
     } catch (err: any) {
       addToast(err.message || 'Failed to sign in with Google.', 'error');

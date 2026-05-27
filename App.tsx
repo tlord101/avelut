@@ -242,6 +242,33 @@ const App: React.FC = () => {
         };
     }, [user, addToast, startTour]);
 
+    useEffect(() => {
+        if (!user) return;
+
+        const syncAuthIdentityToProfile = async () => {
+            try {
+                const userRef = dbRef(db, `users/${user.uid}`);
+                const snapshot = await get(userRef);
+                const existingProfile = snapshot.val() || {};
+                const nextProfile = {
+                    uid: user.uid,
+                    display_name: user.displayName || existingProfile.display_name || 'Learner',
+                    email: user.email || existingProfile.email || '',
+                    photo_url: user.photoURL || existingProfile.photo_url || '',
+                };
+
+                const hasProfileUpdates = Object.entries(nextProfile).some(([key, value]) => existingProfile[key] !== value && value);
+                if (hasProfileUpdates) {
+                    await update(userRef, nextProfile);
+                }
+            } catch (error) {
+                console.error('Failed to sync auth identity to profile:', error);
+            }
+        };
+
+        syncAuthIdentityToProfile();
+    }, [user]);
+
     // Fetch all users for messenger/presence
     useEffect(() => {
         if (!userProfile) return;
