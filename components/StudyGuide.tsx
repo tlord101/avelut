@@ -75,27 +75,27 @@ const getSubjectVisuals = (subjectName: string) => {
     if (lowerName.includes('algebra') || lowerName.includes('math')) {
         return {
             Icon: CalculatorIcon,
-            gradient: 'from-blue-100 to-indigo-100',
-            borderColor: 'border-blue-500',
+            bgColor: 'bg-blue-50',
+            borderColor: 'border-blue-200',
             textColor: 'text-blue-800',
-            pathColor: 'bg-blue-300'
+            pathColor: 'bg-blue-200'
         };
     }
     if (lowerName.includes('biology') || lowerName.includes('science')) {
         return {
             Icon: BeakerIcon,
-            gradient: 'from-purple-100 to-pink-100',
-            borderColor: 'border-purple-500',
+            bgColor: 'bg-purple-50',
+            borderColor: 'border-purple-200',
             textColor: 'text-purple-800',
-            pathColor: 'bg-purple-300'
+            pathColor: 'bg-purple-200'
         };
     }
     return {
         Icon: BookIcon,
-        gradient: 'from-yellow-100 to-orange-100',
-        borderColor: 'border-yellow-500',
+        bgColor: 'bg-yellow-50',
+        borderColor: 'border-yellow-200',
         textColor: 'text-yellow-800',
-        pathColor: 'bg-yellow-300'
+        pathColor: 'bg-yellow-200'
     };
 };
 
@@ -685,13 +685,13 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
     return (
         <div className="relative w-full py-12 flex items-center justify-center">
             {/* Vertical Connector Line */}
-            <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1.5 ${isCompleted ? 'bg-lime-500 shadow-[0_0_15px_rgba(132,204,22,0.3)]' : 'bg-gray-100'} z-0`}></div>
+            <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1.5 ${isCompleted ? 'bg-emerald' : 'bg-gray-200'} z-0`}></div>
 
             <div className={`w-full max-w-2xl flex items-center ${isEven ? 'flex-row' : 'flex-row-reverse'} relative z-10`}>
                 {/* Content Side */}
                 <div className={`w-1/2 px-8 ${isEven ? 'text-right' : 'text-left'}`}>
                     <div className="group cursor-pointer inline-block" onClick={onSelect}>
-                        <h4 className={`text-sm font-black uppercase tracking-widest ${isCompleted ? 'text-lime-600' : 'text-gray-400 group-hover:text-gray-900'} transition-colors duration-300`}>
+                        <h4 className={`text-sm font-bold uppercase tracking-widest ${isCompleted ? 'text-emerald' : 'text-gray-400 group-hover:text-gray-600'} transition-colors duration-300`}>
                             {isCompleted ? 'Mastered' : 'Locked'}
                         </h4>
                         <p className={`mt-1 text-lg font-bold leading-tight ${isCompleted ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-700'} transition-colors duration-300`}>
@@ -704,10 +704,10 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
                 <div className="relative flex items-center justify-center">
                     <button 
                         onClick={onSelect}
-                        className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 transform hover:scale-110 active:scale-95 shadow-xl
+                        className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 transform hover:scale-105 active:scale-95
                             ${isCompleted 
-                                ? 'bg-lime-500 text-white ring-8 ring-lime-500/20' 
-                                : 'bg-white border-2 border-gray-200 text-gray-300 ring-8 ring-transparent hover:ring-gray-100'}`}
+                                ? 'bg-emerald text-white' 
+                                : 'bg-white border-2 border-gray-200 text-gray-300 hover:border-gray-300'}`}
                     >
                         {isCompleted ? (
                             <CheckIcon className="w-8 h-8"/>
@@ -725,7 +725,7 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
                     
                     {/* Pulsing indicator for current topic (not yet completed but first in list) */}
                     {!isCompleted && index === 0 && (
-                        <div className="absolute inset-0 w-16 h-16 rounded-full bg-lime-500/20 animate-ping pointer-events-none"></div>
+                        <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-emerald pointer-events-none"></div>
                     )}
                 </div>
 
@@ -737,12 +737,12 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
 };
 
 const CourseHeader: React.FC<{ course: Course, isExpanded: boolean, onClick: () => void }> = ({ course, isExpanded, onClick }) => {
-    const { Icon, gradient, textColor } = getSubjectVisuals(course.course_name);
+    const { Icon, bgColor, borderColor, textColor } = getSubjectVisuals(course.course_name);
     return (
         <div className="relative flex justify-center py-8">
             <button
                 onClick={onClick}
-                className={`flex items-center justify-between w-full max-w-xl gap-3 p-4 rounded-xl bg-gradient-to-r ${gradient} border border-gray-200 shadow-md hover:shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500`}
+                className={`flex items-center justify-between w-full max-w-xl gap-3 p-4 rounded-xl ${bgColor} border ${borderColor} hover:bg-gray-100 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald`}
                 aria-expanded={isExpanded}
             >
                 <div className="flex items-center gap-3">
@@ -857,14 +857,13 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full bg-white md:rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in duration-700">
-        <div className="flex-shrink-0 px-8 py-10 bg-gradient-to-b from-gray-50/50 to-white border-b border-gray-100">
+    <div className="flex-1 flex flex-col w-full bg-white border border-gray-200 overflow-hidden rounded-2xl">
+        <div className="flex-shrink-0 px-8 py-10 bg-gray-50 border-b border-gray-200">
             <div className="max-w-4xl mx-auto flex flex-col items-center text-center">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-lime-50 text-lime-700 text-[10px] font-black uppercase tracking-widest mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-lime-500 animate-pulse"></div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald/10 text-emerald text-[10px] font-bold uppercase tracking-widest mb-4">
                     Your Learning Path
                 </div>
-                <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Knowledge Roadmap</h2>
+                <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Knowledge Roadmap</h2>
                 <p className="text-gray-500 text-lg max-w-lg">Master your curriculum topic by topic with personalized AI guidance.</p>
                 
                 <div className="mt-8 w-full flex flex-col sm:flex-row gap-3">
@@ -874,22 +873,22 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                             placeholder="Find a topic..."
                             value={filter.searchTerm}
                             onChange={(e) => setFilter(f => ({ ...f, searchTerm: e.target.value }))}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-gray-900 placeholder:text-gray-400 focus:ring-4 focus:ring-lime-500/10 focus:border-lime-500 focus:bg-white focus:outline-none transition-all shadow-sm group-hover:shadow-md"
+                            className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-12 pr-4 text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-emerald focus:border-emerald focus:outline-none transition-all"
                         />
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-lime-500 transition-colors">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-emerald transition-colors">
                            <SearchIcon className="w-5 h-5" />
                         </div>
                     </div>
-                    <div className="bg-gray-50 p-1.5 rounded-2xl flex border border-gray-200">
-                        <button onClick={() => setFilter(f => ({ ...f, semester: 'first' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'first' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>1st Sem</button>
-                        <button onClick={() => setFilter(f => ({ ...f, semester: 'second' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'second' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>2nd Sem</button>
-                        <button onClick={() => setFilter(f => ({ ...f, semester: 'all' }))} className={`px-6 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${filter.semester === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>All</button>
+                    <div className="bg-white p-1 rounded-xl flex border border-gray-200">
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'first' }))} className={`px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${filter.semester === 'first' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>1st Sem</button>
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'second' }))} className={`px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${filter.semester === 'second' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>2nd Sem</button>
+                        <button onClick={() => setFilter(f => ({ ...f, semester: 'all' }))} className={`px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${filter.semester === 'all' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>All</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12">
             {isLoading ? (
                 <StudyGuideSkeleton />
             ) : (

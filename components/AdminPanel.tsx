@@ -837,7 +837,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ userProfile }) => {
                                                 </button>
                                             </div>
 
-                                            <div className="flex justify-end pt-4 border-t border-gray-50">
+                                            <div className="flex justify-between items-center pt-4 border-t border-gray-50">
                                                 <button className="text-red-400 hover:text-red-600 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5" onClick={() => {
                                                     const list = coursesList.filter((_, i) => i !== sIdx);
                                                     setCoursesList(list);
