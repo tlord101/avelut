@@ -117,16 +117,29 @@ export interface LeaderboardEntry {
   last_updated_at?: number;
 }
 
+export interface DashboardAssessment {
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  next_steps: string[];
+  confidence: number;
+  evidence: string[];
+  generated_at: number;
+}
+
 // Type for the Dashboard data
 export interface DashboardData {
     totalTopics: number;
     completedTopicsCount: number;
-  completedCoursesCount: number;
-  totalStudySeconds: number;
-  averageTopicStudySeconds: number;
-  averageCourseStudySeconds: number;
-  understandingScore: number;
-  understandingLabel: string;
+    completedCoursesCount: number;
+    totalStudySeconds: number;
+    averageTopicStudySeconds: number;
+    averageCourseStudySeconds: number;
+    examAverageScore: number;
+    understandingScore: number;
+    understandingLabel: string;
+    backedFacts: string[];
+    geminiAssessment?: DashboardAssessment | null;
     examHistory: ExamHistoryItem[];
 }
 

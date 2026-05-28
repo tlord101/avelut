@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GoogleGenAI, Type } from '@google/genai';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
-import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course } from './types';
+import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course, DashboardAssessment } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
 import { AdminLogin } from './components/AdminLogin';
@@ -20,6 +21,9 @@ import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
 
 declare var __app_id: string;
+
+// @ts-ignore
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const AppLoader: React.FC = () => {
   return (
@@ -63,6 +67,15 @@ const resolveActiveItemFromPath = (pathname: string): string => {
 const normalizeLevelValue = (value?: string): string => {
     if (!value) return '';
     return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
+};
+
+const formatDurationForPrompt = (seconds: number): string => {
+    if (!seconds || seconds <= 0) return '0 minutes';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} minutes`;
+    const hours = Math.floor(minutes / 60);
+    const remMinutes = minutes % 60;
+    return remMinutes ? `${hours} hours ${remMinutes} minutes` : `${hours} hours`;
 };
 
 const App: React.FC = () => {
@@ -141,6 +154,7 @@ const App: React.FC = () => {
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
+    const dashboardAssessmentKeyRef = useRef('');
 
 
     const { addToast } = useToast();
@@ -410,8 +424,17 @@ const App: React.FC = () => {
                     totalStudySeconds,
                     averageTopicStudySeconds,
                     averageCourseStudySeconds,
+                    examAverageScore: Math.round(examAverageScore),
                     understandingScore,
                     understandingLabel,
+                    backedFacts: [
+                        `Completed topics: ${completedTopicsCount} of ${totalTopics}`,
+                        `Completed courses: ${completedCoursesCount}`,
+                        `Total study time: ${formatDurationForPrompt(totalStudySeconds)}`,
+                        `Average topic time: ${formatDurationForPrompt(averageTopicStudySeconds)}`,
+                        `Average course time: ${formatDurationForPrompt(averageCourseStudySeconds)}`,
+                        `Average exam score: ${Math.round(examAverageScore)}%`,
+                    ],
                     examHistory: examHistory
                 });
 
@@ -459,6 +482,107 @@ const App: React.FC = () => {
             off(examHistoryRef, 'value', unsubscribeExamHistory);
         }
     }, [userProfile, userProgress]);
+
+    useEffect(() => {
+        if (!userProfile || !dashboardData) return;
+
+        const assessmentKey = [
+            dashboardData.totalTopics,
+            dashboardData.completedTopicsCount,
+            dashboardData.completedCoursesCount,
+            dashboardData.totalStudySeconds,
+            dashboardData.averageTopicStudySeconds,
+            dashboardData.averageCourseStudySeconds,
+            dashboardData.examAverageScore,
+            dashboardData.understandingScore,
+            dashboardData.examHistory.length,
+        ].join('|');
+
+        if (dashboardAssessmentKeyRef.current === assessmentKey) return;
+        dashboardAssessmentKeyRef.current = assessmentKey;
+
+        const generateAssessment = async () => {
+            const prompt = `You are assessing a university student's learning progress using only backend-backed facts.
+
+Student: ${userProfile.display_name}
+Department: ${userProfile.department_id}
+Level: ${userProfile.level}
+
+Facts:
+${dashboardData.backedFacts.join('\n')}
+
+Recent exam performance: ${dashboardData.examHistory.length > 0 ? dashboardData.examHistory.map((exam) => `${Math.round((exam.score / exam.total_questions) * 100)}%`).join(', ') : 'No exam history yet'}
+
+Write a concise but specific assessment based only on the facts above. Do not invent details. Return valid JSON with keys: summary, strengths, concerns, next_steps, confidence, evidence.
+Keep summary to 2 sentences max.`;
+
+            if (!ai) {
+                const fallbackAssessment: DashboardAssessment = {
+                    summary: `AI is unavailable right now, but the dashboard shows ${dashboardData.completedTopicsCount}/${dashboardData.totalTopics} topics completed and ${dashboardData.examAverageScore}% average exam performance.`,
+                    strengths: [
+                        `Completed ${dashboardData.completedTopicsCount} topics`,
+                        `Tracked ${formatDurationForPrompt(dashboardData.totalStudySeconds)} of study time`,
+                    ],
+                    concerns: [
+                        'Enable API_KEY to generate a Gemini assessment.',
+                    ],
+                    next_steps: [
+                        'Continue completing topics in the Study Guide.',
+                        'Use exams to improve weak areas.',
+                    ],
+                    confidence: 0,
+                    evidence: dashboardData.backedFacts,
+                    generated_at: Date.now(),
+                };
+
+                setDashboardData(prev => prev ? { ...prev, geminiAssessment: fallbackAssessment } : prev);
+                return;
+            }
+
+            try {
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3.5-flash',
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                summary: { type: Type.STRING },
+                                strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                confidence: { type: Type.NUMBER },
+                                evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            },
+                            required: ['summary', 'strengths', 'concerns', 'next_steps', 'confidence', 'evidence'],
+                        },
+                    },
+                });
+
+                if (!response.text) {
+                    throw new Error('Gemini returned an empty assessment.');
+                }
+
+                const parsed = JSON.parse(response.text);
+                const assessment: DashboardAssessment = {
+                    summary: (parsed.summary || '').toString().trim(),
+                    strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map((item: any) => String(item)) : [],
+                    concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map((item: any) => String(item)) : [],
+                    next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map((item: any) => String(item)) : [],
+                    confidence: Math.max(0, Math.min(100, Number(parsed.confidence || 0))),
+                    evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item: any) => String(item)) : dashboardData.backedFacts,
+                    generated_at: Date.now(),
+                };
+
+                setDashboardData(prev => prev ? { ...prev, geminiAssessment: assessment } : prev);
+            } catch (error) {
+                console.error('Failed to generate dashboard assessment:', error);
+            }
+        };
+
+        void generateAssessment();
+    }, [userProfile, dashboardData]);
 
 
     const handleLogout = async () => {

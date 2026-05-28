@@ -70,14 +70,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
     const totalStudySeconds = dashboardData?.totalStudySeconds ?? 0;
     const averageTopicStudySeconds = dashboardData?.averageTopicStudySeconds ?? 0;
     const averageCourseStudySeconds = dashboardData?.averageCourseStudySeconds ?? 0;
+        const examAverageScore = dashboardData?.examAverageScore ?? 0;
     const understandingScore = dashboardData?.understandingScore ?? 0;
     const understandingLabel = dashboardData?.understandingLabel || 'Needs focus';
   const progressPercent = totalTopics > 0 ? Math.round((completedTopicsCount / totalTopics) * 100) : 0;
   
-  const averageScore = dashboardData?.examHistory && dashboardData.examHistory.length > 0
-    ? Math.round(dashboardData.examHistory.reduce((acc, exam) => acc + (exam.score / exam.total_questions), 0) / dashboardData.examHistory.length * 100)
-    : 0;
-
     const formatDuration = (seconds: number) => {
         if (!seconds || seconds <= 0) return '0m';
         const mins = Math.floor(seconds / 60);
@@ -87,7 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
         return `${hours}h ${remMins}m`;
     };
 
-    const examAverageLabel = averageScore > 0 ? `${averageScore}%` : 'No exams yet';
+        const examAverageLabel = dashboardData?.examHistory && dashboardData.examHistory.length > 0 ? `${examAverageScore}%` : 'No exams yet';
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 md:p-10" data-tour-id="dashboard-content">
@@ -172,29 +169,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <div className="rounded-3xl border border-gray-200 bg-white p-8">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-gray-400">Analytics</h3>
-                    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">Overall Score</p>
-                            <p className="mt-2 text-3xl font-black tracking-tight text-gray-900">{examAverageLabel}</p>
-                            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-gray-500">Across recent exams</p>
-                        </div>
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">Completed Courses</p>
-                            <p className="mt-2 text-3xl font-black tracking-tight text-gray-900">{completedCoursesCount}</p>
-                            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-gray-500">Fully finished courses</p>
-                        </div>
-                        <div className="rounded-2xl bg-gray-50 p-4 sm:col-span-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">AI Understanding</p>
-                            <p className="mt-2 text-3xl font-black tracking-tight text-emerald-600">{understandingScore}%</p>
-                            <p className="mt-1 text-sm font-bold uppercase tracking-[0.18em] text-gray-500">
-                                {understandingLabel} understanding based on progress and exam results
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-3xl border border-gray-200 bg-white p-8">
                     <h3 className="mb-6 text-[10px] font-black uppercase tracking-[0.28em] text-gray-500">Recent Performance</h3>
                     {dashboardData && dashboardData.examHistory.length > 0 ? (
                         <div className="max-h-[420px] space-y-2 overflow-y-auto pr-2">
@@ -211,6 +185,70 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                             <p className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">No activity yet</p>
                         </div>
                     )}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <div className="rounded-3xl border border-gray-200 bg-white p-8">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-gray-400">Backed Information</h3>
+                    <p className="mt-2 text-sm font-bold uppercase tracking-[0.18em] text-gray-500">Directly pulled from your progress and exam records</p>
+                    <div className="mt-6 space-y-3">
+                        {(dashboardData?.backedFacts || []).map((fact) => (
+                            <div key={fact} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
+                                {fact}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="rounded-3xl border border-gray-200 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 p-8 text-white shadow-xl shadow-emerald-900/10">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70">Gemini Assessment</p>
+                            <h3 className="mt-2 text-2xl font-black tracking-tight">Real AI feedback</h3>
+                        </div>
+                        <div className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                            Confidence {dashboardData?.geminiAssessment ? `${dashboardData.geminiAssessment.confidence}%` : '...'}
+                        </div>
+                    </div>
+
+                    <div className="mt-6 rounded-2xl bg-white/10 p-5 backdrop-blur-sm">
+                        <p className="text-sm leading-7 text-white/95">
+                            {dashboardData?.geminiAssessment?.summary || 'Generating assessment from your backend data...'}
+                        </p>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                        <div className="rounded-2xl bg-white/10 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Strengths</p>
+                            <ul className="mt-3 space-y-2 text-sm text-white/95">
+                                {(dashboardData?.geminiAssessment?.strengths || []).slice(0, 3).map((item) => (
+                                    <li key={item}>• {item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="rounded-2xl bg-white/10 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Focus Areas</p>
+                            <ul className="mt-3 space-y-2 text-sm text-white/95">
+                                {(dashboardData?.geminiAssessment?.concerns || []).slice(0, 3).map((item) => (
+                                    <li key={item}>• {item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="rounded-2xl bg-white/10 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Next Steps</p>
+                            <ul className="mt-3 space-y-2 text-sm text-white/95">
+                                {(dashboardData?.geminiAssessment?.next_steps || []).slice(0, 3).map((item) => (
+                                    <li key={item}>• {item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 rounded-2xl bg-white/10 p-4 text-xs text-white/80">
+                        <span className="font-black uppercase tracking-[0.25em] text-white/60">Evidence: </span>
+                        {(dashboardData?.geminiAssessment?.evidence || dashboardData?.backedFacts || []).join(' · ')}
+                    </div>
                 </div>
             </div>
         </div>
