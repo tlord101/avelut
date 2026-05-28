@@ -297,7 +297,6 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                 timestamp: firebaseServerTimestamp()
             };
             
-            // Only add properties if they have values (Firebase doesn't allow undefined)
             if (textToSend) {
                 messageData.text = textToSend;
             }
@@ -332,23 +331,23 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
     };
     
     return (
-        <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.82)_0%,_rgba(236,244,250,0.9)_36%,_rgba(226,232,240,0.95)_100%)] text-slate-900">
-            <header className="shrink-0 border-b border-white/60 bg-white/45 px-4 py-4 backdrop-blur-2xl lg:px-6">
+        <div className="flex h-full max-h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.82)_0%,_rgba(236,244,250,0.9)_36%,_rgba(226,232,240,0.95)_100%)] text-slate-900 overflow-hidden">
+            <header className="shrink-0 border-b border-white/60 bg-white/45 px-4 py-3.5 backdrop-blur-2xl">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex min-w-0 items-center gap-3">
                         <button onClick={onBack} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/55 text-slate-600 transition hover:bg-white/75 lg:hidden" aria-label="Back to conversations">
                             <BackIcon />
                         </button>
                         <div className="relative shrink-0">
-                            <Avatar display_name={otherUser.display_name} photo_url={otherUser.photo_url} className="h-12 w-12 ring-1 ring-slate-200" />
-                            <div className="absolute -bottom-1 -right-1">
+                            <Avatar display_name={otherUser.display_name} photo_url={otherUser.photo_url} className="h-11 w-11 ring-1 ring-slate-200" />
+                            <div className="absolute -bottom-1 -right-1 z-10">
                                 <UserStatusIndicator isOnline={otherUser.is_online} />
                             </div>
                         </div>
                         <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                                <h3 className="truncate text-base font-semibold text-slate-900">{otherUser.display_name}</h3>
-                                {otherUser.is_online && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">Online</span>}
+                                <h3 className="truncate text-sm font-semibold text-slate-900">{otherUser.display_name}</h3>
+                                {otherUser.is_online && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-emerald-700">Online</span>}
                             </div>
                             <p className="truncate text-xs text-slate-500">
                                 {isOtherUserTyping ? 'typing...' : (otherUser.is_online ? 'Available right now' : (otherUser.last_seen ? `Active ${formatLastSeen(otherUser.last_seen)}` : 'Offline'))}
@@ -356,14 +355,14 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
                         </div>
                     </div>
                     <div className="hidden items-center gap-2 lg:flex">
-                        <div className="rounded-full border border-white/60 bg-white/45 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl">
+                        <div className="rounded-full border border-white/60 bg-white/45 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl">
                             Secure direct chat
                         </div>
                     </div>
                 </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto px-4 py-6 lg:px-6">
+            <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
                 <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
                     {messages.length === 0 && (
                         <div className="rounded-[32px] border border-white/60 bg-white/55 p-8 text-center shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
@@ -537,18 +536,15 @@ const MessengerAuth: React.FC<MessengerAuthProps> = ({ userProfile }) => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            // Create/update user record in RTDB for discovery and presence
             const userRef = dbRef(db, `users/${user.uid}`);
             await set(userRef, {
-                displayName: userProfile.display_name, // Use RTDB profile name as source of truth
-                photoURL: userProfile.photo_url,      // Use RTDB photo as source of truth
+                displayName: userProfile.display_name,
+                photoURL: userProfile.photo_url,
             });
             
             addToast("Successfully signed into Messenger!", "success");
-            // The onAuthStateChanged listener in the parent Messenger component will handle the UI update.
         } catch (error: any) {
             console.error("Google Sign-in error:", error);
-            // Handle common errors
             if (error.code === 'auth/popup-closed-by-user') {
                  addToast("Sign-in cancelled.", "info");
             } else {
@@ -660,7 +656,6 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
             return;
         };
 
-        // Sync profile to Firebase Auth & RTDB
         const syncFirebaseProfile = async () => {
             const authUpdates: { displayName?: string; photoURL?: string | null } = {};
 
@@ -674,7 +669,6 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
             if (Object.keys(authUpdates).length > 0) {
                 try {
                     await updateProfile(firebaseUser, authUpdates);
-                    // Reload the user to get the fresh profile data. The onAuthStateChanged will then update our state.
                     await firebaseUser.reload();
                 } catch (e) {
                     console.error("Failed to update Firebase Auth profile:", e);
@@ -682,7 +676,6 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
                 }
             }
             
-            // This is the public profile for other users to see.
             const rtdbUserRef = dbRef(db, `users/${firebaseUser.uid}`);
             update(rtdbUserRef, {
                 displayName: userProfile.display_name,
@@ -719,7 +712,6 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
                 const statuses = statusSnap.val() || {};
                 const usersWithStatus: UserProfile[] = usersList.map((u: any) => ({ ...u, ...statuses[u.uid] }));
                 
-                // Filter to show users in the same department and level
                 const filteredUsers = usersWithStatus.filter(u => 
                     u.uid !== firebaseUser.uid && 
                     u.department_id === userProfile.department_id && 
@@ -826,27 +818,25 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
     );
 
     const sidebar = (
-        <div className="flex h-full min-h-0 flex-col bg-white/35 backdrop-blur-2xl">
-            <div className="border-b border-white/50 px-4 py-4 lg:px-5">
+        <div className="flex h-full min-h-0 flex-col bg-white/35 backdrop-blur-2xl overflow-hidden">
+            <div className="border-b border-white/50 px-4 py-4 lg:px-5 shrink-0">
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Messenger</p>
-                        <h2 className="mt-1 text-xl font-semibold text-slate-900">Messages</h2>
-                        <p className="mt-1 text-sm text-slate-500">Your direct conversations and people nearby.</p>
+                        <h2 className="text-xl font-semibold text-slate-900">Conversations</h2>
+                        <p className="mt-1 text-xs text-slate-500">Your connected classmates nearby.</p>
                     </div>
                     <div className="relative" ref={profileMenuRef}>
                         <button onClick={() => setIsProfileMenuOpen(prev => !prev)} className="flex items-center gap-3 rounded-full border border-white/60 bg-white/55 px-2 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition hover:bg-white/80">
-                            <Avatar display_name={firebaseUser!.displayName} photo_url={firebaseUser!.photoURL} className="h-9 w-9" />
+                            <Avatar display_name={firebaseUser!.displayName} photo_url={firebaseUser!.photoURL} className="h-8 w-8" />
                             <div className="hidden min-w-0 sm:block">
-                                <p className="max-w-[140px] truncate text-sm font-semibold text-slate-900">{firebaseUser!.displayName}</p>
-                                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Profile</p>
+                                <p className="max-w-[120px] truncate text-xs font-semibold text-slate-900">{firebaseUser!.displayName}</p>
                             </div>
                         </button>
                         {isProfileMenuOpen && (
                             <div className="absolute right-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-2xl border border-white/60 bg-white/75 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl">
                                 <div className="border-b border-white/50 p-4">
                                     <p className="font-semibold text-slate-900 truncate">{firebaseUser!.displayName}</p>
-                                    <p className="mt-1 text-xs leading-5 text-slate-500">This is the public name other learners will see in Messenger.</p>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">Public profile signature.</p>
                                 </div>
                                 <button
                                     onClick={() => { firebaseSignOut(auth); setIsProfileMenuOpen(false); }}
@@ -860,10 +850,10 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
                 </div>
 
                 <div className="mt-4 inline-flex w-full rounded-full border border-white/60 bg-white/45 p-1 backdrop-blur-xl">
-                    <button onClick={() => setTab('chats')} className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${tab === 'chats' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
+                    <button onClick={() => setTab('chats')} className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${tab === 'chats' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
                         Chats
                     </button>
-                    <button onClick={() => setTab('add_friend')} className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${tab === 'add_friend' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
+                    <button onClick={() => setTab('add_friend')} className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${tab === 'add_friend' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
                         People
                     </button>
                 </div>
@@ -872,10 +862,10 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
             <div className="flex-1 overflow-y-auto px-2 py-3 lg:px-3">
                 {tab === 'chats' && (
                     isDataLoading ? (
-                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">Loading chats...</div>
+                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-xs text-slate-500 backdrop-blur-xl">Loading chats...</div>
                     ) : chats.length === 0 ? (
-                        <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-sm leading-6 text-slate-500 backdrop-blur-xl">
-                            No conversations yet. Switch to People to start a new chat.
+                        <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-xs leading-6 text-slate-500 backdrop-blur-xl">
+                            No active channels. Select a context path from "People" to engage.
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -891,15 +881,15 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="relative shrink-0">
-                                                <Avatar display_name={chat.member_info[otherUserId]?.display_name} photo_url={chat.member_info[otherUserId]?.photo_url} className={`h-12 w-12 ${isUnread ? 'ring-2 ring-slate-900 ring-offset-2' : ''}`} />
-                                                <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={otherUserInfo?.is_online} /></div>
+                                                <Avatar display_name={chat.member_info[otherUserId]?.display_name} photo_url={chat.member_info[otherUserId]?.photo_url} className={`h-11 w-11 ${isUnread ? 'ring-2 ring-slate-900 ring-offset-2' : ''}`} />
+                                                <div className="absolute -bottom-1 -right-1 z-10"><UserStatusIndicator isOnline={otherUserInfo?.is_online} /></div>
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <p className={`truncate text-sm font-semibold ${isUnread ? 'text-slate-900' : 'text-slate-700'}`}>{chat.member_info[otherUserId]?.display_name}</p>
-                                                    <p className="shrink-0 text-[11px] text-slate-400">{chat.last_message ? formatLastSeen(chat.last_message.timestamp) : ''}</p>
+                                                    <p className={`truncate text-xs font-semibold ${isUnread ? 'text-slate-900' : 'text-slate-700'}`}>{chat.member_info[otherUserId]?.display_name}</p>
+                                                    <p className="shrink-0 text-[10px] text-slate-400">{chat.last_message ? formatLastSeen(chat.last_message.timestamp) : ''}</p>
                                                 </div>
-                                                <p className={`mt-1 truncate text-sm ${isUnread ? 'font-medium text-slate-800' : 'text-slate-500'}`}>{chat.last_message?.text || 'No messages yet'}</p>
+                                                <p className={`mt-1 truncate text-xs ${isUnread ? 'font-medium text-slate-800' : 'text-slate-500'}`}>{chat.last_message?.text || 'No messages yet'}</p>
                                             </div>
                                         </div>
                                     </button>
@@ -911,23 +901,23 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
 
                 {tab === 'add_friend' && (
                     isDataLoading ? (
-                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">Loading users...</div>
+                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-xs text-slate-500 backdrop-blur-xl">Loading users...</div>
                     ) : (
                         <div className="space-y-2">
                             {allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).length === 0 ? (
-                                <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">No other users have signed in yet.</div>
+                                <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-xs text-slate-500 backdrop-blur-xl">No active users in your profile slice.</div>
                             ) : allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).map(user => (
                                 <div key={user.uid} className="rounded-2xl border border-white/60 bg-white/45 p-3 transition hover:bg-white/72 backdrop-blur-xl">
                                     <div className="flex items-center gap-3">
                                         <div className="relative shrink-0">
-                                            <Avatar display_name={user.display_name} photo_url={user.photo_url} className="h-12 w-12" />
-                                            <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={user.is_online} /></div>
+                                            <Avatar display_name={user.display_name} photo_url={user.photo_url} className="h-11 w-11" />
+                                            <div className="absolute -bottom-1 -right-1 z-10"><UserStatusIndicator isOnline={user.is_online} /></div>
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-semibold text-slate-900">{user.display_name}</p>
-                                            <p className="truncate text-xs text-slate-500">{user.is_online ? 'Online' : (user.last_seen ? `Active ${formatLastSeen(user.last_seen)}` : 'Offline')}</p>
+                                            <p className="truncate text-xs font-semibold text-slate-900">{user.display_name}</p>
+                                            <p className="truncate text-[11px] text-slate-500">{user.is_online ? 'Online' : (user.last_seen ? `Active ${formatLastSeen(user.last_seen)}` : 'Offline')}</p>
                                         </div>
-                                        <button onClick={() => handleStartChat(user)} className="rounded-full bg-slate-900/90 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
+                                        <button onClick={() => handleStartChat(user)} className="rounded-full bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-800">
                                             Chat
                                         </button>
                                     </div>
@@ -948,26 +938,13 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
     }
 
     return (
-        <div className="flex h-full min-h-0 w-full flex-col bg-[linear-gradient(180deg,#eef3f9_0%,#f8fafc_100%)] text-slate-900">
-            <header className="shrink-0 border-b border-slate-200/80 bg-white/72 px-4 py-4 backdrop-blur-xl lg:px-6">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.32em] text-slate-400">VanTutor</p>
-                        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Messenger</h1>
-                        <p className="mt-1 text-sm text-slate-500">A full-width direct messaging space for learners.</p>
-                    </div>
-                    <div className="hidden items-center gap-3 sm:flex">
-                        <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">{chats.length} chats</div>
-                        <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">{allFirebaseUsers.length} people</div>
-                    </div>
-                </div>
-            </header>
-
-            <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
-                <aside className="min-h-0 border-b border-slate-200/80 bg-white/60 lg:border-b-0 lg:border-r">
+        <div className="flex h-[calc(100vh-73px)] w-full flex-col bg-[linear-gradient(180deg,#eef3f9_0%,#f8fafc_100%)] text-slate-900 overflow-hidden">
+            {/* REMOVED EXTRA DUP LAYER HEADER: App Header handles top metadata row contextual spacing */}
+            <div className="grid flex-1 h-full min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
+                <aside className="h-full min-h-0 border-r border-slate-200/80 bg-white/60">
                     {sidebar}
                 </aside>
-                <main className="min-h-0">
+                <main className="flex h-full flex-col min-h-0 overflow-hidden">
                     {chatPane}
                 </main>
             </div>
