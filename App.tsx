@@ -17,6 +17,7 @@ import { navigationItems, adminNavigationItems } from './constants';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
 import { getWindowPathname } from './utils/pathname';
+import ErrorBoundary from './components/ErrorBoundary';
 
 declare var __app_id: string;
 
@@ -637,17 +638,19 @@ const App: React.FC = () => {
                         }
                     />
                     <div className="flex-1 min-h-0 px-4 pb-20 md:pb-8 md:overflow-y-auto">
-                        <AdminPanel
-                            userProfile={mockAdminProfile}
-                            pathname={adminPath}
-                            onNavigate={(path) => {
-                                setAdminPath(path);
-                                if (typeof window !== 'undefined') {
-                                    window.history.pushState(null, '', path);
-                                }
-                            }}
-                        />
-                            </div>
+                        <ErrorBoundary>
+                            <AdminPanel
+                                userProfile={mockAdminProfile}
+                                pathname={adminPath}
+                                onNavigate={(path) => {
+                                    setAdminPath(path);
+                                    if (typeof window !== 'undefined') {
+                                        window.history.pushState(null, '', path);
+                                    }
+                                }}
+                            />
+                        </ErrorBoundary>
+                    </div>
                         </main>
 
                 <BottomNavBar
