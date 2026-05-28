@@ -4,10 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { onValue, push, ref as dbRef, serverTimestamp, set, update, remove } from 'firebase/database';
+import { get, onValue, push, ref as dbRef, serverTimestamp, set, update, remove } from 'firebase/database';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import 'katex/dist/katex.min.css';
-import { db } from '../firebase';
-import type { UserProfile } from '../types';
+import { db, storage } from '../firebase';
+import type { Course, UserProfile } from '../types';
 import { ChatIcon } from './icons/ChatIcon';
 import { SendIcon } from './icons/SendIcon';
 import { PlusIcon } from './icons/PlusIcon';
@@ -17,11 +18,20 @@ import { PromptInput, PromptInputActions, PromptInputTextarea } from './prompt-k
 
 type AssistantSender = 'user' | 'assistant';
 
+interface AssistantAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  url: string;
+  isImage: boolean;
+}
+
 interface AssistantMessage {
   id: string;
   sender: AssistantSender;
   text: string;
   timestamp?: number;
+  attachments?: AssistantAttachment[];
 }
 
 interface HistoryItem {
@@ -54,6 +64,18 @@ const normalizeTitle = (text: string) => {
   return truncateTitle(cleaned || 'New Chat');
 };
 
+const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
+  prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
+);
+
+const createAttachmentId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const isImageMimeType = (mimeType?: string, fileName?: string) => (
+  Boolean(mimeType?.startsWith('image/')) || Boolean(fileName?.match(/\.(png|jpe?g|gif|webp|bmp|svg)$/i))
+);
+
+const sanitizeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => {
@@ -64,9 +86,46 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
   reader.readAsDataURL(file);
 });
 
-const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
-  prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
-);
+const uploadChatAttachment = async (userId: string, conversationId: string, file: File, index: number) => {
+  const attachmentToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : `${Date.now()}_${index}`;
+  const safeName = sanitizeFileName(file.name);
+  const path = `assistant_attachments/${userId}/${conversationId}/${attachmentToken}_${safeName}`;
+  const fileRef = storageRef(storage, path);
+  const snapshot = await uploadBytes(fileRef, file);
+  const url = await getDownloadURL(snapshot.ref);
+
+  return {
+    id: attachmentToken,
+    name: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    url,
+    isImage: isImageMimeType(file.type, file.name),
+  } satisfies AssistantAttachment;
+};
+
+const readCourseText = (courses: Course[], userLevel: string) => {
+  if (!courses.length) return '';
+
+  const lines: string[] = ['COURSE ACCESS:'];
+  courses.forEach((course, index) => {
+    const topicLines = (course.topics || []).slice(0, 20).map(topic => {
+      const parts = [topic.topic_name, topic.topic_context, topic.start_point, topic.end_point].filter(Boolean);
+      return `  - ${parts.join(' | ')}`;
+    });
+
+    lines.push([
+      `Course ${index + 1}: ${course.course_code || course.course_id || course.course_name}`,
+      `Title: ${course.course_name}`,
+      `Level: ${course.level || userLevel}`,
+      `Semester: ${course.semester || 'first'}`,
+      topicLines.length ? `Topics:\n${topicLines.join('\n')}` : 'Topics: none recorded yet',
+    ].join('\n'));
+  });
+
+  return lines.join('\n\n');
+};
 
 const mapSender = (sender: string | undefined): AssistantSender => {
   if (sender === 'user') return 'user';
@@ -83,7 +142,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [inputValue, setInputValue] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
-  const [attachment, setAttachment] = useState<File | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [courseContext, setCourseContext] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
@@ -126,6 +186,53 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   }, [userProfile.uid]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const loadCourseContext = async () => {
+      try {
+        const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+        const departmentData = departmentSnapshot.val();
+        if (!departmentData) {
+          if (isMounted) setCourseContext('');
+          return;
+        }
+
+        const courses: Course[] = Array.isArray(departmentData.course_list) ? departmentData.course_list : [];
+        const contextParts: string[] = [];
+
+        contextParts.push(`STUDENT DEPARTMENT: ${userProfile.department_id}`);
+        contextParts.push(`STUDENT LEVEL: ${userProfile.level}`);
+        contextParts.push(readCourseText(courses, userProfile.level));
+
+        const sharedKeys = Array.from(new Set(courses.map(course => (course as Course & { textbook_shared_key?: string }).textbook_shared_key).filter(Boolean)));
+        for (const sharedKey of sharedKeys) {
+          const sharedSnapshot = await get(dbRef(db, `textbook_contexts/shared/${sharedKey}`));
+          if (!sharedSnapshot.exists()) continue;
+          const sharedData = sharedSnapshot.val();
+          contextParts.push([
+            `SHARED TEXTBOOK: ${(sharedData.course_name || sharedKey).toString()}`,
+            `Level: ${sharedData.level || userProfile.level}`,
+            `Syllabus: ${JSON.stringify(sharedData.syllabus || [])}`,
+          ].join('\n'));
+        }
+
+        if (isMounted) {
+          setCourseContext(contextParts.filter(Boolean).join('\n\n'));
+        }
+      } catch (error) {
+        console.error('Failed to load assistant course context:', error);
+        if (isMounted) setCourseContext('');
+      }
+    };
+
+    void loadCourseContext();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userProfile.department_id, userProfile.level]);
+
+  useEffect(() => {
     if (!activeHistoryId) {
       setMessages([]);
       return;
@@ -166,7 +273,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   }, [activeHistoryId, history, messages.length]);
 
   const clearAttachment = () => {
-    setAttachment(null);
+    setAttachments([]);
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   };
 
@@ -210,9 +317,10 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const handleSend = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const prompt = inputValue.trim();
-    if ((!prompt && !attachment) || isSending) return;
+    if ((!prompt && attachments.length === 0) || isSending) return;
 
-    const userText = prompt || getHistoryFallbackTitle(prompt, attachment);
+    const primaryAttachment = attachments[0] || null;
+    const userText = prompt || getHistoryFallbackTitle(prompt, primaryAttachment);
     const previousMessages = messages;
     const userMessage: AssistantMessage = {
       id: createMessageId(),
@@ -266,25 +374,31 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       }
 
       const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
-      await push(messagesRef, {
+      const storedAttachments: AssistantAttachment[] = [];
+      const attachmentParts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
+
+      for (let index = 0; index < attachments.length; index += 1) {
+        const file = attachments[index];
+        const storedAttachment = await uploadChatAttachment(userProfile.uid, conversationId, file, index);
+        storedAttachments.push(storedAttachment);
+
+        const data = await fileToBase64(file);
+        attachmentParts.push({
+          inlineData: {
+            data,
+            mimeType: file.type || 'application/octet-stream',
+          },
+        });
+      }
+
+      const storedUserMessage = {
         text: userText,
         sender: 'user',
         timestamp: serverTimestamp(),
-      });
+        attachments: storedAttachments,
+      };
 
-      let attachmentPart:
-        | { inlineData: { data: string; mimeType: string } }
-        | undefined;
-
-      if (attachment) {
-        const data = await fileToBase64(attachment);
-        attachmentPart = {
-          inlineData: {
-            data,
-            mimeType: attachment.type || 'application/octet-stream',
-          },
-        };
-      }
+      await push(messagesRef, storedUserMessage);
 
       const result = await ai.models.generateContent({
         model: ASSISTANT_MODEL,
@@ -296,14 +410,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                 text: [
                   'You are VanTutorAssistant, a friendly study companion for university students.',
                   'Answer clearly, encourage the learner, and keep explanations concise but complete.',
+                  'You have full access to the learner\'s course context and should ground answers in it when relevant.',
                   'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
                   'If the question needs calculations, show the steps and final formula neatly.',
-                  attachment ? 'An attachment is included. Use it as context.' : '',
+                  courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
+                  storedAttachments.length ? `ATTACHMENTS: ${storedAttachments.map(item => item.name).join(', ')}` : '',
                   '',
                   `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
                 ].filter(Boolean).join('\n'),
               },
-              ...(attachmentPart ? [attachmentPart] : []),
+              ...attachmentParts,
             ],
           },
         ],
@@ -334,7 +450,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       updates.last_updated_at = Date.now();
       await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
 
-      setMessages([...nextMessages, assistantMessage]);
+      setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
       setStatusText('Response ready.');
       clearAttachment();
     } catch (error) {
@@ -358,15 +474,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setAttachment(file);
-    setStatusText(`Attachment ready: ${file.name}`);
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    setAttachments(prev => [...prev, ...files]);
+    setStatusText(`${files.length} attachment${files.length !== 1 ? 's' : ''} ready.`);
+    event.target.value = '';
   };
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-slate-50 via-white to-emerald-50/40">
-      <div className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-7xl overflow-hidden bg-white/90 backdrop-blur md:rounded-[2rem] md:border md:border-white/70 md:shadow-[0_20px_80px_rgba(15,23,42,0.08)]">
+    <div className="h-full min-h-0 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/40">
+      <div className="mx-auto flex h-full min-h-0 max-w-7xl overflow-hidden bg-white/90 backdrop-blur md:rounded-[2rem] md:border md:border-white/70 md:shadow-[0_20px_80px_rgba(15,23,42,0.08)]">
         <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 md:static md:z-auto md:w-80 md:translate-x-0 md:shadow-none`}>
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -456,7 +573,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           />
         )}
 
-        <main className="relative flex min-h-0 flex-1 flex-col">
+        <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center justify-between border-b border-slate-200 px-4 py-4 sm:px-6">
             <div className="flex items-center gap-3">
               <button
@@ -477,7 +594,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             </div>
           </header>
 
-          <section className="flex-1 overflow-y-auto px-4 py-5 pb-48 sm:px-6 md:pb-6">
+          <section className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-6 sm:px-6">
             {messages.length === 0 ? (
               <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-6 py-16 text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-lg">
@@ -504,6 +621,33 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                           : 'w-[90%] max-w-[90%] rounded-3xl border border-slate-200 bg-white text-slate-800'
                       }`}
                     >
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className={`mb-3 grid gap-2 ${message.attachments.some(item => item.isImage) ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                          {message.attachments.map(attachmentItem => (
+                            <a
+                              key={attachmentItem.id}
+                              href={attachmentItem.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`overflow-hidden rounded-2xl border ${message.sender === 'user' ? 'border-white/20 bg-white/10 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+                            >
+                              {attachmentItem.isImage ? (
+                                <img src={attachmentItem.url} alt={attachmentItem.name} className="max-h-56 w-full object-cover" />
+                              ) : (
+                                <div className="flex items-center gap-3 px-4 py-3">
+                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${message.sender === 'user' ? 'bg-white/15' : 'bg-white'} text-[10px] font-black uppercase`}>
+                                    DOC
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">{attachmentItem.name}</p>
+                                    <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">Open attachment</p>
+                                  </div>
+                                </div>
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                       {message.sender === 'assistant' ? (
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
@@ -538,7 +682,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </section>
 
-          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-40 px-4 sm:px-6 md:static md:bottom-auto transition-all duration-300 ${isSidebarOpen ? 'pointer-events-none translate-y-6 opacity-0 md:pointer-events-auto md:translate-y-0 md:opacity-100' : ''}`}>
+          <footer className={`shrink-0 border-t border-slate-200/70 bg-white/85 px-4 py-4 sm:px-6 transition-all duration-300 backdrop-blur-xl ${isSidebarOpen ? 'pointer-events-none opacity-0' : ''}`}>
             <div className="mx-auto max-w-4xl space-y-3">
               <PromptInput
                 className="!border-0 !bg-transparent !p-0 !shadow-none rounded-[28px]"

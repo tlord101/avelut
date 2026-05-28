@@ -8,20 +8,49 @@ import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { LogoIcon } from './icons/LogoIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
-import { GoogleGenAI } from '@google/genai';
 
 import { db, storage, auth, onAuthStateChanged, firebaseSignOut, type FirebaseUser, GoogleAuthProvider, signInWithPopup, updateProfile } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, update, serverTimestamp as firebaseServerTimestamp, onDisconnect } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, serverTimestamp as firebaseServerTimestamp, onDisconnect, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const VoiceIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
     </svg>
 );
+
+const MicrophoneOffIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.5a5.5 5.5 0 005.5-5.5V8.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 10v3a5 5 0 001.5 3.5M12 18.5V22m0 0H9m3 0h3" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5.5A3 3 0 0112 2.5h0a3 3 0 013 3V12a3 3 0 01-.3 1.3M4 4l16 16" />
+    </svg>
+);
+
+const BackIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+);
+
+const MessageIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 8.5h10M7 12h7m-9.5 8.5 2.1-3.2A8 8 0 0 1 12 18.5h2a8 8 0 0 0 8-8v-.5a8 8 0 0 0-8-8H10a8 8 0 0 0-8 8v.5a8 8 0 0 0 3.5 6.5Z" />
+    </svg>
+);
+
+const formatAudioDuration = (seconds?: number): string => {
+    if (!seconds || Number.isNaN(seconds)) return '0:00';
+    const wholeSeconds = Math.max(0, Math.round(seconds));
+    const minutes = Math.floor(wholeSeconds / 60);
+    const remainingSeconds = wholeSeconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+const formatTimestamp = (timestamp?: number): string => {
+    if (!timestamp) return 'now';
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 const UserStatusIndicator: React.FC<{ isOnline?: boolean; lastSeen?: number }> = ({ isOnline }) => {
     return <div className={`w-3 h-3 rounded-full border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>;
@@ -58,15 +87,15 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
     const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-    const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
-    const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+    const [recordingSeconds, setRecordingSeconds] = useState(0);
     const { addToast } = useToast();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<number | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const liveClientRef = useRef<any>(null);
+    const recordingTimerRef = useRef<number | null>(null);
+    const recordingStartedAtRef = useRef<number | null>(null);
     
     useEffect(() => {
         const messagesRef = dbRef(db, `private_messages/${chatId}`);
@@ -126,12 +155,69 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
         }
     };
 
-    const startVoiceStreaming = async () => {
+    const clearRecordingTimer = () => {
+        if (recordingTimerRef.current) {
+            window.clearInterval(recordingTimerRef.current);
+            recordingTimerRef.current = null;
+        }
+    };
+
+    const uploadVoiceNote = async (audioBlob: Blob, durationSeconds: number) => {
+        const audioName = `${Date.now()}-voice-note.webm`;
+        const audioRef = storageRef(storage, `private_chats/${chatId}/${audioName}`);
+        const uploadResult = await uploadBytes(audioRef, audioBlob, { contentType: 'audio/webm' });
+        const audioUrl = await getDownloadURL(uploadResult.ref);
+
+        const messageListRef = dbRef(db, `private_messages/${chatId}`);
+        const newMessageRef = push(messageListRef);
+        const messageData: any = {
+            sender_id: currentUser.uid,
+            timestamp: firebaseServerTimestamp(),
+            audio_url: audioUrl,
+            audio_duration: durationSeconds,
+        };
+
+        await set(newMessageRef, messageData);
+
+        const lastMessagePayload = {
+            text: 'Voice note',
+            timestamp: firebaseServerTimestamp(),
+            sender_id: currentUser.uid,
+            read_by: [currentUser.uid],
+        };
+
+        const updates: { [key: string]: any } = {};
+        updates[`user_chats/${currentUser.uid}/${chatId}/last_message`] = lastMessagePayload;
+        updates[`user_chats/${currentUser.uid}/${chatId}/timestamp`] = firebaseServerTimestamp();
+        updates[`user_chats/${otherUser.uid}/${chatId}/last_message`] = lastMessagePayload;
+        updates[`user_chats/${otherUser.uid}/${chatId}/timestamp`] = firebaseServerTimestamp();
+
+        const unreadSnapshot = await get(dbRef(db, `user_chats/${otherUser.uid}/${chatId}/unreadCount`));
+        const currentCount = unreadSnapshot.val() || 0;
+        updates[`user_chats/${otherUser.uid}/${chatId}/unreadCount`] = currentCount + 1;
+        await update(dbRef(db), updates);
+    };
+
+    const startVoiceRecording = async () => {
         try {
+            if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                addToast('Voice notes are not supported in this browser.', 'error');
+                return;
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
+            recordingStartedAtRef.current = Date.now();
+            setRecordingSeconds(0);
+            setIsRecordingVoice(true);
+            clearRecordingTimer();
+            recordingTimerRef.current = window.setInterval(() => {
+                if (recordingStartedAtRef.current) {
+                    setRecordingSeconds(Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000)));
+                }
+            }, 1000);
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -142,68 +228,45 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
             mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 stream.getTracks().forEach(track => track.stop());
-                await processVoiceStreaming(audioBlob);
+                clearRecordingTimer();
+                const durationSeconds = recordingStartedAtRef.current
+                    ? Math.max(1, Math.ceil((Date.now() - recordingStartedAtRef.current) / 1000))
+                    : Math.max(1, recordingSeconds);
+                recordingStartedAtRef.current = null;
+                setRecordingSeconds(durationSeconds);
+                try {
+                    setIsSending(true);
+                    await uploadVoiceNote(audioBlob, durationSeconds);
+                    addToast('Voice note sent.', 'success');
+                } catch (error) {
+                    console.error('Error sending voice note:', error);
+                    addToast('Failed to send voice note.', 'error');
+                } finally {
+                    setIsSending(false);
+                    setIsRecordingVoice(false);
+                    setRecordingSeconds(0);
+                }
             };
 
             mediaRecorder.start();
-            setVoiceStatus('listening');
-            setIsVoiceStreaming(true);
-            addToast('Listening... Click again to stop.', 'info');
+            addToast('Recording voice note. Tap again to send.', 'info');
         } catch (error) {
             console.error('Error starting voice recording:', error);
             addToast('Could not access microphone. Please check permissions.', 'error');
         }
     };
 
-    const stopVoiceStreaming = () => {
+    const stopVoiceRecording = () => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
-            setVoiceStatus('processing');
         }
     };
 
-    const processVoiceStreaming = async (audioBlob: Blob) => {
-        try {
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-                const base64Audio = (reader.result as string).split(',')[1];
-                
-                // Send voice message to Gemini for live response
-                const result = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
-                    contents: [{
-                        role: 'user',
-                        parts: [
-                            { text: 'Please respond conversationally to this voice message. Keep your response natural and friendly for a chat conversation.' },
-                            { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
-                        ]
-                    }]
-                });
-
-                const responseText = result.text || '';
-                if (responseText) {
-                    // Add the AI's response as a text message in the chat
-                    setInput(responseText);
-                    addToast('Voice processed and response ready!', 'success');
-                } else {
-                    addToast('Could not process voice. Please try again.', 'error');
-                }
-            };
-        } catch (error) {
-            console.error('Error processing voice:', error);
-            addToast('Failed to process voice input.', 'error');
-        } finally {
-            setVoiceStatus('idle');
-            setIsVoiceStreaming(false);
-        }
-    };
-
-    const toggleVoiceStreaming = () => {
-        if (isVoiceStreaming) {
-            stopVoiceStreaming();
+    const toggleVoiceRecording = () => {
+        if (isRecordingVoice) {
+            stopVoiceRecording();
         } else {
-            startVoiceStreaming();
+            void startVoiceRecording();
         }
     };
 
@@ -249,18 +312,16 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
             if (!lastMessageText && fileToSend) {
                 lastMessageText = '📷 Photo';
             }
-            const lastMessagePayload = { text: lastMessageText, timestamp: firebaseServerTimestamp(), sender_id: currentUser.uid };
+            const lastMessagePayload = { text: lastMessageText, timestamp: firebaseServerTimestamp(), sender_id: currentUser.uid, read_by: [currentUser.uid] };
             updates[`user_chats/${currentUser.uid}/${chatId}/last_message`] = lastMessagePayload;
             updates[`user_chats/${currentUser.uid}/${chatId}/timestamp`] = firebaseServerTimestamp();
             updates[`user_chats/${otherUser.uid}/${chatId}/last_message`] = lastMessagePayload;
             updates[`user_chats/${otherUser.uid}/${chatId}/timestamp`] = firebaseServerTimestamp();
             
-            const otherUserChatRef = dbRef(db, `user_chats/${otherUser.uid}/${chatId}/unreadCount`);
-            onValue(otherUserChatRef, (snap) => {
-                const currentCount = snap.val() || 0;
-                updates[`user_chats/${otherUser.uid}/${chatId}/unreadCount`] = currentCount + 1;
-                update(dbRef(db), updates);
-            }, { onlyOnce: true });
+            const unreadSnapshot = await get(dbRef(db, `user_chats/${otherUser.uid}/${chatId}/unreadCount`));
+            const currentCount = unreadSnapshot.val() || 0;
+            updates[`user_chats/${otherUser.uid}/${chatId}/unreadCount`] = currentCount + 1;
+            await update(dbRef(db), updates);
 
         } catch (error) {
             console.error("Message send error:", error);
@@ -271,53 +332,190 @@ const PrivateChatView: React.FC<PrivateChatViewProps> = ({ chatId, currentUser, 
     };
     
     return (
-        <div className="h-full flex flex-col bg-gray-50 chat-bg-pattern">
-            <header className="flex-shrink-0 flex items-center justify-between gap-3 p-4 bg-white rounded-b-3xl shadow-lg relative z-10">
-                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-1 text-gray-500 hover:text-gray-900 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-                     <div className="relative"><Avatar display_name={otherUser.display_name} photo_url={otherUser.photo_url} className="w-10 h-10" /><div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={otherUser.is_online} /></div></div>
-                    <div><h3 className="font-bold text-gray-800 leading-tight">{otherUser.display_name}</h3><p className="text-xs text-gray-500 leading-tight">{isOtherUserTyping ? 'typing...' : (otherUser.is_online ? 'Online' : (otherUser.last_seen ? `Active ${formatLastSeen(otherUser.last_seen)}` : 'Offline'))}</p></div>
-                </div>
-            </header>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {messages.map(msg => (
-                    <div key={msg.id} className={`flex gap-3 items-end ${msg.sender_id === currentUser.uid ? 'justify-end' : 'justify-start'}`}>
-                       <div className={`flex flex-col max-w-[80%] p-3 rounded-2xl ${msg.sender_id === currentUser.uid ? 'bg-lime-500 text-white' : 'bg-white text-gray-800 border border-gray-200'}`}>
-                           {msg.image_url && <img src={msg.image_url} alt="Sent media" className="rounded-lg max-w-xs max-h-64 mb-2" />}
-                           {msg.text && <div className="text-sm whitespace-pre-wrap"><ReactMarkdown>{msg.text}</ReactMarkdown></div>}
+        <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.82)_0%,_rgba(236,244,250,0.9)_36%,_rgba(226,232,240,0.95)_100%)] text-slate-900">
+            <header className="shrink-0 border-b border-white/60 bg-white/45 px-4 py-4 backdrop-blur-2xl lg:px-6">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <button onClick={onBack} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/55 text-slate-600 transition hover:bg-white/75 lg:hidden" aria-label="Back to conversations">
+                            <BackIcon />
+                        </button>
+                        <div className="relative shrink-0">
+                            <Avatar display_name={otherUser.display_name} photo_url={otherUser.photo_url} className="h-12 w-12 ring-1 ring-slate-200" />
+                            <div className="absolute -bottom-1 -right-1">
+                                <UserStatusIndicator isOnline={otherUser.is_online} />
+                            </div>
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h3 className="truncate text-base font-semibold text-slate-900">{otherUser.display_name}</h3>
+                                {otherUser.is_online && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">Online</span>}
+                            </div>
+                            <p className="truncate text-xs text-slate-500">
+                                {isOtherUserTyping ? 'typing...' : (otherUser.is_online ? 'Available right now' : (otherUser.last_seen ? `Active ${formatLastSeen(otherUser.last_seen)}` : 'Offline'))}
+                            </p>
                         </div>
                     </div>
-                ))}
-                {isOtherUserTyping && <div className="flex gap-3 items-end justify-start animate-fade-in-up"><div className="p-3 rounded-2xl bg-white text-gray-800 border border-gray-200"><div className="flex items-center space-x-2"><div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div><div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div><div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div></div></div></div>}
-                <div ref={messagesEndRef} />
-            </div>
-            <footer className="flex-shrink-0 bg-white/80 backdrop-blur-sm p-3">
-                {imagePreviewUrl && (
-                    <div className="relative w-24 h-24 mb-2 p-1 border border-gray-200 rounded-lg">
-                        <img src={imagePreviewUrl} alt="Preview" className="w-full h-full object-cover rounded" />
-                        <button 
-                            onClick={() => { setImageFile(null); setImagePreviewUrl(null); }} 
-                            className="absolute -top-2 -right-2 bg-gray-700 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors"
-                        >
-                            <XIcon className="w-4 h-4" />
-                        </button>
+                    <div className="hidden items-center gap-2 lg:flex">
+                        <div className="rounded-full border border-white/60 bg-white/45 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl">
+                            Secure direct chat
+                        </div>
                     </div>
-                )}
-                <div className="relative flex items-center">
-                    <label htmlFor="file-upload" className="mr-2 cursor-pointer p-3 text-gray-500 hover:text-lime-600 transition-colors">
-                        <PaperclipIcon className="w-6 h-6" />
-                    </label>
-                    <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isSending} />
-                    <button 
-                        onClick={toggleVoiceStreaming} 
-                        disabled={isSending}
-                        className={`mr-2 p-3 rounded-full transition-colors ${isVoiceStreaming ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'text-gray-500 hover:text-lime-600'}`}
-                        title="Voice input"
-                    >
-                        <VoiceIcon className="w-6 h-6" />
-                    </button>
-                    <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Enter') handleSend()}} placeholder="Type a message..." className="w-full bg-gray-100 border-transparent rounded-full py-2 px-4 text-gray-900 placeholder-gray-500 focus:ring-lime-500 focus:border-lime-500" disabled={isVoiceStreaming} />
-                    <button onClick={handleSend} disabled={isSending || (!input.trim() && !imageFile)} className="ml-2 bg-lime-600 rounded-full p-3 text-white hover:bg-lime-700 transition-colors disabled:opacity-50 active:scale-95"><SendIcon className="w-6 h-6" /></button>
+                </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto px-4 py-6 lg:px-6">
+                <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
+                    {messages.length === 0 && (
+                        <div className="rounded-[32px] border border-white/60 bg-white/55 p-8 text-center shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                <MessageIcon className="h-6 w-6" />
+                            </div>
+                            <h4 className="text-lg font-semibold text-slate-900">Start the conversation</h4>
+                            <p className="mt-2 text-sm leading-6 text-slate-500">Send text, share an image, or record a voice note. Messages appear as clean, production-grade chat bubbles.</p>
+                        </div>
+                    )}
+
+                    {messages.map(msg => {
+                        const isOwnMessage = msg.sender_id === currentUser.uid;
+                        return (
+                            <div key={msg.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`flex max-w-[82%] gap-3 xl:max-w-[72%] ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    <div className="shrink-0 pt-1">
+                                        <Avatar display_name={isOwnMessage ? currentUser.displayName || currentUserProfile.display_name : otherUser.display_name} photo_url={isOwnMessage ? currentUser.photoURL || currentUserProfile.photo_url : otherUser.photo_url} className="h-9 w-9" />
+                                    </div>
+                                    <div className={`flex flex-col gap-2 ${isOwnMessage ? 'items-end text-right' : 'items-start text-left'}`}>
+                                        <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                            <span>{isOwnMessage ? 'You' : otherUser.display_name}</span>
+                                            <span>{formatTimestamp(msg.timestamp)}</span>
+                                        </div>
+                                        <div className={`rounded-[28px] border px-4 py-3.5 backdrop-blur-xl ${isOwnMessage ? 'border-slate-900/20 bg-slate-900/90 text-white shadow-[0_18px_40px_rgba(15,23,42,0.12)]' : 'border-white/70 bg-white/72 text-slate-900 shadow-[0_14px_30px_rgba(15,23,42,0.06)]'}`}>
+                                            {msg.text && (
+                                                <div className={`text-[15px] leading-6 ${msg.text.length > 240 ? 'max-w-none' : ''}`}>
+                                                    <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                                </div>
+                                            )}
+                                            {msg.image_url && (
+                                                <div className="mt-3 overflow-hidden rounded-[22px] border border-black/5 bg-slate-50">
+                                                    <img src={msg.image_url} alt="Sent media" className="max-h-96 w-full object-cover" />
+                                                </div>
+                                            )}
+                                            {msg.audio_url && (
+                                                <div className={`mt-3 rounded-[22px] border p-4 backdrop-blur-xl ${isOwnMessage ? 'border-white/10 bg-white/10' : 'border-white/60 bg-white/60'}`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`flex h-11 w-11 items-center justify-center rounded-full ${isOwnMessage ? 'bg-white/10 text-white' : 'bg-slate-900 text-white'}`}>
+                                                            <VoiceIcon className="h-5 w-5" />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className={`text-sm font-semibold ${isOwnMessage ? 'text-white' : 'text-slate-900'}`}>Voice note</p>
+                                                            <p className={`text-xs ${isOwnMessage ? 'text-white/70' : 'text-slate-500'}`}>{formatAudioDuration(msg.audio_duration)}</p>
+                                                        </div>
+                                                    </div>
+                                                    <audio controls controlsList="nodownload" src={msg.audio_url} className="mt-4 w-full rounded-xl" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {isOtherUserTyping && (
+                        <div className="flex justify-start">
+                            <div className="rounded-[22px] border border-white/60 bg-white/55 px-4 py-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)] backdrop-blur-xl">
+                                <div className="flex items-center gap-2">
+                                    <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
+                                    <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.2s]" />
+                                    <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.4s]" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                </div>
+            </div>
+
+            <footer className="shrink-0 border-t border-white/60 bg-white/45 px-4 py-4 backdrop-blur-2xl lg:px-6">
+                <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3">
+                    {(isRecordingVoice || recordingSeconds > 0) && (
+                        <div className="flex items-center justify-between rounded-[22px] border border-rose-200/50 bg-rose-50/70 px-4 py-3 text-rose-900 backdrop-blur-xl">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-600 text-white shadow-sm">
+                                    <VoiceIcon className="h-5 w-5" />
+                                </span>
+                                <div>
+                                    <p className="text-sm font-semibold">Recording voice note</p>
+                                    <p className="text-xs text-rose-700">Tap the microphone again to send the audio note.</p>
+                                </div>
+                            </div>
+                            <div className="text-sm font-semibold tabular-nums">{formatAudioDuration(recordingSeconds)}</div>
+                        </div>
+                    )}
+
+                    {imagePreviewUrl && (
+                        <div className="flex items-center gap-3 rounded-[22px] border border-white/60 bg-white/55 p-3 backdrop-blur-xl">
+                            <img src={imagePreviewUrl} alt="Preview" className="h-16 w-16 rounded-2xl object-cover" />
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-slate-900">Image ready to send</p>
+                                <p className="text-xs text-slate-500">It will be attached to the next message.</p>
+                            </div>
+                            <button
+                                onClick={() => { setImageFile(null); setImagePreviewUrl(null); }}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-white hover:text-slate-900"
+                                aria-label="Remove image"
+                            >
+                                <XIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="rounded-[30px] border border-white/60 bg-white/45 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+                        <div className="flex items-end gap-3">
+                            <label htmlFor="file-upload" className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/60 bg-white/55 text-slate-600 transition hover:bg-white/75 hover:text-slate-900" aria-label="Attach image">
+                                <PaperclipIcon className="h-5 w-5" />
+                            </label>
+                            <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isSending || isRecordingVoice} />
+
+                            <div className="flex-1 rounded-[24px] border border-white/60 bg-white/50 px-4 py-3 transition focus-within:bg-white/80">
+                                <textarea
+                                    value={input}
+                                    onChange={e => setInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            void handleSend();
+                                        }
+                                    }}
+                                    placeholder="Write a message..."
+                                    className="min-h-[48px] w-full resize-none border-0 bg-transparent p-0 text-[15px] leading-6 text-slate-900 placeholder:text-slate-400 focus:ring-0"
+                                    rows={1}
+                                    disabled={isSending}
+                                />
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-400">Secure direct message</p>
+                                    <button
+                                        type="button"
+                                        onClick={toggleVoiceRecording}
+                                        disabled={isSending}
+                                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${isRecordingVoice ? 'border-rose-200/70 bg-rose-500/90 text-white shadow-[0_12px_28px_rgba(251,113,133,0.18)]' : 'border-white/60 bg-white/60 text-slate-600 hover:bg-white/80'}`}
+                                    >
+                                        {isRecordingVoice ? <MicrophoneOffIcon className="h-4 w-4" /> : <VoiceIcon className="h-4 w-4" />}
+                                        {isRecordingVoice ? 'Stop & send voice note' : 'Record voice note'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => { void handleSend(); }}
+                                disabled={isSending || (!input.trim() && !imageFile)}
+                                className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-900/90 text-white shadow-[0_16px_30px_rgba(15,23,42,0.16)] transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label="Send message"
+                            >
+                                <SendIcon className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </footer>
         </div>
@@ -362,38 +560,56 @@ const MessengerAuth: React.FC<MessengerAuthProps> = ({ userProfile }) => {
     };
 
     return (
-        <div className="flex items-center justify-center h-full bg-gray-50 p-4">
-          <div className="w-full max-w-sm">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 shadow-xl text-center">
-              <div className="flex justify-center items-center mb-4">
-                  <LogoIcon className="w-10 h-10 text-lime-500" />
-                  <h1 className="text-2xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider ml-3">
-                      Messenger
-                  </h1>
-              </div>
-              <p className="text-gray-600 mb-8">
-                Sign in with your Google account to chat with other learners.
-              </p>
-              
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={isSubmitting}
-                className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                {isSubmitting ? (
-                    <>
-                      <svg className="w-5 h-5 mr-2 animate-spin" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5Z" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      <span>Signing In...</span>
-                    </>
-                ) : (
-                    <>
-                        <GoogleIcon className="w-5 h-5 mr-3" />
-                        Sign in with Google
-                    </>
-                )}
-              </button>
+        <div className="flex min-h-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.88)_0%,_rgba(240,246,252,0.92)_42%,_rgba(226,232,240,0.98)_100%)] px-4 py-10">
+            <div className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/60 bg-white/55 shadow-[0_22px_60px_rgba(15,23,42,0.08)] backdrop-blur-2xl">
+                <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="flex flex-col justify-between bg-slate-950/92 px-8 py-10 text-white sm:px-10">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <LogoIcon className="h-10 w-10 text-emerald-400" />
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Messenger</p>
+                                    <h1 className="text-3xl font-semibold tracking-tight">Direct learning chat</h1>
+                                </div>
+                            </div>
+                            <p className="mt-6 max-w-md text-sm leading-6 text-white/70">
+                                Sign in to message other learners with image sharing, voice notes, and a clean, professional chat layout.
+                            </p>
+                        </div>
+                        <div className="mt-8 grid grid-cols-3 gap-3 text-xs text-white/65">
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">Real-time presence</div>
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">Voice notes</div>
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">Image sharing</div>
+                        </div>
+                    </div>
+
+                    <div className="px-8 py-10 sm:px-10">
+                        <div className="mb-6">
+                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Secure sign-in</p>
+                            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Continue with Google</h2>
+                            <p className="mt-2 text-sm leading-6 text-slate-500">Use your account to access your messenger inbox and connect with classmates.</p>
+                        </div>
+
+                        <button
+                            onClick={handleGoogleSignIn}
+                            disabled={isSubmitting}
+                            className="flex w-full items-center justify-center rounded-2xl border border-white/60 bg-white/70 px-4 py-3.5 font-semibold text-slate-700 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5Z" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                    Signing In...
+                                </>
+                            ) : (
+                                <>
+                                    <GoogleIcon className="mr-3 h-5 w-5" />
+                                    Sign in with Google
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
     );
 };
@@ -581,105 +797,180 @@ export const Messenger: React.FC<MessengerProps> = ({ userProfile }) => {
         setSelectedChatData({ chatId: chat.id, otherUser: otherUser as UserProfile });
         setView('chat');
     };
-    
-    if (isAuthLoading) {
-        return <div className="flex items-center justify-center h-full"><p>Loading Messenger...</p></div>;
-    }
-    if (!firebaseUser) {
-        return <MessengerAuth userProfile={userProfile} />;
-    }
 
-    const renderListView = () => (
-         <div className="h-full flex flex-col bg-white">
-            <header className="flex-shrink-0 p-4 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Messages</h2>
+    const chatPane = selectedChatData && firebaseUser ? (
+        <PrivateChatView
+            chatId={selectedChatData.chatId}
+            currentUser={firebaseUser}
+            currentUserProfile={userProfile}
+            otherUser={selectedChatData.otherUser}
+            onBack={() => setSelectedChatData(null)}
+        />
+    ) : (
+        <div className="flex h-full min-h-[28rem] items-center justify-center px-6 py-10">
+            <div className="max-w-xl rounded-[32px] border border-slate-200 bg-white p-8 text-center shadow-sm lg:p-10">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
+                    <MessageIcon className="h-7 w-7" />
+                </div>
+                <h3 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Select a conversation</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                    Open a direct chat from the left panel to start messaging, sending images, or recording voice notes.
+                </p>
+                <div className="mt-6 grid gap-3 text-left text-sm text-slate-600 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">Clean bubble layout</div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">Playable voice notes</div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">Full-width experience</div>
+                </div>
+            </div>
+        </div>
+    );
+
+    const sidebar = (
+        <div className="flex h-full min-h-0 flex-col bg-white/35 backdrop-blur-2xl">
+            <div className="border-b border-white/50 px-4 py-4 lg:px-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Messenger</p>
+                        <h2 className="mt-1 text-xl font-semibold text-slate-900">Messages</h2>
+                        <p className="mt-1 text-sm text-slate-500">Your direct conversations and people nearby.</p>
+                    </div>
                     <div className="relative" ref={profileMenuRef}>
-                        <button onClick={() => setIsProfileMenuOpen(prev => !prev)} className="flex items-center gap-2 text-left p-1 rounded-full hover:bg-gray-100 transition-colors">
-                            <span className="font-semibold text-gray-700 text-sm hidden sm:inline">{firebaseUser!.displayName}</span>
-                            <Avatar display_name={firebaseUser!.displayName} photo_url={firebaseUser!.photoURL} className="w-9 h-9" />
+                        <button onClick={() => setIsProfileMenuOpen(prev => !prev)} className="flex items-center gap-3 rounded-full border border-white/60 bg-white/55 px-2 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition hover:bg-white/80">
+                            <Avatar display_name={firebaseUser!.displayName} photo_url={firebaseUser!.photoURL} className="h-9 w-9" />
+                            <div className="hidden min-w-0 sm:block">
+                                <p className="max-w-[140px] truncate text-sm font-semibold text-slate-900">{firebaseUser!.displayName}</p>
+                                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Profile</p>
+                            </div>
                         </button>
                         {isProfileMenuOpen && (
-                            <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-20 animate-fade-in-up">
-                                <div className="p-4 border-b border-gray-200">
-                                    <p className="font-bold text-gray-800 truncate">{firebaseUser!.displayName}</p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        This is your display name for Messenger. Other users can find you by searching this name.
-                                    </p>
+                            <div className="absolute right-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-2xl border border-white/60 bg-white/75 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl">
+                                <div className="border-b border-white/50 p-4">
+                                    <p className="font-semibold text-slate-900 truncate">{firebaseUser!.displayName}</p>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">This is the public name other learners will see in Messenger.</p>
                                 </div>
-                                <button 
-                                    onClick={() => { firebaseSignOut(auth); setIsProfileMenuOpen(false); }} 
-                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                                <button
+                                    onClick={() => { firebaseSignOut(auth); setIsProfileMenuOpen(false); }}
+                                    className="w-full px-4 py-3 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
                                 >
-                                    Logout
+                                    Log out
                                 </button>
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="mt-4 bg-gray-100 p-1 rounded-full flex">
-                    <button onClick={() => setTab('chats')} className={`flex-1 p-2 rounded-md font-semibold text-sm transition-colors ${tab === 'chats' ? 'bg-lime-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Chats</button>
-                    <button onClick={() => setTab('add_friend')} className={`flex-1 p-2 rounded-md font-semibold text-sm transition-colors ${tab === 'add_friend' ? 'bg-lime-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>All Users</button>
+
+                <div className="mt-4 inline-flex w-full rounded-full border border-white/60 bg-white/45 p-1 backdrop-blur-xl">
+                    <button onClick={() => setTab('chats')} className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${tab === 'chats' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
+                        Chats
+                    </button>
+                    <button onClick={() => setTab('add_friend')} className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${tab === 'add_friend' ? 'bg-slate-900/90 text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]' : 'text-slate-600 hover:bg-white/70'}`}>
+                        People
+                    </button>
                 </div>
-            </header>
-            <div className="flex-1 overflow-y-auto">
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-2 py-3 lg:px-3">
                 {tab === 'chats' && (
-                    isDataLoading ? <div className="p-4 text-center text-gray-500">Loading chats...</div> :
-                    chats.length === 0 ? <div className="p-4 text-center text-gray-500">No chats yet. Find users in the "All Users" tab.</div> :
-                    <ul className="divide-y divide-gray-200">{chats.map(chat => {
-                        const otherUserId = chat.members.find(id => id !== firebaseUser.uid)!;
-                        const otherUserInfo = allFirebaseUsers.find(u => u.uid === otherUserId);
-                        const isUnread = (chat.unreadCount || 0) > 0;
-                        return <li key={chat.id} onClick={() => handleSelectChat(chat)} className="p-4 hover:bg-gray-50 flex items-center gap-4 cursor-pointer">
-                                <div className="relative flex-shrink-0">
-                                    <Avatar display_name={chat.member_info[otherUserId]?.display_name} photo_url={chat.member_info[otherUserId]?.photo_url} className={`w-12 h-12 ${isUnread ? 'ring-2 ring-lime-500 ring-offset-2' : ''}`}/>
-                                    <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={otherUserInfo?.is_online} /></div>
-                                </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <div className="flex justify-between items-center"><p className={`font-semibold truncate ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>{chat.member_info[otherUserId]?.display_name}</p><p className="text-xs text-gray-400">{chat.last_message ? formatLastSeen(chat.last_message.timestamp) : ''}</p></div>
-                                    <p className={`text-sm truncate ${isUnread ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>{chat.last_message?.text || '...'}</p>
-                                </div>
-                        </li>
-                    })}</ul>
+                    isDataLoading ? (
+                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">Loading chats...</div>
+                    ) : chats.length === 0 ? (
+                        <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-sm leading-6 text-slate-500 backdrop-blur-xl">
+                            No conversations yet. Switch to People to start a new chat.
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {chats.map(chat => {
+                                const otherUserId = chat.members.find(id => id !== firebaseUser!.uid)!;
+                                const otherUserInfo = allFirebaseUsers.find(u => u.uid === otherUserId);
+                                const isUnread = (chat.unreadCount || 0) > 0;
+                                return (
+                                    <button
+                                        key={chat.id}
+                                        onClick={() => handleSelectChat(chat)}
+                                        className={`w-full rounded-2xl border p-3 text-left transition backdrop-blur-xl ${selectedChatData?.chatId === chat.id ? 'border-slate-900/20 bg-white/80 shadow-[0_12px_28px_rgba(15,23,42,0.08)]' : 'border-white/60 bg-white/45 hover:bg-white/72'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative shrink-0">
+                                                <Avatar display_name={chat.member_info[otherUserId]?.display_name} photo_url={chat.member_info[otherUserId]?.photo_url} className={`h-12 w-12 ${isUnread ? 'ring-2 ring-slate-900 ring-offset-2' : ''}`} />
+                                                <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={otherUserInfo?.is_online} /></div>
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className={`truncate text-sm font-semibold ${isUnread ? 'text-slate-900' : 'text-slate-700'}`}>{chat.member_info[otherUserId]?.display_name}</p>
+                                                    <p className="shrink-0 text-[11px] text-slate-400">{chat.last_message ? formatLastSeen(chat.last_message.timestamp) : ''}</p>
+                                                </div>
+                                                <p className={`mt-1 truncate text-sm ${isUnread ? 'font-medium text-slate-800' : 'text-slate-500'}`}>{chat.last_message?.text || 'No messages yet'}</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )
                 )}
+
                 {tab === 'add_friend' && (
-                     isDataLoading ? <div className="p-4 text-center text-gray-500">Loading users...</div> :
-                     <ul className="divide-y divide-gray-200">{
-                        allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).length === 0
-                        ? <p className="text-center text-gray-500 p-8">No other users have signed into Messenger yet.</p>
-                        : allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).map(user => (
-                            <li key={user.uid} className="p-4 hover:bg-gray-50 flex items-center gap-4 cursor-pointer">
-                                <div className="relative flex-shrink-0">
-                                    <Avatar display_name={user.display_name} photo_url={user.photo_url} className="w-12 h-12" />
-                                    <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={user.is_online} /></div>
+                    isDataLoading ? (
+                        <div className="rounded-3xl border border-white/60 bg-white/45 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">Loading users...</div>
+                    ) : (
+                        <div className="space-y-2">
+                            {allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).length === 0 ? (
+                                <div className="rounded-3xl border border-dashed border-white/60 bg-white/40 p-6 text-center text-sm text-slate-500 backdrop-blur-xl">No other users have signed in yet.</div>
+                            ) : allFirebaseUsers.filter(u => u.uid !== firebaseUser?.uid).map(user => (
+                                <div key={user.uid} className="rounded-2xl border border-white/60 bg-white/45 p-3 transition hover:bg-white/72 backdrop-blur-xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative shrink-0">
+                                            <Avatar display_name={user.display_name} photo_url={user.photo_url} className="h-12 w-12" />
+                                            <div className="absolute -bottom-1 -right-1"><UserStatusIndicator isOnline={user.is_online} /></div>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-semibold text-slate-900">{user.display_name}</p>
+                                            <p className="truncate text-xs text-slate-500">{user.is_online ? 'Online' : (user.last_seen ? `Active ${formatLastSeen(user.last_seen)}` : 'Offline')}</p>
+                                        </div>
+                                        <button onClick={() => handleStartChat(user)} className="rounded-full bg-slate-900/90 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
+                                            Chat
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <p className="font-semibold truncate text-gray-800">{user.display_name}</p>
-                                    <p className="text-sm truncate text-gray-500">{user.is_online ? 'Online' : (user.last_seen ? `Active ${formatLastSeen(user.last_seen)}` : 'Offline')}</p>
-                                </div>
-                                <button onClick={() => handleStartChat(user)} className="px-4 py-2 text-sm rounded-lg bg-lime-600 text-white font-semibold hover:bg-lime-700">
-                                    Chat
-                                </button>
-                            </li>
-                        ))
-                     }</ul>
+                            ))}
+                        </div>
+                    )
                 )}
             </div>
         </div>
     );
+    
+    if (isAuthLoading) {
+        return <div className="flex h-full items-center justify-center bg-slate-50"><p className="text-sm text-slate-500">Loading Messenger...</p></div>;
+    }
+    if (!firebaseUser) {
+        return <MessengerAuth userProfile={userProfile} />;
+    }
 
     return (
-        <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-white md:rounded-xl border border-gray-200">
-            {view === 'list' && renderListView()}
-            {view === 'chat' && selectedChatData && (
-                <PrivateChatView 
-                    chatId={selectedChatData.chatId}
-                    currentUser={firebaseUser} 
-                    currentUserProfile={userProfile}
-                    otherUser={selectedChatData.otherUser} 
-                    onBack={() => setView('list')}
-                />
-            )}
+        <div className="flex h-full min-h-0 w-full flex-col bg-[linear-gradient(180deg,#eef3f9_0%,#f8fafc_100%)] text-slate-900">
+            <header className="shrink-0 border-b border-slate-200/80 bg-white/72 px-4 py-4 backdrop-blur-xl lg:px-6">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.32em] text-slate-400">VanTutor</p>
+                        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Messenger</h1>
+                        <p className="mt-1 text-sm text-slate-500">A full-width direct messaging space for learners.</p>
+                    </div>
+                    <div className="hidden items-center gap-3 sm:flex">
+                        <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">{chats.length} chats</div>
+                        <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">{allFirebaseUsers.length} people</div>
+                    </div>
+                </div>
+            </header>
+
+            <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
+                <aside className="min-h-0 border-b border-slate-200/80 bg-white/60 lg:border-b-0 lg:border-r">
+                    {sidebar}
+                </aside>
+                <main className="min-h-0">
+                    {chatPane}
+                </main>
+            </div>
         </div>
     );
 };
