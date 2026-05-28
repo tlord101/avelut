@@ -133,8 +133,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             <div className={`flex-1 flex flex-col bg-[#efeae2] relative ${!activeChat ? 'hidden lg:flex items-center justify-center' : 'flex'}`}>
                 {activeChat ? (
                     <>
-                        {/* Chat Header */}
-                        <div className="h-16 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-10 shadow-sm shrink-0">
+                        {/* Fixed Chat Header */}
+                        <div className="h-16 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-30 shadow-sm shrink-0">
                             <button onClick={() => setActiveChat(null)} className="lg:hidden p-2 text-slate-600">←</button>
                             <Avatar className="w-10 h-10" display_name={activeChat.otherUser.display_name} photo_url={activeChat.otherUser.photo_url} />
                             <div>
@@ -143,16 +143,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         </div>
 
-                        {/* Messages Area - Added bottom padding to account for the lifted bar */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-32">
+                        {/* Scrollable Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-36">
                              <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] text-sm">
                                 Welcome to the chat!
                             </div>
                         </div>
 
-                        {/* Lifted Input Bar - Positioned 50px from bottom */}
-                        <div className="absolute bottom-[50px] left-0 right-0 z-20 px-4">
-                            <div className="max-w-[800px] mx-auto flex items-end gap-2 p-2 bg-transparent">
+                        {/* Fixed Floating Input Bar - Pushed to bottom-[85px] to sit right above the bottom nav */}
+                        <div className="absolute bottom-[85px] left-0 right-0 z-20 px-4 pointer-events-none">
+                            <div className="max-w-[800px] mx-auto flex items-end gap-2 p-2 bg-transparent pointer-events-auto">
                                 <div className="flex-1 bg-white rounded-[24px] flex items-end p-2 px-4 shadow-lg border border-slate-200 transition-all focus-within:ring-2 focus-within:ring-emerald-100">
                                     <textarea 
                                         rows={1}
@@ -162,7 +162,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                         className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 max-h-32"
                                     />
                                 </div>
-                                <button className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:bg-emerald-600">
+                                <button className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:bg-emerald-600 shrink-0">
                                     {inputText.trim() ? <SendIcon /> : <VoiceIcon />}
                                 </button>
                             </div>
