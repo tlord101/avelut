@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, update, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // ================= REPLICA ICONS =================
@@ -65,6 +65,22 @@ const MicPlayIcon = ({ color = "#486380" }) => (
     <path d="M8 5v14l11-7z" />
   </svg>
 );
+
+const formatLastSeen = (value?: number) => {
+  if (!value) return 'Last seen recently';
+  const diffMs = Date.now() - value;
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMinutes < 1) return 'Last seen just now';
+  if (diffMinutes < 60) return `Last seen ${diffMinutes}m ago`;
+  if (diffHours < 24) return `Last seen ${diffHours}h ago`;
+  if (diffDays < 7) return `Last seen ${diffDays}d ago`;
+  return `Last seen ${new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+};
+
+const getUnreadCount = (chat: any) => Number(chat?.unreadCount || 0);
 
 // =======================================================
 // FLOATING LIGHT THEME INPUT COMPONENT
@@ -300,6 +316,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const [isLoading, setIsLoading] = useState(true);
     const [tab, setTab] = useState<'chats' | 'people'>('chats');
     const [peopleSearchQuery, setPeopleSearchQuery] = useState("");
+  const [isAppActive, setIsAppActive] = useState(() => typeof document === 'undefined' ? true : document.visibilityState === 'visible');
 
     const [isRecording, setIsRecording] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
@@ -337,10 +354,68 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             setAllUsers(Object.entries(data).map(([uid, u]: any) => ({
                 uid,
                 display_name: u.displayName || u.display_name,
-                photo_url: u.photoURL || u.photo_url
+          photo_url: u.photoURL || u.photo_url,
+          is_online: u.is_online,
+          last_seen: u.last_seen
             })));
         });
     }, []);
+
+    useEffect(() => {
+      const handleVisibilityChange = () => setIsAppActive(document.visibilityState === 'visible');
+      const handleFocus = () => setIsAppActive(true);
+      const handleBlur = () => setIsAppActive(false);
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
+      window.addEventListener('blur', handleBlur);
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('blur', handleBlur);
+      };
+    }, []);
+
+    useEffect(() => {
+      if (!firebaseUser) return;
+
+      const presenceRef = dbRef(db, `users/${firebaseUser.uid}`);
+      const connectedRef = dbRef(db, '.info/connected');
+      let activeConnection = false;
+
+      const syncPresence = async (online: boolean) => {
+        await update(presenceRef, {
+          is_online: online,
+          last_seen: firebaseServerTimestamp()
+        });
+      };
+
+      const unsubscribeConnected = onValue(connectedRef, async (snapshot) => {
+        const connected = snapshot.val() === true;
+        activeConnection = connected;
+
+        if (connected && isAppActive) {
+          const presenceDisconnect = onDisconnect(presenceRef);
+          await presenceDisconnect.update({
+            is_online: false,
+            last_seen: firebaseServerTimestamp()
+          });
+          await syncPresence(true);
+        }
+      });
+
+      if (isAppActive && activeConnection) {
+        syncPresence(true);
+      } else if (!isAppActive) {
+        syncPresence(false);
+      }
+
+      return () => {
+        off(connectedRef, 'value', unsubscribeConnected);
+        syncPresence(false);
+      };
+    }, [firebaseUser, isAppActive]);
 
     useEffect(() => {
         if (!firebaseUser) return;
@@ -359,9 +434,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         onValue(messagesRef, (snap) => {
             setMessages(Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp));
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        if (firebaseUser) {
+          set(dbRef(db, `user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`), 0);
+        }
         });
         return () => off(messagesRef);
-    }, [activeChat]);
+    }, [activeChat, firebaseUser]);
 
     const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!activeChat || !e.target.files || e.target.files.length === 0) return;
@@ -462,9 +540,19 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         if (type === 'voice') summaryText = '🎵 Voice message';
         else if (type === 'image') summaryText = '📷 Image file';
         else if (type === 'file') summaryText = '📄 Document file';
-        const meta = { last_message: { text: summaryText }, timestamp: firebaseServerTimestamp() };
-        updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}`] = { ...meta, otherUserId: activeChat.otherUser.uid };
-        updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}`] = { ...meta, otherUserId: firebaseUser.uid };
+      const meta = { last_message: { text: summaryText }, timestamp: firebaseServerTimestamp() };
+        const unreadSnapshot = await get(dbRef(db, `user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`));
+        const unreadCount = Number(unreadSnapshot.val() || 0);
+      updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}`] = {
+        ...meta,
+        otherUserId: activeChat.otherUser.uid,
+        unreadCount: 0
+      };
+      updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}`] = {
+        ...meta,
+        otherUserId: firebaseUser.uid
+      };
+        updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
         update(dbRef(db), updates);
     };
 
@@ -499,17 +587,27 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 <div className="flex-1 overflow-y-auto bg-white">
                     {tab === 'chats' ?
                     chats.map(c => (
-                        <div key={c.id} onClick={() => setActiveChat({ chatId: c.id, otherUser: c.otherUser })} className={`flex items-center gap-3 p-3 hover:bg-brand-50 cursor-pointer border-b border-brand-100 transition ${activeChat?.chatId === c.id ? 'bg-brand-50' : ''}`}>
+                    <div key={c.id} onClick={() => setActiveChat({ chatId: c.id, otherUser: c.otherUser })} className={`flex items-center gap-3 p-3 hover:bg-brand-50 cursor-pointer border-b border-brand-100 transition ${activeChat?.chatId === c.id ? 'bg-brand-50' : ''}`}>
                             <Avatar className="w-12 h-12 rounded-full shrink-0 object-cover" photo_url={c.otherUser?.photo_url} />
                             <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
-                                    <h3 className="font-medium text-brand-900 text-[16px] truncate">{c.otherUser?.display_name}</h3>
+                          <h3 className={`text-[16px] truncate ${getUnreadCount(c) > 0 ? 'font-bold text-brand-900' : 'font-medium text-brand-900'}`}>{c.otherUser?.display_name}</h3>
                                     <span className="text-[12px] text-brand-700">10:16 AM</span>
                                 </div>
-                                <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1 min-w-0">
                                     <DoubleCheckIcon color="#0088cc" />
-                                    <p className="text-[14px] text-brand-700 truncate">{c.last_message?.text}</p>
+                            <p className={`text-[14px] truncate ${getUnreadCount(c) > 0 ? 'font-semibold text-brand-900' : 'text-brand-700'}`}>{c.last_message?.text}</p>
+                          </div>
+                          {getUnreadCount(c) > 0 && (
+                            <span className="shrink-0 min-w-[24px] h-6 px-2 rounded-full bg-brand-500 text-white text-[11px] font-bold flex items-center justify-center">
+                              {getUnreadCount(c) > 99 ? '99+' : getUnreadCount(c)}
+                            </span>
+                          )}
                                 </div>
+                        <p className="text-[11px] mt-1 text-brand-500 font-medium">
+                          {c.otherUser?.is_online ? 'online' : formatLastSeen(c.otherUser?.last_seen)}
+                        </p>
                             </div>
                         </div>
                     )) : 
@@ -517,6 +615,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                         <div key={u.uid} onClick={() => setActiveChat({ chatId: [firebaseUser?.uid, u.uid].sort().join('_'), otherUser: u })} className="flex items-center gap-3 p-3 hover:bg-brand-50 cursor-pointer border-b border-brand-100 transition">
                             <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover" photo_url={u.photo_url} />
                             <h3 className="text-brand-900 font-medium text-[15px]">{u.display_name}</h3>
+                      <span className="ml-auto text-[11px] text-brand-500 font-medium">{u.is_online ? 'online' : formatLastSeen(u.last_seen)}</span>
                         </div>
                     ))}
                 </div>
@@ -533,7 +632,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             <Avatar className="w-10 h-10 rounded-full object-cover" photo_url={activeChat.otherUser.photo_url} />
                             <div className="flex-1 min-w-0">
                                 <h2 className="font-medium text-brand-900 text-[16px] leading-tight truncate">{activeChat.otherUser.display_name}</h2>
-                                <p className="text-[12px] text-brand-500 font-medium mt-0.5">online</p>
+                            <p className="text-[12px] text-brand-500 font-medium mt-0.5">
+                              {activeChat.otherUser.is_online ? 'online' : formatLastSeen(activeChat.otherUser.last_seen)}
+                            </p>
                             </div>
                         </div>
 
