@@ -841,7 +841,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (!courseAdminView.departmentId || !courseAdminView.level) return;
 
         const courseLabel = course.course_code || course.course_name || course.course_id;
-        const departmentLabel = selectedManagerDepartment?.department_name || courseAdminView.departmentId;
+        const departmentLabel = allDepartments.find((dept) => dept.id === courseAdminView.departmentId)?.department_name || courseAdminView.departmentId;
         const confirmed = window.confirm(`Delete ${courseLabel} from ${departmentLabel} (${courseAdminView.level})? This will remove the course and its stored textbook outline for this department.`);
         if (!confirmed) return;
 
@@ -868,7 +868,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             console.error('Error deleting course:', error);
             addToast(error?.message || 'Failed to delete course', 'error');
         }
-    }, [addToast, courseAdminView.departmentId, courseAdminView.level, loadDepartmentCourses, selectedManagerDepartment]);
+    }, [addToast, allDepartments, courseAdminView.departmentId, courseAdminView.level, loadDepartmentCourses]);
 
     const handleAddQuestion = async () => {
         if (!uploadDepartmentId || !uploadLevel || !uploadCourseName || !year || !newQuestion.question || !newQuestion.correctAnswer) {
