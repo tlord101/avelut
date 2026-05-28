@@ -594,27 +594,32 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                             </div>
                         </div>
                         {/* Shutter Button Area */}
-                        <div className="flex-shrink-0 flex justify-center items-center gap-4 h-28 bg-gray-100">
-                            <button 
-                                onClick={() => fileInputRef.current?.click()} 
-                                aria-label="Upload photo"
-                                className="flex items-center gap-2 px-4 py-3 bg-gray-700 text-white rounded-full hover:bg-gray-800 transition-colors shadow-lg font-semibold"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                Upload Photo
-                            </button>
-                            <input 
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleFileUpload}
-                                className="hidden"
-                            />
-                            <button onClick={handleScan} aria-label="Scan problem" className="p-2 bg-white/50 rounded-full transition-transform active:scale-95 shadow-lg">
-                                <ShutterIcon />
-                            </button>
+                        <div className="flex-shrink-0 flex items-center h-28 bg-gray-100 px-4">
+                            <div className="flex-1 flex justify-start"></div>
+                            <div className="flex-1 flex justify-center items-center">
+                                <button onClick={handleScan} aria-label="Scan problem" className="p-1 bg-white rounded-full transition-transform active:scale-95 shadow-2xl ring-4 ring-white/70">
+                                    <ShutterIcon className="w-20 h-20" />
+                                </button>
+                            </div>
+                            <div className="flex-1 flex justify-end items-center">
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()} 
+                                    aria-label="Upload photo"
+                                    className="flex items-center gap-2 px-4 py-3 bg-gray-700 text-white rounded-full hover:bg-gray-800 transition-colors shadow-lg font-semibold"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Upload Photo
+                                </button>
+                                <input 
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                />
+                            </div>
                         </div>
                     </div>
                 );

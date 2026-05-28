@@ -13,7 +13,6 @@ import { SendIcon } from './icons/SendIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { XIcon } from './icons/XIcon';
 import { PromptInput, PromptInputActions, PromptInputTextarea } from './prompt-kit/prompt-input';
-import { PromptSuggestion } from './prompt-kit/prompt-suggestion';
 
 type AssistantSender = 'user' | 'assistant';
 
@@ -36,49 +35,6 @@ interface VanTutorAssistantProps {
 
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
-
-const suggestionGroups = [
-  {
-    label: 'Summary',
-    highlight: 'Summarize',
-    items: [
-      'Summarize this topic for me',
-      'Summarize my lecture notes',
-      'Summarize the key formulas',
-      'Summarize this chapter in simple terms',
-    ],
-  },
-  {
-    label: 'Code',
-    highlight: 'Help me',
-    items: [
-      'Help me write React components',
-      'Help me debug code',
-      'Help me learn Python',
-      'Help me learn SQL',
-    ],
-  },
-  {
-    label: 'Design',
-    highlight: 'Design',
-    items: [
-      'Design a study plan',
-      'Design a revision timetable',
-      'Design a simple landing page',
-      'Design a clean dashboard layout',
-    ],
-  },
-  {
-    label: 'Research',
-    highlight: 'Research',
-    items: [
-      'Research the best study methods',
-      'Research how to revise faster',
-      'Research the best note-taking techniques',
-      'Research the most effective exam strategies',
-    ],
-  },
-];
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -130,7 +86,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
-  const [activeCategory, setActiveCategory] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,13 +164,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     return messages.length > 0 ? 'Current chat' : 'New chat';
   }, [activeHistoryId, history, messages.length]);
 
-  const activeCategoryData = useMemo(
-    () => suggestionGroups.find(group => group.label === activeCategory),
-    [activeCategory]
-  );
-
-  const showCategorySuggestions = activeCategory !== '';
-
   const clearAttachment = () => {
     setAttachment(null);
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
@@ -225,7 +173,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     setActiveHistoryId(null);
     setMessages([]);
     setInputValue('');
-    setActiveCategory('');
     clearAttachment();
     setStatusText('Started a new chat.');
     setIsSidebarOpen(false);
@@ -405,20 +352,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
   };
 
-  const handlePromptClick = (prompt: string) => {
-    setInputValue(prompt);
-    setActiveCategory('');
-  };
-
   const handlePromptInputValueChange = (value: string) => {
     setInputValue(value);
-    if (value.trim() === '') {
-      setActiveCategory('');
-      return;
-    }
-    if (activeCategory && !activeCategoryData?.items.includes(value)) {
-      setActiveCategory('');
-    }
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -579,33 +514,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
           <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-40 px-4 sm:px-6 md:static md:bottom-auto transition-all duration-300 ${isSidebarOpen ? 'pointer-events-none translate-y-6 opacity-0 md:pointer-events-auto md:translate-y-0 md:opacity-100' : ''}`}>
             <div className="mx-auto max-w-4xl space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {showCategorySuggestions ? (
-                  activeCategoryData?.items.map((suggestion) => (
-                    <PromptSuggestion
-                      key={suggestion}
-                      highlight={activeCategoryData.highlight}
-                      onClick={() => handlePromptClick(suggestion)}
-                    >
-                      {suggestion}
-                    </PromptSuggestion>
-                  ))
-                ) : (
-                  suggestionGroups.map((suggestion) => (
-                    <PromptSuggestion
-                      key={suggestion.label}
-                      onClick={() => {
-                        setActiveCategory(suggestion.label);
-                        setInputValue('');
-                      }}
-                      className="capitalize"
-                    >
-                      {suggestion.label}
-                    </PromptSuggestion>
-                  ))
-                )}
-              </div>
-
               <PromptInput
                 className="!border-0 !bg-transparent !p-0 !shadow-none rounded-[28px]"
                 style={{ background: 'linear-gradient(90deg, #ff4d4d, #ffb84d, #4dff88, #4dd2ff, #b84dff)' }}
