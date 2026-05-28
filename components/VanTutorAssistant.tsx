@@ -713,9 +713,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                         placeholder="Ask anything..."
                         className="min-h-[44px] pt-3 pl-4 pr-4 text-base leading-[1.3] sm:text-base md:text-base"
                       />
-                      {attachment && (
+                      {attachments.length > 0 && (
                         <div className="mt-2 flex items-center justify-between rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-600">
-                          <span className="truncate">{attachment.name}</span>
+                          <span className="truncate">{attachments[0].name}</span>
                           <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
                             <XIcon className="h-3.5 w-3.5" />
                           </button>
@@ -726,7 +726,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                       <button
                         type="button"
                         onClick={() => { void handleSend(); }}
-                        disabled={(!inputValue.trim() && !attachment) || isSending}
+                        disabled={(!inputValue.trim() && attachments.length === 0) || isSending}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label="Send message"
                       >
