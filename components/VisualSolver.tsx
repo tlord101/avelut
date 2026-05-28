@@ -9,8 +9,12 @@ import rehypeKatex from 'rehype-katex';
 import { useToast } from '../hooks/useToast';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+// Safely check for Vite's meta environment setup
+const apiKey = typeof window !== 'undefined' && (import.meta as any).env 
+    ? (import.meta as any).env.VITE_API_KEY 
+    : null;
+
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
