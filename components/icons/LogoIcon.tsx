@@ -50,3 +50,12 @@ export const LogoIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h
 };
 
 export default LogoIcon;
+
+// Expose as a global fallback for environments/bundles that reference the symbol at runtime
+if (typeof window !== 'undefined') {
+    try {
+        (window as any).LogoIcon = LogoIcon;
+    } catch (e) {
+        // ignore
+    }
+}
