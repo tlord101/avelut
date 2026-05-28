@@ -48,3 +48,5 @@ export const LogoIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h
         </svg>
     );
 };
+
+export default LogoIcon;
