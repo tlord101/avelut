@@ -10,11 +10,8 @@ import 'katex/dist/katex.min.css';
 import { db, storage } from '../firebase';
 import type { Course, UserProfile } from '../types';
 import { ChatIcon } from './icons/ChatIcon';
-import { SendIcon } from './icons/SendIcon';
-import { PlusIcon } from './icons/PlusIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
-import { PromptInput, PromptInputActions, PromptInputTextarea } from './prompt-kit/prompt-input';
 
 type AssistantSender = 'user' | 'assistant';
 
@@ -46,7 +43,6 @@ interface VanTutorAssistantProps {
 
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
-
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
@@ -60,15 +56,12 @@ const normalizeTitle = (text: string) => {
     .replace(/^['"`]+|['"`]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-
   return truncateTitle(cleaned || 'New Chat');
 };
 
 const getHistoryFallbackTitle = (prompt: string, attachment: File | null) => (
   prompt || (attachment ? `Attachment: ${attachment.name}` : 'New Chat')
 );
-
-const createAttachmentId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const isImageMimeType = (mimeType?: string, fileName?: string) => (
   Boolean(mimeType?.startsWith('image/')) || Boolean(fileName?.match(/\.(png|jpe?g|gif|webp|bmp|svg)$/i))
@@ -95,7 +88,6 @@ const uploadChatAttachment = async (userId: string, conversationId: string, file
   const fileRef = storageRef(storage, path);
   const snapshot = await uploadBytes(fileRef, file);
   const url = await getDownloadURL(snapshot.ref);
-
   return {
     id: attachmentToken,
     name: file.name,
@@ -134,7 +126,64 @@ const mapSender = (sender: string | undefined): AssistantSender => {
   return 'assistant';
 };
 
-const MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS = 'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0rem))]';
+// Custom SVG Icons
+const PlusIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <line x1="12" y1="5" x2="12" y2="19"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+  </svg>
+);
+
+const MicIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[22px] h-[22px]">
+    <rect x="9" y="3" width="6" height="11" rx="3" strokeWidth="1.8" />
+    <path d="M5 10c0 3.866 3.134 7 7 7s7-3.134 7-7" strokeLinecap="round" />
+    <line x1="12" y1="17" x2="12" y2="21" strokeLinecap="round" />
+  </svg>
+);
+
+const WaveformIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <rect x="7" y="8" width="2" height="8" rx="1" />
+    <rect x="11" y="4" width="2" height="16" rx="1" />
+    <rect x="15" y="8" width="2" height="8" rx="1" />
+  </svg>
+);
+
+const UpArrowIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <line x1="12" y1="19" x2="12" y2="5" />
+    <polyline points="5 12 12 5 19 12" />
+  </svg>
+);
+
+const StopIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
+    <rect x="7" y="7" width="10" height="10" rx="2" />
+  </svg>
+);
+
+const VisionIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-[22px] h-[22px]">
+    <rect x="3" y="6" width="15" height="12" rx="3.5" />
+    <path d="M18 10c1.2 0 2 .8 2 2s-.8 2-2 2" />
+    <circle cx="10.5" cy="12" r="3" />
+  </svg>
+);
+
+const ShareUploadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-[22px] h-[22px]">
+    <rect x="5" y="9" width="14" height="10" rx="2" />
+    <path d="M12 13V3M12 3l-3.5 3.5M12 3l3.5 3.5" />
+  </svg>
+);
+
+const CloseXIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-[22px] h-[22px]">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
 export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -147,8 +196,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
+  
+  // Custom Input Bar States: 1 (Default), 2 (Typing), 3 (Listening), 4 (Ambient/Live Voice)
+  const [inputState, setInputState] = useState<number>(1);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const inputElementRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -226,7 +280,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     };
 
     void loadCourseContext();
-
     return () => {
       isMounted = false;
     };
@@ -284,11 +337,11 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     clearAttachment();
     setStatusText('Started a new chat.');
     setIsSidebarOpen(false);
+    setInputState(1);
   };
 
   const generateChatTitle = async (prompt: string, responseText: string) => {
     const fallbackTitle = normalizeTitle(prompt);
-
     if (!ai) return fallbackTitle;
 
     try {
@@ -306,7 +359,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           }],
         }],
       });
-
       return normalizeTitle((result.text || '').split('\n')[0] || fallbackTitle);
     } catch (error) {
       console.error('Failed to generate chat title:', error);
@@ -314,8 +366,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
   };
 
-  const handleSend = async (event?: React.FormEvent) => {
-    event?.preventDefault();
+  const handleSend = async () => {
     const prompt = inputValue.trim();
     if ((!prompt && attachments.length === 0) || isSending) return;
 
@@ -328,7 +379,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       text: userText,
       timestamp: Date.now(),
     };
-
     const nextMessages = [...messages, userMessage];
     const isNewConversation = !activeHistoryId;
     const activeConversation = history.find(item => item.id === activeHistoryId);
@@ -338,6 +388,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     setInputValue('');
     setIsSending(true);
     setStatusText('Thinking...');
+    setInputState(1);
 
     try {
       if (!ai) {
@@ -355,14 +406,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       let conversationId = activeHistoryId;
       const now = Date.now();
-
       if (!conversationId) {
         const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
         const newConversationRef = push(conversationsRef);
         conversationId = newConversationRef.key;
 
         if (!conversationId) {
-          throw new Error('Failed to create conversation: Firebase push() returned no key. Check database permissions and connection.');
+          throw new Error('Failed to create conversation: Firebase push() returned no key.');
         }
 
         await set(newConversationRef, {
@@ -397,7 +447,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         timestamp: serverTimestamp(),
         attachments: storedAttachments,
       };
-
       await push(messagesRef, storedUserMessage);
 
       const result = await ai.models.generateContent({
@@ -432,7 +481,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         text: responseText,
         timestamp: Date.now(),
       };
-
       await push(messagesRef, {
         text: responseText,
         sender: 'assistant',
@@ -442,7 +490,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       const updates: { title?: string; last_updated_at: number } = {
         last_updated_at: 0,
       };
-
       if (shouldGenerateTitle) {
         updates.title = await generateChatTitle(userText, responseText);
       }
@@ -469,8 +516,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
   };
 
-  const handlePromptInputValueChange = (value: string) => {
-    setInputValue(value);
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+    if (val.length > 0) {
+      setInputState(2);
+    } else {
+      setInputState(1);
+    }
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -482,18 +535,20 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/40">
-      <div className="mx-auto flex h-full min-h-0 max-w-7xl overflow-hidden bg-white/90 backdrop-blur md:rounded-[2rem] md:border md:border-white/70 md:shadow-[0_20px_80px_rgba(15,23,42,0.08)]">
-        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 md:static md:z-auto md:w-80 md:translate-x-0 md:shadow-none`}>
+    <div className="h-full min-h-0 overflow-hidden bg-[#060814]">
+      <div className="mx-auto flex h-full min-h-0 max-w-7xl overflow-hidden bg-[#0a0d1a]/90 backdrop-blur md:rounded-[2rem] md:border md:border-neutral-800/50 md:shadow-[0_20px_80px_rgba(0,0,0,0.6)]">
+        
+        {/* Sidebar */}
+        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-neutral-800/40 bg-[#0d1122] p-5 shadow-2xl transition-transform duration-300 md:static md:z-auto md:w-80 md:translate-x-0 md:shadow-none`}>
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">VanTutor</p>
-              <h2 className="mt-1 text-xl font-bold text-slate-900">Assistant history</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">VanTutor</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-100">Assistant history</h2>
             </div>
             <button
               type="button"
               onClick={() => setIsSidebarOpen(false)}
-              className="rounded-full border border-slate-200 p-2 text-slate-600 md:hidden"
+              className="rounded-full border border-neutral-800 p-2 text-slate-400 md:hidden"
               aria-label="Close assistant history"
             >
               <XIcon className="h-5 w-5" />
@@ -503,106 +558,106 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           <button
             type="button"
             onClick={startNewChat}
-            className="mb-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="mb-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
           >
-            <PlusIcon className="h-5 w-5" />
+            <PlusIcon />
             New chat
           </button>
 
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-220px)]">
             {isHistoryLoading ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              <div className="rounded-2xl border border-neutral-800 bg-[#12182e] px-4 py-3 text-sm text-slate-400">
                 Loading chat history...
               </div>
             ) : history.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-neutral-800 bg-[#12182e] px-4 py-6 text-sm text-slate-400 text-center">
                 Your saved chats will appear here.
               </div>
             ) : (
               history.map(item => (
-                  <div key={item.id} className="flex items-start gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveHistoryId(item.id);
-                        setIsSidebarOpen(false);
-                        setStatusText(`Opened ${item.title}.`);
-                      }}
-                      className={`flex-1 text-left rounded-2xl border px-4 py-3 transition ${activeHistoryId === item.id ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'}`}
-                    >
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Recent chat</p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">{item.title}</p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!confirm(`Delete "${item.title}" from assistant history?`)) return;
-                        try {
-                          await remove(dbRef(db, `chat_conversations/${userProfile.uid}/${item.id}`));
-                          await remove(dbRef(db, `chat_messages/${item.id}`));
-                          // Clear local selection if it was the active one
-                          if (activeHistoryId === item.id) {
-                            setActiveHistoryId(null);
-                            setMessages([]);
-                          }
-                          setStatusText(`Deleted ${item.title}.`);
-                        } catch (err) {
-                          console.error('Failed to delete history item:', err);
-                          setStatusText('Could not delete chat.');
+                <div key={item.id} className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveHistoryId(item.id);
+                      setIsSidebarOpen(false);
+                      setStatusText(`Opened ${item.title}.`);
+                    }}
+                    className={`flex-1 text-left rounded-2xl border px-4 py-3 transition ${activeHistoryId === item.id ? 'border-emerald-500/50 bg-[#16223f]' : 'border-neutral-800 bg-[#12182e] hover:border-neutral-700 hover:bg-[#18203c]'}`}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">Recent chat</p>
+                    <p className="mt-1 text-sm font-medium text-slate-200 truncate">{item.title}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`Delete "${item.title}" from assistant history?`)) return;
+                      try {
+                        await remove(dbRef(db, `chat_conversations/${userProfile.uid}/${item.id}`));
+                        await remove(dbRef(db, `chat_messages/${item.id}`));
+                        if (activeHistoryId === item.id) {
+                          setActiveHistoryId(null);
+                          setMessages([]);
                         }
-                      }}
-                      className="p-2 rounded-full text-red-600 hover:bg-red-50"
-                      aria-label={`Delete ${item.title}`}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
+                        setStatusText(`Deleted ${item.title}.`);
+                      } catch (err) {
+                        console.error('Failed to delete history item:', err);
+                        setStatusText('Could not delete chat.');
+                      }
+                    }}
+                    className="p-2 mt-2 rounded-full text-red-400 hover:bg-red-950/30"
+                    aria-label={`Delete ${item.title}`}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                </div>
               ))
             )}
           </div>
-
         </aside>
 
         {isSidebarOpen && (
           <button
             type="button"
-            className="fixed inset-0 z-30 bg-slate-950/30 md:hidden"
+            className="fixed inset-0 z-30 bg-black/50 md:hidden"
             aria-label="Close assistant history overlay"
             onClick={() => setIsSidebarOpen(false)}
           />
         )}
 
-        <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          <header className="flex items-center justify-between border-b border-slate-200 px-4 py-4 sm:px-6">
+        {/* Main Content Area */}
+        <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#060814]">
+          <header className="flex items-center justify-between border-b border-neutral-800/40 px-4 py-4 sm:px-6">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(true)}
-                className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-700 md:hidden"
+                className="rounded-2xl border border-neutral-800 bg-[#0d1122] p-2 text-slate-300 md:hidden"
                 aria-label="Open assistant history"
               >
                 <ChatIcon className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">VanTutorAssistant</p>
-                <h1 className="text-lg font-bold text-slate-900 sm:text-2xl">{conversationSummary}</h1>
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">VanTutorAssistant</p>
+                <h1 className="text-lg font-bold text-slate-100 sm:text-2xl truncate max-w-[200px] sm:max-w-md">{conversationSummary}</h1>
               </div>
             </div>
-            <div className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 sm:block">
+            <div className="rounded-full bg-emerald-950/50 border border-emerald-800/30 px-3 py-1 text-xs font-semibold text-emerald-400">
               {statusText}
             </div>
           </header>
 
-          <section className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-6 sm:px-6">
+          {/* Messages List Container */}
+          <section className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-32 sm:px-6">
             {messages.length === 0 ? (
               <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-6 py-16 text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-lg">
                   <ChatIcon className="h-10 w-10" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">Ask VanTutor anything</h2>
-                  <p className="mt-2 max-w-xl text-slate-600">
+                  <h2 className="text-2xl font-bold text-slate-100">Ask VanTutor anything</h2>
+                  <p className="mt-2 max-w-xl text-slate-400">
                     Get step-by-step answers with clean LaTeX for equations, formulas, and proofs.
                   </p>
                 </div>
@@ -617,8 +672,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                     <div
                       className={`px-4 py-3 shadow-sm ${
                         message.sender === 'user'
-                          ? 'max-w-[76%] rounded-full bg-slate-900 text-white'
-                          : 'w-[90%] max-w-[90%] rounded-3xl border border-slate-200 bg-white text-slate-800'
+                          ? 'max-w-[76%] rounded-3xl bg-emerald-600 text-white'
+                          : 'w-[90%] max-w-[90%] rounded-3xl border border-neutral-800/60 bg-[#0e1227] text-slate-200'
                       }`}
                     >
                       {message.attachments && message.attachments.length > 0 && (
@@ -629,13 +684,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                               href={attachmentItem.url}
                               target="_blank"
                               rel="noreferrer"
-                              className={`overflow-hidden rounded-2xl border ${message.sender === 'user' ? 'border-white/20 bg-white/10 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+                              className={`overflow-hidden rounded-2xl border ${message.sender === 'user' ? 'border-white/20 bg-white/10 text-white' : 'border-neutral-800 bg-[#131935] text-slate-300'}`}
                             >
                               {attachmentItem.isImage ? (
                                 <img src={attachmentItem.url} alt={attachmentItem.name} className="max-h-56 w-full object-cover" />
                               ) : (
                                 <div className="flex items-center gap-3 px-4 py-3">
-                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${message.sender === 'user' ? 'bg-white/15' : 'bg-white'} text-[10px] font-black uppercase`}>
+                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${message.sender === 'user' ? 'bg-white/15' : 'bg-[#060814]'} text-[10px] font-black uppercase`}>
                                     DOC
                                   </div>
                                   <div className="min-w-0">
@@ -653,12 +708,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
-                            ul: ({ node, ...props }) => <ul className="mb-3 list-disc space-y-1 pl-5" {...props} />,
-                            ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5" {...props} />,
+                            p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="mb-3 list-disc space-y-1 pl-5 text-slate-200" {...props} />,
+                            ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5 text-slate-200" {...props} />,
                             li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
-                            strong: ({ node, ...props }) => <strong className="font-semibold text-slate-900" {...props} />,
-                            pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100" {...props} />,
+                            strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-400" {...props} />,
+                            pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-[#050711] p-4 text-sm text-slate-100 border border-neutral-800/40" {...props} />,
                           }}
                         >
                           {message.text}
@@ -672,7 +727,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
                 {isSending && (
                   <div className="flex justify-start">
-                    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+                    <div className="rounded-3xl border border-neutral-800 bg-[#0e1227] px-4 py-3 text-sm text-slate-400 shadow-sm">
                       Thinking...
                     </div>
                   </div>
@@ -682,64 +737,190 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </section>
 
-          <footer className={`shrink-0 border-t border-slate-200/70 bg-white/85 px-4 py-4 sm:px-6 transition-all duration-300 backdrop-blur-xl ${isSidebarOpen ? 'pointer-events-none opacity-0' : ''}`}>
-            <div className="mx-auto max-w-4xl space-y-3">
-              <PromptInput
-                className="!border-0 !bg-transparent !p-0 !shadow-none rounded-[28px]"
-                style={{ background: 'linear-gradient(90deg, #ff4d4d, #ffb84d, #4dff88, #4dd2ff, #b84dff)' }}
-                value={inputValue}
-                onValueChange={handlePromptInputValueChange}
-                onSubmit={() => { void handleSend(); }}
-              >
-                <div className="rounded-[27px] bg-white/95 backdrop-blur-xl border border-white/70 px-4 py-4 md:py-[18px] shadow-[0_10px_40px_rgba(15,23,42,0.12)]">
-                  <div className="flex items-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => attachmentInputRef.current?.click()}
-                      className="mb-1.5 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 transition hover:bg-white"
-                      aria-label="Upload attachment"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                    </button>
-                    <input
-                      ref={attachmentInputRef}
-                      type="file"
-                      accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                      className="hidden"
-                      onChange={handleAttachmentChange}
-                    />
-                    <div className="flex-1">
-                      <PromptInputTextarea
-                        placeholder="Ask anything..."
-                        className="min-h-[44px] pt-3 pl-4 pr-4 text-base leading-[1.3] sm:text-base md:text-base"
+          {/* Integrated VanTutor Input Layout Panel */}
+          <footer className="absolute bottom-6 left-0 right-0 z-30 px-4">
+            <div className="w-full max-w-xl mx-auto transition-all duration-300">
+              
+              {/* Attachment Preview (if any) displayed elegantly right above the bar layout */}
+              {attachments.length > 0 && (
+                <div className="mb-2 mx-auto max-w-md flex items-center justify-between rounded-xl bg-[#1e1f20] border border-neutral-800/80 px-3 py-2 text-xs text-slate-300">
+                  <span className="truncate flex-1 pr-2">{attachments[0].name}</span>
+                  <button type="button" onClick={clearAttachment} className="text-red-400 hover:text-red-300 transition" aria-label="Remove attachment">
+                    <XIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* STATES 1, 2, 3: Stadium Input Box Bar */}
+              {inputState !== 4 && (
+                <div className="relative w-full h-[64px] bg-[#1e1f20] rounded-full flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                  
+                  {/* Attachment triggered clicker hook button */}
+                  <button 
+                    type="button" 
+                    onClick={() => attachmentInputRef.current?.click()}
+                    disabled={isSending}
+                    className="text-white hover:opacity-80 transition active:scale-95 shrink-0 flex items-center justify-center w-8 h-8 disabled:opacity-40"
+                    aria-label="Upload attachment"
+                  >
+                    <PlusIcon />
+                  </button>
+
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="hidden"
+                    onChange={handleAttachmentChange}
+                  />
+
+                  {/* Input form field or ambient loading voice lines container */}
+                  <div className="flex-1 h-full flex items-center px-2 min-w-0">
+                    {(inputState === 1 || inputState === 2) ? (
+                      <input 
+                        ref={inputElementRef}
+                        type="text"
+                        value={inputValue}
+                        onChange={handleTextChange}
+                        disabled={isSending}
+                        placeholder="Ask VanTutor"
+                        className="w-full h-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void handleSend();
+                          }
+                        }}
                       />
-                      {attachments.length > 0 && (
-                        <div className="mt-2 flex items-center justify-between rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-600">
-                          <span className="truncate">{attachments[0].name}</span>
-                          <button type="button" onClick={clearAttachment} className="ml-2 text-slate-500 hover:text-slate-800" aria-label="Remove attachment">
-                            <XIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <PromptInputActions className="mb-1.5 flex items-end justify-end gap-2">
-                      <button
+                    ) : (
+                      /* State 3 listening ticks simulation view graphic components */
+                      <div className="flex items-center justify-start gap-[4px] py-1 select-none overflow-hidden w-full h-full pl-1">
+                        {[...Array(15)].map((_, i) => {
+                          const animatedHeights = ["h-3", "h-2", "h-4", "h-3", "h-5", "h-3", "h-4", "h-2", "h-4", "h-5", "h-3", "h-2", "h-4", "h-3", "h-2"];
+                          return (
+                            <div 
+                              key={i} 
+                              style={{ animationDelay: `${i * 0.08}s` }}
+                              className={`w-[2.2px] ${animatedHeights[i]} bg-neutral-300 rounded-full opacity-90 animate-voice-bar-pulse`}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Operational Action triggers buttons cluster panel */}
+                  <div className="flex items-center gap-[9px] shrink-0">
+                    
+                    {/* Microphone interactive selection control options */}
+                    {(inputState === 1 || inputState === 2) && (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(3)}
+                        className="text-white hover:opacity-85 transition active:scale-90 flex items-center justify-center w-9 h-9"
+                      >
+                        <MicIcon />
+                      </button>
+                    )}
+
+                    {/* Quick termination stop option return hook (State 3) */}
+                    {inputState === 3 && (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(1)}
+                        className="w-[42px] h-[42px] bg-[#27282b]/80 hover:bg-[#2e3034] rounded-full flex items-center justify-center text-white transition active:scale-90"
+                      >
+                        <StopIcon />
+                      </button>
+                    )}
+
+                    {/* Submission / Waveform routing engine button handler */}
+                    {inputState === 1 && !inputValue.trim() && attachments.length === 0 ? (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(4)}
+                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95"
+                      >
+                        <WaveformIcon />
+                      </button>
+                    ) : (
+                      <button 
                         type="button"
                         onClick={() => { void handleSend(); }}
-                        disabled={(!inputValue.trim() && attachments.length === 0) || isSending}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label="Send message"
+                        disabled={isSending || (!inputValue.trim() && attachments.length === 0)}
+                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50"
                       >
-                        <SendIcon className="h-4 w-4" />
+                        <UpArrowIcon />
                       </button>
-                    </PromptInputActions>
+                    )}
                   </div>
+
                 </div>
-              </PromptInput>
+              )}
+
+              {/* STATE 4: Fullscreen Live mode controls selection panel cluster block */}
+              {inputState === 4 && (
+                <div className="w-full flex items-center justify-between px-2 py-4 animate-fade-in select-none bg-[#101114] rounded-3xl border border-neutral-800/40 p-4 shadow-xl">
+                  {/* Camera Button */}
+                  <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
+                    <VisionIcon />
+                  </button>
+
+                  {/* Share Button */}
+                  <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
+                    <ShareUploadIcon />
+                  </button>
+
+                  {/* Center glowing neon pulsing capsule graphic elements */}
+                  <div className="relative w-[114px] h-[64px] bg-gradient-to-b from-[#08080a] to-[#0d0f14] rounded-full overflow-hidden border border-neutral-800/70 flex items-center justify-center shadow-lg">
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[86px] h-[18px] bg-[#38bdf8] rounded-full blur-[8px] opacity-80 animate-ambient-pulse" />
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[82px] h-[4px] bg-[#60a5fa] rounded-full opacity-90" />
+                  </div>
+
+                  {/* Mute/Mic Control */}
+                  <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
+                    <MicIcon />
+                  </button>
+
+                  {/* Close Control return to default mode */}
+                  <button 
+                    type="button"
+                    onClick={() => setInputState(1)}
+                    className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-red-950/20 rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md"
+                  >
+                    <CloseXIcon />
+                  </button>
+                </div>
+              )}
             </div>
           </footer>
         </main>
       </div>
+
+      {/* Styled animation wrappers safely mounted under main application shell layout */}
+      <style>{`
+        @keyframes voice-bar-pulse {
+          0%, 100% { transform: scaleY(1); opacity: 0.8; }
+          50% { transform: scaleY(1.6); opacity: 1; background-color: #10b981; }
+        }
+        .animate-voice-bar-pulse {
+          animation: voice-bar-pulse 1.1s ease-in-out infinite;
+          transform-origin: center;
+        }
+        @keyframes ambient-pulse {
+          0%, 100% { opacity: 0.7; transform: translate(-50%, 0px) scale(0.95); filter: blur(8px); }
+          50% { opacity: 0.95; transform: translate(-50%, -1px) scale(1.05); filter: blur(10px); }
+        }
+        .animate-ambient-pulse {
+          animation: ambient-pulse 2s ease-in-out infinite;
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
     </div>
   );
 }
