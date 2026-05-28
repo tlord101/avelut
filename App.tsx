@@ -19,37 +19,20 @@ import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
 import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
+import { LogoIcon } from './components/icons/LogoIcon';
 
 declare var __app_id: string;
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
-// =========================================================================
-// CUSTOM VANTUTOR PWA LOGO (FLAT OUTLINE VECTOR DESIGN STYLE)
-// =========================================================================
-const VanTutorLogoIcon: React.FC<{ className?: string }> = ({ className = "w-24 h-24" }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Interconnected Knowledge Network Base */}
-    <path d="M12 44C20 48 44 48 52 44" stroke="#25d366" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M22 47V53C22 55.5 25 57 32 57C39 57 42 55.5 42 53V47" stroke="#25d366" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-    {/* Hanging Graduation Tassel */}
-    <path d="M50 24V36M50 36L47 39M50 36L53 39" stroke="#111b21" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-    {/* Main Geometric Vector Cap Diamond */}
-    <path d="M32 9L58 22L32 35L6 22L32 9Z" fill="white" stroke="#111b21" strokeWidth="3" strokeLinejoin="round"/>
-    {/* Core Tech Node Star Intersection */}
-    <circle cx="32" cy="22" r="3" fill="#25d366" stroke="#111b21" strokeWidth="2"/>
-    <path d="M32 15V19M32 25V29M25 22H29M35 22H39" stroke="#111b21" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-
 const AppLoader: React.FC = () => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50" role="status" aria-label="Loading Vantutor application">
+        <div className="flex flex-col items-center justify-center min-h-screen bg-off-white text-charcoal" role="status" aria-label="Loading Vantutor application">
       <div className="animate-bounce">
-        <VanTutorLogoIcon className="w-28 h-28" />
+                <LogoIcon className="w-28 h-28 loader-logo" />
       </div>
-      <h2 className="text-sm font-bold tracking-widest text-neutral-400 mt-4 uppercase animate-pulse">Vantutor Loading</h2>
+            <h2 className="text-sm font-bold tracking-widest text-charcoal/60 mt-4 uppercase animate-pulse">Vantutor Loading</h2>
     </div>
   );
 };
@@ -99,58 +82,91 @@ const usePWAInstallEngine = () => {
 const PWAInstallBannerOverlay: React.FC = () => {
     const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
     const [dismissed, setDismissed] = useState(false);
+    const [isPopupOpen, setIsPopupOpen] = useState(false);
 
     if (isStandalone || dismissed) return null;
 
-    // Standard Android / Chromium automatic engine trigger prompt screen
-    if (deferredPrompt) {
-        return (
-            <div className="fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-                <div className="mb-6 p-4 bg-neutral-50 rounded-full shadow-inner border border-neutral-100">
-                    <VanTutorLogoIcon className="w-24 h-24" />
-                </div>
-                <h2 className="text-2xl font-black text-[#111b21] mb-2 tracking-tight">Install VANTUTOR Application</h2>
-                <p className="text-sm text-neutral-500 max-w-sm mb-8 leading-relaxed">
-                    Install Vantutor directly onto your device to unlock lightning-fast private message sync, persistence tracking, and fluid dashboard interactions.
-                </p>
-                <div className="w-full max-w-xs flex flex-col gap-3">
-                    <button 
-                        onClick={executeInstallationPipeline}
-                        className="w-full bg-[#25d366] text-white py-3.5 rounded-xl font-bold text-base shadow-md hover:bg-[#20ba5a] active:scale-98 transition-all"
-                    >
-                        Install App Now
-                    </button>
-                    <button 
-                        onClick={() => setDismissed(true)}
-                        className="w-full bg-neutral-100 text-neutral-500 py-3 rounded-xl font-semibold text-sm hover:bg-neutral-200 transition-colors"
-                    >
-                        Continue via Web Browser
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    const popupTitle = deferredPrompt
+        ? 'Install VANTUTOR Application'
+        : isIOS
+            ? 'Add Vantutor to Home Screen'
+            : 'Install VANTUTOR';
 
-    // Manual custom onboarding modal for iOS / Mobile Safari environments
-    if (isIOS) {
-        return (
-            <div className="fixed bottom-4 left-4 right-4 z-[99999] bg-white p-5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] border border-neutral-100 flex flex-col items-center text-center animate-fade-in">
-                <div className="flex items-center gap-3 w-full border-b border-neutral-100 pb-3 mb-3">
-                    <VanTutorLogoIcon className="w-10 h-10 shrink-0" />
-                    <div className="text-left">
-                        <h3 className="font-bold text-[#111b21] text-sm">Add Vantutor to Home Screen</h3>
-                        <p className="text-xs text-neutral-400">Run natively on your iPhone or iPad</p>
+    const popupDescription = deferredPrompt
+        ? 'Install the app to get a faster, more native experience on this device.'
+        : isIOS
+            ? 'Use the Safari share menu, then choose Add to Home Screen to install the PWA.'
+            : 'Open the browser menu and choose Install app when your browser offers it.';
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => setIsPopupOpen(true)}
+                className="fixed bottom-5 right-5 z-[99998] inline-flex items-center gap-3 rounded-full bg-brand-500 px-4 py-3 text-off-white shadow-2xl shadow-brand-900/20 transition-transform hover:scale-[1.03] active:scale-95"
+                aria-haspopup="dialog"
+                aria-expanded={isPopupOpen}
+                aria-label="Open install app popup"
+            >
+                <span className="absolute -top-2 -right-2 inline-flex items-center rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900 shadow-lg ring-2 ring-brand-500">
+                    Install
+                </span>
+                <LogoIcon className="h-6 w-6 loader-logo" />
+                <span className="text-sm font-bold tracking-wide">Install App</span>
+            </button>
+
+            {isPopupOpen && (
+                <div className="fixed inset-0 z-[99999] flex items-end justify-end bg-black/20 p-4 sm:p-6 animate-fade-in" role="dialog" aria-modal="true" aria-label="Install VANTUTOR popup">
+                    <div className="w-full max-w-sm rounded-3xl border border-brand-100 bg-off-white p-5 shadow-[0_24px_80px_rgba(0,45,98,0.22)]">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                                <LogoIcon className="h-12 w-12 loader-logo" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h2 className="text-lg font-black tracking-tight text-charcoal">{popupTitle}</h2>
+                                <p className="mt-1 text-sm leading-relaxed text-charcoal/65">{popupDescription}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsPopupOpen(false)}
+                                className="rounded-full p-1 text-charcoal/45 transition hover:bg-white hover:text-charcoal"
+                                aria-label="Close install popup"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="mt-5 flex flex-col gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (deferredPrompt) {
+                                        executeInstallationPipeline();
+                                        setIsPopupOpen(false);
+                                        return;
+                                    }
+                                    if (isIOS) {
+                                        setIsPopupOpen(false);
+                                        return;
+                                    }
+                                }}
+                                className="w-full rounded-2xl bg-brand-500 px-4 py-3 font-bold text-off-white transition hover:bg-brand-600"
+                            >
+                                {deferredPrompt ? 'Install Now' : isIOS ? 'Follow iPhone Steps' : 'Check Browser Menu'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDismissed(true)}
+                                className="w-full rounded-2xl bg-white px-4 py-3 font-semibold text-charcoal/70 transition hover:bg-brand-50"
+                            >
+                                Hide Install Button
+                            </button>
+                        </div>
                     </div>
-                    <button onClick={() => setDismissed(true)} className="ml-auto text-neutral-400 text-sm p-1">✕</button>
                 </div>
-                <p className="text-xs text-neutral-500 text-left w-full leading-relaxed">
-                    Tap the native share icon <span className="font-bold text-blue-500">“Share”</span> button below in your Safari panel, then scroll downwards and select <span className="font-bold text-[#111b21]">“Add to Home Screen”</span> to complete setup.
-                </p>
-            </div>
-        );
-    }
-
-    return null;
+            )}
+        </>
+    );
 };
 
 // ==========================================

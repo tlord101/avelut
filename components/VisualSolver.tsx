@@ -543,7 +543,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
     const renderContent = () => {
         switch (cameraState) {
             case 'initializing':
-                return <div className="flex flex-col items-center justify-center h-full"><svg className="w-12 h-12 loader-logo" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg"><path className="loader-path-1" d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path className="loader-path-2" d="M41.5 21V29.75C41.5 30.825 40.85 32.55 39.4166 33.25L27.75 39.375C26.6666 39.9 25.3333 39.9 24.25 39.375L12.5833 33.25C11.15 32.55 10.5 30.825 10.5 29.75V21" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path className="loader-path-3" d="M47.6667 17.5V26.25" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg><p className="mt-4 text-gray-700">Starting camera...</p></div>;
+                return <div className="flex flex-col items-center justify-center h-full"><LogoIcon className="w-12 h-12 loader-logo" /><p className="mt-4 text-gray-700">Starting camera...</p></div>;
 
             case 'denied':
                 return <div className="flex flex-col items-center justify-center h-full text-center p-4"><ErrorIcon className="w-12 h-12 text-yellow-500 mb-4" /><h3 className="text-xl font-semibold">Camera Access Denied</h3><p className="text-gray-600 mt-2 max-w-sm">{error}</p><button onClick={initializeCamera} className="mt-6 bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-full hover:bg-gray-300 transition-colors">Retry</button></div>;
@@ -631,7 +631,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                         {scannedImage && <img src={scannedImage} alt="Scanned problem" className="w-full h-full object-contain" />}
                         {cameraState === 'analyzing' && (
                             <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center text-gray-900">
-                                <svg className="w-12 h-12 loader-logo" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg"><path className="loader-path-1" d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path className="loader-path-2" d="M41.5 21V29.75C41.5 30.825 40.85 32.55 39.4166 33.25L27.75 39.375C26.6666 39.9 25.3333 39.9 24.25 39.375L12.5833 33.25C11.15 32.55 10.5 30.825 10.5 29.75V21" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path className="loader-path-3" d="M47.6667 17.5V26.25" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                <LogoIcon className="w-12 h-12 loader-logo" />
                                 <p className="mt-4 text-lg font-semibold">Analyzing...</p>
                                 <p className="text-gray-600">This may take a moment.</p>
                             </div>
