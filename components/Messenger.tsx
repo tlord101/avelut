@@ -74,6 +74,7 @@ interface VanTutorInputProps {
   setIsLocked: (locked: boolean) => void;
   recordDuration: number;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
@@ -85,7 +86,8 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
   isLocked,
   setIsLocked,
   recordDuration,
-  onFileSelect
+  onFileSelect,
+  onImageSelect
 }) => {
   const [message, setMessage] = useState("");
   const [showTrashAnimation, setShowTrashAnimation] = useState(false);
@@ -97,6 +99,7 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
   const [isSwiping, setIsSwiping] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -167,6 +170,7 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
 
   return (
     <div className="w-full max-w-[800px] mx-auto relative select-none z-40 px-4">
+      {/* Hidden File Input for General Documents */}
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -174,6 +178,16 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
         className="hidden" 
         multiple 
         accept="*/*"
+      />
+
+      {/* Hidden Image Input Dedicated to Camera Uploads */}
+      <input 
+        type="file"
+        ref={imageInputRef}
+        onChange={onImageSelect}
+        className="hidden"
+        multiple
+        accept="image/*"
       />
 
       {/* Dynamic Slide Lock Track */}
@@ -214,7 +228,7 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
 
             <button 
               type="button" 
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => imageInputRef.current?.click()}
               className="hover:opacity-85 transition active:scale-90 flex items-center justify-center w-9 h-9 ml-1"
             >
               <CameraIcon />
@@ -365,6 +379,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         return () => off(messagesRef);
     }, [activeChat]);
 
+    // ================= MEDIA FILE ATTACHMENT HANDLER =================
+
     const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!activeChat || !e.target.files || e.target.files.length === 0) return;
         
@@ -387,6 +403,30 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             }
         }
     };
+
+    // ================= TARGETED IMAGE/CAMERA UPLOAD PIPELINE =================
+
+    const handleImageSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!activeChat || !e.target.files || e.target.files.length === 0) return;
+
+        const selectedImages = Array.from(e.target.files);
+        for (const img of selectedImages) {
+            try {
+                const cloudPath = `chat_files/${activeChat.chatId}/${Date.now()}_camera_${img.name}`;
+                const fileBucketRef = storageRef(storage, cloudPath);
+                
+                const snapshot = await uploadBytes(fileBucketRef, img);
+                const fileDownloadUrl = await getDownloadURL(snapshot.ref);
+
+                // Instantly pushes formatted image markdown block
+                await sendMsg(`![Captured Image](${fileDownloadUrl})`, 'image');
+            } catch (err) {
+                addToast({ type: 'error', message: "Failed to upload visual layout media." });
+            }
+        }
+    };
+
+    // ================= RECORDING CORE PIPELINE =================
 
     const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
         if (!activeChat) return;
@@ -560,6 +600,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                     setIsLocked={setIsLocked}
                                     recordDuration={recordDuration}
                                     onFileSelect={handleFileSelection}
+                                    onImageSelect={handleImageSelection}
                                 />
                             </div>
                         </div>
