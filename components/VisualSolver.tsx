@@ -722,30 +722,11 @@ Make it visually engaging, well-spaced, and easy to follow!`;
         }
     };
 
-    const diagnostics = {
-        cameraState,
-        error,
-        hasStream: !!streamRef.current,
-        videoReadyState: videoRef.current?.readyState ?? -1,
-        videoWidth: videoRef.current?.videoWidth ?? 0,
-        videoHeight: videoRef.current?.videoHeight ?? 0,
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-    };
-
     return (
         <div className="flex-1 flex flex-col w-full">
             <div className="flex-1 bg-gray-300 rounded-xl border border-gray-200 overflow-hidden relative">
                 <canvas ref={canvasRef} className="hidden"></canvas>
                 {renderContent()}
-                <div className="absolute top-3 right-3 z-50 bg-white/90 backdrop-blur-sm border border-neutral-200 p-3 rounded-md text-xs text-neutral-800 w-72 shadow">
-                    <div className="font-semibold text-sm mb-1">Visual Solver Diagnostics</div>
-                    <div className="flex justify-between"><span className="font-medium">State</span><span>{diagnostics.cameraState}</span></div>
-                    <div className="flex justify-between mt-1"><span className="font-medium">Error</span><span className="break-words max-w-[36ch]">{diagnostics.error || '—'}</span></div>
-                    <div className="flex justify-between mt-1"><span className="font-medium">Has stream</span><span>{diagnostics.hasStream ? 'yes' : 'no'}</span></div>
-                    <div className="flex justify-between mt-1"><span className="font-medium">Video readyState</span><span>{diagnostics.videoReadyState}</span></div>
-                    <div className="flex justify-between mt-1"><span className="font-medium">Video size</span><span>{diagnostics.videoWidth}×{diagnostics.videoHeight}</span></div>
-                    <div className="mt-2 truncate"><span className="font-medium">UA:</span> {diagnostics.userAgent}</div>
-                </div>
             </div>
         </div>
     );
