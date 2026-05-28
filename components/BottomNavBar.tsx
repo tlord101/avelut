@@ -17,9 +17,9 @@ interface BottomNavBarProps {
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items }) => {
   const baseNavItems = [
+    { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
     { id: 'visual_solver', icon: <CameraIcon />, label: 'Solver' },
-    { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
     { id: 'chat', icon: <ChatIcon className="w-7 h-7" />, label: 'Chat' },
     { id: 'messenger', icon: <MessengerIcon className="w-7 h-7" />, label: 'Connect' },
   ];
@@ -36,13 +36,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
   if (!isVisible || activeIndex === -1) {
       return null;
   }
-
-  // Calculate dynamic position classes based on number of items
-  const getPositionClass = (index: number) => {
-    const total = navItems.length;
-    const centerPercent = (index + 0.5) * (100 / total);
-    return `left-[calc(${centerPercent}%-1.75rem)]`;
-  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up bottom-nav">

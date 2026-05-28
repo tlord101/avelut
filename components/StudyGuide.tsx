@@ -1005,15 +1005,26 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             return null;
         }
 
+        const searchTerm = filter.searchTerm.trim().toLowerCase();
+        if (!searchTerm) {
+            return course;
+        }
+
+        const matchesCourse = [course.course_name, course.course_code, course.course_id]
+            .filter(Boolean)
+            .some(value => value!.toLowerCase().includes(searchTerm));
+
         const filteredTopics = course.topics.filter(topic => 
-            topic.topic_name.toLowerCase().includes(filter.searchTerm.toLowerCase())
+            [topic.topic_name, topic.topic_id, topic.topic_context]
+                .filter(Boolean)
+                .some(value => value!.toLowerCase().includes(searchTerm))
         );
 
-        if (filteredTopics.length === 0 && filter.searchTerm) {
+        if (!matchesCourse && filteredTopics.length === 0) {
             return null;
         }
 
-        return { ...course, topics: filteredTopics };
+        return matchesCourse ? course : { ...course, topics: filteredTopics };
     })
     .filter((c): c is Course => c !== null);
 

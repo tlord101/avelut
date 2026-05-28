@@ -577,7 +577,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </section>
 
-          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-40 px-4 sm:px-6 md:static md:bottom-auto`}>
+          <footer className={`fixed inset-x-0 ${MOBILE_COMPOSER_BOTTOM_OFFSET_CLASS} z-40 px-4 sm:px-6 md:static md:bottom-auto transition-all duration-300 ${isSidebarOpen ? 'pointer-events-none translate-y-6 opacity-0 md:pointer-events-auto md:translate-y-0 md:opacity-100' : ''}`}>
             <div className="mx-auto max-w-4xl space-y-3">
               <div className="flex flex-wrap gap-2">
                 {showCategorySuggestions ? (
