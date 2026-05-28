@@ -568,4 +568,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 ) : (
                     <div className="text-center opacity-20">
                         <LogoIcon className="w-32 h-32 mx-auto" />
-                        <h2 className="text-3xl font-
+                        <h2 className="text-3xl font-black italic">VANTUTOR</h2>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
