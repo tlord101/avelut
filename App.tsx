@@ -45,7 +45,7 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 ].map(normalizeRouteSegment));
 
 const resolveActiveItemFromPath = (pathname: string): string => {
-    if (pathname === '/') return 'visual_solver';
+    if (pathname === '/') return 'dashboard';
     if (pathname === '/dashboard') return 'dashboard';
     const rawSegment = pathname.substring(1).split('/')[0];
     if (!rawSegment) return 'visual_solver';
@@ -364,15 +364,54 @@ const App: React.FC = () => {
                 const completedTopicsCount = Object.keys(userProgress)
                     .filter(topicId => userProgress[topicId].is_complete && topicIdsForLevel.has(topicId))
                     .length;
+
+                const topicDurations = Object.entries(userProgress)
+                    .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof progress.study_duration_seconds === 'number' && progress.study_duration_seconds > 0)
+                    .map(([, progress]) => progress.study_duration_seconds || 0);
+
+                const totalStudySeconds = topicDurations.reduce((acc: number, seconds: number) => acc + seconds, 0);
+                const averageTopicStudySeconds = topicDurations.length > 0 ? Math.round(totalStudySeconds / topicDurations.length) : 0;
+
+                const completedCoursesCount = coursesForLevel.filter((course: Course) => {
+                    const topicIds = course.topics?.map(topic => topic.topic_id) || [];
+                    return topicIds.length > 0 && topicIds.every(topicId => userProgress[topicId]?.is_complete);
+                }).length;
+
+                const courseDurations = coursesForLevel
+                    .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + (userProgress[topic.topic_id]?.study_duration_seconds || 0), 0))
+                    .filter((seconds: number) => seconds > 0);
+
+                const averageCourseStudySeconds = courseDurations.length > 0
+                    ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length)
+                    : 0;
                 
                 const examHistoryRef = dbRef(db, `exam_history/${userProfile.uid}`);
                 const examSnapshot = await get(examHistoryRef);
                 const examData = examSnapshot.val() || {};
                 const examHistory = Object.values(examData).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
 
+                const examAverageScore = examHistory.length > 0
+                    ? examHistory.reduce((acc, exam) => acc + ((exam.score / exam.total_questions) * 100), 0) / examHistory.length
+                    : 0;
+                const progressPercent = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
+                const understandingScore = Math.max(0, Math.min(100, Math.round((progressPercent * 0.55) + (examAverageScore * 0.45))));
+                const understandingLabel = understandingScore >= 85
+                    ? 'Excellent'
+                    : understandingScore >= 70
+                        ? 'Strong'
+                        : understandingScore >= 50
+                            ? 'Growing'
+                            : 'Needs focus';
+
                 setDashboardData({ 
                     totalTopics, 
                     completedTopicsCount, 
+                    completedCoursesCount,
+                    totalStudySeconds,
+                    averageTopicStudySeconds,
+                    averageCourseStudySeconds,
+                    understandingScore,
+                    understandingLabel,
                     examHistory: examHistory
                 });
 

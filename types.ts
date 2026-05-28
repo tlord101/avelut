@@ -121,6 +121,12 @@ export interface LeaderboardEntry {
 export interface DashboardData {
     totalTopics: number;
     completedTopicsCount: number;
+  completedCoursesCount: number;
+  totalStudySeconds: number;
+  averageTopicStudySeconds: number;
+  averageCourseStudySeconds: number;
+  understandingScore: number;
+  understandingLabel: string;
     examHistory: ExamHistoryItem[];
 }
 

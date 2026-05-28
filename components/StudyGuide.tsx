@@ -430,6 +430,24 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         }
     };
 
+    const handleMarkTopicComplete = async () => {
+        try {
+            const progressRef = dbRef(db, `user_progress/${userProfile.uid}/${topic.topic_id}`);
+            const currentSnapshot = await get(progressRef);
+            const currentData = currentSnapshot.val() || {};
+
+            await update(progressRef, {
+                is_complete: true,
+                timestamp: Date.now(),
+                study_duration_seconds: currentData.study_duration_seconds || 0,
+                xp_earned: currentData.xp_earned || 0,
+            });
+        } catch (error) {
+            console.error('Failed to mark topic complete:', error);
+            addToast('Could not mark topic complete right now.', 'error');
+        }
+    };
+
     useEffect(() => {
         const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
         
@@ -846,7 +864,7 @@ Student: "${tempInput}"
 };
 
 // --- NEW LEARNING PATH COMPONENTS ---
-const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, index: number, pathColor: string, studyDurationSeconds?: number }> = ({ topic, isCompleted, onSelect, index, pathColor, studyDurationSeconds = 0 }) => {
+const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, onMarkComplete: () => void, index: number, pathColor: string, studyDurationSeconds?: number, isSaving?: boolean }> = ({ topic, isCompleted, onSelect, onMarkComplete, index, pathColor, studyDurationSeconds = 0, isSaving = false }) => {
     const isEven = index % 2 === 0;
     
     return (
@@ -870,6 +888,23 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
                                 <div className="ml-2">
                                     <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-medium">{formatDuration(studyDurationSeconds)}</span>
                                 </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!isCompleted) {
+                                            onMarkComplete();
+                                        }
+                                    }}
+                                    disabled={isCompleted || isSaving}
+                                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${isCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'} disabled:opacity-60`}
+                                    aria-label={isCompleted ? `${topic.topic_name} completed` : `Mark ${topic.topic_name} complete`}
+                                >
+                                    <CheckCircleIcon className="w-4 h-4" />
+                                    {isCompleted ? 'Completed' : isSaving ? 'Saving' : 'Mark complete'}
+                                </button>
                             </div>
                         </div>
                 </div>
@@ -950,6 +985,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string }) | null>(null);
     const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'second', searchTerm: '' });
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
+    const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -1044,6 +1080,32 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         }
         return newSet;
     });
+  };
+
+  const handleMarkTopicComplete = async (course: Course, topic: Topic) => {
+    if (userProgress[topic.topic_id]?.is_complete) return;
+    setIsMarkingTopicId(topic.topic_id);
+    try {
+        const progressRef = dbRef(db, `user_progress/${userProfile.uid}/${topic.topic_id}`);
+        const currentSnapshot = await get(progressRef);
+        const currentData = currentSnapshot.val() || {};
+        await update(progressRef, {
+            is_complete: true,
+            timestamp: Date.now(),
+            study_duration_seconds: currentData.study_duration_seconds || 0,
+            xp_earned: currentData.xp_earned || 0,
+            course_id: course.course_id,
+            course_name: course.course_name,
+            department_id: userProfile.department_id,
+            level: course.level,
+        });
+        addToast(`${topic.topic_name} marked complete.`, 'success');
+    } catch (error) {
+        console.error('Failed to mark topic complete:', error);
+        addToast('Could not mark the topic as complete.', 'error');
+    } finally {
+        setIsMarkingTopicId(null);
+    }
   };
 
   const filteredCourses = courses
@@ -1142,8 +1204,10 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                         isCompleted={userProgress[topic.topic_id]?.is_complete || false}
                                                         studyDurationSeconds={userProgress[topic.topic_id]?.study_duration_seconds || 0}
                                                         onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
+                                                        onMarkComplete={() => void handleMarkTopicComplete(course, topic)}
                                                         index={index}
                                                         pathColor="bg-gray-100"
+                                                        isSaving={isMarkingTopicId === topic.topic_id}
                                                     />
                                                 ))}
                                             </div>
