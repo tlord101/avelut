@@ -149,6 +149,34 @@ const TextChat: React.FC<{
                         textbookDataText += `Course: ${subj}\nSyllabus: ${JSON.stringify(textbooks[subj].syllabus)}\n\n`;
                     });
                 }
+
+                // Additionally, support canonical shared textbook contexts.
+                try {
+                    const deptRef = dbRef(db, `departments_data/${userProfile.department_id}`);
+                    const deptSnap = await get(deptRef);
+                    if (deptSnap.exists()) {
+                        const deptVal = deptSnap.val();
+                        const deptCourses = Array.isArray(deptVal?.course_list) ? deptVal.course_list : [];
+                        const sharedKeys = Array.from(new Set(deptCourses
+                            .map((c: any) => c?.textbook_shared_key)
+                            .filter(Boolean)));
+
+                        for (const key of sharedKeys) {
+                            try {
+                                const sharedRef = dbRef(db, `textbook_contexts/shared/${key}`);
+                                const sharedSnap = await get(sharedRef);
+                                if (sharedSnap.exists()) {
+                                    const sharedVal = sharedSnap.val();
+                                    textbookDataText += `Shared Course (${sharedVal.course_name || key}): \nSyllabus: ${JSON.stringify(sharedVal.syllabus)}\n\n`;
+                                }
+                            } catch (e) {
+                                // ignore per-key fetch errors
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // ignore shared lookup errors
+                }
                 
                 setCourseContext(contextText + textbookDataText);
             } catch (error) {

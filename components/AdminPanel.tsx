@@ -573,6 +573,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [uploadDepartmentId, setUploadDepartmentId] = useState('');
     const [uploadLevel, setUploadLevel] = useState('');
     const [uploadCourseName, setUploadCourseName] = useState('');
+    const [autoSyncToOfferingDepartments, setAutoSyncToOfferingDepartments] = useState(true);
 
     useEffect(() => {
         const pathTab = resolvedPathname.split('/').filter(Boolean)[1];
@@ -1153,8 +1154,23 @@ FORMAT:
         }
         const sourceCourseList = overrideCourseList || coursesList;
         const selectedCourse = sourceCourseList.find(c => c.course_id === courseId || getCourseMergeKey(c) === courseId);
-        const syncDepartmentIds = getUniqueIds(overrideDepartmentIds || [departmentId, ...targetDepartmentIds]);
-        
+        let syncDepartmentIds = getUniqueIds(overrideDepartmentIds || [departmentId, ...targetDepartmentIds]);
+
+        // If auto-sync is enabled and we only have the primary department selected,
+        // expand the sync list to include all departments that offer the same course
+        // (so an upload to one department reflects across departments offering that course).
+        if (autoSyncToOfferingDepartments && syncDepartmentIds.length <= 1) {
+            try {
+                const courseKey = getCourseMergeKey(selectedCourse);
+                const catalogEntry = courseCatalog.find(entry => entry.key === courseKey);
+                if (catalogEntry && Array.isArray(catalogEntry.departmentIds) && catalogEntry.departmentIds.length) {
+                    syncDepartmentIds = getUniqueIds(catalogEntry.departmentIds);
+                }
+            } catch (e) {
+                // fallback to provided syncDepartmentIds
+            }
+        }
+
         const primaryDepartmentId = syncDepartmentIds[0] || departmentId;
         if (!files.length || !primaryDepartmentId || !selectedCourse || !syncDepartmentIds.length) {
             addToast("Missing file or course information", "error");
@@ -1256,36 +1272,53 @@ FORMAT:
             // 3. Save textbook context + course updates to every selected department
             let primaryDepartmentCourses: Course[] | null = null;
 
+            // Create a canonical shared textbook entry keyed by the course merge key.
+            const courseKey = getCourseMergeKey(selectedCourse) || normalizeTopicId(course_name || selectedCourse.course_id || `${Date.now()}`);
+            const sharedTextbookRef = dbRef(db, `textbook_contexts/shared/${courseKey}`);
+
+            // Merge any existing shared context with newly extracted syllabus and pdfs
+            const sharedSnapshot = await get(sharedTextbookRef);
+            const existingShared = sharedSnapshot.exists() ? sharedSnapshot.val() : {};
+            const existingSharedPdfUrls: string[] = Array.isArray(existingShared?.pdf_urls) ? existingShared.pdf_urls.filter(Boolean) : [];
+            if (existingShared?.pdf_url && !existingSharedPdfUrls.includes(existingShared.pdf_url)) {
+                existingSharedPdfUrls.push(existingShared.pdf_url);
+            }
+            const mergedSharedPdfUrls = Array.from(new Set([...existingSharedPdfUrls, ...uploadedUrls]));
+            const mergedSharedSyllabus = mergeTopics(
+                Array.isArray(existingShared?.syllabus) ? existingShared.syllabus : [],
+                extractedTopicGroups.flat()
+            );
+            const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingShared?.pdf_url, mergedSharedPdfUrls);
+
+            // Write canonical shared textbook data
+            await set(sharedTextbookRef, {
+                pdf_url: primaryPdfUrl,
+                pdf_urls: mergedSharedPdfUrls,
+                syllabus: mergedSharedSyllabus,
+                uploaded_at: Date.now(),
+                course_key: courseKey,
+                course_name: course_name,
+                level: level,
+            });
+
+            // Update each target department to reference the shared textbook instead of copying content
             for (const targetDepartmentId of syncDepartmentIds) {
-                const textbookContextRef = dbRef(db, `textbook_contexts/${targetDepartmentId}/${level}/${course_name}`);
-                const textbookContextSnapshot = await get(textbookContextRef);
-                const existingContext = textbookContextSnapshot.exists() ? textbookContextSnapshot.val() : {};
-
-                const existingPdfUrls: string[] = Array.isArray(existingContext?.pdf_urls) ? existingContext.pdf_urls.filter(Boolean) : [];
-                if (existingContext?.pdf_url && !existingPdfUrls.includes(existingContext.pdf_url)) {
-                    existingPdfUrls.push(existingContext.pdf_url);
-                }
-                const mergedPdfUrls = Array.from(new Set([...existingPdfUrls, ...uploadedUrls]));
-                const mergedSyllabus = mergeTopics(
-                    Array.isArray(existingContext?.syllabus) ? existingContext.syllabus : [],
-                    extractedTopicGroups.flat()
-                );
-                const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingContext?.pdf_url, mergedPdfUrls);
-
-                await set(textbookContextRef, {
-                    pdf_url: primaryPdfUrl,
-                    pdf_urls: mergedPdfUrls,
-                    syllabus: mergedSyllabus,
-                    uploaded_at: Date.now()
-                });
-
                 const departmentRef = dbRef(db, `departments_data/${targetDepartmentId}`);
                 const departmentSnapshot = await get(departmentRef);
                 const existingDepartmentCourses = normalizeCourseList(departmentSnapshot.val()?.course_list);
 
                 const isPrimaryDepartmentTarget = targetDepartmentId === primaryDepartmentId;
                 const coursesForTargetDepartment = isPrimaryDepartmentTarget ? sourceCourseList : existingDepartmentCourses;
-                const updatedCourseList = upsertCourseInList(coursesForTargetDepartment, selectedCourse, mergedSyllabus, uploadedUrls);
+
+                // Ensure the course entry carries a reference to the shared textbook
+                const courseWithSharedRef = {
+                    ...selectedCourse,
+                    textbook_shared_key: courseKey,
+                    textbook_urls: mergedSharedPdfUrls,
+                    textbook_url: primaryPdfUrl,
+                };
+
+                const updatedCourseList = upsertCourseInList(coursesForTargetDepartment, courseWithSharedRef, mergedSharedSyllabus, mergedSharedPdfUrls);
 
                 await update(departmentRef, {
                     course_list: updatedCourseList
@@ -2025,6 +2058,16 @@ FORMAT:
                                                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
                                             />
                                             <p className="text-xs text-gray-500">You can select and upload multiple PDF textbooks at once.</p>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <input
+                                                    id="auto-sync-textbooks"
+                                                    type="checkbox"
+                                                    checked={autoSyncToOfferingDepartments}
+                                                    onChange={e => setAutoSyncToOfferingDepartments(e.target.checked)}
+                                                    className="h-4 w-4"
+                                                />
+                                                <label htmlFor="auto-sync-textbooks" className="text-sm text-gray-600">Auto-sync to departments offering this course</label>
+                                            </div>
                                             <button
                                                 disabled={!courseDetailFiles.length || isUploading}
                                                 onClick={async () => {

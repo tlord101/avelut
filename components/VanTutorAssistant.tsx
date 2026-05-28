@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { onValue, push, ref as dbRef, serverTimestamp, set, update } from 'firebase/database';
+import { onValue, push, ref as dbRef, serverTimestamp, set, update, remove } from 'firebase/database';
 import 'katex/dist/katex.min.css';
 import { db } from '../firebase';
 import type { UserProfile } from '../types';
@@ -12,6 +12,7 @@ import { ChatIcon } from './icons/ChatIcon';
 import { SendIcon } from './icons/SendIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { XIcon } from './icons/XIcon';
+import { TrashIcon } from './icons/TrashIcon';
 import { PromptInput, PromptInputActions, PromptInputTextarea } from './prompt-kit/prompt-input';
 
 type AssistantSender = 'user' | 'assistant';
@@ -402,19 +403,44 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
               </div>
             ) : (
               history.map(item => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveHistoryId(item.id);
-                    setIsSidebarOpen(false);
-                    setStatusText(`Opened ${item.title}.`);
-                  }}
-                  className={`block w-full rounded-2xl border px-4 py-3 text-left transition ${activeHistoryId === item.id ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'}`}
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Recent chat</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{item.title}</p>
-                </button>
+                  <div key={item.id} className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveHistoryId(item.id);
+                        setIsSidebarOpen(false);
+                        setStatusText(`Opened ${item.title}.`);
+                      }}
+                      className={`flex-1 text-left rounded-2xl border px-4 py-3 transition ${activeHistoryId === item.id ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'}`}
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Recent chat</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">{item.title}</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete "${item.title}" from assistant history?`)) return;
+                        try {
+                          await remove(dbRef(db, `chat_conversations/${userProfile.uid}/${item.id}`));
+                          await remove(dbRef(db, `chat_messages/${item.id}`));
+                          // Clear local selection if it was the active one
+                          if (activeHistoryId === item.id) {
+                            setActiveHistoryId(null);
+                            setMessages([]);
+                          }
+                          setStatusText(`Deleted ${item.title}.`);
+                        } catch (err) {
+                          console.error('Failed to delete history item:', err);
+                          setStatusText('Could not delete chat.');
+                        }
+                      }}
+                      className="p-2 rounded-full text-red-600 hover:bg-red-50"
+                      aria-label={`Delete ${item.title}`}
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
               ))
             )}
           </div>

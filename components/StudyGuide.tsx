@@ -139,6 +139,21 @@ const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = '')
     } as Course;
 };
 
+const sanitizeTopicMetadata = (topic: any, index: number) => {
+    const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
+    const rawTopicId = (topic?.topic_id || '').toString().trim();
+    return {
+        topic_name: topicName,
+        topic_id: rawTopicId || normalizeTopicId(topicName),
+        topic_context: (topic?.topic_context || topic?.context || '').toString().trim(),
+        start_point: (topic?.start_point || topic?.start || '').toString().trim(),
+        end_point: (topic?.end_point || topic?.end || '').toString().trim(),
+        is_complete: Boolean(topic?.is_complete),
+    } as Topic;
+};
+
+const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+
 const extractCoursesFromDepartmentData = (departmentData: any): Course[] => {
     if (!departmentData || typeof departmentData !== 'object') return [];
 
@@ -933,7 +948,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string }) | null>(null);
-  const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'all', searchTerm: '' });
+    const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'second', searchTerm: '' });
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
   const { addToast } = useToast();
 
@@ -976,7 +991,39 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             normalizeLevelValue(course.level) === normalizedUserLevel
         ));
 
-        setCourses(coursesForLevel);
+        // Enrich each course with syllabus/topics from shared canonical path if available
+        const enrichedCourses: Course[] = [];
+        for (const course of coursesForLevel) {
+            try {
+                if (course.textbook_shared_key) {
+                    const sharedRef = dbRef(db, `textbook_contexts/shared/${course.textbook_shared_key}`);
+                    const sharedSnap = await get(sharedRef);
+                    if (sharedSnap.exists()) {
+                        const sharedVal = sharedSnap.val();
+                        const syllabus = Array.isArray(sharedVal.syllabus) ? sharedVal.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
+                        enrichedCourses.push({ ...course, topics: syllabus });
+                        continue;
+                    }
+                }
+
+                // Fallback: per-department textbook context
+                const perDeptRef = dbRef(db, `textbook_contexts/${userProfile.department_id}/${course.level}/${course.course_name}`);
+                const perDeptSnap = await get(perDeptRef);
+                if (perDeptSnap.exists()) {
+                    const val = perDeptSnap.val();
+                    const syllabus = Array.isArray(val.syllabus) ? val.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
+                    enrichedCourses.push({ ...course, topics: syllabus });
+                    continue;
+                }
+
+                enrichedCourses.push(course);
+            } catch (e) {
+                console.error('Error enriching course with textbook syllabus:', e);
+                enrichedCourses.push(course);
+            }
+        }
+
+        setCourses(enrichedCourses);
       } catch (err) {
         console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');

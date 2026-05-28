@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migrate:shared-textbooks": "node scripts/migrate_textbooks_to_shared.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
