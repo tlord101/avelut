@@ -23,12 +23,26 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
     const [chats, setChats] = useState<any[]>([]);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+    const [messages, setMessages] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [tab, setTab] = useState<'chats' | 'people'>('chats');
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [inputText, setInputText] = useState("");
+    const [isRecording, setIsRecording] = useState(false);
+    
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     const { addToast } = useToast();
 
+    // Auto-scroll to the latest message
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    // Handle Authentication monitoring
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, user => { 
             setFirebaseUser(user); 
@@ -37,6 +51,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         return unsub;
     }, []);
 
+    // Load users list
     useEffect(() => {
         const usersRef = dbRef(db, 'users');
         onValue(usersRef, (snap) => {
@@ -52,6 +67,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         });
     }, []);
 
+    // Load user chats summaries
     useEffect(() => {
         if (!firebaseUser) return;
         const userChatsRef = dbRef(db, `user_chats/${firebaseUser.uid}`);
@@ -65,6 +81,67 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         });
     }, [firebaseUser, allUsers]);
 
+    // REALTIME LISTENER: Load actual chat messages when activeChat changes
+    useEffect(() => {
+        if (!activeChat) {
+            setMessages([]);
+            return;
+        }
+
+        const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
+        onValue(messagesRef, (snap) => {
+            const data = snap.val() || {};
+            const parsedMessages = Object.entries(data).map(([id, msg]: any) => ({
+                id,
+                ...msg
+            })).sort((a, b) => a.timestamp - b.timestamp);
+            setMessages(parsedMessages);
+        });
+
+        return () => off(messagesRef);
+    }, [activeChat]);
+
+    // Send functional text message
+    const handleSendMessage = async () => {
+        if (!inputText.trim() || !firebaseUser || !activeChat) return;
+
+        const messageText = inputText.trim();
+        setInputText(""); // instantly clear input for UI snappiness
+
+        try {
+            const chatMessagesRef = dbRef(db, `messages/${activeChat.chatId}`);
+            const newMessageRef = push(chatMessagesRef);
+            
+            const messageData = {
+                senderId: firebaseUser.uid,
+                text: messageText,
+                type: 'text',
+                timestamp: firebaseServerTimestamp()
+            };
+
+            // Post message node
+            await set(newMessageRef, messageData);
+
+            // Update user chat meta indexes with the preview snippet
+            const updates: any = {};
+            updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/last_message`] = { text: messageText };
+            updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/timestamp`] = firebaseServerTimestamp();
+            updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/last_message`] = { text: messageText };
+            updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/timestamp`] = firebaseServerTimestamp();
+            
+            await update(dbRef(db), updates);
+        } catch (error) {
+            addToast({ type: 'error', message: 'Failed to send message.' });
+        }
+    };
+
+    // Voice recording events
+    const handleVoiceStart = () => setIsRecording(true);
+    const handleVoiceStop = () => {
+        setIsRecording(false);
+        // Implement your actual mic recording audio blobs -> Firebase Storage logic here if needed!
+    };
+
     const handleStartChat = (other: UserProfile) => {
         if (!firebaseUser) return;
         const chatId = [firebaseUser.uid, other.uid].sort().join('_');
@@ -75,7 +152,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         update(dbRef(db), updates);
     };
 
-    if (isLoading) return <div className="p-10 text-center">Loading Messenger...</div>;
+    if (isLoading) return <div className="p-10 text-center text-slate-500">Loading Messenger...</div>;
     if (!firebaseUser) return <div className="p-10 text-center">Please login to access chats.</div>;
 
     return (
@@ -143,26 +220,71 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         </div>
 
-                        {/* Scrollable Messages Area */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-36">
-                             <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] text-sm">
-                                Welcome to the chat!
-                            </div>
+                        {/* Functional Scrollable Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-48">
+                            {messages.length === 0 ? (
+                                <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl shadow-sm max-w-[250px] mx-auto text-center text-xs text-slate-500 font-medium">
+                                    No messages yet. Say hello!
+                                </div>
+                            ) : (
+                                messages.map((msg) => {
+                                    const isMe = msg.senderId === firebaseUser.uid;
+                                    return (
+                                        <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`p-3 text-sm max-w-[75%] shadow-sm rounded-2xl
+                                                ${isMe 
+                                                    ? 'bg-emerald-500 text-white rounded-tr-none' 
+                                                    : 'bg-white text-slate-800 rounded-tl-none'
+                                                }`}
+                                            >
+                                                <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                            <div ref={messagesEndRef} />
                         </div>
 
-                        {/* Fixed Floating Input Bar - Pushed to bottom-[85px] to sit right above the bottom nav */}
-                        <div className="absolute bottom-[85px] left-0 right-0 z-20 px-4 pointer-events-none">
+                        {/* Guided Animation Overlay */}
+                        {isRecording && (
+                            <div className="absolute bottom-[180px] right-8 flex flex-col items-center gap-2 z-50 pointer-events-none">
+                                <div className="animate-bounce flex flex-col items-center text-rose-500">
+                                    <span className="text-lg font-bold">↑</span>
+                                    <span className="text-[10px] uppercase font-black bg-white px-2 py-1 rounded shadow-sm">Slide up to lock</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Fixed Floating Input Bar - bottom-[120px] */}
+                        <div className="absolute bottom-[120px] left-0 right-0 z-20 px-4 pointer-events-none">
                             <div className="max-w-[800px] mx-auto flex items-end gap-2 p-2 bg-transparent pointer-events-auto">
-                                <div className="flex-1 bg-white rounded-[24px] flex items-end p-2 px-4 shadow-lg border border-slate-200 transition-all focus-within:ring-2 focus-within:ring-emerald-100">
+                                <div className={`flex-1 bg-white rounded-[24px] flex items-end p-2 px-4 shadow-lg border border-slate-200 transition-all ${isRecording ? 'border-rose-300 ring-2 ring-rose-50' : 'focus-within:ring-2 focus-within:ring-emerald-100'}`}>
                                     <textarea 
                                         rows={1}
-                                        value={inputText}
+                                        value={isRecording ? "Recording audio..." : inputText}
                                         onChange={(e) => setInputText(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                handleSendMessage();
+                                            }
+                                        }}
+                                        readOnly={isRecording}
                                         placeholder="Type a message"
-                                        className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 max-h-32"
+                                        className={`flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 max-h-32 ${isRecording ? 'text-rose-500 italic' : ''}`}
                                     />
                                 </div>
-                                <button className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:bg-emerald-600 shrink-0">
+                                <button 
+                                    onClick={inputText.trim() ? handleSendMessage : undefined}
+                                    onMouseDown={inputText.trim() ? undefined : handleVoiceStart}
+                                    onMouseUp={inputText.trim() ? undefined : handleVoiceStop}
+                                    onTouchStart={inputText.trim() ? undefined : handleVoiceStart}
+                                    onTouchEnd={inputText.trim() ? undefined : handleVoiceStop}
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all duration-200 shrink-0 text-white
+                                        ${inputText.trim() ? 'bg-emerald-500 hover:bg-emerald-600' : isRecording ? 'bg-rose-500 scale-125' : 'bg-emerald-500'}
+                                    `}
+                                >
                                     {inputText.trim() ? <SendIcon /> : <VoiceIcon />}
                                 </button>
                             </div>
