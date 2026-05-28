@@ -46,7 +46,11 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'leaderboard':
             return <Leaderboard userProfile={userProfile} />;
         case 'visual_solver':
-            return <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />;
+            return (
+                <ErrorBoundary>
+                    <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />
+                </ErrorBoundary>
+            );
         case 'exam':
             return <Exam userProfile={userProfile} userProgress={userProgress} />;
         case 'settings':

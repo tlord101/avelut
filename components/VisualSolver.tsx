@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import ReactMarkdown from 'react-markdown';
@@ -10,11 +9,22 @@ import { useToast } from '../hooks/useToast';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 
 // Safely check for Vite's meta environment setup
-const apiKey = typeof window !== 'undefined' && (import.meta as any).env 
-    ? (import.meta as any).env.VITE_API_KEY 
+const apiKey = typeof window !== 'undefined' && (import.meta as any).env
+    ? (import.meta as any).env.VITE_API_KEY
     : null;
 
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+async function getAIClient() {
+    if (!apiKey) return null;
+    try {
+        const mod = await import('@google/genai');
+        const GoogleGenAI = (mod as any).GoogleGenAI || (mod as any).default;
+        if (!GoogleGenAI) return null;
+        return new GoogleGenAI({ apiKey });
+    } catch (e) {
+        console.error('Failed to load Google GenAI client:', e);
+        return null;
+    }
+}
 
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
@@ -424,7 +434,9 @@ $$
 
 Make it visually engaging, well-spaced, and easy to follow!`;
 
-            const result = await ai.models.generateContent({
+            const aiClient = await getAIClient();
+            if (!aiClient) throw new Error('AI client not available');
+            const result = await aiClient.models.generateContent({
                 model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
@@ -456,7 +468,9 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const result = await ai.models.generateContent({
+            const aiClient = await getAIClient();
+            if (!aiClient) throw new Error('AI client not available');
+            const result = await aiClient.models.generateContent({
                 model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
@@ -488,7 +502,9 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const result = await ai.models.generateContent({
+            const aiClient = await getAIClient();
+            if (!aiClient) throw new Error('AI client not available');
+            const result = await aiClient.models.generateContent({
                 model: 'gemini-3.5-flash',
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
