@@ -83,6 +83,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
     const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
     const [dismissed, setDismissed] = useState(false);
     const [isPopupOpen, setIsPopupOpen] = useState(false);
+    const canTriggerNativeInstall = !!deferredPrompt;
 
     if (isStandalone || dismissed) return null;
 
@@ -102,11 +103,17 @@ const PWAInstallBannerOverlay: React.FC = () => {
         <>
             <button
                 type="button"
-                onClick={() => setIsPopupOpen(true)}
+                onClick={() => {
+                    if (canTriggerNativeInstall) {
+                        executeInstallationPipeline();
+                        return;
+                    }
+                    setIsPopupOpen(true);
+                }}
                 className="fixed bottom-5 right-5 z-[99998] inline-flex items-center gap-3 rounded-full bg-brand-500 px-4 py-3 text-off-white shadow-2xl shadow-brand-900/20 transition-transform hover:scale-[1.03] active:scale-95"
                 aria-haspopup="dialog"
                 aria-expanded={isPopupOpen}
-                aria-label="Open install app popup"
+                aria-label={canTriggerNativeInstall ? 'Install app' : 'Open install app popup'}
             >
                 <span className="absolute -top-2 -right-2 inline-flex items-center rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900 shadow-lg ring-2 ring-brand-500">
                     Install
@@ -140,7 +147,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    if (deferredPrompt) {
+                                    if (canTriggerNativeInstall) {
                                         executeInstallationPipeline();
                                         setIsPopupOpen(false);
                                         return;
@@ -152,7 +159,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                                 }}
                                 className="w-full rounded-2xl bg-brand-500 px-4 py-3 font-bold text-off-white transition hover:bg-brand-600"
                             >
-                                {deferredPrompt ? 'Install Now' : isIOS ? 'Follow iPhone Steps' : 'Check Browser Menu'}
+                                {canTriggerNativeInstall ? 'Install Now' : isIOS ? 'Follow iPhone Steps' : 'View Install Steps'}
                             </button>
                             <button
                                 type="button"
