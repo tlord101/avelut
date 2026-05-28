@@ -139,7 +139,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const handleVoiceStart = () => setIsRecording(true);
     const handleVoiceStop = () => {
         setIsRecording(false);
-        // Implement your actual mic recording audio blobs -> Firebase Storage logic here if needed!
     };
 
     const handleStartChat = (other: UserProfile) => {
@@ -156,9 +155,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     if (!firebaseUser) return <div className="p-10 text-center">Please login to access chats.</div>;
 
     return (
-        <div className="flex h-[calc(100vh-73px)] w-full overflow-hidden bg-white">
+        /* Changed h-[calc(100vh-73px)] to h-[calc(100dvh-73px)] to stay locked during viewport resizing */
+        <div className="flex h-[calc(100dvh-73px)] w-full overflow-hidden bg-white">
             {/* Sidebar */}
-            <div className={`w-full lg:w-[380px] border-r border-slate-200 flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'}`}>
+            <div className={`w-full lg:w-[380px] border-r border-slate-200 flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'} h-full`}>
                 <div className="p-4 border-b border-slate-100 bg-white">
                     <div className="flex justify-between items-center mb-4">
                         <h1 className="text-xl font-bold text-slate-800">Messages</h1>
@@ -207,7 +207,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             </div>
 
             {/* Chat Pane */}
-            <div className={`flex-1 flex flex-col bg-[#efeae2] relative ${!activeChat ? 'hidden lg:flex items-center justify-center' : 'flex'}`}>
+            {/* Added 'h-full max-h-full' to prevent layout changes from shifting headers when keyboards pull up */}
+            <div className={`flex-1 flex flex-col h-full max-h-full bg-[#efeae2] relative ${!activeChat ? 'hidden lg:flex items-center justify-center' : 'flex'}`}>
                 {activeChat ? (
                     <>
                         {/* Fixed Chat Header */}
@@ -221,7 +222,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                         </div>
 
                         {/* Functional Scrollable Messages Area */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-48">
+                        {/* Adjusted padding to pb-52 to keep messages from getting caught behind the high input bar */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-52">
                             {messages.length === 0 ? (
                                 <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl shadow-sm max-w-[250px] mx-auto text-center text-xs text-slate-500 font-medium">
                                     No messages yet. Say hello!
@@ -248,7 +250,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
                         {/* Guided Animation Overlay */}
                         {isRecording && (
-                            <div className="absolute bottom-[180px] right-8 flex flex-col items-center gap-2 z-50 pointer-events-none">
+                            <div className="absolute bottom-[185px] right-8 flex flex-col items-center gap-2 z-50 pointer-events-none">
                                 <div className="animate-bounce flex flex-col items-center text-rose-500">
                                     <span className="text-lg font-bold">↑</span>
                                     <span className="text-[10px] uppercase font-black bg-white px-2 py-1 rounded shadow-sm">Slide up to lock</span>
@@ -256,7 +258,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         )}
 
-                        {/* Fixed Floating Input Bar - bottom-[120px] */}
+                        {/* Fixed Floating Input Bar - shifted to bottom-[120px] */}
                         <div className="absolute bottom-[120px] left-0 right-0 z-20 px-4 pointer-events-none">
                             <div className="max-w-[800px] mx-auto flex items-end gap-2 p-2 bg-transparent pointer-events-auto">
                                 <div className={`flex-1 bg-white rounded-[24px] flex items-end p-2 px-4 shadow-lg border border-slate-200 transition-all ${isRecording ? 'border-rose-300 ring-2 ring-rose-50' : 'focus-within:ring-2 focus-within:ring-emerald-100'}`}>
