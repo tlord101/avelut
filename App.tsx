@@ -25,18 +25,137 @@ declare var __app_id: string;
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
+// =========================================================================
+// CUSTOM VANTUTOR PWA LOGO (FLAT OUTLINE VECTOR DESIGN STYLE)
+// =========================================================================
+const VanTutorLogoIcon: React.FC<{ className?: string }> = ({ className = "w-24 h-24" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Interconnected Knowledge Network Base */}
+    <path d="M12 44C20 48 44 48 52 44" stroke="#25d366" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M22 47V53C22 55.5 25 57 32 57C39 57 42 55.5 42 53V47" stroke="#25d366" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    {/* Hanging Graduation Tassel */}
+    <path d="M50 24V36M50 36L47 39M50 36L53 39" stroke="#111b21" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    {/* Main Geometric Vector Cap Diamond */}
+    <path d="M32 9L58 22L32 35L6 22L32 9Z" fill="white" stroke="#111b21" strokeWidth="3" strokeLinejoin="round"/>
+    {/* Core Tech Node Star Intersection */}
+    <circle cx="32" cy="22" r="3" fill="#25d366" stroke="#111b21" strokeWidth="2"/>
+    <path d="M32 15V19M32 25V29M25 22H29M35 22H39" stroke="#111b21" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
 const AppLoader: React.FC = () => {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100" role="status" aria-label="Loading application">
-      <svg className="w-24 h-24 loader-logo" viewBox="0 0 52 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path className="loader-path-1" d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path className="loader-path-2" d="M41.5 21V29.75C41.5 30.825 40.85 32.55 39.4166 33.25L27.75 39.375C26.6666 39.9 25.3333 39.9 24.25 39.375L12.5833 33.25C11.15 32.55 10.5 30.825 10.5 29.75V21" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path className="loader-path-3" d="M47.6667 17.5V26.25" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50" role="status" aria-label="Loading Vantutor application">
+      <div className="animate-bounce">
+        <VanTutorLogoIcon className="w-28 h-28" />
+      </div>
+      <h2 className="text-sm font-bold tracking-widest text-neutral-400 mt-4 uppercase animate-pulse">Vantutor Loading</h2>
     </div>
   );
 };
 
+// =========================================================================
+// HIGH ACCURACY PWA AUTO-INSTALL HOOK & INTERFACE COMPONENT
+// =========================================================================
+const usePWAInstallEngine = () => {
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [isIOS, setIsIOS] = useState(false);
+    const [isStandalone, setIsStandalone] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // Check if application environment is running standalone already
+        const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches 
+            || (window.navigator as any).standalone === true;
+        setIsStandalone(isAppStandalone);
+
+        // Track Apple hardware environment profiles
+        const userAgent = window.navigator.userAgent.toLowerCase();
+        const isAppleDevice = /iphone|ipad|ipod/.test(userAgent);
+        setIsIOS(isAppleDevice);
+
+        const handlePromptCapture = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+
+        window.addEventListener('beforeinstallprompt', handlePromptCapture);
+        return () => window.removeEventListener('beforeinstallprompt', handlePromptCapture);
+    }, []);
+
+    const executeInstallationPipeline = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+        }
+    };
+
+    return { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline };
+};
+
+const PWAInstallBannerOverlay: React.FC = () => {
+    const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
+    const [dismissed, setDismissed] = useState(false);
+
+    if (isStandalone || dismissed) return null;
+
+    // Standard Android / Chromium automatic engine trigger prompt screen
+    if (deferredPrompt) {
+        return (
+            <div className="fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                <div className="mb-6 p-4 bg-neutral-50 rounded-full shadow-inner border border-neutral-100">
+                    <VanTutorLogoIcon className="w-24 h-24" />
+                </div>
+                <h2 className="text-2xl font-black text-[#111b21] mb-2 tracking-tight">Install VANTUTOR Application</h2>
+                <p className="text-sm text-neutral-500 max-w-sm mb-8 leading-relaxed">
+                    Install Vantutor directly onto your device to unlock lightning-fast private message sync, persistence tracking, and fluid dashboard interactions.
+                </p>
+                <div className="w-full max-w-xs flex flex-col gap-3">
+                    <button 
+                        onClick={executeInstallationPipeline}
+                        className="w-full bg-[#25d366] text-white py-3.5 rounded-xl font-bold text-base shadow-md hover:bg-[#20ba5a] active:scale-98 transition-all"
+                    >
+                        Install App Now
+                    </button>
+                    <button 
+                        onClick={() => setDismissed(true)}
+                        className="w-full bg-neutral-100 text-neutral-500 py-3 rounded-xl font-semibold text-sm hover:bg-neutral-200 transition-colors"
+                    >
+                        Continue via Web Browser
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Manual custom onboarding modal for iOS / Mobile Safari environments
+    if (isIOS) {
+        return (
+            <div className="fixed bottom-4 left-4 right-4 z-[99999] bg-white p-5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] border border-neutral-100 flex flex-col items-center text-center animate-fade-in">
+                <div className="flex items-center gap-3 w-full border-b border-neutral-100 pb-3 mb-3">
+                    <VanTutorLogoIcon className="w-10 h-10 shrink-0" />
+                    <div className="text-left">
+                        <h3 className="font-bold text-[#111b21] text-sm">Add Vantutor to Home Screen</h3>
+                        <p className="text-xs text-neutral-400">Run natively on your iPhone or iPad</p>
+                    </div>
+                    <button onClick={() => setDismissed(true)} className="ml-auto text-neutral-400 text-sm p-1">✕</button>
+                </div>
+                <p className="text-xs text-neutral-500 text-left w-full leading-relaxed">
+                    Tap the native share icon <span className="font-bold text-blue-500">“Share”</span> button below in your Safari panel, then scroll downwards and select <span className="font-bold text-[#111b21]">“Add to Home Screen”</span> to complete setup.
+                </p>
+            </div>
+        );
+    }
+
+    return null;
+};
+
+// ==========================================
+// UTILITY ROUTING PROTOCOLS
+// ==========================================
 const normalizeRouteSegment = (segment: string): string => segment.toLowerCase().replace(/-/g, '_');
 
 const ALLOWED_ROUTE_ITEMS = new Set([
@@ -49,8 +168,7 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 ].map(normalizeRouteSegment));
 
 const resolveActiveItemFromPath = (pathname: string): string => {
-    if (pathname === '/') return 'dashboard';
-    if (pathname === '/dashboard') return 'dashboard';
+    if (pathname === '/' || pathname === '/dashboard') return 'dashboard';
     const rawSegment = pathname.substring(1).split('/')[0];
     if (!rawSegment) return 'visual_solver';
     let decodedSegment = rawSegment;
@@ -78,6 +196,9 @@ const formatDurationForPrompt = (seconds: number): string => {
     return remMinutes ? `${hours} hours ${remMinutes} minutes` : `${hours} hours`;
 };
 
+// ==========================================
+// CORE APP CONTEXT ENGINE INITIALIZATION
+// ==========================================
 const App: React.FC = () => {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -90,8 +211,7 @@ const App: React.FC = () => {
     const [isProfileLoading, setIsProfileLoading] = useState(true);
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
-    
-    // Derived state from URL or internal state for PWA feel
+
     const [activeItem, setActiveItemState] = useState<string>(() => {
         const item = resolveActiveItemFromPath(getWindowPathname());
         return item === 'admin' ? 'admin' : item;
@@ -145,7 +265,6 @@ const App: React.FC = () => {
     });
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    // Breadcrumbs logic based on activeItem
     const currentPageLabel = activeItem === 'messenger' 
         ? 'Messenger' 
         : (navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard');
@@ -156,15 +275,13 @@ const App: React.FC = () => {
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
 
-
     const { addToast } = useToast();
     const tourStatusRef = useRef<'unknown' | 'checked' | 'shown'>('unknown');
-    const presenceRef = useRef<any>(null);
 
     const startTour = useCallback(() => {
-        setActiveItem('dashboard'); // Reset to a known state for the tour
-        setTimeout(() => setIsTourOpen(true), 300); // Small delay to allow UI to settle
-    }, []);
+        setActiveItem('dashboard');
+        setTimeout(() => setIsTourOpen(true), 300);
+    }, [setActiveItem]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
@@ -175,7 +292,6 @@ const App: React.FC = () => {
           }
           setIsLoading(false);
         });
-    
         return () => unsubscribe();
     }, []);
 
@@ -186,30 +302,26 @@ const App: React.FC = () => {
 
     const handleProfileUpdate = useCallback(async (updatedData: Partial<UserProfile>): Promise<{ success: boolean; error?: string }> => {
         if (!user) return { success: false, error: 'User not authenticated.' };
-    
         try {
             const userRef = dbRef(db, `users/${user.uid}`);
             await update(userRef, updatedData);
-
             if (updatedData.display_name || updatedData.photo_url) {
                 const profileUpdates: any = {};
                 if (updatedData.display_name) profileUpdates.displayName = updatedData.display_name;
                 if (updatedData.photo_url) profileUpdates.photoURL = updatedData.photo_url;
                 await updateProfile(user, profileUpdates);
             }
-
             setUserProfile(prevProfile => {
                 if (!prevProfile) return null;
                 return { ...prevProfile, ...updatedData };
             });
-
             return { success: true };
         } catch (err: any) {
             console.error("Error updating profile:", err.message || err);
             return { success: false, error: err.message };
         }
     }, [user]);
-    
+
     const handleConsent = async (granted: boolean) => {
         setShowPrivacyModal(false);
         await handleProfileUpdate({ privacy_consent: { granted, timestamp: Date.now() } });
@@ -221,7 +333,6 @@ const App: React.FC = () => {
             setIsProfileLoading(false);
             return;
         }
-
         setIsProfileLoading(true);
         const userRef = dbRef(db, `users/${user.uid}`);
         
@@ -252,14 +363,11 @@ const App: React.FC = () => {
             setIsProfileLoading(false);
         });
         
-        return () => {
-            off(userRef, 'value', unsubscribeProfile);
-        };
+        return () => { off(userRef, 'value', unsubscribeProfile); };
     }, [user, addToast, startTour]);
 
     useEffect(() => {
         if (!user) return;
-
         const syncAuthIdentityToProfile = async () => {
             try {
                 const userRef = dbRef(db, `users/${user.uid}`);
@@ -271,7 +379,6 @@ const App: React.FC = () => {
                     email: user.email || existingProfile.email || '',
                     photo_url: user.photoURL || existingProfile.photo_url || '',
                 };
-
                 const hasProfileUpdates = Object.entries(nextProfile).some(([key, value]) => existingProfile[key] !== value && value);
                 if (hasProfileUpdates) {
                     await update(userRef, nextProfile);
@@ -280,11 +387,9 @@ const App: React.FC = () => {
                 console.error('Failed to sync auth identity to profile:', error);
             }
         };
-
         syncAuthIdentityToProfile();
     }, [user]);
 
-    // Fetch all users for messenger/presence
     useEffect(() => {
         if (!userProfile) return;
         const usersRef = dbRef(db, 'users');
@@ -296,26 +401,15 @@ const App: React.FC = () => {
         return () => off(usersRef, 'value', unsubscribeAllUsers);
     }, [userProfile]);
 
-    // Setup Presence
     useEffect(() => {
         if (!userProfile || !user) return;
-
         const userStatusRef = dbRef(db, `users/${user.uid}`);
         const connectedRef = dbRef(db, '.info/connected');
 
         const unsubscribeConnected = onValue(connectedRef, (snap) => {
             if (snap.val() === true) {
-                // When I disconnect, update the last seen time
-                onDisconnect(userStatusRef).update({
-                    is_online: false,
-                    last_seen: serverTimestamp()
-                });
-
-                // Set online status
-                update(userStatusRef, {
-                    is_online: true,
-                    last_seen: serverTimestamp()
-                });
+                onDisconnect(userStatusRef).update({ is_online: false, last_seen: serverTimestamp() });
+                update(userStatusRef, { is_online: true, last_seen: serverTimestamp() });
             }
         });
 
@@ -328,7 +422,6 @@ const App: React.FC = () => {
         };
         
         window.addEventListener('visibilitychange', handleVisibilityChange);
-
         return () => {
             window.removeEventListener('visibilitychange', handleVisibilityChange);
             off(connectedRef, 'value', unsubscribeConnected);
@@ -337,23 +430,18 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (!userProfile) return;
-
         const progressRef = dbRef(db, `user_progress/${userProfile.uid}`);
         const unsubscribeProgress = onValue(progressRef, (snapshot) => {
             setUserProgress(snapshot.val() || {});
         });
-
-        return () => {
-            off(progressRef, 'value', unsubscribeProgress);
-        };
-
+        return () => { off(progressRef, 'value', unsubscribeProgress); };
     }, [userProfile]);
 
     useEffect(() => {
         if (!userProfile) {
             setUnreadMessagesCount(0);
             return;
-        };
+        }
         
         const setupDashboardData = async () => {
             try {
@@ -367,22 +455,18 @@ const App: React.FC = () => {
                 ));
                 
                 const totalTopics = coursesForLevel.reduce((acc: number, course: Course) => acc + (course.topics?.length || 0), 0) || 0;
-
                 const topicIdsForLevel = new Set<string>();
+            
                 coursesForLevel.forEach(course => {
-                    course.topics?.forEach(topic => {
-                        topicIdsForLevel.add(topic.topic_id);
-                    });
+                    course.topics?.forEach(topic => { topicIdsForLevel.add(topic.topic_id); });
                 });
 
                 const completedTopicsCount = Object.keys(userProgress)
                     .filter(topicId => userProgress[topicId].is_complete && topicIdsForLevel.has(topicId))
                     .length;
-
                 const topicDurations = Object.entries(userProgress)
                     .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof progress.study_duration_seconds === 'number' && progress.study_duration_seconds > 0)
                     .map(([, progress]) => progress.study_duration_seconds || 0);
-
                 const totalStudySeconds = topicDurations.reduce((acc: number, seconds: number) => acc + seconds, 0);
                 const averageTopicStudySeconds = topicDurations.length > 0 ? Math.round(totalStudySeconds / topicDurations.length) : 0;
 
@@ -390,32 +474,20 @@ const App: React.FC = () => {
                     const topicIds = course.topics?.map(topic => topic.topic_id) || [];
                     return topicIds.length > 0 && topicIds.every(topicId => userProgress[topicId]?.is_complete);
                 }).length;
-
                 const courseDurations = coursesForLevel
                     .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + (userProgress[topic.topic_id]?.study_duration_seconds || 0), 0))
                     .filter((seconds: number) => seconds > 0);
+                const averageCourseStudySeconds = courseDurations.length > 0 ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length) : 0;
 
-                const averageCourseStudySeconds = courseDurations.length > 0
-                    ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length)
-                    : 0;
-                
                 const examHistoryRef = dbRef(db, `exam_history/${userProfile.uid}`);
                 const examSnapshot = await get(examHistoryRef);
                 const examData = examSnapshot.val() || {};
                 const examHistory = Object.values(examData).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
+                const examAverageScore = examHistory.length > 0 ? examHistory.reduce((acc, exam) => acc + ((exam.score / exam.total_questions) * 100), 0) / examHistory.length : 0;
 
-                const examAverageScore = examHistory.length > 0
-                    ? examHistory.reduce((acc, exam) => acc + ((exam.score / exam.total_questions) * 100), 0) / examHistory.length
-                    : 0;
                 const progressPercent = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
                 const understandingScore = Math.max(0, Math.min(100, Math.round((progressPercent * 0.55) + (examAverageScore * 0.45))));
-                const understandingLabel = understandingScore >= 85
-                    ? 'Excellent'
-                    : understandingScore >= 70
-                        ? 'Strong'
-                        : understandingScore >= 50
-                            ? 'Growing'
-                            : 'Needs focus';
+                const understandingLabel = understandingScore >= 85 ? 'Excellent' : understandingScore >= 70 ? 'Strong' : understandingScore >= 50 ? 'Growing' : 'Needs focus';
 
                 setDashboardData({ 
                     totalTopics, 
@@ -437,7 +509,6 @@ const App: React.FC = () => {
                     ],
                     examHistory: examHistory
                 });
-
             } catch (error) {
                 console.error("Error setting up dashboard data:", (error as Error).message || error);
             }
@@ -449,20 +520,16 @@ const App: React.FC = () => {
         const unsubscribeNotifications = onValue(notificationsRef, (snapshot) => {
             const data = snapshot.val() || {};
             const notificationList: NotificationType[] = Object.entries(data).map(([id, n]: [string, any]) => ({
-                id,
-                ...n,
-                timestamp: n.timestamp
+                id, ...n, timestamp: n.timestamp
             })).sort((a,b) => b.timestamp - a.timestamp);
             setNotifications(notificationList.slice(0, 20));
         });
-        
+
         const userChatsRef = dbRef(db, `user_chats/${userProfile.uid}`);
         const unsubscribeUnreadCount = onValue(userChatsRef, (snapshot) => {
             const data = snapshot.val() || {};
             let totalUnread = 0;
-            Object.values(data).forEach((chat: any) => {
-                totalUnread += (chat.unreadCount || 0);
-            });
+            Object.values(data).forEach((chat: any) => { totalUnread += (chat.unreadCount || 0); });
             setUnreadMessagesCount(totalUnread);
         });
 
@@ -470,17 +537,14 @@ const App: React.FC = () => {
         const unsubscribeExamHistory = onValue(examHistoryRef, (snapshot) => {
             const data = snapshot.val() || {};
             const examHistory = Object.values(data).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
-            setDashboardData(prev => {
-                if (!prev) return null;
-                return { ...prev, examHistory };
-            });
+            setDashboardData(prev => prev ? { ...prev, examHistory } : null);
         });
 
         return () => {
             off(notificationsRef, 'value', unsubscribeNotifications);
             off(userChatsRef, 'value', unsubscribeUnreadCount);
             off(examHistoryRef, 'value', unsubscribeExamHistory);
-        }
+        };
     }, [userProfile, userProgress]);
 
     useEffect(() => {
@@ -503,7 +567,6 @@ const App: React.FC = () => {
 
         const generateAssessment = async () => {
             const prompt = `You are assessing a university student's learning progress using only backend-backed facts.
-
 Student: ${userProfile.display_name}
 Department: ${userProfile.department_id}
 Level: ${userProfile.level}
@@ -513,8 +576,7 @@ ${dashboardData.backedFacts.join('\n')}
 
 Recent exam performance: ${dashboardData.examHistory.length > 0 ? dashboardData.examHistory.map((exam) => `${Math.round((exam.score / exam.total_questions) * 100)}%`).join(', ') : 'No exam history yet'}
 
-Write a concise but specific assessment based only on the facts above. Do not invent details. Return valid JSON with keys: summary, strengths, concerns, next_steps, confidence, evidence.
-Keep summary to 2 sentences max.`;
+Write a concise but specific assessment based only on the facts above. Do not invent details. Return valid JSON with keys: summary, strengths, concerns, next_steps, confidence, evidence. Keep summary to 2 sentences max.`;
 
             if (!ai) {
                 const fallbackAssessment: DashboardAssessment = {
@@ -523,18 +585,12 @@ Keep summary to 2 sentences max.`;
                         `Completed ${dashboardData.completedTopicsCount} topics`,
                         `Tracked ${formatDurationForPrompt(dashboardData.totalStudySeconds)} of study time`,
                     ],
-                    concerns: [
-                        'Enable API_KEY to generate a Gemini assessment.',
-                    ],
-                    next_steps: [
-                        'Continue completing topics in the Study Guide.',
-                        'Use exams to improve weak areas.',
-                    ],
+                    concerns: ['Enable API_KEY to generate a Gemini assessment.'],
+                    next_steps: ['Continue completing topics in the Study Guide.', 'Use exams to improve weak areas.'],
                     confidence: 0,
                     evidence: dashboardData.backedFacts,
                     generated_at: Date.now(),
                 };
-
                 setDashboardData(prev => prev ? { ...prev, geminiAssessment: fallbackAssessment } : prev);
                 return;
             }
@@ -559,10 +615,7 @@ Keep summary to 2 sentences max.`;
                         },
                     },
                 });
-
-                if (!response.text) {
-                    throw new Error('Gemini returned an empty assessment.');
-                }
+                if (!response.text) throw new Error('Gemini returned an empty assessment.');
 
                 const parsed = JSON.parse(response.text);
                 const assessment: DashboardAssessment = {
@@ -574,7 +627,6 @@ Keep summary to 2 sentences max.`;
                     evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item: any) => String(item)) : dashboardData.backedFacts,
                     generated_at: Date.now(),
                 };
-
                 setDashboardData(prev => prev ? { ...prev, geminiAssessment: assessment } : prev);
             } catch (error) {
                 console.error('Failed to generate dashboard assessment:', error);
@@ -584,7 +636,6 @@ Keep summary to 2 sentences max.`;
         void generateAssessment();
     }, [userProfile, dashboardData]);
 
-
     const handleLogout = async () => {
         try {
             await firebaseSignOut(firebaseAuth);
@@ -593,13 +644,12 @@ Keep summary to 2 sentences max.`;
             addToast(error.message || "Failed to log out.", "error");
         }
     };
-    
+
     const handleOnboardingComplete = async (profileData: { departmentId: string; level: string }) => {
         if (!user) return;
         const now = Date.now();
         const displayName = user.displayName || 'Learner';
         const photoURL = user.photoURL || '';
-        
         const userProfileData: Omit<UserProfile, 'privacy_consent'> = {
             uid: user.uid,
             display_name: displayName,
@@ -613,7 +663,6 @@ Keep summary to 2 sentences max.`;
             last_seen: now,
             has_completed_tour: false,
         };
-
         try {
             const userRef = dbRef(db, `users/${user.uid}`);
             await update(userRef, userProfileData);
@@ -655,9 +704,7 @@ Keep summary to 2 sentences max.`;
             const data = snapshot.val() || {};
             const updates: any = {};
             Object.keys(data).forEach(id => {
-                if (!data[id].is_read) {
-                    updates[`${id}/is_read`] = true;
-                }
+                if (!data[id].is_read) { updates[`${id}/is_read`] = true; }
             });
             if (Object.keys(updates).length > 0) {
                 await update(notificationsRef, updates);
@@ -670,8 +717,6 @@ Keep summary to 2 sentences max.`;
     };
 
     const handleAccountDeletion = async (): Promise<{ success: boolean; error?: string }> => {
-        // Firebase account deletion is complex on client side (requires recent login)
-        // For simplicity in this migration, we'll just sign out and mark profile as deleted
         try {
             if (user) {
                 await update(dbRef(db, `users/${user.uid}`), { is_deleted: true });
@@ -682,7 +727,7 @@ Keep summary to 2 sentences max.`;
             return { success: false, error: 'User not found.' };
         } catch (error: any) {
             console.error("Error deleting account:", error.message || error);
-            return { success: false, error: error.message || 'An error occurred while deleting your account. This may require a recent login.' };
+            return { success: false, error: error.message || 'An error occurred while deleting your account.' };
         }
     };
     
@@ -695,59 +740,19 @@ Keep summary to 2 sentences max.`;
         }
         setIsTourOpen(false);
     };
-    
-    const isMobile = window.innerWidth < 768;
+
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     const tourSteps: TourStep[] = [
-      {
-        target: 'body',
-        title: '👋 Welcome to VANTUTOR!',
-        content: "Let's take a quick tour of your new learning dashboard.",
-        placement: 'center',
-      },
-      {
-        target: '[data-tour-id="dashboard-content"]',
-        title: '📊 Your Dashboard',
-        content: 'View your progress, streaks, and personalized lessons.',
-        placement: 'bottom',
-      },
-      {
-        target: isMobile ? '[data-tour-id="bottomnav-study_guide"]' : '[data-tour-id="sidebar-study_guide"]',
-        title: '📚 Study Guide',
-        content: 'Explore tutorials and start new lessons anytime.',
-        placement: isMobile ? 'top' : 'right',
-      },
-      {
-        target: isMobile ? '[data-tour-id="bottomnav-visual_solver"]' : '[data-tour-id="sidebar-visual_solver"]',
-        title: '📸 Visual Solver',
-        content: 'Scan any problem and get instant or detailed tutorials.',
-        placement: isMobile ? 'top' : 'right',
-      },
-      {
-        target: isMobile ? '[data-tour-id="bottomnav-messenger"]' : '[data-tour-id="header-messenger"]',
-        title: '🤝 Messenger',
-        content: 'Connect with other learners and chat privately.',
-        placement: isMobile ? 'top' : 'bottom',
-      },
-      ...(isMobile ? [{
-        target: '[data-tour-id="mobile-menu-button"]',
-        title: '⚙️ Main Menu',
-        content: 'Access your settings, help, and logout options from here.',
-        placement: 'bottom' as const,
-      }] : [{
-        target: '[data-tour-id="sidebar-settings"]',
-        title: '⚙️ Settings',
-        content: 'Update your info and view your achievements.',
-        placement: 'top' as const,
-      }]),
-      {
-        target: 'body',
-        title: "🎉 You're all set!",
-        content: 'Enjoy exploring your learning journey. Tap "Finish" to start!',
-        placement: 'center',
-      },
+      { target: 'body', title: '👋 Welcome to VANTUTOR!', content: "Let's take a quick tour of your new learning dashboard.", placement: 'center' },
+      { target: '[data-tour-id="dashboard-content"]', title: '📊 Your Dashboard', content: 'View your progress, streaks, and personalized lessons.', placement: 'bottom' },
+      { target: isMobile ? '[data-tour-id="bottomnav-study_guide"]' : '[data-tour-id="sidebar-study_guide"]', title: '📚 Study Guide', content: 'Explore tutorials and start new lessons anytime.', placement: isMobile ? 'top' : 'right' },
+      { target: isMobile ? '[data-tour-id="bottomnav-visual_solver"]' : '[data-tour-id="sidebar-visual_solver"]', title: '📸 Visual Solver', content: 'Scan any problem and get instant or detailed tutorials.', placement: isMobile ? 'top' : 'right' },
+      { target: isMobile ? '[data-tour-id="bottomnav-messenger"]' : '[data-tour-id="header-messenger"]', title: '🤝 Messenger', content: 'Connect with other learners and chat privately.', placement: isMobile ? 'top' : 'bottom' },
+      ...(isMobile ? [{ target: '[data-tour-id="mobile-menu-button"]', title: '⚙️ Main Menu', content: 'Access your settings, help, and logout options from here.', placement: 'bottom' as const }] : [{ target: '[data-tour-id="sidebar-settings"]', title: '⚙️ Settings', content: 'Update your info and view your achievements.', placement: 'top' as const }]),
+      { target: 'body', title: "🎉 You're all set!", content: 'Enjoy exploring your learning journey. Tap "Finish" to start!', placement: 'center' },
     ];
-    
+
     if (activeItem === 'admin') {
         if (!isAdminAuthenticated) {
             return <AdminLogin onLogin={() => setIsAdminAuthenticated(true)} />;
@@ -766,7 +771,6 @@ Keep summary to 2 sentences max.`;
 
         return (
             <div className="min-h-screen md:h-screen flex flex-col md:flex-row bg-gray-50 overflow-x-hidden md:overflow-hidden">
-                {/* Admin-specific Sidebar */}
                 <Sidebar
                     activeItem="admin"
                     onItemClick={setActiveItem}
@@ -778,7 +782,7 @@ Keep summary to 2 sentences max.`;
                     isMobileSidebarOpen={isMobileSidebarOpen}
                     onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
                     items={adminNavigationItems}
-                    secondaryItems={[]} // Less secondary items for admin
+                    secondaryItems={[]}
                 />
                 
                 <main className="flex-1 flex flex-col min-w-0">
@@ -807,14 +811,12 @@ Keep summary to 2 sentences max.`;
                                 pathname={adminPath}
                                 onNavigate={(path) => {
                                     setAdminPath(path);
-                                    if (typeof window !== 'undefined') {
-                                        window.history.pushState(null, '', path);
-                                    }
+                                    if (typeof window !== 'undefined') { window.history.pushState(null, '', path); }
                                 }}
                             />
                         </ErrorBoundary>
                     </div>
-                        </main>
+                </main>
 
                 <BottomNavBar
                     activeItem="admin"
@@ -841,7 +843,7 @@ Keep summary to 2 sentences max.`;
         return <Onboarding user={user} onOnboardingComplete={handleOnboardingComplete} />;
     }
     
-    if (!userProfile) { // Should be covered by loading, but as a fallback
+    if (!userProfile) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100">
                 <p>An error occurred loading your profile. Please refresh.</p>
@@ -852,7 +854,10 @@ Keep summary to 2 sentences max.`;
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     return (
-        <div className="h-screen flex flex-col md:flex-row bg-off-white text-charcoal font-sans overflow-hidden">
+        <div className="h-screen flex flex-col md:flex-row bg-off-white text-charcoal font-sans overflow-hidden relative">
+            {/* Automatic PWA App Intercept Modal Overlay */}
+            <PWAInstallBannerOverlay />
+
             <Sidebar
                 activeItem={activeItem}
                 onItemClick={setActiveItem}
