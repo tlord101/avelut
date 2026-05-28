@@ -603,22 +603,22 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         </div>
 
-                        {/* Floating Input Wrap Container */}
-                        <div className="absolute bottom-0 left-0 right-0 z-30 pb-4 pt-10 bg-gradient-to-t from-off-white via-off-white/80 to-transparent pointer-events-none">
-                            <div className="pointer-events-auto">
-                                <VanTutorMessageInput 
-                                    onSend={(text) => sendMsg(text, 'text')}
-                                    startRecording={startRecording}
-                                    handleMove={handleMove}
-                                    stopRecording={stopRecording}
-                                    isRecording={isRecording}
-                                    isLocked={isLocked}
-                                    setIsLocked={setIsLocked}
-                                    recordDuration={recordDuration}
-                                    onFileSelect={handleFileSelection}
-                                    onImageSelect={handleImageSelection}
-                                />
-                            </div>
+                        {/* Floating Input Wrap Container (use assistant-style fixed floating bar) */}
+                        <div className="fixed left-0 right-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:left-[320px] md:bottom-6 z-40 pointer-events-none">
+                          <div className="mx-4 md:mx-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pointer-events-auto">
+                            <VanTutorMessageInput 
+                              onSend={(text) => sendMsg(text, 'text')}
+                              startRecording={startRecording}
+                              handleMove={handleMove}
+                              stopRecording={stopRecording}
+                              isRecording={isRecording}
+                              isLocked={isLocked}
+                              setIsLocked={setIsLocked}
+                              recordDuration={recordDuration}
+                              onFileSelect={handleFileSelection}
+                              onImageSelect={handleImageSelection}
+                            />
+                          </div>
                         </div>
 
                     </div>
