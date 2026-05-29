@@ -82,97 +82,116 @@ const usePWAInstallEngine = () => {
 const PWAInstallBannerOverlay: React.FC = () => {
     const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
     const [dismissed, setDismissed] = useState(false);
-    const [isPopupOpen, setIsPopupOpen] = useState(false);
     const canTriggerNativeInstall = !!deferredPrompt;
 
     if (isStandalone || dismissed) return null;
 
-    const popupTitle = deferredPrompt
-        ? 'Install VANTUTOR Application'
-        : isIOS
-            ? 'Add Vantutor to Home Screen'
-            : 'Install VANTUTOR';
-
-    const popupDescription = deferredPrompt
-        ? 'Install the app to get a faster, more native experience on this device.'
-        : isIOS
-            ? 'Use the Safari share menu, then choose Add to Home Screen to install the PWA.'
-            : 'Open the browser menu and choose Install app when your browser offers it.';
-
     return (
-        <>
-            <button
-                type="button"
-                onClick={() => {
-                    if (canTriggerNativeInstall) {
-                        executeInstallationPipeline();
-                        return;
-                    }
-                    setIsPopupOpen(true);
-                }}
-                className="fixed bottom-5 right-5 z-[99998] inline-flex items-center gap-3 rounded-full bg-brand-500 px-4 py-3 text-off-white shadow-2xl shadow-brand-900/20 transition-transform hover:scale-[1.03] active:scale-95"
-                aria-haspopup="dialog"
-                aria-expanded={isPopupOpen}
-                aria-label={canTriggerNativeInstall ? 'Install app' : 'Open install app popup'}
-            >
-                <span className="absolute -top-2 -right-2 inline-flex items-center rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900 shadow-lg ring-2 ring-brand-500">
-                    Install
-                </span>
-                <LogoIcon className="h-6 w-6 loader-logo" />
-                <span className="text-sm font-bold tracking-wide">Install App</span>
-            </button>
+        <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install VANTUTOR">
+            <div className="relative p-4">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ice-blue via-brand-500 to-brand-900" />
 
-            {isPopupOpen && (
-                <div className="fixed inset-0 z-[99999] flex items-end justify-end bg-black/20 p-4 sm:p-6 animate-fade-in" role="dialog" aria-modal="true" aria-label="Install VANTUTOR popup">
-                    <div className="w-full max-w-sm rounded-3xl border border-brand-100 bg-off-white p-5 shadow-[0_24px_80px_rgba(0,45,98,0.22)]">
-                        <div className="flex items-start gap-3">
-                            <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
-                                <LogoIcon className="h-12 w-12 loader-logo" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <h2 className="text-lg font-black tracking-tight text-charcoal">{popupTitle}</h2>
-                                <p className="mt-1 text-sm leading-relaxed text-charcoal/65">{popupDescription}</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsPopupOpen(false)}
-                                className="rounded-full p-1 text-charcoal/45 transition hover:bg-white hover:text-charcoal"
-                                aria-label="Close install popup"
-                            >
-                                ✕
-                            </button>
+                <div className="flex items-start gap-3">
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <LogoIcon className="h-11 w-11 loader-logo" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-base font-black tracking-tight text-charcoal">
+                                {canTriggerNativeInstall ? 'Install VANTUTOR' : isIOS ? 'Add VANTUTOR to iPhone' : 'Install VANTUTOR'}
+                            </h2>
+                            <span className="rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900">
+                                {isIOS ? 'iOS' : 'Android'}
+                            </span>
                         </div>
+                        <p className="mt-1 text-sm leading-relaxed text-charcoal/65">
+                            {canTriggerNativeInstall
+                                ? 'Install the app now for faster access and a native app feel.'
+                                : isIOS
+                                    ? 'Tap Safari’s share menu, then choose Add to Home Screen.'
+                                    : 'Use the browser menu and choose Install app or Add to Home Screen.'}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setDismissed(true)}
+                        className="rounded-full p-1 text-charcoal/45 transition hover:bg-white hover:text-charcoal"
+                        aria-label="Dismiss install tip"
+                    >
+                        ✕
+                    </button>
+                </div>
 
-                        <div className="mt-5 flex flex-col gap-3">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (canTriggerNativeInstall) {
-                                        executeInstallationPipeline();
-                                        setIsPopupOpen(false);
-                                        return;
-                                    }
-                                    if (isIOS) {
-                                        setIsPopupOpen(false);
-                                        return;
-                                    }
-                                }}
-                                className="w-full rounded-2xl bg-brand-500 px-4 py-3 font-bold text-off-white transition hover:bg-brand-600"
-                            >
-                                {canTriggerNativeInstall ? 'Install Now' : isIOS ? 'Follow iPhone Steps' : 'View Install Steps'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setDismissed(true)}
-                                className="w-full rounded-2xl bg-white px-4 py-3 font-semibold text-charcoal/70 transition hover:bg-brand-50"
-                            >
-                                Hide Install Button
-                            </button>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <div className="flex items-center gap-2 text-brand-900">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                                {canTriggerNativeInstall ? (
+                                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 3v12" />
+                                        <path d="M7 8l5-5 5 5" />
+                                        <rect x="4" y="15" width="16" height="6" rx="2" />
+                                    </svg>
+                                ) : (
+                                    <MenuIcon className="h-5 w-5" />
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 1</p>
+                                <p className="text-sm font-bold">{canTriggerNativeInstall ? 'Tap Install' : 'Tap Menu'}</p>
+                            </div>
                         </div>
+                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
+                            {canTriggerNativeInstall
+                                ? 'Choose Install from the browser prompt.'
+                                : isIOS
+                                    ? 'Open Safari’s share menu.'
+                                    : 'Open Chrome’s menu in the top-right corner.'}
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <div className="flex items-center gap-2 text-brand-900">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 3v12" />
+                                    <path d="M7 8l5-5 5 5" />
+                                    <rect x="4" y="15" width="16" height="6" rx="2" />
+                                </svg>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 2</p>
+                                <p className="text-sm font-bold">Add to Home</p>
+                            </div>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
+                            {canTriggerNativeInstall
+                                ? 'The app installs directly to your device.'
+                                : 'Choose Add to Home Screen to save it like an app.'}
+                        </p>
                     </div>
                 </div>
-            )}
-        </>
+
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-500 px-4 py-3 text-off-white">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
+                        <LogoIcon className="h-6 w-6 loader-logo" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-bold leading-tight">Looks and feels like a real app</p>
+                        <p className="text-[11px] text-white/80">Fast launch, home screen access, and a cleaner experience.</p>
+                    </div>
+                    {canTriggerNativeInstall && (
+                        <button
+                            type="button"
+                            onClick={() => executeInstallationPipeline()}
+                            className="ml-auto rounded-full bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-brand-900 transition hover:bg-ice-blue"
+                        >
+                            Install
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 };
 
