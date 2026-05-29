@@ -20,6 +20,7 @@ import GuidedTour, { TourStep } from './components/GuidedTour';
 import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LogoIcon } from './components/icons/LogoIcon';
+import { MenuIcon } from './components/icons/MenuIcon';
 
 declare var __app_id: string;
 
