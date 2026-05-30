@@ -588,7 +588,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 }
             } catch (err) {
                 // Safeguarded catch wrapper from leaking standard error object down state tracking arrays
-                addToast({ type: 'error', message: `Failed to upload asset: ${file.name}` });
+              addToast(`Failed to upload asset: ${file.name}`, 'error');
                 setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
             }
         }
@@ -619,7 +619,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
                 await sendMsg(`![Captured Image](${fileDownloadUrl})`, 'image');
             } catch (err) {
-                addToast({ type: 'error', message: "Failed to upload visual layout media." });
+              addToast('Failed to upload visual layout media.', 'error');
                 setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
             }
         }
@@ -679,7 +679,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             if (timerRef.current) clearInterval(timerRef.current);
             timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
         } catch (err) { 
-            addToast({ type: 'error', message: 'Mic entry parameters rejected.' });
+          addToast('Mic entry parameters rejected.', 'error');
         }
     };
 
