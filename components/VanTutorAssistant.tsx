@@ -43,6 +43,7 @@ interface VanTutorAssistantProps {
 
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
+const LIVE_MODEL = 'gemini-live-2.5-flash-preview';
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
@@ -203,6 +204,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const inputElementRef = useRef<HTMLInputElement>(null);
+  const liveSessionRef = useRef<any | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -525,6 +529,119 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       setInputState(1);
     }
   };
+
+  const handleLiveServerMessage = (msg: any) => {
+    try {
+      // Log for debugging; server message shapes vary between previews
+      console.debug('Live server message:', msg);
+      const serverContent = msg?.serverContent;
+      if (!serverContent) return;
+
+      // Preferred textual content locations
+      const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text;
+      if (text) {
+        const assistantMessage: AssistantMessage = {
+          id: createMessageId(),
+          sender: 'assistant',
+          text: String(text),
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        setStatusText('Live response streaming');
+      }
+    } catch (err) {
+      console.error('Error handling live server message:', err);
+    }
+  };
+
+  const startLiveSession = async () => {
+    if (!ai || !ai.live) {
+      setStatusText('Live API not configured');
+      setInputState(1);
+      return;
+    }
+
+    try {
+      setStatusText('Requesting microphone...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      setStatusText('Connecting to live session...');
+      const session = await ai.live.connect({
+        model: LIVE_MODEL,
+        callbacks: {
+          onopen: () => setStatusText('Live connected'),
+          onmessage: (e: any) => handleLiveServerMessage(e),
+          onerror: (e: any) => { console.error('Live error', e); setStatusText('Live error'); },
+          onclose: () => { setStatusText('Live closed'); },
+        },
+      });
+
+      liveSessionRef.current = session;
+
+      // Start MediaRecorder and stream chunks to the session
+      const options: any = {};
+      let mime = '';
+      if (MediaRecorder.isTypeSupported) {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+        else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+      }
+      if (mime) options.mimeType = mime;
+
+      const recorder = new MediaRecorder(stream as MediaStream, options);
+      mediaRecorderRef.current = recorder;
+
+      recorder.addEventListener('dataavailable', (ev: BlobEvent) => {
+        if (!ev.data || ev.data.size === 0) return;
+        try {
+          liveSessionRef.current?.sendRealtimeInput?.({ audio: ev.data });
+        } catch (err) {
+          console.error('Failed to send realtime input:', err);
+        }
+      });
+
+      recorder.start(250); // emit small chunks frequently
+      setStatusText('Listening...');
+    } catch (err) {
+      console.error('Failed to start live session:', err);
+      setStatusText('Could not start live session');
+      setInputState(1);
+    }
+  };
+
+  const stopLiveSession = async () => {
+    try {
+      // Stop recorder
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      // Signal end of audio stream to server
+      try { liveSessionRef.current?.sendRealtimeInput?.({ audioStreamEnd: true }); } catch (e) { /* ignore */ }
+      // Close session
+      try { liveSessionRef.current?.close?.(); } catch (e) { /* ignore */ }
+      // Stop tracks
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    } catch (err) {
+      console.error('Error while stopping live session:', err);
+    } finally {
+      liveSessionRef.current = null;
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+      setStatusText('Live stopped');
+    }
+  };
+
+  useEffect(() => {
+    // When entering fullscreen live mode, start the session; when leaving, stop it
+    if (inputState === 4) {
+      void startLiveSession();
+    } else {
+      void stopLiveSession();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputState]);
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);

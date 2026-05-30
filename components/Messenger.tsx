@@ -5,8 +5,10 @@ import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+const REACTION_EMOJIS = ['🔥', '😂', '😍', '👏', '😮', '😭', '👍', '❤️'];
 
 // ================= REPLICA ICONS =================
 
@@ -426,6 +428,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const [isRecording, setIsRecording] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [recordDuration, setRecordDuration] = useState(0);
+    const [messageActionTarget, setMessageActionTarget] = useState<{
+      id: string;
+      senderId?: string;
+      text?: string;
+      type?: string;
+      isUploading?: boolean;
+      reactions?: Record<string, string>;
+    } | null>(null);
+    const [messageActionPosition, setMessageActionPosition] = useState<{ x: number; y: number } | null>(null);
     
     const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
 
@@ -434,7 +445,39 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const startYRef = useRef<number>(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messageActionMenuRef = useRef<HTMLDivElement>(null);
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastTapRef = useRef<{ id: string | null; time: number }>({ id: null, time: 0 });
+    const chatRowLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const suppressNextChatOpenRef = useRef(false);
     const { addToast } = useToast();
+
+    const closeMessageActions = () => {
+      setMessageActionTarget(null);
+      setMessageActionPosition(null);
+    };
+
+    useEffect(() => {
+      if (!messageActionTarget) return;
+      const onPointerDown = (event: MouseEvent | TouchEvent) => {
+        if (!messageActionMenuRef.current) return;
+        if (event.target instanceof Node && !messageActionMenuRef.current.contains(event.target)) {
+          closeMessageActions();
+        }
+      };
+      const onEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') closeMessageActions();
+      };
+
+      document.addEventListener('mousedown', onPointerDown);
+      document.addEventListener('touchstart', onPointerDown);
+      document.addEventListener('keydown', onEscape);
+      return () => {
+        document.removeEventListener('mousedown', onPointerDown);
+        document.removeEventListener('touchstart', onPointerDown);
+        document.removeEventListener('keydown', onEscape);
+      };
+    }, [messageActionTarget]);
 
     const filteredPeople = useMemo(() => {
         if (!peopleSearchQuery.trim()) return allUsers;
@@ -556,6 +599,160 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const combinedMessageStream = useMemo(() => {
         return [...messages, ...optimisticMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     }, [messages, optimisticMessages]);
+
+    const updateChatMetaFromLatestMessage = async (chatId: string, otherUserId: string) => {
+      if (!firebaseUser) return;
+
+      const latestSnapshot = await get(dbRef(db, `messages/${chatId}`));
+      let summaryText = 'No messages yet';
+      let latestTimestamp = Date.now();
+
+      if (latestSnapshot.exists()) {
+        const cloudMsgs = Object.entries(latestSnapshot.val() || {}).map(([, msg]: any) => msg);
+        cloudMsgs.sort((a: any, b: any) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0));
+        const lastMessage: any = cloudMsgs[cloudMsgs.length - 1] || {};
+        latestTimestamp = Number(lastMessage?.timestamp || Date.now());
+        if (lastMessage?.type === 'voice') summaryText = '🎵 Voice message';
+        else if (lastMessage?.type === 'image') summaryText = '📷 Image file';
+        else if (lastMessage?.type === 'file') summaryText = '📄 Document file';
+        else summaryText = (lastMessage?.text || 'No messages yet').toString();
+      }
+
+      const updates: any = {};
+      updates[`user_chats/${firebaseUser.uid}/${chatId}/last_message`] = { text: summaryText };
+      updates[`user_chats/${firebaseUser.uid}/${chatId}/timestamp`] = latestTimestamp;
+      updates[`user_chats/${otherUserId}/${chatId}/last_message`] = { text: summaryText };
+      updates[`user_chats/${otherUserId}/${chatId}/timestamp`] = latestTimestamp;
+      await update(dbRef(db), updates);
+    };
+
+    const handleDeleteChatThread = async (chat: any) => {
+      if (!firebaseUser || !chat?.id || !chat?.otherUserId) return;
+      const confirmed = window.confirm(`Delete this chat with ${chat.otherUser?.display_name || 'this user'}?`);
+      if (!confirmed) return;
+
+      try {
+        const updates: any = {};
+        updates[`user_chats/${firebaseUser.uid}/${chat.id}`] = null;
+        updates[`user_chats/${chat.otherUserId}/${chat.id}`] = null;
+        updates[`messages/${chat.id}`] = null;
+        await update(dbRef(db), updates);
+        if (activeChat?.chatId === chat.id) {
+          setActiveChat(null);
+          setMessages([]);
+          setOptimisticMessages([]);
+        }
+        addToast('Chat deleted successfully.', 'success');
+      } catch (error: any) {
+        console.error('Failed to delete chat thread:', error);
+        addToast(error?.message || 'Failed to delete chat.', 'error');
+      }
+    };
+
+    const startChatRowLongPress = (chat: any) => {
+      if (chatRowLongPressTimerRef.current) {
+        clearTimeout(chatRowLongPressTimerRef.current);
+      }
+      chatRowLongPressTimerRef.current = setTimeout(() => {
+        suppressNextChatOpenRef.current = true;
+        void handleDeleteChatThread(chat);
+      }, 520);
+    };
+
+    const clearChatRowLongPress = () => {
+      if (chatRowLongPressTimerRef.current) {
+        clearTimeout(chatRowLongPressTimerRef.current);
+        chatRowLongPressTimerRef.current = null;
+      }
+    };
+
+    const openMessageActions = (msg: any, x: number, y: number) => {
+      if (msg?.isUploading) return;
+      setMessageActionTarget({
+        id: msg.id,
+        senderId: msg.senderId,
+        text: msg.text,
+        type: msg.type,
+        isUploading: msg.isUploading,
+        reactions: msg.reactions || {}
+      });
+      setMessageActionPosition({ x, y });
+    };
+
+    const copyMessageContent = async () => {
+      if (!messageActionTarget) return;
+      const rawText = typeof messageActionTarget.text === 'string' ? messageActionTarget.text : '';
+      const copiedValue = messageActionTarget.type === 'image'
+        ? (rawText.match(/\((.*?)\)/)?.[1] || rawText)
+        : rawText;
+      if (!copiedValue) {
+        addToast('Nothing to copy.', 'info');
+        closeMessageActions();
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(copiedValue);
+        addToast('Message copied.', 'success');
+      } catch (error) {
+        addToast('Copy failed on this device.', 'error');
+      }
+      closeMessageActions();
+    };
+
+    const deleteSelectedMessage = async () => {
+      if (!messageActionTarget || !activeChat || !firebaseUser) return;
+      if (messageActionTarget.senderId !== firebaseUser.uid) {
+        addToast('You can only delete your own messages.', 'info');
+        closeMessageActions();
+        return;
+      }
+
+      try {
+        await remove(dbRef(db, `messages/${activeChat.chatId}/${messageActionTarget.id}`));
+        await updateChatMetaFromLatestMessage(activeChat.chatId, activeChat.otherUser.uid);
+        addToast('Message deleted.', 'success');
+      } catch (error: any) {
+        console.error('Failed to delete message:', error);
+        addToast(error?.message || 'Failed to delete message.', 'error');
+      }
+      closeMessageActions();
+    };
+
+    const reactToMessage = async (emoji: string) => {
+      if (!messageActionTarget || !activeChat || !firebaseUser) return;
+      try {
+        const reactionPath = dbRef(db, `messages/${activeChat.chatId}/${messageActionTarget.id}/reactions/${firebaseUser.uid}`);
+        const currentReaction = messageActionTarget.reactions?.[firebaseUser.uid];
+        if (currentReaction === emoji) {
+          await remove(reactionPath);
+        } else {
+          await set(reactionPath, emoji);
+        }
+      } catch (error: any) {
+        console.error('Failed to react to message:', error);
+        addToast(error?.message || 'Failed to add reaction.', 'error');
+      }
+      closeMessageActions();
+    };
+
+    const quickReactToMessage = async (msg: any, emoji: string) => {
+      if (!activeChat || !firebaseUser || !msg?.id || msg?.isUploading) return;
+      try {
+        const existingReactions = (msg.reactions && typeof msg.reactions === 'object') ? msg.reactions as Record<string, string> : {};
+        const reactionPath = dbRef(db, `messages/${activeChat.chatId}/${msg.id}/reactions/${firebaseUser.uid}`);
+        if (existingReactions[firebaseUser.uid] === emoji) {
+          await remove(reactionPath);
+          addToast('Reaction removed.', 'info');
+        } else {
+          await set(reactionPath, emoji);
+          addToast('Reacted with ❤️', 'success');
+        }
+      } catch (error: any) {
+        console.error('Failed to quick react to message:', error);
+        addToast(error?.message || 'Quick reaction failed.', 'error');
+      }
+    };
 
     const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!activeChat || !e.target.files || e.target.files.length === 0 || !firebaseUser) return;
@@ -755,7 +952,25 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
                 <div className="flex-1 overflow-y-auto bg-white">
                     {tab === 'chats' ? chats.map(c => (
-                        <div key={c.id} onClick={() => setActiveChat({ chatId: c.id, otherUser: c.otherUser })} className={`flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition ${activeChat?.chatId === c.id ? 'bg-[#F8F9FA]' : ''}`}>
+                      <div
+                        key={c.id}
+                        onClick={() => {
+                          if (suppressNextChatOpenRef.current) {
+                            suppressNextChatOpenRef.current = false;
+                            return;
+                          }
+                          setActiveChat({ chatId: c.id, otherUser: c.otherUser });
+                        }}
+                        onTouchStart={() => startChatRowLongPress(c)}
+                        onTouchEnd={clearChatRowLongPress}
+                        onTouchCancel={clearChatRowLongPress}
+                        onTouchMove={clearChatRowLongPress}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          void handleDeleteChatThread(c);
+                        }}
+                        className={`flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition ${activeChat?.chatId === c.id ? 'bg-[#F8F9FA]' : ''}`}
+                      >
                             <Avatar className="w-11 h-11 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={c.otherUser?.photo_url} />
                             <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
@@ -818,6 +1033,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                 // Safe string checks on markdown regex match selectors
                                 const rawText = typeof msg.text === 'string' ? msg.text : '';
                                 const imageUrl = msg.type === 'image' ? (rawText.match(/\((.*?)\)/)?.[1] || rawText) : '';
+                              const reactionMap = (msg.reactions && typeof msg.reactions === 'object') ? msg.reactions as Record<string, string> : {};
+                              const reactionCounts = Object.values(reactionMap).reduce((acc: Record<string, number>, reactionEmoji: string) => {
+                                acc[reactionEmoji] = (acc[reactionEmoji] || 0) + 1;
+                                return acc;
+                              }, {});
+                              const sortedReactions = Object.entries(reactionCounts).sort((a, b) => b[1] - a[1]);
                                 
                                 return (
                                     <div key={msg.id} className="space-y-1">
@@ -830,7 +1051,44 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                 isMe 
                                                     ? 'bg-[#009EE2] text-white rounded-[24px] rounded-tr-[4px]' 
                                                     : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
-                                            }`}>
+                                    }`}
+                                      onContextMenu={(event) => {
+                                        event.preventDefault();
+                                        openMessageActions(msg, event.clientX, event.clientY);
+                                      }}
+                                      onTouchStart={(event) => {
+                                        if (!event.touches[0]) return;
+                                        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                                        const touch = event.touches[0];
+                                        longPressTimerRef.current = setTimeout(() => {
+                                          openMessageActions(msg, touch.clientX, touch.clientY);
+                                        }, 450);
+                                      }}
+                                      onTouchEnd={() => {
+                                        if (longPressTimerRef.current) {
+                                          clearTimeout(longPressTimerRef.current);
+                                          longPressTimerRef.current = null;
+                                        }
+
+                                        const now = Date.now();
+                                        const lastTap = lastTapRef.current;
+                                        const isDoubleTap = lastTap.id === msg.id && (now - lastTap.time) < 320;
+
+                                        if (isDoubleTap) {
+                                          void quickReactToMessage(msg, '❤️');
+                                          lastTapRef.current = { id: null, time: 0 };
+                                          return;
+                                        }
+
+                                        lastTapRef.current = { id: msg.id, time: now };
+                                      }}
+                                      onTouchMove={() => {
+                                        if (longPressTimerRef.current) {
+                                          clearTimeout(longPressTimerRef.current);
+                                          longPressTimerRef.current = null;
+                                        }
+                                      }}
+                                    >
                                                 
                                                 {/* Voice Note Player */}
                                                 {msg.type === 'voice' ? (
@@ -873,6 +1131,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                     </span>
                                                     {isMe && !msg.isUploading && <DoubleCheckIcon color="white" />}
                                                 </div>
+
+                                                {sortedReactions.length > 0 && (
+                                                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                    {sortedReactions.map(([emoji, count]) => (
+                                                      <span key={`${msg.id}-${emoji}`} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isMe ? 'bg-white/20 text-white' : 'bg-[#E9ECEF] text-[#212529]'}`}>
+                                                        {emoji} {count}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
                                             </div>
                                         </div>
                                         
@@ -902,6 +1170,51 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                               onImageSelect={handleImageSelection}
                             />
                         </div>
+
+                        {messageActionTarget && (
+                          <div className="fixed inset-0 z-40 bg-black/20">
+                            <div
+                              ref={messageActionMenuRef}
+                              className="absolute w-[min(92vw,320px)] rounded-2xl border border-[#E9ECEF] bg-white p-3 shadow-2xl"
+                              style={{
+                                left: `${Math.max(12, Math.min((messageActionPosition?.x || 24) - 140, window.innerWidth - 332))}px`,
+                                top: `${Math.max(12, Math.min((messageActionPosition?.y || 24) - 80, window.innerHeight - 220))}px`
+                              }}
+                            >
+                              <p className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#6C757D]">Message actions</p>
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {REACTION_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => void reactToMessage(emoji)}
+                                    className="rounded-full border border-[#E9ECEF] bg-[#F8F9FA] px-2.5 py-1.5 text-base transition hover:bg-[#E9ECEF]"
+                                    title={`React with ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="space-y-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void copyMessageContent()}
+                                  className="w-full rounded-xl border border-[#E9ECEF] bg-white px-3 py-2 text-left text-sm font-semibold text-[#212529] transition hover:bg-[#F8F9FA]"
+                                >
+                                  Copy message
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteSelectedMessage()}
+                                  disabled={messageActionTarget.senderId !== firebaseUser?.uid}
+                                  className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Delete message
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                     </div>
                 ) : (
