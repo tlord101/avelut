@@ -201,6 +201,13 @@ export const UploadCenter: React.FC = () => {
     if (!user) return;
     setIsProfileLoading(true);
     const profileRef = dbRef(db, `uploaders/${user.uid}`);
+    const handleProfileError = (error: Error) => {
+      console.error('Failed to load uploader profile:', error);
+      addToast('Could not load your uploader profile. Please sign in again.', 'error');
+      setProfile(null);
+      setIsProfileLoading(false);
+    };
+
     const unsubscribeProfile = onValue(profileRef, (snapshot) => {
       const value = snapshot.val();
       if (value) {
@@ -214,13 +221,16 @@ export const UploadCenter: React.FC = () => {
         setProfile(null);
       }
       setIsProfileLoading(false);
-    });
+    }, handleProfileError);
 
     const uploadsRef = dbRef(db, `uploaders/${user.uid}/uploads`);
     const unsubscribeUploads = onValue(uploadsRef, (snapshot) => {
       const data = snapshot.val() || {};
       const nextUploads = Object.values(data) as UploadRecord[];
       setUploads(nextUploads.sort((a, b) => b.uploaded_at - a.uploaded_at));
+    }, (error) => {
+      console.error('Failed to load uploader uploads:', error);
+      setUploads([]);
     });
 
     const requestsRef = dbRef(db, `uploaders/${user.uid}/requests`);
@@ -228,6 +238,9 @@ export const UploadCenter: React.FC = () => {
       const data = snapshot.val() || {};
       const nextRequests = Object.values(data) as RequestRecord[];
       setRequests(nextRequests.sort((a, b) => b.created_at - a.created_at));
+    }, (error) => {
+      console.error('Failed to load uploader requests:', error);
+      setRequests([]);
     });
 
     return () => {

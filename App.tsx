@@ -802,7 +802,11 @@ Write a concise but specific assessment based only on the facts above. Do not in
     ];
 
     if (isUploadCenterRoute) {
-        return <UploadCenter />;
+        return (
+            <ErrorBoundary>
+                <UploadCenter />
+            </ErrorBoundary>
+        );
     }
 
     if (activeItem === 'admin') {

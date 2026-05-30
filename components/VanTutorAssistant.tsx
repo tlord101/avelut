@@ -530,7 +530,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
   };
 
-  const handleLiveServerMessage = (msg: any) => {
+  const handleLiveServerMessage = async (msg: any) => {
     try {
       // Log for debugging; server message shapes vary between previews
       console.debug('Live server message:', msg);
@@ -548,6 +548,36 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         };
         setMessages(prev => [...prev, assistantMessage]);
         setStatusText('Live response streaming');
+
+        // Persist streamed assistant segment to Firebase so live sessions are recorded
+        try {
+          let conversationId = activeHistoryId;
+          if (!conversationId) {
+            const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+            const newConversationRef = push(conversationsRef);
+            conversationId = newConversationRef.key || undefined;
+            if (conversationId) {
+              await set(newConversationRef, {
+                title: 'Live Chat',
+                created_at: Date.now(),
+                last_updated_at: Date.now(),
+              });
+              setActiveHistoryId(conversationId);
+            }
+          }
+
+          if (conversationId) {
+            const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
+            await push(messagesRef, {
+              text: String(text),
+              sender: 'assistant',
+              timestamp: serverTimestamp(),
+            });
+            await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), { last_updated_at: Date.now() });
+          }
+        } catch (err) {
+          console.error('Failed to persist live assistant message:', err);
+        }
       }
     } catch (err) {
       console.error('Error handling live server message:', err);
