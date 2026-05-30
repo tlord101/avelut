@@ -136,6 +136,12 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  const MicPlayIcon = ({ color = "#486380" }) => (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style={{ color }}>
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+
   return (
     <div className="flex items-center gap-3 w-[260px] py-1 select-none">
       <button 
@@ -395,14 +401,6 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
           )}
         </div>
       </div>
-
-      {showTrashAnimation && (
-        <div className="absolute inset-0 bg-white rounded-full flex items-center justify-center animate-fade-out z-50 border border-[#E9ECEF]">
-          <div className="flex items-center gap-2 text-red-500 text-sm font-semibold tracking-wider animate-bounce">
-            <TrashIcon /> Recording discarded
-          </div>
-        </div>
-      )}
 
       <style>{`
         @keyframes slide-left-loop { 0%, 100% { transform: translateX(0px); opacity: 1; } 50% { transform: translateX(-4px); opacity: 0.5; } }
@@ -766,4 +764,75 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                             <div className={`px-5 py-3.5 shadow-sm max-w-[80%] text-[15px] md:text-[16px] relative select-text ${
                                                 isMe 
                                                     ? 'bg-[#009EE2] text-white rounded-[24px] rounded-tr-[4px]' 
-                                                    : 'bg-white text-
+                                                    : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
+                                            }`}>
+                                                
+                                                {/* Voice Note Player */}
+                                                {msg.type === 'voice' ? (
+                                                    <VoiceNotePlayer 
+                                                        src={msg.text.match(/\((.*?)\)/)?.[1] || msg.text} 
+                                                        isMe={isMe} 
+                                                    />
+                                                ) : msg.type === 'image' ? (
+                                                    <div className="rounded-[16px] overflow-hidden max-w-full">
+                                                        <img src={msg.text.match(/\((.*?)\)/)?.[1]} alt="Shared Media" className="max-h-[260px] w-full object-cover hover:opacity-95 cursor-pointer transition" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="leading-relaxed break-words whitespace-pre-wrap tracking-wide font-sans">
+                                                        <ReactMarkdown 
+                                                            components={{
+                                                                p: ({node, ...props}) => <p className="m-0 inline" {...props} />,
+                                                                a: ({node, ...props}) => <a className={`${isMe ? 'text-white underline font-medium' : 'text-[#009EE2] underline'} break-all`} target="_blank" rel="noreferrer" {...props} />
+                                                            }}
+                                                        >
+                                                            {msg.text}
+                                                        </ReactMarkdown>
+                                                    </div>
+                                                )}
+
+                                                {/* Meta Timestamp */}
+                                                <div className={`flex items-center justify-end gap-1 mt-1.5 text-[10px] select-none pointer-events-none ${isMe ? 'text-white/70' : 'text-[#6C757D]'}`}>
+                                                    <span className="uppercase font-normal tracking-tight">12:53 PM</span>
+                                                    {isMe && <DoubleCheckIcon color="white" />}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {!isMe && (
+                                            <div className="pl-[46px] text-[13px] text-[#6C757D] font-normal">
+                                                {activeChat.otherUser.display_name}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        {/* Floating Action Bar */}
+                        <div className="absolute left-0 right-0 bottom-4 z-40">
+                            <VanTutorMessageInput 
+                              onSend={(text) => sendMsg(text, 'text')}
+                              startRecording={startRecording}
+                              handleMove={handleMove}
+                              stopRecording={stopRecording}
+                              isRecording={isRecording}
+                              isLocked={isLocked}
+                              setIsLocked={setIsLocked}
+                              recordDuration={recordDuration}
+                              onFileSelect={handleFileSelection}
+                              onImageSelect={handleImageSelection}
+                            />
+                        </div>
+
+                    </div>
+                ) : (
+                    <div className="text-center opacity-30 select-none">
+                        <LogoIcon className="w-24 h-24 mx-auto mb-2 text-[#6C757D]" />
+                        <h2 className="text-2xl font-black italic tracking-widest text-[#6C757D]">VANTUTOR</h2>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
