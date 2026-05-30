@@ -266,6 +266,9 @@ const App: React.FC = () => {
     });
 
     const syncItemFromPath = useCallback((pathname: string) => {
+            if (pathname.startsWith('/upload-center')) {
+                return;
+            }
         const item = resolveActiveItemFromPath(pathname);
         setActiveItemState(item === 'admin' ? 'admin' : item);
         if (item === 'admin') {
