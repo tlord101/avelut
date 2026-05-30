@@ -46,6 +46,11 @@ type RequestRecord = {
   status: 'open';
 };
 
+type RequestedCourseEntry = {
+  request: RequestRecord;
+  catalogEntry: CatalogEntry | null;
+};
+
 const normalizeLevel = (value?: string) => {
   if (!value) return LEVELS[0];
   const normalized = value.toLowerCase().replace(/\s+/g, '');
@@ -302,6 +307,17 @@ export const UploadCenter: React.FC = () => {
     catalog.filter(entry => normalizeLevel(entry.course.level) === selectedLevel && normalizeSemester(entry.course.semester) === selectedSemester && entry.hasTextbook)
   ), [catalog, selectedLevel, selectedSemester]);
 
+  const requestedCourseEntries = useMemo<RequestedCourseEntry[]>(() => {
+    const uniqueRequests = Array.from(
+      new Map(requests.map(request => [request.course_key, request])).values()
+    );
+
+    return uniqueRequests.map((request) => ({
+      request,
+      catalogEntry: catalog.find(entry => entry.key === request.course_key) || null,
+    }));
+  }, [catalog, requests]);
+
   const totalUploadedCourses = uploads.length;
   const totalRequestedCourses = requests.length;
 
@@ -514,6 +530,7 @@ export const UploadCenter: React.FC = () => {
     }
   };
 
+      navigate('/upload-center');
   if (isAuthLoading || (user && isProfileLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#fff7ed,_#fff)] text-slate-900">
@@ -662,20 +679,68 @@ export const UploadCenter: React.FC = () => {
               ))}
             </section>
 
-            <section className="rounded-[24px] border border-orange-100 bg-[linear-gradient(135deg,_#1f2937_0%,_#ea580c_100%)] p-6 text-white shadow-[0_24px_70px_rgba(234,88,12,0.2)]">
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-white/70">Quick action</p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight">Upload a new course textbook</h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-white/80">
-                Go straight to the upload page, choose a level and semester, and only the courses that still need textbooks will appear.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/upload-center/upload')}
-                className="mt-6 rounded-full bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-900 transition hover:bg-orange-50"
-              >
-                Go to upload page
-              </button>
-            </section>
+            <div className="space-y-4">
+              <section className="rounded-[24px] border border-orange-100 bg-[linear-gradient(135deg,_#1f2937_0%,_#ea580c_100%)] p-6 text-white shadow-[0_24px_70px_rgba(234,88,12,0.2)]">
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-white/70">Quick action</p>
+                <h2 className="mt-2 text-3xl font-black tracking-tight">Upload a new course textbook</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-white/80">
+                  Go straight to the upload page, choose a level and semester, and only the courses that still need textbooks will appear.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/upload-center/upload')}
+                  className="mt-6 rounded-full bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-900 transition hover:bg-orange-50"
+                >
+                  Go to upload page
+                </button>
+              </section>
+
+              <section className="rounded-[24px] border border-orange-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">Requested courses</p>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Upload extra books for these courses</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload-center/requests')}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-orange-200 hover:text-orange-600"
+                  >
+                    Manage requests
+                  </button>
+                </div>
+
+                {requestedCourseEntries.length ? (
+                  <div className="mt-4 space-y-3">
+                    {requestedCourseEntries.slice(0, 4).map(({ request, catalogEntry }) => (
+                      <div key={request.course_key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h4 className="text-base font-bold text-slate-900">{request.course_name}</h4>
+                            <p className="text-sm text-slate-500">{request.level} {request.semester}</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">{request.note}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/upload-center/upload')}
+                            className="rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                          >
+                            Upload additional books
+                          </button>
+                        </div>
+                        {!catalogEntry && (
+                          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">Waiting for course sync</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm leading-6 text-slate-500">
+                    Requested courses will appear here after you ask for a course that already has textbooks.
+                  </p>
+                )}
+              </section>
+            </div>
           </div>
         )}
 
@@ -725,6 +790,67 @@ export const UploadCenter: React.FC = () => {
                 </label>
               </div>
             </section>
+
+            {requestedCourseEntries.length > 0 && (
+              <section className="rounded-[28px] border border-orange-100 bg-white p-5 shadow-sm md:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">Requested courses</p>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Upload additional books here too</h3>
+                    <p className="mt-1 text-sm text-slate-500">These are courses you requested for extra textbooks.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload-center')}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+                  >
+                    Back to dashboard
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {requestedCourseEntries.map(({ request, catalogEntry }) => {
+                    const requestKey = request.course_key;
+                    return (
+                      <div key={requestKey} className="rounded-[24px] border border-orange-100 bg-slate-50 p-5 shadow-sm">
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">Requested course</p>
+                        <h4 className="mt-2 text-lg font-black tracking-tight text-slate-900">{request.course_name}</h4>
+                        <p className="mt-1 text-sm text-slate-500">{request.level} {request.semester}</p>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">{request.note}</p>
+                        <div className="mt-4">
+                          <input
+                            ref={(node) => { fileInputRefs.current[requestKey] = node; }}
+                            type="file"
+                            accept="application/pdf"
+                            multiple
+                            className="hidden"
+                            onChange={(event) => {
+                              if (event.target.files?.length && catalogEntry) {
+                                void handleFileUpload(catalogEntry, event.target.files);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (catalogEntry) {
+                                fileInputRefs.current[requestKey]?.click();
+                              } else {
+                                addToast('This course is still syncing. Try again in a moment.', 'info');
+                              }
+                            }}
+                            disabled={!catalogEntry || isUploadingCourseKey === requestKey}
+                            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isUploadingCourseKey === requestKey ? 'Uploading...' : 'Upload additional books'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {isCatalogLoading ? (
@@ -828,6 +954,35 @@ export const UploadCenter: React.FC = () => {
               >
                 Send request
               </button>
+            </section>
+
+            <section className="rounded-[28px] border border-orange-100 bg-white p-5 shadow-sm md:p-6">
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">Your requested courses</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Ready when you are</h3>
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {requestedCourseEntries.map(({ request, catalogEntry }) => (
+                  <div key={`request-${request.course_key}-${request.created_at}`} className="rounded-[24px] border border-orange-100 bg-slate-50 p-5 shadow-sm">
+                    <h4 className="text-lg font-black tracking-tight text-slate-900">{request.course_name}</h4>
+                    <p className="mt-1 text-sm text-slate-500">{request.level} {request.semester}</p>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{request.note}</p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/upload-center/upload')}
+                      className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                    >
+                      Upload additional books
+                    </button>
+                    {!catalogEntry && (
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">Waiting for course sync</p>
+                    )}
+                  </div>
+                ))}
+                {!requestedCourseEntries.length && (
+                  <div className="rounded-[24px] border border-dashed border-orange-200 bg-white p-6 text-sm text-slate-500 md:col-span-2 xl:col-span-3">
+                    No requested courses yet.
+                  </div>
+                )}
+              </div>
             </section>
 
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

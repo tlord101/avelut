@@ -108,10 +108,10 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         </div>
                         <p className="mt-1 text-sm leading-relaxed text-charcoal/65">
                             {canTriggerNativeInstall
-                                ? 'Install the app now for faster access and a native app feel.'
+                                ? 'Install VANTUTOR from your browser for quick access any time.'
                                 : isIOS
-                                    ? 'Tap Safari’s share menu, then choose Add to Home Screen.'
-                                    : 'Use the browser menu and choose Install app or Add to Home Screen.'}
+                                    ? 'Open Safari’s share menu, then choose Add to Home Screen.'
+                                    : 'Open the browser menu and choose Install app.'}
                         </p>
                     </div>
                     <button
@@ -145,7 +145,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         </div>
                         <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
                             {canTriggerNativeInstall
-                                ? 'Choose Install from the browser prompt.'
+                                ? 'Confirm installation in the browser prompt.'
                                 : isIOS
                                     ? 'Open Safari’s share menu.'
                                     : 'Open Chrome’s menu in the top-right corner.'}
@@ -168,8 +168,8 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         </div>
                         <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
                             {canTriggerNativeInstall
-                                ? 'The app installs directly to your device.'
-                                : 'Choose Add to Home Screen to save it like an app.'}
+                                ? 'The browser will add VANTUTOR to your device.'
+                                : 'Choose Add to Home Screen to finish setup.'}
                         </p>
                     </div>
                 </div>
@@ -179,8 +179,8 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         <LogoIcon className="h-6 w-6 loader-logo" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-sm font-bold leading-tight">Looks and feels like a real app</p>
-                        <p className="text-[11px] text-white/80">Fast launch, home screen access, and a cleaner experience.</p>
+                        <p className="text-sm font-bold leading-tight">Install from Chrome for quick access</p>
+                        <p className="text-[11px] text-white/80">No app store required, just a browser install.</p>
                     </div>
                     {canTriggerNativeInstall && (
                         <button
