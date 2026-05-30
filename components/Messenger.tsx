@@ -80,7 +80,7 @@ const getUnreadCount = (chat: any) => Number(chat?.unreadCount || 0);
 // FUNCTIONAL VOICE NOTE PLAYER COMPONENT
 // =======================================================
 
-const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }) => {
+const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean; isUploading?: boolean }> = ({ src, isMe, isUploading = false }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -88,6 +88,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
   const [playbackRate, setPlaybackRate] = useState(1);
 
   useEffect(() => {
+    if (isUploading || !src) return;
     const audio = new Audio(src);
     audioRef.current = audio;
 
@@ -105,10 +106,10 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
       audio.removeEventListener('timeupdate', setAudioTime);
       audio.removeEventListener('ended', setAudioEnded);
     };
-  }, [src]);
+  }, [src, isUploading]);
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
+    if (isUploading || !audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
     } else {
@@ -118,7 +119,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
   };
 
   const handleSpeedChange = () => {
-    if (!audioRef.current) return;
+    if (isUploading || !audioRef.current) return;
     let nextRate = 1;
     if (playbackRate === 1) nextRate = 1.5;
     else if (playbackRate === 1.5) nextRate = 2;
@@ -128,7 +129,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
   };
 
   const formatTime = (time: number) => {
-    if (isNaN(time)) return "0:00";
+    if (isNaN(time) || time === 0) return "0:00";
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
@@ -144,14 +145,21 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
 
   return (
     <div className="flex items-center gap-3 w-[260px] py-1 select-none">
+      {/* Play / Pause or Loading Spinner State Toggle Option */}
       <button 
         type="button" 
         onClick={togglePlay}
+        disabled={isUploading}
         className={`w-9 h-9 flex items-center justify-center rounded-full transition shrink-0 ${
           isMe ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-[#F8F9FA] text-[#486380] hover:bg-[#E9ECEF]'
-        }`}
+        } ${isUploading ? 'cursor-not-allowed' : ''}`}
       >
-        {isPlaying ? (
+        {isUploading ? (
+          <svg className="animate-spin h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        ) : isPlaying ? (
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
           </svg>
@@ -173,9 +181,11 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
                 className="flex-1 rounded-full transition-colors duration-150"
                 style={{ 
                   height: `${barHeight}%`,
-                  backgroundColor: isPlayed 
-                    ? (isMe ? '#FFFFFF' : '#009EE2') 
-                    : (isMe ? 'rgba(255,255,255,0.3)' : '#E9ECEF')
+                  backgroundColor: isUploading
+                    ? (isMe ? 'rgba(255,255,255,0.2)' : '#E9ECEF')
+                    : isPlayed 
+                      ? (isMe ? '#FFFFFF' : '#009EE2') 
+                      : (isMe ? 'rgba(255,255,255,0.3)' : '#E9ECEF')
                 }}
               />
             );
@@ -183,13 +193,14 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }
         </div>
 
         <div className={`flex justify-between items-center text-[11px] font-medium ${isMe ? 'text-white/80' : 'text-[#6C757D]'}`}>
-          <span>{formatTime(isPlaying ? currentTime : duration)}</span>
+          <span>{isUploading ? "Uploading..." : formatTime(isPlaying ? currentTime : duration)}</span>
           <button 
             type="button" 
             onClick={handleSpeedChange}
+            disabled={isUploading}
             className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
               isMe ? 'border-white/30 hover:bg-white/10' : 'border-[#E9ECEF] hover:bg-neutral-100'
-            }`}
+            } ${isUploading ? 'opacity-40 cursor-not-allowed' : ''}`}
           >
             {playbackRate}x
           </button>
@@ -431,6 +442,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const [isRecording, setIsRecording] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [recordDuration, setRecordDuration] = useState(0);
+    
+    // Optimistic Upload Tracking State Array
+    const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -539,23 +553,51 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
     useEffect(() => {
         if (!activeChat) return;
+        // Reset local pipeline variables whenever switching channel threads
+        setOptimisticMessages([]);
         const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
         onValue(messagesRef, (snap) => {
-            setMessages(Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp));
+            const cloudMsgs = Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp);
+            setMessages(cloudMsgs);
+            
+            // Clean matched items out of local optimistic pending state array if matching items arrive from backend sync
+            setOptimisticMessages(prev => prev.filter(opt => !cloudMsgs.some(cloud => cloud.timestamp === opt.timestamp)));
+            
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-        if (firebaseUser) {
-          set(dbRef(db, `user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`), 0);
-        }
+            if (firebaseUser) {
+              set(dbRef(db, `user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`), 0);
+            }
         });
         return () => off(messagesRef);
     }, [activeChat, firebaseUser]);
 
+    // Combined message tracking viewport array composition formula
+    const combinedMessageStream = useMemo(() => {
+        return [...messages, ...optimisticMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    }, [messages, optimisticMessages]);
+
     const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!activeChat || !e.target.files || e.target.files.length === 0) return;
+        if (!activeChat || !e.target.files || e.target.files.length === 0 || !firebaseUser) return;
         const selectedFiles = Array.from(e.target.files);
         for (const file of selectedFiles) {
+            const localTimestamp = Date.now();
+            const tempId = `temp_file_${localTimestamp}`;
+            const fileType = file.type.startsWith('image/') ? 'image' : 'file';
+            
+            // Render loading placeholders layout immediately
+            const pendingMessage = {
+                id: tempId,
+                senderId: firebaseUser.uid,
+                text: `[📄 ${file.name}]()`,
+                type: fileType,
+                timestamp: localTimestamp,
+                isUploading: true
+            };
+            setOptimisticMessages(prev => [...prev, pendingMessage]);
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
             try {
-                const cloudPath = `chat_files/${activeChat.chatId}/${Date.now()}_${file.name}`;
+                const cloudPath = `chat_files/${activeChat.chatId}/${localTimestamp}_${file.name}`;
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, file);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
@@ -566,22 +608,38 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 }
             } catch (err) {
                 addToast({ type: 'error', message: `Failed to upload asset: ${file.name}` });
+                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
             }
         }
     };
 
     const handleImageSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!activeChat || !e.target.files || e.target.files.length === 0) return;
+        if (!activeChat || !e.target.files || e.target.files.length === 0 || !firebaseUser) return;
         const selectedImages = Array.from(e.target.files);
         for (const img of selectedImages) {
+            const localTimestamp = Date.now();
+            const tempId = `temp_img_${localTimestamp}`;
+            
+            const pendingMessage = {
+                id: tempId,
+                senderId: firebaseUser.uid,
+                text: `![Captured Image]()`,
+                type: 'image',
+                timestamp: localTimestamp,
+                isUploading: true
+            };
+            setOptimisticMessages(prev => [...prev, pendingMessage]);
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
             try {
-                const cloudPath = `chat_files/${activeChat.chatId}/${Date.now()}_camera_${img.name}`;
+                const cloudPath = `chat_files/${activeChat.chatId}/${localTimestamp}_camera_${img.name}`;
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, img);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
                 await sendMsg(`![Captured Image](${fileDownloadUrl})`, 'image');
             } catch (err) {
                 addToast({ type: 'error', message: "Failed to upload visual layout media." });
+                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
             }
         }
     };
@@ -602,12 +660,34 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             (recorder as any).shouldSave = true;
 
             recorder.onstop = async () => {
-                if ((recorder as any).shouldSave) {
+                if ((recorder as any).shouldSave && firebaseUser) {
                     const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                     if (blob.size > 1000) {
-                        const path = `voice_notes/${activeChat?.chatId}/${Date.now()}.webm`;
-                        const url = await getDownloadURL(await uploadBytes(storageRef(storage, path), blob).then(s => s.ref));
-                        sendMsg(`[Voice Note](${url})`, 'voice');
+                        const localTimestamp = Date.now();
+                        const tempId = `temp_vn_${localTimestamp}`;
+                        const blobLocalUrl = URL.createObjectURL(blob);
+
+                        // Optimistic immediate insert action with processing toggle fields configured
+                        const pendingMessage = {
+                            id: tempId,
+                            senderId: firebaseUser.uid,
+                            text: `[Voice Note](${blobLocalUrl})`,
+                            type: 'voice',
+                            timestamp: localTimestamp,
+                            isUploading: true
+                        };
+                        
+                        setOptimisticMessages(prev => [...prev, pendingMessage]);
+                        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+                        try {
+                            const path = `voice_notes/${activeChat?.chatId}/${localTimestamp}.webm`;
+                            const url = await getDownloadURL(await uploadBytes(storageRef(storage, path), blob).then(s => s.ref));
+                            await sendMsg(`[Voice Note](${url})`, 'voice');
+                        } catch (uploadError) {
+                            console.error("Voice Note storage syncing failure:", uploadError);
+                            setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+                        }
                     }
                 }
                 stream.getTracks().forEach(t => t.stop());
@@ -669,7 +749,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         <div className="flex h-screen w-full overflow-hidden bg-[#F8F9FA] font-sans antialiased text-[#212529]">
             {/* Sidebar Pane */}
             <div className={`w-full lg:w-[380px] border-r border-[#E9ECEF] flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'} h-full bg-white`}>
-                <div className="p-4 bg-[#F8F9FA] border-b border-[#E9ECEF]">
+                <div className="p-4 bg-[#F8F9FA] border-b border-[#E9ECEF] shrink-0">
                     <h1 className="text-xl font-bold text-[#212529] mb-4">Messages</h1>
                     <div className="flex gap-2 bg-[#E9ECEF] p-1 rounded-full mb-3">
                         <button onClick={() => setTab('chats')} className={`flex-1 py-1.5 text-sm rounded-full font-medium transition-all ${tab === 'chats' ? 'bg-white text-[#212529] shadow-sm' : 'text-[#6C757D] hover:text-[#212529]'}`}>Chats</button>
@@ -733,7 +813,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                 {activeChat ? (
                     <div className="flex flex-col h-full w-full relative overflow-hidden">
                         
-                        {/* Header Bar */}
+                        {/* 1. FIXED Header Bar */}
                         <div className="h-16 bg-white flex items-center px-6 gap-3 z-30 shadow-sm shrink-0 border-b border-[#E9ECEF]">
                             <button onClick={() => setActiveChat(null)} className="lg:hidden text-[#6C757D] mr-1 text-lg">←</button>
                             <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={activeChat.otherUser.photo_url} />
@@ -750,10 +830,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         </div>
 
-                        {/* Message Stream */}
-                        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 max-w-3xl mx-auto w-full pb-28">
-                            {messages.map((msg) => {
+                        {/* 2. SCROLLABLE Message Stream Box Container */}
+                        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 max-w-3xl mx-auto w-full">
+                            {combinedMessageStream.map((msg) => {
                                 const isMe = msg.senderId === firebaseUser?.uid;
+                                const imageUrl = msg.type === 'image' ? (msg.text.match(/\((.*?)\)/)?.[1] || msg.text) : '';
+                                
                                 return (
                                     <div key={msg.id} className="space-y-1">
                                         <div className={`flex items-end space-x-2.5 w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -767,15 +849,26 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                     : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
                                             }`}>
                                                 
-                                                {/* Voice Note Player */}
+                                                {/* Voice Note Player Component Integration */}
                                                 {msg.type === 'voice' ? (
                                                     <VoiceNotePlayer 
                                                         src={msg.text.match(/\((.*?)\)/)?.[1] || msg.text} 
-                                                        isMe={isMe} 
+                                                        isMe={isMe}
+                                                        isUploading={msg.isUploading}
                                                     />
                                                 ) : msg.type === 'image' ? (
-                                                    <div className="rounded-[16px] overflow-hidden max-w-full">
-                                                        <img src={msg.text.match(/\((.*?)\)/)?.[1]} alt="Shared Media" className="max-h-[260px] w-full object-cover hover:opacity-95 cursor-pointer transition" />
+                                                    <div className="rounded-[16px] overflow-hidden max-w-[280px] sm:max-w-[340px] w-full bg-neutral-100 relative">
+                                                        {msg.isUploading ? (
+                                                            <div className="h-[200px] w-full flex flex-col items-center justify-center text-xs text-neutral-400 gap-2 font-medium">
+                                                                <svg className="animate-spin h-6 w-6 text-[#009EE2]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                                Processing Media...
+                                                            </div>
+                                                        ) : (
+                                                            <img src={imageUrl} alt="Shared Layout Media" className="max-h-[260px] w-full object-cover hover:opacity-95 cursor-pointer transition-opacity" />
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div className="leading-relaxed break-words whitespace-pre-wrap tracking-wide font-sans">
@@ -790,10 +883,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                     </div>
                                                 )}
 
-                                                {/* Meta Timestamp */}
+                                                {/* Meta Timestamp Info Row */}
                                                 <div className={`flex items-center justify-end gap-1 mt-1.5 text-[10px] select-none pointer-events-none ${isMe ? 'text-white/70' : 'text-[#6C757D]'}`}>
-                                                    <span className="uppercase font-normal tracking-tight">12:53 PM</span>
-                                                    {isMe && <DoubleCheckIcon color="white" />}
+                                                    <span className="uppercase font-normal tracking-tight">
+                                                        {msg.isUploading ? 'Sending...' : '12:53 PM'}
+                                                    </span>
+                                                    {isMe && !msg.isUploading && <DoubleCheckIcon color="white" />}
                                                 </div>
                                             </div>
                                         </div>
@@ -809,8 +904,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             <div ref={messagesEndRef} />
                         </div>
 
-                        {/* Floating Action Bar */}
-                        <div className="absolute left-0 right-0 bottom-4 z-40">
+                        {/* 3. FIXED Bottom Control Anchor Panel Bar */}
+                        <div className="bg-[#F8F9FA] py-4 border-t border-[#E9ECEF] shrink-0 z-30">
                             <VanTutorMessageInput 
                               onSend={(text) => sendMsg(text, 'text')}
                               startRecording={startRecording}
