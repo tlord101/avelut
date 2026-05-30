@@ -543,7 +543,6 @@ export const UploadCenter: React.FC = () => {
     }
   };
 
-      navigate('/upload-center');
   if (isAuthLoading || (user && isProfileLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#fff7ed,_#fff)] text-slate-900">
