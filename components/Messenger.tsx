@@ -88,7 +88,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean; isUploading?: bool
   const [playbackRate, setPlaybackRate] = useState(1);
 
   useEffect(() => {
-    if (isUploading || !src) return;
+    if (isUploading || !src || typeof src !== 'string') return;
     const audio = new Audio(src);
     audioRef.current = audio;
 
@@ -137,15 +137,8 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean; isUploading?: bool
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  const MicPlayIcon = ({ color = "#486380" }) => (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style={{ color }}>
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-
   return (
     <div className="flex items-center gap-3 w-[260px] py-1 select-none">
-      {/* Play / Pause or Loading Spinner State Toggle Option */}
       <button 
         type="button" 
         onClick={togglePlay}
@@ -412,15 +405,6 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
           )}
         </div>
       </div>
-
-      <style>{`
-        @keyframes slide-left-loop { 0%, 100% { transform: translateX(0px); opacity: 1; } 50% { transform: translateX(-4px); opacity: 0.5; } }
-        .animate-slide-left { animation: slide-left-loop 1.2s ease-in-out infinite; }
-        @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes fade-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.95); } }
-        .animate-fade-out { animation: fade-out 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      `}</style>
     </div>
   );
 };
@@ -443,7 +427,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const [isLocked, setIsLocked] = useState(false);
     const [recordDuration, setRecordDuration] = useState(0);
     
-    // Optimistic Upload Tracking State Array
     const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -553,14 +536,13 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
     useEffect(() => {
         if (!activeChat) return;
-        // Reset local pipeline variables whenever switching channel threads
         setOptimisticMessages([]);
         const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
         onValue(messagesRef, (snap) => {
             const cloudMsgs = Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp);
             setMessages(cloudMsgs);
             
-            // Clean matched items out of local optimistic pending state array if matching items arrive from backend sync
+            // Fixed removal logic to filter out only valid matches safely
             setOptimisticMessages(prev => prev.filter(opt => !cloudMsgs.some(cloud => cloud.timestamp === opt.timestamp)));
             
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -571,7 +553,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         return () => off(messagesRef);
     }, [activeChat, firebaseUser]);
 
-    // Combined message tracking viewport array composition formula
     const combinedMessageStream = useMemo(() => {
         return [...messages, ...optimisticMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     }, [messages, optimisticMessages]);
@@ -584,7 +565,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             const tempId = `temp_file_${localTimestamp}`;
             const fileType = file.type.startsWith('image/') ? 'image' : 'file';
             
-            // Render loading placeholders layout immediately
             const pendingMessage = {
                 id: tempId,
                 senderId: firebaseUser.uid,
@@ -607,6 +587,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                     await sendMsg(`[📄 ${file.name}](${fileDownloadUrl})`, 'file');
                 }
             } catch (err) {
+                // Safeguarded catch wrapper from leaking standard error object down state tracking arrays
                 addToast({ type: 'error', message: `Failed to upload asset: ${file.name}` });
                 setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
             }
@@ -667,7 +648,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                         const tempId = `temp_vn_${localTimestamp}`;
                         const blobLocalUrl = URL.createObjectURL(blob);
 
-                        // Optimistic immediate insert action with processing toggle fields configured
                         const pendingMessage = {
                             id: tempId,
                             senderId: firebaseUser.uid,
@@ -834,7 +814,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 max-w-3xl mx-auto w-full">
                             {combinedMessageStream.map((msg) => {
                                 const isMe = msg.senderId === firebaseUser?.uid;
-                                const imageUrl = msg.type === 'image' ? (msg.text.match(/\((.*?)\)/)?.[1] || msg.text) : '';
+                                
+                                // Safe string checks on markdown regex match selectors
+                                const rawText = typeof msg.text === 'string' ? msg.text : '';
+                                const imageUrl = msg.type === 'image' ? (rawText.match(/\((.*?)\)/)?.[1] || rawText) : '';
                                 
                                 return (
                                     <div key={msg.id} className="space-y-1">
@@ -849,16 +832,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                     : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
                                             }`}>
                                                 
-                                                {/* Voice Note Player Component Integration */}
+                                                {/* Voice Note Player */}
                                                 {msg.type === 'voice' ? (
                                                     <VoiceNotePlayer 
-                                                        src={msg.text.match(/\((.*?)\)/)?.[1] || msg.text} 
+                                                        src={rawText.match(/\((.*?)\)/)?.[1] || rawText} 
                                                         isMe={isMe}
                                                         isUploading={msg.isUploading}
                                                     />
                                                 ) : msg.type === 'image' ? (
                                                     <div className="rounded-[16px] overflow-hidden max-w-[280px] sm:max-w-[340px] w-full bg-neutral-100 relative">
-                                                        {msg.isUploading ? (
+                                                        {msg.isUploading || !imageUrl ? (
                                                             <div className="h-[200px] w-full flex flex-col items-center justify-center text-xs text-neutral-400 gap-2 font-medium">
                                                                 <svg className="animate-spin h-6 w-6 text-[#009EE2]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -878,12 +861,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                                                 a: ({node, ...props}) => <a className={`${isMe ? 'text-white underline font-medium' : 'text-[#009EE2] underline'} break-all`} target="_blank" rel="noreferrer" {...props} />
                                                             }}
                                                         >
-                                                            {msg.text}
+                                                            {rawText}
                                                         </ReactMarkdown>
                                                     </div>
                                                 )}
 
-                                                {/* Meta Timestamp Info Row */}
+                                                {/* Meta Timestamp */}
                                                 <div className={`flex items-center justify-end gap-1 mt-1.5 text-[10px] select-none pointer-events-none ${isMe ? 'text-white/70' : 'text-[#6C757D]'}`}>
                                                     <span className="uppercase font-normal tracking-tight">
                                                         {msg.isUploading ? 'Sending...' : '12:53 PM'}
