@@ -6,6 +6,7 @@ import type { UserProfile, UserProgress, DashboardData, Notification as Notifica
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp';
 import { AdminLogin } from './components/AdminLogin';
+import { UploadCenter } from './components/UploadCenter';
 import { Onboarding } from './components/Onboarding';
 import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
@@ -317,6 +318,7 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
+    const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
 
     const { addToast } = useToast();
     const tourStatusRef = useRef<'unknown' | 'checked' | 'shown'>('unknown');
@@ -795,6 +797,10 @@ Write a concise but specific assessment based only on the facts above. Do not in
       ...(isMobile ? [{ target: '[data-tour-id="mobile-menu-button"]', title: '⚙️ Main Menu', content: 'Access your settings, help, and logout options from here.', placement: 'bottom' as const }] : [{ target: '[data-tour-id="sidebar-settings"]', title: '⚙️ Settings', content: 'Update your info and view your achievements.', placement: 'top' as const }]),
       { target: 'body', title: "🎉 You're all set!", content: 'Enjoy exploring your learning journey. Tap "Finish" to start!', placement: 'center' },
     ];
+
+    if (isUploadCenterRoute) {
+        return <UploadCenter />;
+    }
 
     if (activeItem === 'admin') {
         if (!isAdminAuthenticated) {

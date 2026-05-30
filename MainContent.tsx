@@ -58,9 +58,17 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'help':
             return <Help onStartTour={startTour} />;
         case 'messenger':
-            return <Messenger userProfile={userProfile} />;
+            return (
+                <ErrorBoundary>
+                    <Messenger userProfile={userProfile} />
+                </ErrorBoundary>
+            );
         case 'chat':
-            return <VanTutorAssistant userProfile={userProfile} />;
+            return (
+                <ErrorBoundary>
+                    <VanTutorAssistant userProfile={userProfile} />
+                </ErrorBoundary>
+            );
                 case 'admin':
                         return userProfile.is_admin
                                 ? (
