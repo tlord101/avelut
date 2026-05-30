@@ -60,12 +60,6 @@ const LockIcon = ({ locked }: { locked: boolean }) => (
   </svg>
 );
 
-const MicPlayIcon = ({ color = "#486380" }) => (
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style={{ color }}>
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
-
 const formatLastSeen = (value?: number) => {
   if (!value) return 'Last seen recently';
   const diffMs = Date.now() - value;
@@ -81,6 +75,123 @@ const formatLastSeen = (value?: number) => {
 };
 
 const getUnreadCount = (chat: any) => Number(chat?.unreadCount || 0);
+
+// =======================================================
+// FUNCTIONAL VOICE NOTE PLAYER COMPONENT
+// =======================================================
+
+const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean }> = ({ src, isMe }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  useEffect(() => {
+    const audio = new Audio(src);
+    audioRef.current = audio;
+
+    const setAudioData = () => setDuration(audio.duration || 0);
+    const setAudioTime = () => setCurrentTime(audio.currentTime);
+    const setAudioEnded = () => setIsPlaying(false);
+
+    audio.addEventListener('loadedmetadata', setAudioData);
+    audio.addEventListener('timeupdate', setAudioTime);
+    audio.addEventListener('ended', setAudioEnded);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', setAudioData);
+      audio.removeEventListener('timeupdate', setAudioTime);
+      audio.removeEventListener('ended', setAudioEnded);
+    };
+  }, [src]);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(err => console.error("Audio playback failed:", err));
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSpeedChange = () => {
+    if (!audioRef.current) return;
+    let nextRate = 1;
+    if (playbackRate === 1) nextRate = 1.5;
+    else if (playbackRate === 1.5) nextRate = 2;
+    
+    audioRef.current.playbackRate = nextRate;
+    setPlaybackRate(nextRate);
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className="flex items-center gap-3 w-[260px] py-1 select-none">
+      <button 
+        type="button" 
+        onClick={togglePlay}
+        className={`w-9 h-9 flex items-center justify-center rounded-full transition shrink-0 ${
+          isMe ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-[#F8F9FA] text-[#486380] hover:bg-[#E9ECEF]'
+        }`}
+      >
+        {isPlaying ? (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        )}
+      </button>
+
+      <div className="flex-1 flex flex-col gap-1.5 justify-center pr-1">
+        <div className="w-full flex items-center gap-[2px] h-6 relative">
+          {[35, 60, 45, 75, 30, 55, 70, 40, 65, 50, 80, 35, 60, 45, 70, 40, 55, 30].map((barHeight, idx, arr) => {
+            const barProgress = (idx / arr.length) * 100;
+            const isPlayed = progressPercent >= barProgress;
+            return (
+              <div 
+                key={idx}
+                className="flex-1 rounded-full transition-colors duration-150"
+                style={{ 
+                  height: `${barHeight}%`,
+                  backgroundColor: isPlayed 
+                    ? (isMe ? '#FFFFFF' : '#009EE2') 
+                    : (isMe ? 'rgba(255,255,255,0.3)' : '#E9ECEF')
+                }}
+              />
+            );
+          })}
+        </div>
+
+        <div className={`flex justify-between items-center text-[11px] font-medium ${isMe ? 'text-white/80' : 'text-[#6C757D]'}`}>
+          <span>{formatTime(isPlaying ? currentTime : duration)}</span>
+          <button 
+            type="button" 
+            onClick={handleSpeedChange}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
+              isMe ? 'border-white/30 hover:bg-white/10' : 'border-[#E9ECEF] hover:bg-neutral-100'
+            }`}
+          >
+            {playbackRate}x
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // =======================================================
 // FLOATING ZOLA THEME INPUT COMPONENT
@@ -655,86 +766,4 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                             <div className={`px-5 py-3.5 shadow-sm max-w-[80%] text-[15px] md:text-[16px] relative select-text ${
                                                 isMe 
                                                     ? 'bg-[#009EE2] text-white rounded-[24px] rounded-tr-[4px]' 
-                                                    : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
-                                            }`}>
-                                                
-                                                {/* Voice Note Player */}
-                                                {msg.type === 'voice' ? (
-                                                    <div className="flex items-center gap-3 w-[260px] py-1">
-                                                        <button type="button" className={`w-9 h-9 flex items-center justify-center rounded-full transition shrink-0 ${isMe ? 'bg-white/20 text-white' : 'bg-[#F8F9FA] text-[#486380]'}`}>
-                                                            <MicPlayIcon color={isMe ? "#FFFFFF" : "#486380"} />
-                                                        </button>
-                                                        <div className="flex-1 flex flex-col gap-1.5 justify-center pr-1">
-                                                            <div className={`w-full h-1 rounded-full relative overflow-hidden ${isMe ? 'bg-white/30' : 'bg-[#E9ECEF]'}`}>
-                                                                <div className={`absolute top-0 left-0 bottom-0 w-1/3 ${isMe ? 'bg-white' : 'bg-[#009EE2]'}`} />
-                                                            </div>
-                                                            <div className={`flex justify-between items-center text-[11px] font-medium ${isMe ? 'text-white/80' : 'text-[#6C757D]'}`}>
-                                                                <span>0:42</span>
-                                                                <span>1.5x</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ) : msg.type === 'image' ? (
-                                                    <div className="rounded-[16px] overflow-hidden max-w-full">
-                                                        <img src={msg.text.match(/\((.*?)\)/)?.[1]} alt="Shared Media" className="max-h-[260px] w-full object-cover hover:opacity-95 cursor-pointer transition" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="leading-relaxed break-words whitespace-pre-wrap tracking-wide font-sans">
-                                                        <ReactMarkdown 
-                                                            components={{
-                                                                p: ({node, ...props}) => <p className="m-0 inline" {...props} />,
-                                                                a: ({node, ...props}) => <a className={`${isMe ? 'text-white underline font-medium' : 'text-[#009EE2] underline'} break-all`} target="_blank" rel="noreferrer" {...props} />
-                                                            }}
-                                                        >
-                                                            {msg.text}
-                                                        </ReactMarkdown>
-                                                    </div>
-                                                )}
-
-                                                {/* Meta Timestamp Embedded Row */}
-                                                <div className={`flex items-center justify-end gap-1 mt-1.5 text-[10px] select-none pointer-events-none ${isMe ? 'text-white/70' : 'text-[#6C757D]'}`}>
-                                                    <span className="uppercase font-normal tracking-tight">12:53 PM</span>
-                                                    {isMe && <DoubleCheckIcon color="#white" />}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Optional Name Identifier alignment label under Bot/Other Users */}
-                                        {!isMe && (
-                                            <div className="pl-[46px] text-[13px] text-[#6C757D] font-normal">
-                                                {activeChat.otherUser.display_name}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        {/* Floating Action Zola Style Managed Input Core */}
-                        <div className="absolute left-0 right-0 bottom-4 z-40">
-                            <VanTutorMessageInput 
-                              onSend={(text) => sendMsg(text, 'text')}
-                              startRecording={startRecording}
-                              handleMove={handleMove}
-                              stopRecording={stopRecording}
-                              isRecording={isRecording}
-                              isLocked={isLocked}
-                              setIsLocked={setIsLocked}
-                              recordDuration={recordDuration}
-                              onFileSelect={handleFileSelection}
-                              onImageSelect={handleImageSelection}
-                            />
-                        </div>
-
-                    </div>
-                ) : (
-                    <div className="text-center opacity-30 select-none">
-                        <LogoIcon className="w-24 h-24 mx-auto mb-2 text-[#6C757D]" />
-                        <h2 className="text-2xl font-black italic tracking-widest text-[#6C757D]">VANTUTOR</h2>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
+                                                    : 'bg-white text-
