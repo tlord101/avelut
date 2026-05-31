@@ -206,6 +206,8 @@ const createUserDisplayName = (email: string) => {
   return prefix.replace(/[._-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 };
 
+const previewTopics = (topics?: Topic[], maxItems = 3) => (Array.isArray(topics) ? topics.slice(0, maxItems) : []);
+
 export const UploadCenter: React.FC = () => {
   const { addToast } = useToast();
   const [pathname, setPathname] = useState(() => getWindowPathname());
@@ -385,6 +387,13 @@ export const UploadCenter: React.FC = () => {
       catalogEntry: catalog.find(entry => entry.key === request.course_key) || null,
     }));
   }, [catalog, requests]);
+
+  const recentUploads = useMemo(() => (
+    uploads.slice(0, 4).map((upload) => ({
+      upload,
+      catalogEntry: catalog.find(entry => entry.key === upload.course_key) || null,
+    }))
+  ), [catalog, uploads]);
 
   const totalUploadedCourses = uploads.length;
   const totalRequestedCourses = requests.length;
@@ -835,6 +844,65 @@ FORMAT:
                 >
                   Go to upload page
                 </button>
+              </section>
+
+              <section className="rounded-[24px] border border-orange-100 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">Recent uploads</p>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Extracted topics from uploaded textbooks</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload-center/upload')}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-orange-200 hover:text-orange-600"
+                  >
+                    Upload more
+                  </button>
+                </div>
+
+                {recentUploads.length ? (
+                  <div className="mt-4 space-y-3">
+                    {recentUploads.map(({ upload, catalogEntry }) => {
+                      const topics = previewTopics(catalogEntry?.course.topics);
+                      return (
+                        <div key={`${upload.course_key}-${upload.uploaded_at}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <h4 className="text-base font-bold text-slate-900">{upload.course_name}</h4>
+                              <p className="text-sm text-slate-500">{upload.level} {upload.semester}</p>
+                              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
+                                {catalogEntry?.hasTextbook ? 'Topics extracted from textbook' : 'Awaiting syllabus sync'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => navigate('/upload-center/upload')}
+                              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                            >
+                              View course
+                            </button>
+                          </div>
+
+                          {topics.length ? (
+                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                              {topics.map((topic) => (
+                                <div key={topic.topic_id} className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
+                                  <p className="text-sm font-bold text-slate-900">{topic.topic_name}</p>
+                                  {topic.topic_context ? <p className="mt-1 text-xs leading-5 text-slate-500">{topic.topic_context}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm leading-6 text-slate-500">No extracted topics are available for this upload yet.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm leading-6 text-slate-500">Uploaded textbook topics will appear here after Gemini extracts them.</p>
+                )}
               </section>
 
               <section className="rounded-[24px] border border-orange-100 bg-white p-5 shadow-sm">
