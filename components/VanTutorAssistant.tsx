@@ -806,12 +806,26 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       socket.onmessage = (event) => {
         if (sessionToken !== liveSessionTokenRef.current) return;
-        try {
-          const response = JSON.parse(event.data);
-          handleLiveServerMessage(response);
-        } catch (error) {
-          console.error('Error parsing live message:', error);
-        }
+        (async () => {
+          try {
+            let textData: string;
+            if (typeof event.data === 'string') {
+              textData = event.data;
+            } else if (event.data instanceof Blob && typeof event.data.text === 'function') {
+              textData = await event.data.text();
+            } else if (event.data instanceof ArrayBuffer) {
+              textData = new TextDecoder().decode(event.data);
+            } else {
+              // Fallback: try to coerce to string
+              textData = String(event.data);
+            }
+
+            const response = JSON.parse(textData);
+            handleLiveServerMessage(response);
+          } catch (error) {
+            console.error('Error parsing live message:', error, event.data);
+          }
+        })();
       };
 
       socket.onerror = (event) => {
