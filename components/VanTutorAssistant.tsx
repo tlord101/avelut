@@ -280,6 +280,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const micProcessorNodeRef = useRef<ScriptProcessorNode | null>(null);
   const micSilenceGainNodeRef = useRef<GainNode | null>(null);
   const isLiveSessionOpenRef = useRef(false);
+  const isLiveSessionStartingRef = useRef(false);
+  const liveSessionTokenRef = useRef(0);
 
   const enqueueLivePcmAudio = (base64Data: string, mimeType?: string) => {
     try {
@@ -735,6 +737,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       return;
     }
 
+    if (isLiveSessionStartingRef.current || isLiveSessionOpenRef.current) {
+      return;
+    }
+
+    isLiveSessionStartingRef.current = true;
+    const sessionToken = liveSessionTokenRef.current + 1;
+    liveSessionTokenRef.current = sessionToken;
+
     try {
       setStatusText('Requesting microphone...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -758,25 +768,38 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         },
         callbacks: {
           onopen: () => {
+            if (sessionToken !== liveSessionTokenRef.current) return;
             isLiveSessionOpenRef.current = true;
+            isLiveSessionStartingRef.current = false;
             setStatusText('Live connected');
           },
           onmessage: (e: any) => handleLiveServerMessage(e),
           onerror: (e: any) => {
+            if (sessionToken !== liveSessionTokenRef.current) return;
             console.error('Live error', e);
             isLiveSessionOpenRef.current = false;
+            isLiveSessionStartingRef.current = false;
             liveSessionRef.current = null;
             stopLiveCaptureOnly();
             setStatusText('Live error');
+            setInputState(1);
           },
           onclose: () => {
+            if (sessionToken !== liveSessionTokenRef.current) return;
             isLiveSessionOpenRef.current = false;
+            isLiveSessionStartingRef.current = false;
             liveSessionRef.current = null;
             stopLiveCaptureOnly();
             setStatusText('Live closed');
+            setInputState(1);
           },
         },
       });
+
+      if (sessionToken !== liveSessionTokenRef.current) {
+        try { session.close?.(); } catch (error) { /* ignore stale close */ }
+        return;
+      }
 
       liveSessionRef.current = session;
 
@@ -804,6 +827,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       silenceGainNode.connect(inputAudioContext.destination);
 
       processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+        if (sessionToken !== liveSessionTokenRef.current) return;
         if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
         try {
           const inputBuffer = event.inputBuffer.getChannelData(0);
@@ -821,9 +845,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes('WebSocket is already in CLOSING or CLOSED state')) {
+            if (sessionToken !== liveSessionTokenRef.current) return;
             isLiveSessionOpenRef.current = false;
+            isLiveSessionStartingRef.current = false;
             liveSessionRef.current = null;
             stopLiveCaptureOnly();
+            setInputState(1);
             return;
           }
           console.error('Failed to send realtime input:', err);
@@ -832,6 +859,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       setStatusText('Listening...');
     } catch (err) {
+      if (sessionToken === liveSessionTokenRef.current) {
+        isLiveSessionStartingRef.current = false;
+      }
       console.error('Failed to start live session:', err);
       setStatusText('Could not start live session');
       setInputState(1);
@@ -840,6 +870,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const stopLiveSession = async () => {
     try {
+      liveSessionTokenRef.current += 1;
+      isLiveSessionStartingRef.current = false;
       isLiveSessionOpenRef.current = false;
       // Stop recorder
       stopLiveCaptureOnly();
