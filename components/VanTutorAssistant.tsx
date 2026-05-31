@@ -697,16 +697,37 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     try {
       console.debug('Live server message:', msg);
       const serverContent = msg?.serverContent;
+      // Extra debug: log raw serverContent if present for troubleshooting
+      if (serverContent) console.debug('Live serverContent object:', serverContent);
       if (!serverContent) return;
 
       // FIX: Check flat serverContent.parts as well as deep modelTurn.parts 
       // because Gemini Live API streams audio frames in flat arrays
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
       parts.forEach((part: any) => {
-        const inlineData = part?.inlineData;
-        if (!inlineData?.data) return;
-        if (!String(inlineData.mimeType || '').startsWith('audio/pcm')) return;
-        enqueueLivePcmAudio(String(inlineData.data), String(inlineData.mimeType || 'audio/pcm;rate=24000'));
+        try {
+          console.debug('Live part:', part?.type || '(no type)', { inlineData: !!part?.inlineData });
+          const inlineData = part?.inlineData;
+          if (!inlineData?.data) return;
+          const mime = String(inlineData.mimeType || '');
+          console.debug('Received inlineData mimeType:', mime, 'dataLength:', String(inlineData.data || '').length);
+          // Accept various mime type formats that represent raw PCM
+          if (!mime.includes('pcm') && !mime.includes('audio')) return;
+
+          // Ensure output audio context is resumed on first play (user gesture may be required)
+          if (!outputAudioContextRef.current) {
+            outputAudioContextRef.current = new AudioContext();
+          }
+          try {
+            void outputAudioContextRef.current.resume();
+          } catch (e) {
+            // ignore resume errors
+          }
+
+          enqueueLivePcmAudio(String(inlineData.data), String(inlineData.mimeType || 'audio/pcm;rate=24000'));
+        } catch (err) {
+          console.warn('Error handling inline part:', err, part);
+        }
       });
 
       // Preferred textual content locations
