@@ -43,7 +43,7 @@ interface VanTutorAssistantProps {
 
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
-const LIVE_MODEL = 'gemini-live-2.5-flash-preview';
+const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
