@@ -620,11 +620,15 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       const recorder = new MediaRecorder(stream as MediaStream, options);
       mediaRecorderRef.current = recorder;
+      const liveAudioMimeType = recorder.mimeType || options.mimeType || 'audio/webm;codecs=opus';
 
       recorder.addEventListener('dataavailable', (ev: BlobEvent) => {
         if (!ev.data || ev.data.size === 0) return;
         try {
-          liveSessionRef.current?.sendRealtimeInput?.({ audio: ev.data });
+          const audioChunk = ev.data.type
+            ? ev.data
+            : new Blob([ev.data], { type: liveAudioMimeType });
+          liveSessionRef.current?.sendRealtimeInput?.({ audio: audioChunk });
         } catch (err) {
           console.error('Failed to send realtime input:', err);
         }
