@@ -1415,6 +1415,71 @@ FORMAT:
         [courseAdminView, managerCoursesForLevel]
     );
 
+    const [selectedManagerCourseTopics, setSelectedManagerCourseTopics] = useState<Topic[]>([]);
+    const [isSelectedManagerCourseTopicsLoading, setIsSelectedManagerCourseTopicsLoading] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadSelectedManagerCourseTopics = async () => {
+            if (!selectedManagerCourse) {
+                setSelectedManagerCourseTopics([]);
+                setIsSelectedManagerCourseTopicsLoading(false);
+                return;
+            }
+
+            const directTopics = Array.isArray(selectedManagerCourse.topics)
+                ? selectedManagerCourse.topics.map((topic, index) => sanitizeTopicMetadata(topic, index))
+                : [];
+
+            if (directTopics.length > 0) {
+                setSelectedManagerCourseTopics(directTopics);
+                setIsSelectedManagerCourseTopicsLoading(false);
+                return;
+            }
+
+            const courseKey = getCourseMergeKey(selectedManagerCourse);
+            if (!courseKey) {
+                setSelectedManagerCourseTopics([]);
+                setIsSelectedManagerCourseTopicsLoading(false);
+                return;
+            }
+
+            setIsSelectedManagerCourseTopicsLoading(true);
+            try {
+                const sharedSnapshot = await get(dbRef(db, `textbook_contexts/shared/${courseKey}`));
+                if (!isMounted || !sharedSnapshot.exists()) {
+                    if (isMounted) setSelectedManagerCourseTopics([]);
+                    return;
+                }
+
+                const sharedData = sharedSnapshot.val() || {};
+                const sharedTopics = Array.isArray(sharedData.syllabus)
+                    ? sharedData.syllabus.map((topic: any, index: number) => sanitizeTopicMetadata(topic, index))
+                    : [];
+
+                if (isMounted) {
+                    setSelectedManagerCourseTopics(sharedTopics);
+                }
+            } catch (error) {
+                console.error('Failed to load shared textbook topics for selected course:', error);
+                if (isMounted) {
+                    setSelectedManagerCourseTopics([]);
+                }
+            } finally {
+                if (isMounted) {
+                    setIsSelectedManagerCourseTopicsLoading(false);
+                }
+            }
+        };
+
+        void loadSelectedManagerCourseTopics();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [selectedManagerCourse]);
+
     const filteredGlobalCourses = useMemo(() => {
         const query = courseSearchQuery.trim().toLowerCase();
         return courseCatalog.filter(({ course, departmentIds }) => {
@@ -2108,9 +2173,13 @@ FORMAT:
                                             </div>
                                         <div className="space-y-3">
                                             <p className="text-xs font-black uppercase tracking-widest text-gray-400">Course Topics</p>
-                                            {selectedManagerCourse.topics?.length ? (
+                                            {isSelectedManagerCourseTopicsLoading ? (
+                                                <div className="p-6 rounded-2xl border border-dashed border-gray-200 text-sm text-gray-500">
+                                                    Loading course outline from uploaded textbooks...
+                                                </div>
+                                            ) : selectedManagerCourseTopics.length ? (
                                                 <div className="space-y-3">
-                                                    {selectedManagerCourse.topics.map((topic) => (
+                                                    {selectedManagerCourseTopics.map((topic) => (
                                                         <div key={topic.topic_id} className="rounded-2xl border border-gray-100 p-4 bg-gray-50">
                                                             <div className="font-bold text-gray-900">{topic.topic_name}</div>
                                                             {topic.topic_context ? <p className="text-sm text-gray-600 mt-1">{topic.topic_context}</p> : null}
