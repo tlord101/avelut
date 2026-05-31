@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { get, onValue, push, ref as dbRef, serverTimestamp, set, update, remove } from 'firebase/database';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+// @ts-ignore: Allow importing third-party CSS without type declarations
 import 'katex/dist/katex.min.css';
 import { db, storage } from '../firebase';
 import type { Course, UserProfile } from '../types';
@@ -694,12 +695,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const handleLiveServerMessage = async (msg: any) => {
     try {
-      // Log for debugging; server message shapes vary between previews
       console.debug('Live server message:', msg);
       const serverContent = msg?.serverContent;
       if (!serverContent) return;
 
-      const parts = serverContent?.modelTurn?.parts || [];
+      // FIX: Check flat serverContent.parts as well as deep modelTurn.parts 
+      // because Gemini Live API streams audio frames in flat arrays
+      const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
       parts.forEach((part: any) => {
         const inlineData = part?.inlineData;
         if (!inlineData?.data) return;
@@ -708,7 +710,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       });
 
       // Preferred textual content locations
-      const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text;
+      const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
       if (text) {
         const assistantMessage: AssistantMessage = {
           id: createMessageId(),
@@ -725,7 +727,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           if (!conversationId) {
             const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
             const newConversationRef = push(conversationsRef);
-            conversationId = newConversationRef.key || undefined;
+            conversationId = newConversationRef.key || null;
             if (conversationId) {
               await set(newConversationRef, {
                 title: 'Live Chat',
@@ -784,23 +786,18 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         isLiveSessionStartingRef.current = false;
 
         socket.send(JSON.stringify({
-          config: {
+          setup: {
             model: LIVE_MODEL,
-            responseModalities: ['AUDIO'],
-            systemInstruction: {
-              parts: [
-                {
-                  text: 'You are a helpful, real-time voice assistant. Respond concisely.',
-                },
-              ],
-            },
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: 'Aoede',
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: 'Aoede',
+                  },
                 },
               },
-            },
+            }
           },
         }));
 
@@ -912,13 +909,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         };
         workletNode.connect(silenceGainNode);
       } else {
-        const processorNode = inputAudioContext.createScriptProcessor(2048, 1, 1);
-        micProcessorNodeRef.current = processorNode;
-        processorNode.connect(silenceGainNode);
-        processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
-          sendAudioChunk(event.inputBuffer.getChannelData(0));
-        };
-      }
+  // Cast to 'any' to safely clear strict DOM environment typing restrictions for ScriptProcessor
+  const processorNode = (inputAudioContext as any).createScriptProcessor(2048, 1, 1);
+  micProcessorNodeRef.current = processorNode;
+  processorNode.connect(silenceGainNode);
+  processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+    sendAudioChunk(event.inputBuffer.getChannelData(0));
+  };
+}
 
       setStatusText('Listening...');
     } catch (err) {
@@ -955,7 +953,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   useEffect(() => {
-    // When entering fullscreen live mode, start the session; when leaving, stop it
     if (inputState === 4) {
       void startLiveSession();
     } else {

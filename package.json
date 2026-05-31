@@ -37,6 +37,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.23",
