@@ -78,6 +78,17 @@ const formatLastSeen = (value?: number) => {
 
 const getUnreadCount = (chat: any) => Number(chat?.unreadCount || 0);
 
+const createFallbackChatUser = (uid = ''): UserProfile => ({
+  uid,
+  display_name: 'Unknown user',
+  photo_url: '',
+  department_id: '',
+  level: '',
+  current_streak: 0,
+  last_activity_date: Date.now(),
+  notifications_enabled: false,
+});
+
 // =======================================================
 // FUNCTIONAL VOICE NOTE PLAYER COMPONENT
 // =======================================================
@@ -488,6 +499,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         });
     }, [allUsers, peopleSearchQuery]);
 
+    const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
+
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, user => { 
             setFirebaseUser(user); 
@@ -571,7 +584,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         const userChatsRef = dbRef(db, `user_chats/${firebaseUser.uid}`);
         onValue(userChatsRef, (snap) => {
             const chatList = Object.entries(snap.val() || {}).map(([chatId, details]: any) => ({
-                id: chatId, ...details, otherUser: allUsers.find(u => u.uid === details.otherUserId)
+          id: chatId,
+          ...details,
+          otherUser: allUsers.find(u => u.uid === details.otherUserId) || createFallbackChatUser(details.otherUserId || chatId)
             }));
             setChats(chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
         });
@@ -1011,16 +1026,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                         {/* 1. FIXED Header Bar */}
                         <div className="h-16 bg-white flex items-center px-6 gap-3 z-30 shadow-sm shrink-0 border-b border-[#E9ECEF]">
                             <button onClick={() => setActiveChat(null)} className="lg:hidden text-[#6C757D] mr-1 text-lg">←</button>
-                            <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={activeChat.otherUser.photo_url} />
+                            <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} />
                             <div className="flex-1 min-w-0">
-                                <h2 className="font-semibold text-[#212529] text-[16px] leading-tight truncate">{activeChat.otherUser.display_name}</h2>
+                              <h2 className="font-semibold text-[#212529] text-[16px] leading-tight truncate">{selectedChatUser.display_name}</h2>
                                 <p className="text-[12px] text-[#6C757D] font-normal mt-0.5 flex items-center">
-                                    {activeChat.otherUser.is_online ? (
+                                {selectedChatUser.is_online ? (
                                         <>
                                             <span className="w-1.5 h-1.5 bg-[#28A745] rounded-full mr-1 animate-pulse"></span>
                                             <span className="text-[#28A745]">Online</span>
                                         </>
-                                    ) : formatLastSeen(activeChat.otherUser.last_seen)}
+                                ) : formatLastSeen(selectedChatUser.last_seen)}
                                 </p>
                             </div>
                         </div>
@@ -1044,7 +1059,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                     <div key={msg.id} className="space-y-1">
                                         <div className={`flex items-end space-x-2.5 w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                                             {!isMe && (
-                                                <Avatar className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-[#E9ECEF]" photo_url={activeChat.otherUser.photo_url} />
+                                                <Avatar className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} />
                                             )}
                                             
                                             <div className={`px-5 py-3.5 shadow-sm max-w-[80%] text-[15px] md:text-[16px] relative select-text ${
@@ -1146,7 +1161,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                         
                                         {!isMe && (
                                             <div className="pl-[46px] text-[13px] text-[#6C757D] font-normal">
-                                                {activeChat.otherUser.display_name}
+                                            {selectedChatUser.display_name}
                                             </div>
                                         )}
                                     </div>
