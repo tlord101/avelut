@@ -217,6 +217,18 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const liveSessionRef = useRef<any | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const isLiveSessionOpenRef = useRef(false);
+
+  const stopLiveCaptureOnly = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current = null;
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -610,10 +622,24 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       const session = await ai.live.connect({
         model: LIVE_MODEL,
         callbacks: {
-          onopen: () => setStatusText('Live connected'),
+          onopen: () => {
+            isLiveSessionOpenRef.current = true;
+            setStatusText('Live connected');
+          },
           onmessage: (e: any) => handleLiveServerMessage(e),
-          onerror: (e: any) => { console.error('Live error', e); setStatusText('Live error'); },
-          onclose: () => { setStatusText('Live closed'); },
+          onerror: (e: any) => {
+            console.error('Live error', e);
+            isLiveSessionOpenRef.current = false;
+            liveSessionRef.current = null;
+            stopLiveCaptureOnly();
+            setStatusText('Live error');
+          },
+          onclose: () => {
+            isLiveSessionOpenRef.current = false;
+            liveSessionRef.current = null;
+            stopLiveCaptureOnly();
+            setStatusText('Live closed');
+          },
         },
       });
 
@@ -634,19 +660,28 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       recorder.addEventListener('dataavailable', async (ev: BlobEvent) => {
         if (!ev.data || ev.data.size === 0) return;
+        if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
         try {
           const audioChunk = ev.data.type
             ? ev.data
             : new Blob([ev.data], { type: liveAudioMimeType });
           const realtimeAudioMimeType = audioChunk.type || liveAudioMimeType || 'audio/webm';
           const encodedAudio = await blobToBase64(audioChunk);
-          liveSessionRef.current?.sendRealtimeInput?.({
+          if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
+          liveSessionRef.current.sendRealtimeInput?.({
             audio: {
               data: encodedAudio,
               mimeType: realtimeAudioMimeType,
             },
           });
         } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          if (errorMessage.includes('WebSocket is already in CLOSING or CLOSED state')) {
+            isLiveSessionOpenRef.current = false;
+            liveSessionRef.current = null;
+            stopLiveCaptureOnly();
+            return;
+          }
           console.error('Failed to send realtime input:', err);
         }
       });
@@ -662,24 +697,17 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const stopLiveSession = async () => {
     try {
+      isLiveSessionOpenRef.current = false;
       // Stop recorder
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
+      stopLiveCaptureOnly();
       // Signal end of audio stream to server
       try { liveSessionRef.current?.sendRealtimeInput?.({ audioStreamEnd: true }); } catch (e) { /* ignore */ }
       // Close session
       try { liveSessionRef.current?.close?.(); } catch (e) { /* ignore */ }
-      // Stop tracks
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(t => t.stop());
-      }
     } catch (err) {
       console.error('Error while stopping live session:', err);
     } finally {
       liveSessionRef.current = null;
-      mediaRecorderRef.current = null;
-      mediaStreamRef.current = null;
       setStatusText('Live stopped');
     }
   };
