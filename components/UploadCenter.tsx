@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as firebaseAuth, firebaseSignOut, onAuthStateChanged, db, storage } from '../firebase';
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
 import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { useToast } from '../hooks/useToast';
-import type { Course } from '../types';
+import type { Course, Topic } from '../types';
 import { getWindowPathname } from '../utils/pathname';
+
+// @ts-ignore
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'] as const;
 const SEMESTERS = ['first', 'second'] as const;
@@ -78,6 +82,39 @@ const normalizeTextbookUrls = (course: Partial<Course> | undefined) => {
   return Array.from(new Set(urls));
 };
 
+const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+
+const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
+  const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
+  const rawTopicId = (topic?.topic_id || '').toString().trim();
+  return {
+    topic_name: topicName,
+    topic_id: rawTopicId || normalizeTopicId(topicName),
+    topic_context: (topic?.topic_context || topic?.context || '').toString().trim(),
+    start_point: (topic?.start_point || topic?.start || '').toString().trim(),
+    end_point: (topic?.end_point || topic?.end || '').toString().trim(),
+    is_complete: Boolean(topic?.is_complete),
+  };
+};
+
+const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]) => {
+  const topicMap = new Map<string, Topic>();
+  [...existingTopics, ...newTopics].forEach((topic, index) => {
+    const sanitized = sanitizeTopicMetadata(topic, index);
+    const topicId = sanitized.topic_id || normalizeTopicId(sanitized.topic_name);
+    if (!topicMap.has(topicId)) {
+      topicMap.set(topicId, { ...sanitized, topic_id: topicId });
+    }
+  });
+  return Array.from(topicMap.values());
+};
+
+const getPrimaryTextbookUrl = (urls: string[]) => urls[urls.length - 1] || '';
+
+const selectPrimaryPdfUrl = (uploadedUrls: string[], existingPdfUrl: string | undefined, mergedPdfUrls: string[]) => (
+  getPrimaryTextbookUrl(uploadedUrls) || existingPdfUrl || getPrimaryTextbookUrl(mergedPdfUrls)
+);
+
 const getCourseMergeKey = (course: Partial<Course>) => {
   const primaryLabel = (course.course_code || course.course_name || course.course_id || '').toString().trim();
   const normalizedPrimaryLabel = primaryLabel.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
@@ -88,10 +125,16 @@ const getCourseMergeKey = (course: Partial<Course>) => {
   return `${normalizedPrimaryLabel}_${normalizedLevel}_${normalizedSemester}`;
 };
 
-const mergeCourseRecord = (existingCourse: Partial<Course> | undefined, sourceCourse: Partial<Course>): Course => {
+const mergeCourseRecord = (
+  existingCourse: Partial<Course> | undefined,
+  sourceCourse: Partial<Course>,
+  mergedTopics?: Topic[],
+  appendedTextbookUrls: string[] = []
+): Course => {
   const mergedUrls = Array.from(new Set([
     ...normalizeTextbookUrls(existingCourse),
     ...normalizeTextbookUrls(sourceCourse),
+    ...appendedTextbookUrls,
   ]));
 
   return {
@@ -101,15 +144,17 @@ const mergeCourseRecord = (existingCourse: Partial<Course> | undefined, sourceCo
     course_name: (sourceCourse.course_name || existingCourse?.course_name || '').toString(),
     level: normalizeLevel(sourceCourse.level || existingCourse?.level),
     semester: normalizeSemester(sourceCourse.semester || existingCourse?.semester),
-    topics: Array.isArray(sourceCourse.topics)
-      ? sourceCourse.topics
-      : (Array.isArray(existingCourse?.topics) ? (existingCourse?.topics as Course['topics']) : []),
-    textbook_url: mergedUrls[mergedUrls.length - 1] || '',
+    topics: mergedTopics
+      ? mergeTopics(Array.isArray(existingCourse?.topics) ? (existingCourse?.topics as Topic[]) : [], mergedTopics)
+      : (Array.isArray(sourceCourse.topics)
+        ? sourceCourse.topics
+        : (Array.isArray(existingCourse?.topics) ? (existingCourse?.topics as Course['topics']) : [])),
+    textbook_url: getPrimaryTextbookUrl(mergedUrls),
     textbook_urls: mergedUrls,
   };
 };
 
-const upsertCourseInList = (courseList: Course[], sourceCourse: Partial<Course>): Course[] => {
+const upsertCourseInList = (courseList: Course[], sourceCourse: Partial<Course>, mergedTopics?: Topic[], appendedTextbookUrls: string[] = []): Course[] => {
   const sourceKey = getCourseMergeKey(sourceCourse);
   if (!sourceKey) return courseList;
 
@@ -117,7 +162,7 @@ const upsertCourseInList = (courseList: Course[], sourceCourse: Partial<Course>)
   const nextCourse = mergeCourseRecord(existingIndex >= 0 ? courseList[existingIndex] : undefined, {
     ...sourceCourse,
     course_id: sourceCourse.course_id || sourceKey,
-  });
+  }, mergedTopics, appendedTextbookUrls);
 
   if (existingIndex < 0) {
     return [...courseList, nextCourse];
@@ -145,6 +190,16 @@ const normalizeCourseList = (rawCourseList: any): Course[] => {
 };
 
 const isTextbookUploaded = (course: Course) => normalizeTextbookUrls(course).length > 0 || Boolean((course as Course & { textbook_shared_key?: string }).textbook_shared_key);
+
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === 'string' ? reader.result : '';
+    resolve(result.includes(',') ? result.split(',')[1] : result);
+  };
+  reader.onerror = () => reject(new Error(`Failed to read PDF: ${reader.error?.message || 'Unknown error'}`));
+  reader.readAsDataURL(file);
+});
 
 const createUserDisplayName = (email: string) => {
   const prefix = email.split('@')[0] || 'uploader';
@@ -428,6 +483,11 @@ export const UploadCenter: React.FC = () => {
       return;
     }
 
+    if (!ai) {
+      addToast('AI features are unavailable because API_KEY is missing.', 'error');
+      return;
+    }
+
     const pdfFiles = Array.from(files).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     if (!pdfFiles.length) {
       addToast('Please choose PDF files only.', 'error');
@@ -437,6 +497,8 @@ export const UploadCenter: React.FC = () => {
     setIsUploadingCourseKey(courseEntry.key);
     try {
       const uploadedUrls: string[] = [];
+      const extractedTopicGroups: Topic[][] = [];
+
       for (let index = 0; index < pdfFiles.length; index += 1) {
         const file = pdfFiles[index];
         const uploadToken = `${Date.now()}_${index}_${file.lastModified}_${file.size}`;
@@ -444,6 +506,60 @@ export const UploadCenter: React.FC = () => {
         const result = await uploadBytes(fileRef, file);
         const downloadURL = await getDownloadURL(result.ref);
         uploadedUrls.push(downloadURL);
+
+        const base64PDF = await fileToBase64(file);
+        const prompt = `Analyze this PDF textbook for "${courseEntry.course.course_name}" at "${courseEntry.course.level}" level.
+Extract a comprehensive syllabus/course outline into a structured JSON array of topics with concise grounding context.
+
+RULES:
+1. Output ONLY the JSON object.
+2. The root object must have a "syllabus" key which is an array of objects.
+3. Each topic object must have:
+   - topic_name (string)
+   - topic_id (slugified string)
+   - topic_context (string, 1-2 lines describing what this topic covers and why it matters in this course)
+   - start_point (string, where teaching should begin for this topic)
+   - end_point (string, where teaching should stop for this topic)
+4. Keep context concise and specific to this course level.
+
+FORMAT:
+{
+  "syllabus": [
+    {
+      "topic_name": "Introduction to...",
+      "topic_id": "intro_to_...",
+      "topic_context": "Brief course-grounded context...",
+      "start_point": "Start from ...",
+      "end_point": "Stop after ..."
+    }
+  ]
+}`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.5-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: 'application/pdf', data: base64PDF } },
+              ],
+            },
+          ],
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        if (!response.text) {
+          throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
+        }
+
+        const responseData = JSON.parse(response.text);
+        const syllabusData = Array.isArray(responseData?.syllabus)
+          ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
+          : [];
+        extractedTopicGroups.push(syllabusData);
       }
 
       const mergedUrls = Array.from(new Set([
@@ -451,13 +567,27 @@ export const UploadCenter: React.FC = () => {
         ...uploadedUrls,
       ]));
 
+      const sharedSnapshot = await get(dbRef(db, `textbook_contexts/shared/${courseEntry.key}`));
+      const existingShared = sharedSnapshot.exists() ? sharedSnapshot.val() : {};
+      const existingSharedPdfUrls: string[] = Array.isArray(existingShared?.pdf_urls) ? existingShared.pdf_urls.filter(Boolean) : [];
+      if (existingShared?.pdf_url && !existingSharedPdfUrls.includes(existingShared.pdf_url)) {
+        existingSharedPdfUrls.push(existingShared.pdf_url);
+      }
+      const mergedSharedPdfUrls = Array.from(new Set([...existingSharedPdfUrls, ...uploadedUrls]));
+      const mergedSharedSyllabus = mergeTopics(
+        Array.isArray(existingShared?.syllabus) ? existingShared.syllabus : [],
+        extractedTopicGroups.flat()
+      );
+      const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingShared?.pdf_url, mergedSharedPdfUrls);
+
       await set(dbRef(db, `textbook_contexts/shared/${courseEntry.key}`), {
         course_key: courseEntry.key,
         course_name: courseEntry.course.course_name,
         level: courseEntry.course.level,
         semester: courseEntry.course.semester || selectedSemester,
-        pdf_url: mergedUrls[mergedUrls.length - 1] || '',
-        pdf_urls: mergedUrls,
+        pdf_url: primaryPdfUrl,
+        pdf_urls: mergedSharedPdfUrls,
+        syllabus: mergedSharedSyllabus,
         uploaded_at: Date.now(),
         uploader_uid: currentUser.uid,
       });
@@ -469,10 +599,10 @@ export const UploadCenter: React.FC = () => {
         const updatedCourses = upsertCourseInList(existingCourses, {
           ...courseEntry.course,
           course_id: courseEntry.course.course_id || courseEntry.key,
-          textbook_url: mergedUrls[mergedUrls.length - 1] || '',
-          textbook_urls: mergedUrls,
+          textbook_url: primaryPdfUrl,
+          textbook_urls: mergedSharedPdfUrls,
           textbook_shared_key: courseEntry.key,
-        });
+        }, mergedSharedSyllabus, mergedSharedPdfUrls);
         await update(departmentRef, {
           course_list: updatedCourses,
         });
@@ -486,7 +616,7 @@ export const UploadCenter: React.FC = () => {
           level: courseEntry.course.level,
           semester: courseEntry.course.semester || selectedSemester,
           department_ids: courseEntry.departmentIds,
-          uploaded_urls: mergedUrls,
+          uploaded_urls: mergedSharedPdfUrls,
           uploaded_at: Date.now(),
         } satisfies UploadRecord);
       }
