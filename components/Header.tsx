@@ -52,8 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
                         >
                             <MessengerIcon />
                             {unreadMessagesCount > 0 && (
-                                <div className="absolute top-1 right-1">
-                                    <span className="flex h-2 w-2 rounded-full bg-emerald ring-2 ring-white" />
+                                <div className="absolute -top-1 -right-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-bold leading-5 text-white shadow-sm ring-2 ring-white">
+                                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                                 </div>
                             )}
                         </button>

@@ -78,6 +78,14 @@ const formatLastSeen = (value?: number) => {
 
 const getUnreadCount = (chat: any) => Number(chat?.unreadCount || 0);
 
+const getLastMessagePreview = (chat: any) => {
+  const text = chat?.last_message?.text;
+  if (typeof text === 'string' && text.trim()) return text.trim();
+  return 'New message';
+};
+
+const getLastMessageSenderId = (chat: any) => chat?.last_message?.senderId || chat?.last_message?.sender_id || '';
+
 const createFallbackChatUser = (uid = ''): UserProfile => ({
   uid,
   display_name: 'Unknown user',
@@ -461,11 +469,51 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     const lastTapRef = useRef<{ id: string | null; time: number }>({ id: null, time: 0 });
     const chatRowLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suppressNextChatOpenRef = useRef(false);
+    const unreadCountsRef = useRef<Record<string, number>>({});
+    const lastNotificationTimestampRef = useRef<Record<string, number>>({});
     const { addToast } = useToast();
 
     const closeMessageActions = () => {
       setMessageActionTarget(null);
       setMessageActionPosition(null);
+    };
+
+    const showIncomingMessageNotification = async (chat: any, summaryText: string) => {
+      if (typeof window === 'undefined') return;
+      if (!userProfile.notifications_enabled) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const title = chat?.otherUser?.display_name
+        ? `New message from ${chat.otherUser.display_name}`
+        : 'New message received';
+
+      const options: NotificationOptions = {
+        body: summaryText,
+        icon: '/logo.svg',
+        badge: '/logo.svg',
+        tag: `messenger-${chat?.id || 'chat'}`,
+        renotify: true,
+        data: {
+          chatId: chat?.id || '',
+        },
+      };
+
+      try {
+        if ('serviceWorker' in navigator) {
+          let registration = await navigator.serviceWorker.getRegistration();
+          if (!registration) {
+            registration = await navigator.serviceWorker.register('/service-worker.js');
+          }
+          if (registration?.showNotification) {
+            await registration.showNotification(title, options);
+            return;
+          }
+        }
+
+        new Notification(title, options);
+      } catch (error) {
+        console.error('Failed to show messenger notification:', error);
+      }
     };
 
     useEffect(() => {
@@ -588,6 +636,31 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
           ...details,
           otherUser: allUsers.find(u => u.uid === details.otherUserId) || createFallbackChatUser(details.otherUserId || chatId)
             }));
+
+            const nextUnreadCounts: Record<string, number> = {};
+            chatList.forEach((chat) => {
+              const unreadCount = getUnreadCount(chat);
+              nextUnreadCounts[chat.id] = unreadCount;
+
+              const previousUnread = unreadCountsRef.current[chat.id] || 0;
+              const lastMessageTimestamp = Number(chat?.last_message?.timestamp || chat?.timestamp || 0);
+              const lastNotifiedTimestamp = lastNotificationTimestampRef.current[chat.id] || 0;
+              const lastSenderId = getLastMessageSenderId(chat);
+              const hasIncomingUnread = unreadCount > previousUnread && unreadCount > 0;
+
+              if (
+                hasIncomingUnread &&
+                lastSenderId &&
+                lastSenderId !== firebaseUser.uid &&
+                lastMessageTimestamp > 0 &&
+                lastMessageTimestamp !== lastNotifiedTimestamp
+              ) {
+                lastNotificationTimestampRef.current[chat.id] = lastMessageTimestamp;
+                void showIncomingMessageNotification(chat, getLastMessagePreview(chat));
+              }
+            });
+
+            unreadCountsRef.current = nextUnreadCounts;
             setChats(chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
         });
     }, [firebaseUser, allUsers]);
@@ -929,7 +1002,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
 
         participantIds.forEach((participantId) => {
-          updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = { text: summaryText };
+          updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = {
+            text: summaryText,
+            senderId: firebaseUser.uid,
+            timestamp: metaTimestamp,
+            type,
+          };
           updates[`user_chats/${participantId}/${activeChat.chatId}/timestamp`] = metaTimestamp;
           updates[`user_chats/${participantId}/${activeChat.chatId}/otherUserId`] = participantId === firebaseUser.uid
             ? activeChat.otherUser.uid
@@ -1001,10 +1079,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1 min-w-0">
                                         <DoubleCheckIcon color="#009EE2" />
-                                        <p className={`text-[14px] truncate ${getUnreadCount(c) > 0 ? 'font-semibold text-[#212529]' : 'text-[#6C757D]'}`}>{c.last_message?.text}</p>
+                                      <p className={`text-[14px] truncate ${getUnreadCount(c) > 0 ? 'font-bold text-[#212529]' : 'text-[#6C757D]'}`}>{getLastMessagePreview(c)}</p>
                                     </div>
                                     {getUnreadCount(c) > 0 && (
-                                        <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#009EE2] text-white text-[10px] font-bold flex items-center justify-center">
+                                      <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
                                             {getUnreadCount(c) > 99 ? '99+' : getUnreadCount(c)}
                                         </span>
                                     )}
