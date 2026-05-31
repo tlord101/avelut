@@ -80,6 +80,16 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
   reader.readAsDataURL(file);
 });
 
+const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === 'string' ? reader.result : '';
+    resolve(result.includes(',') ? result.split(',')[1] : result);
+  };
+  reader.onerror = () => reject(new Error(`Failed to read audio chunk: ${reader.error?.message || 'Unknown error'}`));
+  reader.readAsDataURL(blob);
+});
+
 const uploadChatAttachment = async (userId: string, conversationId: string, file: File, index: number) => {
   const attachmentToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID()
@@ -622,13 +632,20 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       mediaRecorderRef.current = recorder;
       const liveAudioMimeType = recorder.mimeType || options.mimeType || 'audio/webm;codecs=opus';
 
-      recorder.addEventListener('dataavailable', (ev: BlobEvent) => {
+      recorder.addEventListener('dataavailable', async (ev: BlobEvent) => {
         if (!ev.data || ev.data.size === 0) return;
         try {
           const audioChunk = ev.data.type
             ? ev.data
             : new Blob([ev.data], { type: liveAudioMimeType });
-          liveSessionRef.current?.sendRealtimeInput?.({ audio: audioChunk });
+          const realtimeAudioMimeType = audioChunk.type || liveAudioMimeType || 'audio/webm';
+          const encodedAudio = await blobToBase64(audioChunk);
+          liveSessionRef.current?.sendRealtimeInput?.({
+            audio: {
+              data: encodedAudio,
+              mimeType: realtimeAudioMimeType,
+            },
+          });
         } catch (err) {
           console.error('Failed to send realtime input:', err);
         }
