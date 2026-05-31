@@ -80,15 +80,72 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
   reader.readAsDataURL(file);
 });
 
-const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const result = typeof reader.result === 'string' ? reader.result : '';
-    resolve(result.includes(',') ? result.split(',')[1] : result);
-  };
-  reader.onerror = () => reject(new Error(`Failed to read audio chunk: ${reader.error?.message || 'Unknown error'}`));
-  reader.readAsDataURL(blob);
-});
+const floatTo16BitPCM = (input: Float32Array) => {
+  const buffer = new ArrayBuffer(input.length * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i] || 0));
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Uint8Array(buffer);
+};
+
+const uint8ToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...Array.from(chunk));
+  }
+  return btoa(binary);
+};
+
+const downsampleTo16k = (input: Float32Array, inputRate: number) => {
+  if (!input.length) return new Float32Array(0);
+  if (inputRate <= 16000) return input;
+  const ratio = inputRate / 16000;
+  const newLength = Math.max(1, Math.round(input.length / ratio));
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.min(input.length, Math.round((offsetResult + 1) * ratio));
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer; i += 1) {
+      accum += input[i] || 0;
+      count += 1;
+    }
+    result[offsetResult] = count ? accum / count : 0;
+    offsetResult += 1;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+};
+
+const parsePcmRate = (mimeType?: string) => {
+  const match = mimeType?.match(/rate=(\d+)/i);
+  return match ? Number(match[1]) : 24000;
+};
+
+const base64ToUint8Array = (base64: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const pcm16ToFloat32 = (pcmBytes: Uint8Array) => {
+  const sampleCount = Math.floor(pcmBytes.length / 2);
+  const floatData = new Float32Array(sampleCount);
+  const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+  for (let i = 0; i < sampleCount; i += 1) {
+    floatData[i] = view.getInt16(i * 2, true) / 0x8000;
+  }
+  return floatData;
+};
 
 const uploadChatAttachment = async (userId: string, conversationId: string, file: File, index: number) => {
   const attachmentToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
@@ -215,19 +272,76 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const inputElementRef = useRef<HTMLInputElement>(null);
   const liveSessionRef = useRef<any | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
+  const outputPlaybackTimeRef = useRef(0);
+  const micSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micProcessorNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const micSilenceGainNodeRef = useRef<GainNode | null>(null);
   const isLiveSessionOpenRef = useRef(false);
 
+  const enqueueLivePcmAudio = (base64Data: string, mimeType?: string) => {
+    try {
+      if (!base64Data) return;
+      const sampleRate = parsePcmRate(mimeType);
+      const pcmBytes = base64ToUint8Array(base64Data);
+      if (!pcmBytes.length) return;
+
+      if (!outputAudioContextRef.current) {
+        outputAudioContextRef.current = new AudioContext();
+      }
+      const outputContext = outputAudioContextRef.current;
+      const floatAudio = pcm16ToFloat32(pcmBytes);
+      const audioBuffer = outputContext.createBuffer(1, floatAudio.length, sampleRate);
+      audioBuffer.copyToChannel(floatAudio, 0);
+
+      const source = outputContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(outputContext.destination);
+
+      const startAt = Math.max(outputContext.currentTime + 0.01, outputPlaybackTimeRef.current);
+      source.start(startAt);
+      outputPlaybackTimeRef.current = startAt + audioBuffer.duration;
+    } catch (error) {
+      console.error('Failed to enqueue live audio:', error);
+    }
+  };
+
   const stopLiveCaptureOnly = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+    if (micProcessorNodeRef.current) {
+      try {
+        micProcessorNodeRef.current.onaudioprocess = null;
+        micProcessorNodeRef.current.disconnect();
+      } catch (error) {
+        console.warn('Could not disconnect mic processor:', error);
+      }
+    }
+    if (micSourceNodeRef.current) {
+      try {
+        micSourceNodeRef.current.disconnect();
+      } catch (error) {
+        console.warn('Could not disconnect mic source:', error);
+      }
+    }
+    if (micSilenceGainNodeRef.current) {
+      try {
+        micSilenceGainNodeRef.current.disconnect();
+      } catch (error) {
+        console.warn('Could not disconnect silence gain node:', error);
+      }
     }
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    mediaRecorderRef.current = null;
+    if (inputAudioContextRef.current) {
+      void inputAudioContextRef.current.close().catch(() => undefined);
+    }
+    micProcessorNodeRef.current = null;
+    micSourceNodeRef.current = null;
+    micSilenceGainNodeRef.current = null;
     mediaStreamRef.current = null;
+    inputAudioContextRef.current = null;
   };
 
   useEffect(() => {
@@ -559,6 +673,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       const serverContent = msg?.serverContent;
       if (!serverContent) return;
 
+      const parts = serverContent?.modelTurn?.parts || [];
+      parts.forEach((part: any) => {
+        const inlineData = part?.inlineData;
+        if (!inlineData?.data) return;
+        if (!String(inlineData.mimeType || '').startsWith('audio/pcm')) return;
+        enqueueLivePcmAudio(String(inlineData.data), String(inlineData.mimeType || 'audio/pcm;rate=24000'));
+      });
+
       // Preferred textual content locations
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text;
       if (text) {
@@ -621,6 +743,19 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       setStatusText('Connecting to live session...');
       const session = await ai.live.connect({
         model: LIVE_MODEL,
+        config: {
+          responseModalities: ['AUDIO'] as any,
+          systemInstruction: {
+            parts: [{ text: 'You are a helpful, real-time voice assistant. Respond concisely.' }],
+          } as any,
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Aoede',
+              },
+            },
+          },
+        },
         callbacks: {
           onopen: () => {
             isLiveSessionOpenRef.current = true;
@@ -645,33 +780,42 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       liveSessionRef.current = session;
 
-      // Start MediaRecorder and stream chunks to the session
-      const options: any = {};
-      let mime = '';
-      if (MediaRecorder.isTypeSupported) {
-        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
-        else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+      // Start PCM capture and stream chunks to the session
+      const inputAudioContext = new AudioContext();
+      inputAudioContextRef.current = inputAudioContext;
+      if (inputAudioContext.state === 'suspended') {
+        await inputAudioContext.resume();
       }
-      if (mime) options.mimeType = mime;
 
-      const recorder = new MediaRecorder(stream as MediaStream, options);
-      mediaRecorderRef.current = recorder;
-      const liveAudioMimeType = recorder.mimeType || options.mimeType || 'audio/webm;codecs=opus';
+      if (outputAudioContextRef.current?.state === 'suspended') {
+        await outputAudioContextRef.current.resume();
+      }
 
-      recorder.addEventListener('dataavailable', async (ev: BlobEvent) => {
-        if (!ev.data || ev.data.size === 0) return;
+      const sourceNode = inputAudioContext.createMediaStreamSource(stream as MediaStream);
+      micSourceNodeRef.current = sourceNode;
+      const processorNode = inputAudioContext.createScriptProcessor(2048, 1, 1);
+      micProcessorNodeRef.current = processorNode;
+      const silenceGainNode = inputAudioContext.createGain();
+      silenceGainNode.gain.value = 0;
+      micSilenceGainNodeRef.current = silenceGainNode;
+
+      sourceNode.connect(processorNode);
+      processorNode.connect(silenceGainNode);
+      silenceGainNode.connect(inputAudioContext.destination);
+
+      processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
         if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
         try {
-          const audioChunk = ev.data.type
-            ? ev.data
-            : new Blob([ev.data], { type: liveAudioMimeType });
-          const realtimeAudioMimeType = audioChunk.type || liveAudioMimeType || 'audio/webm';
-          const encodedAudio = await blobToBase64(audioChunk);
-          if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
+          const inputBuffer = event.inputBuffer.getChannelData(0);
+          const downsampled = downsampleTo16k(inputBuffer, inputAudioContext.sampleRate);
+          if (!downsampled.length) return;
+          const pcmBytes = floatTo16BitPCM(downsampled);
+          const encodedAudio = uint8ToBase64(pcmBytes);
+
           liveSessionRef.current.sendRealtimeInput?.({
-            audio: {
+            media: {
+              mimeType: 'audio/pcm;rate=16000',
               data: encodedAudio,
-              mimeType: realtimeAudioMimeType,
             },
           });
         } catch (err) {
@@ -684,9 +828,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           }
           console.error('Failed to send realtime input:', err);
         }
-      });
+      };
 
-      recorder.start(250); // emit small chunks frequently
       setStatusText('Listening...');
     } catch (err) {
       console.error('Failed to start live session:', err);
