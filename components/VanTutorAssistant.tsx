@@ -44,6 +44,10 @@ interface VanTutorAssistantProps {
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+const LIVE_API_KEY = process.env.API_KEY || '';
+const LIVE_WEBSOCKET_URL = LIVE_API_KEY
+  ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${LIVE_API_KEY}`
+  : '';
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
@@ -271,7 +275,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const inputElementRef = useRef<HTMLInputElement>(null);
-  const liveSessionRef = useRef<any | null>(null);
+  const liveSessionRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -339,11 +343,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     if (inputAudioContextRef.current) {
       void inputAudioContextRef.current.close().catch(() => undefined);
     }
+    if (outputAudioContextRef.current) {
+      void outputAudioContextRef.current.close().catch(() => undefined);
+    }
     micProcessorNodeRef.current = null;
     micSourceNodeRef.current = null;
     micSilenceGainNodeRef.current = null;
     mediaStreamRef.current = null;
     inputAudioContextRef.current = null;
+    outputAudioContextRef.current = null;
+    outputPlaybackTimeRef.current = 0;
   };
 
   useEffect(() => {
@@ -731,7 +740,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   const startLiveSession = async () => {
-    if (!ai || !ai.live) {
+    if (!LIVE_WEBSOCKET_URL) {
       setStatusText('Live API not configured');
       setInputState(1);
       return;
@@ -751,57 +760,66 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       mediaStreamRef.current = stream;
 
       setStatusText('Connecting to live session...');
-      const session = await ai.live.connect({
-        model: LIVE_MODEL,
-        config: {
-          responseModalities: ['AUDIO'] as any,
-          systemInstruction: {
-            parts: [{ text: 'You are a helpful, real-time voice assistant. Respond concisely.' }],
-          } as any,
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: 'Aoede',
+      const socket = new WebSocket(LIVE_WEBSOCKET_URL);
+      liveSessionRef.current = socket;
+
+      socket.onopen = () => {
+        if (sessionToken !== liveSessionTokenRef.current) return;
+        isLiveSessionOpenRef.current = true;
+        isLiveSessionStartingRef.current = false;
+
+        socket.send(JSON.stringify({
+          config: {
+            model: LIVE_MODEL,
+            responseModalities: ['AUDIO'],
+            systemInstruction: {
+              parts: [
+                {
+                  text: 'You are a helpful, real-time voice assistant. Respond concisely.',
+                },
+              ],
+            },
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Aoede',
+                },
               },
             },
           },
-        },
-        callbacks: {
-          onopen: () => {
-            if (sessionToken !== liveSessionTokenRef.current) return;
-            isLiveSessionOpenRef.current = true;
-            isLiveSessionStartingRef.current = false;
-            setStatusText('Live connected');
-          },
-          onmessage: (e: any) => handleLiveServerMessage(e),
-          onerror: (e: any) => {
-            if (sessionToken !== liveSessionTokenRef.current) return;
-            console.error('Live error', e);
-            isLiveSessionOpenRef.current = false;
-            isLiveSessionStartingRef.current = false;
-            liveSessionRef.current = null;
-            stopLiveCaptureOnly();
-            setStatusText('Live error');
-            setInputState(1);
-          },
-          onclose: () => {
-            if (sessionToken !== liveSessionTokenRef.current) return;
-            isLiveSessionOpenRef.current = false;
-            isLiveSessionStartingRef.current = false;
-            liveSessionRef.current = null;
-            stopLiveCaptureOnly();
-            setStatusText('Live closed');
-            setInputState(1);
-          },
-        },
-      });
+        }));
 
-      if (sessionToken !== liveSessionTokenRef.current) {
-        try { session.close?.(); } catch (error) { /* ignore stale close */ }
-        return;
-      }
+        setStatusText('Live connected');
+      };
 
-      liveSessionRef.current = session;
+      socket.onmessage = (event) => {
+        if (sessionToken !== liveSessionTokenRef.current) return;
+        try {
+          const response = JSON.parse(event.data);
+          handleLiveServerMessage(response);
+        } catch (error) {
+          console.error('Error parsing live message:', error);
+        }
+      };
+
+      socket.onerror = (event) => {
+        if (sessionToken !== liveSessionTokenRef.current) return;
+        console.error('Live error', event);
+        isLiveSessionOpenRef.current = false;
+        isLiveSessionStartingRef.current = false;
+        stopLiveCaptureOnly();
+        setStatusText('Live error');
+        setInputState(1);
+      };
+
+      socket.onclose = () => {
+        if (sessionToken !== liveSessionTokenRef.current) return;
+        isLiveSessionOpenRef.current = false;
+        isLiveSessionStartingRef.current = false;
+        stopLiveCaptureOnly();
+        setStatusText('Live closed');
+        setInputState(1);
+      };
 
       // Start PCM capture and stream chunks to the session
       const inputAudioContext = new AudioContext();
@@ -828,7 +846,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
         if (sessionToken !== liveSessionTokenRef.current) return;
-        if (!isLiveSessionOpenRef.current || !liveSessionRef.current) return;
+        if (!isLiveSessionOpenRef.current || !liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
         try {
           const inputBuffer = event.inputBuffer.getChannelData(0);
           const downsampled = downsampleTo16k(inputBuffer, inputAudioContext.sampleRate);
@@ -836,12 +854,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           const pcmBytes = floatTo16BitPCM(downsampled);
           const encodedAudio = uint8ToBase64(pcmBytes);
 
-          liveSessionRef.current.sendRealtimeInput?.({
-            media: {
-              mimeType: 'audio/pcm;rate=16000',
-              data: encodedAudio,
+          liveSessionRef.current.send(JSON.stringify({
+            realtimeInput: {
+              mediaChunks: [
+                {
+                  mimeType: 'audio/pcm;rate=16000',
+                  data: encodedAudio,
+                },
+              ],
             },
-          });
+          }));
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes('WebSocket is already in CLOSING or CLOSED state')) {
@@ -876,7 +898,11 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       // Stop recorder
       stopLiveCaptureOnly();
       // Signal end of audio stream to server
-      try { liveSessionRef.current?.sendRealtimeInput?.({ audioStreamEnd: true }); } catch (e) { /* ignore */ }
+      try {
+        if (liveSessionRef.current?.readyState === WebSocket.OPEN) {
+          liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+        }
+      } catch (e) { /* ignore */ }
       // Close session
       try { liveSessionRef.current?.close?.(); } catch (e) { /* ignore */ }
     } catch (err) {
