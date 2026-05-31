@@ -634,10 +634,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
       }
 
       const updates: any = {};
-      updates[`user_chats/${firebaseUser.uid}/${chatId}/last_message`] = { text: summaryText };
-      updates[`user_chats/${firebaseUser.uid}/${chatId}/timestamp`] = latestTimestamp;
-      updates[`user_chats/${otherUserId}/${chatId}/last_message`] = { text: summaryText };
-      updates[`user_chats/${otherUserId}/${chatId}/timestamp`] = latestTimestamp;
+      const participantIds = Array.from(new Set([firebaseUser.uid, otherUserId]));
+
+      participantIds.forEach((participantId) => {
+        updates[`user_chats/${participantId}/${chatId}/last_message`] = { text: summaryText };
+        updates[`user_chats/${participantId}/${chatId}/timestamp`] = latestTimestamp;
+      });
       await update(dbRef(db), updates);
     };
 
@@ -921,19 +923,23 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
         if (type === 'voice') summaryText = '🎵 Voice message';
         else if (type === 'image') summaryText = '📷 Image file';
         else if (type === 'file') summaryText = '📄 Document file';
-        const meta = { last_message: { text: summaryText }, timestamp: firebaseServerTimestamp() };
+        const metaTimestamp = firebaseServerTimestamp();
         const unreadSnapshot = await get(dbRef(db, `user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`));
         const unreadCount = Number(unreadSnapshot.val() || 0);
-      updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}`] = {
-        ...meta,
-        otherUserId: activeChat.otherUser.uid,
-        unreadCount: 0
-      };
-      updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}`] = {
-        ...meta,
-        otherUserId: firebaseUser.uid
-      };
-      updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
+        const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
+
+        participantIds.forEach((participantId) => {
+          updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = { text: summaryText };
+          updates[`user_chats/${participantId}/${activeChat.chatId}/timestamp`] = metaTimestamp;
+          updates[`user_chats/${participantId}/${activeChat.chatId}/otherUserId`] = participantId === firebaseUser.uid
+            ? activeChat.otherUser.uid
+            : firebaseUser.uid;
+        });
+
+        updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`] = 0;
+        if (activeChat.otherUser.uid !== firebaseUser.uid) {
+          updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
+        }
         update(dbRef(db), updates);
     };
 
