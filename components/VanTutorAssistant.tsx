@@ -282,7 +282,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const outputPlaybackTimeRef = useRef(0);
   const micSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micProcessorNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const micWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const micSilenceGainNodeRef = useRef<GainNode | null>(null);
+  const micWorkletModuleUrlRef = useRef<string | null>(null);
   const isLiveSessionOpenRef = useRef(false);
   const isLiveSessionStartingRef = useRef(false);
   const liveSessionTokenRef = useRef(0);
@@ -315,6 +317,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   const stopLiveCaptureOnly = () => {
+    if (micWorkletNodeRef.current) {
+      try {
+        micWorkletNodeRef.current.port.onmessage = null;
+        micWorkletNodeRef.current.disconnect();
+      } catch (error) {
+        console.warn('Could not disconnect mic worklet:', error);
+      }
+    }
     if (micProcessorNodeRef.current) {
       try {
         micProcessorNodeRef.current.onaudioprocess = null;
@@ -347,12 +357,17 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       void outputAudioContextRef.current.close().catch(() => undefined);
     }
     micProcessorNodeRef.current = null;
+    micWorkletNodeRef.current = null;
     micSourceNodeRef.current = null;
     micSilenceGainNodeRef.current = null;
     mediaStreamRef.current = null;
     inputAudioContextRef.current = null;
     outputAudioContextRef.current = null;
     outputPlaybackTimeRef.current = 0;
+    if (micWorkletModuleUrlRef.current) {
+      URL.revokeObjectURL(micWorkletModuleUrlRef.current);
+      micWorkletModuleUrlRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -834,21 +849,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
       const sourceNode = inputAudioContext.createMediaStreamSource(stream as MediaStream);
       micSourceNodeRef.current = sourceNode;
-      const processorNode = inputAudioContext.createScriptProcessor(2048, 1, 1);
-      micProcessorNodeRef.current = processorNode;
       const silenceGainNode = inputAudioContext.createGain();
       silenceGainNode.gain.value = 0;
       micSilenceGainNodeRef.current = silenceGainNode;
-
-      sourceNode.connect(processorNode);
-      processorNode.connect(silenceGainNode);
+      sourceNode.connect(silenceGainNode);
       silenceGainNode.connect(inputAudioContext.destination);
 
-      processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+      const sendAudioChunk = (inputBuffer: Float32Array) => {
         if (sessionToken !== liveSessionTokenRef.current) return;
         if (!isLiveSessionOpenRef.current || !liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
         try {
-          const inputBuffer = event.inputBuffer.getChannelData(0);
           const downsampled = downsampleTo16k(inputBuffer, inputAudioContext.sampleRate);
           if (!downsampled.length) return;
           const pcmBytes = floatTo16BitPCM(downsampled);
@@ -878,6 +888,37 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           console.error('Failed to send realtime input:', err);
         }
       };
+
+      if ('audioWorklet' in inputAudioContext) {
+        const workletSource = `
+          class PCMProcessor extends AudioWorkletProcessor {
+            process(inputs) {
+              const input = inputs[0];
+              if (input && input[0] && input[0].length) {
+                this.port.postMessage(input[0]);
+              }
+              return true;
+            }
+          }
+          registerProcessor('pcm-processor', PCMProcessor);
+        `;
+        const workletUrl = URL.createObjectURL(new Blob([workletSource], { type: 'application/javascript' }));
+        micWorkletModuleUrlRef.current = workletUrl;
+        await inputAudioContext.audioWorklet.addModule(workletUrl);
+        const workletNode = new AudioWorkletNode(inputAudioContext, 'pcm-processor');
+        micWorkletNodeRef.current = workletNode;
+        workletNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          sendAudioChunk(event.data instanceof Float32Array ? event.data : new Float32Array(event.data as any));
+        };
+        workletNode.connect(silenceGainNode);
+      } else {
+        const processorNode = inputAudioContext.createScriptProcessor(2048, 1, 1);
+        micProcessorNodeRef.current = processorNode;
+        processorNode.connect(silenceGainNode);
+        processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+          sendAudioChunk(event.inputBuffer.getChannelData(0));
+        };
+      }
 
       setStatusText('Listening...');
     } catch (err) {
