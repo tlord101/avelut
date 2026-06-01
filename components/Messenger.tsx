@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { UserProfile } from '../types';
 import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
@@ -434,7 +434,7 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
 // MAIN UNIFORM LIGHT THEME MESSENGER
 // ==========================================
 
-export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) => {
+export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: string | null }> = ({ userProfile, initialChatId = null }) => {
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
     const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
     const [chats, setChats] = useState<any[]>([]);
@@ -548,6 +548,39 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     }, [allUsers, peopleSearchQuery]);
 
     const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
+
+    const ensureChatThreadRecord = useCallback(async (otherUser: UserProfile) => {
+      if (!firebaseUser) return null;
+      const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
+      const currentThreadRef = dbRef(db, `user_chats/${firebaseUser.uid}/${chatId}`);
+      const snapshot = await get(currentThreadRef);
+
+      if (!snapshot.exists()) {
+        const now = firebaseServerTimestamp();
+        await set(currentThreadRef, {
+          otherUserId: otherUser.uid,
+          timestamp: now,
+          unreadCount: 0,
+          last_message: {
+            text: 'Start a conversation',
+            senderId: firebaseUser.uid,
+            timestamp: now,
+            type: 'text',
+          },
+        });
+      }
+
+      return chatId;
+    }, [firebaseUser]);
+
+    const openChatWithUser = useCallback((otherUser: UserProfile) => {
+      void (async () => {
+        const chatId = await ensureChatThreadRecord(otherUser);
+        if (!chatId) return;
+        setActiveChat({ chatId, otherUser });
+        setTab('chats');
+      })();
+    }, [ensureChatThreadRecord]);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, user => { 
@@ -664,6 +697,14 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
             setChats(chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
         });
     }, [firebaseUser, allUsers]);
+
+    useEffect(() => {
+      if (!initialChatId || !chats.length) return;
+      const nextChat = chats.find(chat => chat.id === initialChatId);
+      if (!nextChat) return;
+      setActiveChat({ chatId: nextChat.id, otherUser: nextChat.otherUser });
+      setTab('chats');
+    }, [initialChatId, chats]);
 
     useEffect(() => {
         if (!activeChat) return;
@@ -987,38 +1028,54 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
     };
 
     const sendMsg = async (text: string, type = 'text') => {
-        if ((!text.trim() && type === 'text') || !activeChat || !firebaseUser) return;
-        const msgRef = push(dbRef(db, `messages/${activeChat.chatId}`));
-        const data = { senderId: firebaseUser.uid, text, type, timestamp: firebaseServerTimestamp() };
-        await set(msgRef, data);
-        const updates: any = {};
-        let summaryText = text;
-        if (type === 'voice') summaryText = '🎵 Voice message';
-        else if (type === 'image') summaryText = '📷 Image file';
-        else if (type === 'file') summaryText = '📄 Document file';
-        const metaTimestamp = firebaseServerTimestamp();
-        const unreadSnapshot = await get(dbRef(db, `user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`));
-        const unreadCount = Number(unreadSnapshot.val() || 0);
-        const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
-
-        participantIds.forEach((participantId) => {
-          updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = {
-            text: summaryText,
-            senderId: firebaseUser.uid,
-            timestamp: metaTimestamp,
-            type,
-          };
-          updates[`user_chats/${participantId}/${activeChat.chatId}/timestamp`] = metaTimestamp;
-          updates[`user_chats/${participantId}/${activeChat.chatId}/otherUserId`] = participantId === firebaseUser.uid
-            ? activeChat.otherUser.uid
-            : firebaseUser.uid;
-        });
-
-        updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`] = 0;
-        if (activeChat.otherUser.uid !== firebaseUser.uid) {
-          updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
+        if ((!text.trim() && type === 'text') || !activeChat || !firebaseUser) {
+          addToast('Open a chat first, then send a message.', 'info');
+          return;
         }
-        update(dbRef(db), updates);
+
+        const msgRef = push(dbRef(db, `messages/${activeChat.chatId}`));
+        const clientTimestamp = Date.now();
+        const optimisticId = msgRef.key || `${clientTimestamp}`;
+        const data = { senderId: firebaseUser.uid, text, type, timestamp: firebaseServerTimestamp() };
+        const optimisticMessage = { id: optimisticId, ...data, timestamp: clientTimestamp };
+
+        setMessages(prev => [...prev, optimisticMessage]);
+
+        try {
+          await set(msgRef, data);
+          const updates: any = {};
+          let summaryText = text;
+          if (type === 'voice') summaryText = '🎵 Voice message';
+          else if (type === 'image') summaryText = '📷 Image file';
+          else if (type === 'file') summaryText = '📄 Document file';
+          const metaTimestamp = firebaseServerTimestamp();
+          const unreadSnapshot = await get(dbRef(db, `user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`));
+          const unreadCount = Number(unreadSnapshot.val() || 0);
+          const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
+
+          participantIds.forEach((participantId) => {
+            updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = {
+              text: summaryText,
+              senderId: firebaseUser.uid,
+              timestamp: metaTimestamp,
+              type,
+            };
+            updates[`user_chats/${participantId}/${activeChat.chatId}/timestamp`] = metaTimestamp;
+            updates[`user_chats/${participantId}/${activeChat.chatId}/otherUserId`] = participantId === firebaseUser.uid
+              ? activeChat.otherUser.uid
+              : firebaseUser.uid;
+          });
+
+          updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`] = 0;
+          if (activeChat.otherUser.uid !== firebaseUser.uid) {
+            updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
+          }
+          await update(dbRef(db), updates);
+        } catch (error: any) {
+          setMessages(prev => prev.filter(message => message.id !== optimisticId));
+          console.error('Failed to send message:', error);
+          addToast(error?.message || 'Message failed to send.', 'error');
+        }
     };
 
     return (
@@ -1093,7 +1150,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
                             </div>
                         </div>
                     )) : filteredPeople.map(u => (
-                        <div key={u.uid} onClick={() => setActiveChat({ chatId: [firebaseUser?.uid, u.uid].sort().join('_'), otherUser: u })} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
+                      <div key={u.uid} onClick={() => openChatWithUser(u)} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
                             <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={u.photo_url} />
                             <h3 className="text-[#212529] font-medium text-[15px]">{u.display_name}</h3>
                             <span className="ml-auto text-[11px] text-[#6C757D] font-normal">{u.is_online ? <span className="text-[#28A745]">online</span> : formatLastSeen(u.last_seen)}</span>
@@ -1126,7 +1183,18 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
                         {/* 2. SCROLLABLE Message Stream Box Container */}
                         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 max-w-3xl mx-auto w-full">
-                            {combinedMessageStream.map((msg) => {
+                            {combinedMessageStream.length === 0 ? (
+                              <div className="flex min-h-[48vh] flex-col items-center justify-center text-center">
+                                <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-sm border border-[#E9ECEF]">
+                                  <LogoIcon className="h-11 w-11" />
+                                </div>
+                                <p className="mt-5 text-xs font-bold uppercase tracking-[0.24em] text-[#6C757D]">New contact</p>
+                                <h2 className="mt-2 text-2xl font-black text-[#212529]">Start a chat to connect</h2>
+                                <p className="mt-2 max-w-md text-sm leading-6 text-[#6C757D]">
+                                  Say hello to {selectedChatUser.display_name}. Your first message will create the conversation.
+                                </p>
+                              </div>
+                            ) : combinedMessageStream.map((msg) => {
                                 const isMe = msg.senderId === firebaseUser?.uid;
                                 
                                 // Safe string checks on markdown regex match selectors
@@ -1317,9 +1385,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile }> = ({ userProfile 
 
                     </div>
                 ) : (
-                    <div className="text-center opacity-30 select-none">
-                        <LogoIcon className="w-24 h-24 mx-auto mb-2 text-[#6C757D]" />
-                        <h2 className="text-2xl font-black italic tracking-widest text-[#6C757D]">VANTUTOR</h2>
+                  <div className="mx-auto max-w-md px-6 text-center select-none">
+                    <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[30px] bg-white shadow-sm border border-[#E9ECEF]">
+                      <LogoIcon className="w-14 h-14 text-[#6C757D]" />
+                    </div>
+                    <h2 className="mt-5 text-2xl font-black tracking-wide text-[#212529]">VANTUTOR</h2>
+                    <p className="mt-2 text-sm leading-6 text-[#6C757D]">Pick a person to start a new chat and connect with them.</p>
                     </div>
                 )}
             </div>
