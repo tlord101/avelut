@@ -4,6 +4,8 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course } from '../types';
 import { useToast } from '../hooks/useToast';
+import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { CheckIcon } from './icons/CheckIcon';
@@ -129,6 +131,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [isTopicDataLoading, setIsTopicDataLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const { addToast } = useToast();
+  const { attemptApiCall } = useApiLimiter();
+  const { settings: appSettings } = useAppSettings();
+  const geminiModel = appSettings.primary_gemini_model;
 
   useEffect(() => {
     // Check for available subjects (courses) in Past Questions FOR THE USER'S DEPT AND LEVEL
@@ -297,6 +302,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const generateQuestions = async () => {
     setExamState('generating');
     try {
+      if (!ai) {
+        throw new Error('AI features are unavailable because API_KEY is missing.');
+      }
       const safeDepartment = sanitizePromptInput(getCourseNameById(userProfile.department_id));
       const safeLevel = sanitizePromptInput(userProfile.level);
       const safeTopics = completedTopicNames.map((topicName, index) => {
@@ -304,43 +312,48 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         return sanitizedTopic || `Topic ${index + 1}`;
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    correctAnswer: { type: Type.STRING },
-                    explanation: { type: Type.STRING }
-                  },
-                  required: ['question', 'options', 'correctAnswer', 'explanation']
+      const result = await attemptApiCall(async () => {
+        const response = await ai.models.generateContent({
+          model: geminiModel,
+          contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                questions: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      question: { type: Type.STRING },
+                      options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      correctAnswer: { type: Type.STRING },
+                      explanation: { type: Type.STRING }
+                    },
+                    required: ['question', 'options', 'correctAnswer', 'explanation']
+                  }
                 }
               }
             }
           }
-        }
-      });
+        });
 
-      if (!response.text) {
-        throw new Error('AI returned an empty response while generating exam questions.');
-      }
-      const responseData = JSON.parse(response.text);
-      if (responseData.questions && responseData.questions.length > 0) {
+        if (!response.text) {
+          throw new Error('AI returned an empty response while generating exam questions.');
+        }
+        const responseData = JSON.parse(response.text);
+        if (!(responseData.questions && responseData.questions.length > 0)) {
+          throw new Error("Failed to generate valid questions from AI response.");
+        }
         const newQuestions = responseData.questions;
         setQuestions(newQuestions);
         setTimeLeft(newQuestions.length * TIME_PER_QUESTION_SECONDS);
         setExamState('in_progress');
-      } else {
-        throw new Error("Failed to generate valid questions from AI response.");
+      });
+
+      if (!result.success) {
+        throw new Error(result.message);
       }
     } catch (error: any) {
       console.error("Error generating exam questions:", error);

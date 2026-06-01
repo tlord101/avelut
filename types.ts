@@ -143,6 +143,12 @@ export interface DashboardData {
     examHistory: ExamHistoryItem[];
 }
 
+export interface AppSettings {
+  primary_gemini_model: string;
+  upload_center_uploads_enabled: boolean;
+  coming_soon_enabled: boolean;
+}
+
 // Type for the new Notification System
 export interface Notification {
   id: string;

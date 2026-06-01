@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -203,6 +204,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 
 
     const { attemptApiCall } = useApiLimiter();
+    const { settings: appSettings } = useAppSettings();
     const { addToast } = useToast();
 
     const cleanupCamera = useCallback(() => {
@@ -437,7 +439,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: geminiModel,
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
@@ -471,7 +473,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: geminiModel,
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }
@@ -505,7 +507,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: geminiModel,
                 contents: [{ role: 'user', parts: [
                     { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                     { text: promptText }

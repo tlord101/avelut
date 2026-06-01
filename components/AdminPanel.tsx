@@ -4,6 +4,7 @@ import { ref as dbRef, set, push, update, get, remove } from 'firebase/database'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
+import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile, Question, Course, Topic } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { MenuIcon } from './icons/MenuIcon';
@@ -14,6 +15,7 @@ import { ExamIcon } from './icons/ExamIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { getWindowPathname } from '../utils/pathname';
+import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS } from '../utils/appSettings';
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
@@ -54,7 +56,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'questions' | 'courses' | 'users' | 'departments';
+type AdminTab = 'questions' | 'courses' | 'users' | 'departments' | 'app';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -63,7 +65,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users', 'app'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -314,10 +316,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
     const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
-    const visibleTabs = useMemo(
-        () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
-        [allowedTabs]
-    );
+const { settings: appSettings } = useAppSettings();
+const geminiModel = appSettings.primary_gemini_model;
+const [isSavingAppSettings, setIsSavingAppSettings] = useState(false);
+const [appSettingsDraft, setAppSettingsDraft] = useState(appSettings);
+const visibleTabs = useMemo(
+    () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
+    [allowedTabs]
+);
     const resolvedPathname = pathname || internalPathname;
     const courseAdminView = useMemo(() => getCourseAdminView(resolvedPathname), [resolvedPathname]);
     const isManagerCourseView = courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail';
@@ -477,7 +483,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 const prompt = `Create a short notification title (max 8 words) and a concise notification message (max 200 characters) for a ${notificationType.replace('_', ' ')} to students. Return only a JSON object with keys \"title\" and \"message\".`;
 
                 const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
+                    model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],
                     config: {
                         responseMimeType: "application/json",
@@ -544,6 +550,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
+    const handleSaveAppSettings = async () => {
+        const nextSettings = {
+            ...appSettingsDraft,
+            primary_gemini_model: appSettingsDraft.primary_gemini_model.trim() || DEFAULT_APP_SETTINGS.primary_gemini_model,
+        };
+
+        setIsSavingAppSettings(true);
+        try {
+            await set(dbRef(db, APP_SETTINGS_PATH), nextSettings);
+            addToast('App settings saved successfully!', 'success');
+        } catch (error: any) {
+            console.error('Error saving app settings:', error);
+            addToast(error?.message || 'Failed to save app settings', 'error');
+        } finally {
+            setIsSavingAppSettings(false);
+        }
+    };
+
     // Past Questions State
     const [year, setYear] = useState('');
     const [newQuestion, setNewQuestion] = useState<Question>({
@@ -577,6 +601,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [uploadLevel, setUploadLevel] = useState('');
     const [uploadCourseName, setUploadCourseName] = useState('');
     const [autoSyncToOfferingDepartments, setAutoSyncToOfferingDepartments] = useState(true);
+
+    useEffect(() => {
+        setAppSettingsDraft(appSettings);
+    }, [appSettings]);
 
     useEffect(() => {
         const pathTab = resolvedPathname.split('/').filter(Boolean)[1] as AdminTab | undefined;
@@ -911,7 +939,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
 
         setIsPQProcessing(true);
-        setExtractionProgress('Extracting questions with Gemini 3.5 Flash...');
+        setExtractionProgress(`Extracting questions with ${geminiModel}...`);
 
         try {
             const reader = new FileReader();
@@ -942,7 +970,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }`;
 
             const response = await ai.models.generateContent({
-                model: "gemini-3.5-flash",
+                model: geminiModel,
                 contents: [
                     {
                         role: 'user',
@@ -1057,7 +1085,7 @@ FORMAT:
 }`;
 
                 const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
+                    model: geminiModel,
                     contents: [
                         {
                             role: 'user',
@@ -1216,7 +1244,7 @@ FORMAT:
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
 
-                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with Gemini 3.5 Flash...`);
+                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with ${geminiModel}...`);
                 
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
@@ -1253,7 +1281,7 @@ FORMAT:
             }`;
 
                 const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
+                    model: geminiModel,
                     contents: [
                         {
                             role: 'user',
@@ -1563,7 +1591,80 @@ FORMAT:
                         User Management
                     </button>
                 )}
+                {visibleTabs.includes('app') && (
+                    <button 
+                        onClick={() => handleCourseTabNavigate('/admin/app')}
+                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'app' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
+                    >
+                        App Controls
+                    </button>
+                )}
             </div>
+
+            {activeTab === 'app' && (
+                <div className="space-y-6 max-w-3xl">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900">App Controls</h3>
+                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and change the Gemini model string.</p>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                                <input
+                                    type="checkbox"
+                                    checked={appSettingsDraft.coming_soon_enabled}
+                                    onChange={e => setAppSettingsDraft(prev => ({ ...prev, coming_soon_enabled: e.target.checked }))}
+                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                />
+                                <span>
+                                    <span className="block font-bold text-gray-900">Coming soon mode</span>
+                                    <span className="mt-1 block text-sm text-gray-500">Shows a polished coming soon screen to public users.</span>
+                                </span>
+                            </label>
+
+                            <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                                <input
+                                    type="checkbox"
+                                    checked={appSettingsDraft.upload_center_uploads_enabled}
+                                    onChange={e => setAppSettingsDraft(prev => ({ ...prev, upload_center_uploads_enabled: e.target.checked }))}
+                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                />
+                                <span>
+                                    <span className="block font-bold text-gray-900">Upload center uploads</span>
+                                    <span className="mt-1 block text-sm text-gray-500">Turn textbook uploading on or off for upload center users.</span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-semibold text-gray-700">Primary Gemini model</span>
+                            <input
+                                type="text"
+                                value={appSettingsDraft.primary_gemini_model}
+                                onChange={e => setAppSettingsDraft(prev => ({ ...prev, primary_gemini_model: e.target.value }))}
+                                placeholder="gemini-2.5-flash-lite"
+                                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                            />
+                            <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>
+                        </label>
+
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                type="button"
+                                onClick={handleSaveAppSettings}
+                                disabled={isSavingAppSettings}
+                                className="rounded-xl bg-lime-600 px-5 py-3 text-sm font-black uppercase tracking-widest text-white hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isSavingAppSettings ? 'Saving...' : 'Save App Settings'}
+                            </button>
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                                Current model: <span className="font-bold text-gray-900">{appSettings.primary_gemini_model}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'departments' && (
                 <div className="space-y-6 max-w-2xl">

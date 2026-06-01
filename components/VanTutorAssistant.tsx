@@ -10,6 +10,8 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage
 import 'katex/dist/katex.min.css';
 import { db, storage } from '../firebase';
 import type { Course, UserProfile } from '../types';
+import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -43,7 +45,6 @@ interface VanTutorAssistantProps {
 }
 
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
-const ASSISTANT_MODEL = 'gemini-2.5-flash';
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const LIVE_API_KEY = process.env.API_KEY || '';
 const LIVE_ACCESS_TOKEN = process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
@@ -274,6 +275,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
+  const { attemptApiCall } = useApiLimiter();
+  const { settings: appSettings } = useAppSettings();
+  const geminiModel = appSettings.primary_gemini_model;
   
   // Custom Input Bar States: 1 (Default), 2 (Typing), 3 (Listening), 4 (Ambient/Live Voice)
   const [inputState, setInputState] = useState<number>(1);
@@ -523,7 +527,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
     try {
       const result = await ai.models.generateContent({
-        model: ASSISTANT_MODEL,
+        model: geminiModel,
         contents: [{
           role: 'user',
           parts: [{
@@ -626,57 +630,63 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       };
       await push(messagesRef, storedUserMessage);
 
-      const result = await ai.models.generateContent({
-        model: ASSISTANT_MODEL,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: [
-                  'You are VanTutorAssistant, a friendly study companion for university students.',
-                  'Answer clearly, encourage the learner, and keep explanations concise but complete.',
-                  'You have full access to the learner\'s course context and should ground answers in it when relevant.',
-                  'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
-                  'If the question needs calculations, show the steps and final formula neatly.',
-                  courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
-                  storedAttachments.length ? `ATTACHMENTS: ${storedAttachments.map(item => item.name).join(', ')}` : '',
-                  '',
-                  `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
-                ].filter(Boolean).join('\n'),
-              },
-              ...attachmentParts,
-            ],
-          },
-        ],
+      const aiResult = await attemptApiCall(async () => {
+        const result = await ai.models.generateContent({
+          model: geminiModel,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: [
+                    'You are VanTutorAssistant, a friendly study companion for university students.',
+                    'Answer clearly, encourage the learner, and keep explanations concise but complete.',
+                    'You have full access to the learner\'s course context and should ground answers in it when relevant.',
+                    'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
+                    'If the question needs calculations, show the steps and final formula neatly.',
+                    courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
+                    storedAttachments.length ? `ATTACHMENTS: ${storedAttachments.map(item => item.name).join(', ')}` : '',
+                    '',
+                    `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
+                  ].filter(Boolean).join('\n'),
+                },
+                ...attachmentParts,
+              ],
+            },
+          ],
+        });
+
+        const responseText = (result.text || '').trim() || 'I could not generate a response right now. Please try again.';
+        const assistantMessage: AssistantMessage = {
+          id: createMessageId(),
+          sender: 'assistant',
+          text: responseText,
+          timestamp: Date.now(),
+        };
+        await push(messagesRef, {
+          text: responseText,
+          sender: 'assistant',
+          timestamp: serverTimestamp(),
+        });
+
+        const updates: { title?: string; last_updated_at: number } = {
+          last_updated_at: 0,
+        };
+        if (shouldGenerateTitle) {
+          updates.title = await generateChatTitle(userText, responseText);
+        }
+
+        updates.last_updated_at = Date.now();
+        await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
+
+        setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
+        setStatusText('Response ready.');
+        clearAttachment();
       });
 
-      const responseText = (result.text || '').trim() || 'I could not generate a response right now. Please try again.';
-      const assistantMessage: AssistantMessage = {
-        id: createMessageId(),
-        sender: 'assistant',
-        text: responseText,
-        timestamp: Date.now(),
-      };
-      await push(messagesRef, {
-        text: responseText,
-        sender: 'assistant',
-        timestamp: serverTimestamp(),
-      });
-
-      const updates: { title?: string; last_updated_at: number } = {
-        last_updated_at: 0,
-      };
-      if (shouldGenerateTitle) {
-        updates.title = await generateChatTitle(userText, responseText);
+      if (!aiResult.success) {
+        throw new Error(aiResult.message);
       }
-
-      updates.last_updated_at = Date.now();
-      await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
-
-      setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
-      setStatusText('Response ready.');
-      clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages([

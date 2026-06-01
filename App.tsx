@@ -15,6 +15,7 @@ import { MainContent } from './MainContent';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { BottomNavBar } from './components/BottomNavBar';
 import { useToast } from './hooks/useToast';
+import { useAppSettings } from './hooks/useAppSettings';
 import { navigationItems, adminNavigationItems } from './constants';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
@@ -22,6 +23,7 @@ import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { MenuIcon } from './components/icons/MenuIcon';
+import { ComingSoonScreen } from './components/ComingSoonScreen';
 
 declare var __app_id: string;
 
@@ -322,7 +324,9 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
+    const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
+    const isAdminRoute = getWindowPathname().startsWith('/admin');
 
         const applyMessengerTarget = useCallback((chatId: string | null | undefined) => {
                 if (!chatId) return;
@@ -674,7 +678,7 @@ Write a concise but specific assessment based only on the facts above. Do not in
 
             try {
                 const response = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                    model: appSettings.primary_gemini_model,
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],
                     config: {
                         responseMimeType: 'application/json',
@@ -830,7 +834,30 @@ Write a concise but specific assessment based only on the facts above. Do not in
       { target: 'body', title: "🎉 You're all set!", content: 'Enjoy exploring your learning journey. Tap "Finish" to start!', placement: 'center' },
     ];
 
+    if (isAppSettingsLoading || isLoading || isProfileLoading) {
+        return <AppLoader />;
+    }
+
+    if (appSettings.coming_soon_enabled && !isAdminRoute) {
+        return (
+            <ComingSoonScreen
+                title="VANTUTOR is coming soon"
+                subtitle="We are polishing the full learning experience right now. Admins can reopen the app anytime."
+                supportText="If you are an admin, open the admin panel to manage launch settings."
+            />
+        );
+    }
+
     if (isUploadCenterRoute) {
+        if (!appSettings.upload_center_uploads_enabled) {
+            return (
+                <ComingSoonScreen
+                    title="Textbook uploads are paused"
+                    subtitle="The upload center is temporarily locked by an administrator."
+                    supportText="Please check back later or contact an admin for access."
+                />
+            );
+        }
         return (
             <ErrorBoundary>
                 <UploadCenter />
@@ -914,10 +941,6 @@ Write a concise but specific assessment based only on the facts above. Do not in
         );
     }
     
-    if (isLoading || isProfileLoading) {
-        return <AppLoader />;
-    }
-
     if (!user) {
         return authView === 'login' 
             ? <Login onSwitchToSignUp={() => setAuthView('signup')} /> 

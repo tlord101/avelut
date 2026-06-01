@@ -5,6 +5,8 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
+import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
@@ -250,17 +252,23 @@ const TextChat: React.FC<{
             update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
             // Call Gemini
-            const result = await ai.models.generateContent({
-                model: "gemini-3.5-flash",
-                contents: [{ role: 'user', parts: [{ text: currentInput }] }]
-            });
-            const responseText = result.text || '';
+            const aiResult = await attemptApiCall(async () => {
+                const result = await ai.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [{ text: currentInput }] }]
+                });
+                const responseText = result.text || '';
 
-            await push(messagesRef, {
-                text: responseText,
-                sender: 'ai',
-                timestamp: serverTimestamp()
+                await push(messagesRef, {
+                    text: responseText,
+                    sender: 'ai',
+                    timestamp: serverTimestamp()
+                });
             });
+
+            if (!aiResult.success) {
+                throw new Error(aiResult.message);
+            }
 
         } catch (error) {
             console.error('Error in chat:', error);
@@ -452,6 +460,9 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
     const { addToast } = useToast();
+    const { attemptApiCall } = useApiLimiter();
+    const { settings: appSettings } = useAppSettings();
+    const geminiModel = appSettings.primary_gemini_model;
 
     useEffect(() => {
         setIsHistoryLoading(true);
