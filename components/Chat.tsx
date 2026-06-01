@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GoogleGenAI } from '@google/genai';
 import { db } from '../firebase';
@@ -17,9 +17,6 @@ import { ListIcon } from './icons/ListIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { usePortalRoot } from '../utils/portal';
-
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const timeAgo = (timestamp: number): string => {
     const now = Date.now();
@@ -111,9 +108,14 @@ const TextChat: React.FC<{
     handleClearAll: () => void;
     handleNewChat: () => void;
     isDeleting: boolean;
+    geminiModel: string;
+    ai: GoogleGenAI | null;
+    addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+    attemptApiCall: <T>(apiCall: () => Promise<T>) => Promise<{ success: boolean; data?: T; message: string }>;
 }> = ({
     userProfile, conversations, activeConversationId, setActiveConversationId, isHistoryLoading,
-    handleDeleteConversation, handleRenameConversation, handleClearAll, handleNewChat, isDeleting
+    handleDeleteConversation, handleRenameConversation, handleClearAll, handleNewChat, isDeleting,
+    geminiModel, ai, addToast, attemptApiCall,
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -252,6 +254,10 @@ const TextChat: React.FC<{
             update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
             // Call Gemini
+            if (!ai) {
+                addToast('Gemini API key is not configured in App Controls.', 'error');
+                return;
+            }
             const aiResult = await attemptApiCall(async () => {
                 const result = await ai.models.generateContent({
                     model: geminiModel,
@@ -468,6 +474,8 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
+    const geminiApiKey = appSettings.gemini_api_key.trim();
+    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
 
     useEffect(() => {
         setIsHistoryLoading(true);
@@ -531,6 +539,10 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
                 handleClearAll={onClearAll}
                 handleNewChat={handleNewChat}
                 isDeleting={isDeleting}
+                geminiModel={geminiModel}
+                ai={ai}
+                addToast={addToast}
+                attemptApiCall={attemptApiCall}
             />
         </div>
     );

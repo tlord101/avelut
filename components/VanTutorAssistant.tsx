@@ -44,16 +44,8 @@ interface VanTutorAssistantProps {
   userProfile: UserProfile;
 }
 
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
-const LIVE_API_KEY = process.env.API_KEY || '';
 const LIVE_ACCESS_TOKEN = process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
-
-const LIVE_WEBSOCKET_URL = LIVE_ACCESS_TOKEN
-  ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${LIVE_ACCESS_TOKEN}`
-  : LIVE_API_KEY
-    ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${LIVE_API_KEY}`
-    : '';
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -278,6 +270,17 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
+  const geminiApiKey = appSettings.gemini_api_key.trim();
+  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+  const liveWebSocketUrl = useMemo(() => {
+    if (LIVE_ACCESS_TOKEN) {
+      return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(LIVE_ACCESS_TOKEN)}`;
+    }
+    if (geminiApiKey) {
+      return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(geminiApiKey)}`;
+    }
+    return '';
+  }, [geminiApiKey]);
   
   // Custom Input Bar States: 1 (Default), 2 (Typing), 3 (Listening), 4 (Ambient/Live Voice)
   const [inputState, setInputState] = useState<number>(1);
@@ -577,7 +580,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           {
             id: createMessageId(),
             sender: 'assistant',
-            text: 'Gemini is not configured yet. Add the app GEMINI_API_KEY to the .env to enable assistant replies.',
+            text: 'Gemini is not configured yet. Ask an admin to save the Gemini API key in App Controls.',
           },
         ]);
         setStatusText('API key missing.');
@@ -814,7 +817,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   };
 
   const startLiveSession = async () => {
-    if (!LIVE_WEBSOCKET_URL) {
+    if (!liveWebSocketUrl) {
       setStatusText('Live API not configured');
       setInputState(1);
       return;
@@ -832,7 +835,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       mediaStreamRef.current = stream;
 
       setStatusText('Connecting to live session...');
-      const socket = new WebSocket(LIVE_WEBSOCKET_URL);
+      const socket = new WebSocket(liveWebSocketUrl);
       liveSessionRef.current = socket;
 
       socket.onopen = () => {

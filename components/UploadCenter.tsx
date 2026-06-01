@@ -9,9 +9,6 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import type { Course, Topic } from '../types';
 import { getWindowPathname } from '../utils/pathname';
 
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
-
 const LEVELS = ['100lvl', '200lvl', '300lvl', '400lvl', '500lvl'] as const;
 const SEMESTERS = ['first', 'second'] as const;
 
@@ -215,6 +212,8 @@ export const UploadCenter: React.FC = () => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
+  const geminiApiKey = appSettings.gemini_api_key.trim();
+  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [user, setUser] = useState(firebaseAuth.currentUser);
@@ -498,7 +497,7 @@ export const UploadCenter: React.FC = () => {
     }
 
     if (!ai) {
-      addToast('AI features are unavailable because API_KEY is missing.', 'error');
+      addToast('AI features are unavailable because the Gemini API key is not configured in App Controls.', 'error');
       return;
     }
 

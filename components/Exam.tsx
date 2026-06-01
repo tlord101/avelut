@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
@@ -14,8 +14,6 @@ import { ListIcon } from './icons/ListIcon';
 import { LogoIcon } from './icons/LogoIcon';
 
 declare var __app_id: string;
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const TIME_PER_QUESTION_SECONDS = 30;
 
@@ -134,6 +132,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
+  const geminiApiKey = appSettings.gemini_api_key.trim();
+  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
   const isGeminiConfigured = Boolean(ai);
 
   useEffect(() => {
@@ -304,7 +304,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     setExamState('generating');
     try {
       if (!ai) {
-        throw new Error('AI features are unavailable because API_KEY is missing.');
+        throw new Error('Gemini API key is not configured in App Controls.');
       }
       const safeDepartment = sanitizePromptInput(getCourseNameById(userProfile.department_id));
       const safeLevel = sanitizePromptInput(userProfile.level);
