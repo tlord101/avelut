@@ -698,19 +698,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       const serverContent = msg?.serverContent;
       if (!serverContent) return;
 
-      // Extract parts from either modelTurn or flat serverContent
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
-      
       parts.forEach((part: any) => {
         try {
           const inlineData = part?.inlineData;
           if (!inlineData?.data) return;
-          
           const mime = String(inlineData.mimeType || '');
-          // Accept data if it contains audio or pcm markers
           if (!mime.includes('pcm') && !mime.includes('audio')) return;
 
-          // Crucial: AudioContext must be resumed inside a message handler
           if (!outputAudioContextRef.current) {
             outputAudioContextRef.current = new AudioContext();
           }
@@ -722,38 +717,10 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
           enqueueLivePcmAudio(String(inlineData.data), mime || 'audio/pcm;rate=24000');
         } catch (err) {
-          console.warn('Error handling audio part:', err);
+          console.warn('Error handling inline part:', err, part);
         }
       });
 
-      // Handle transcript/text for UI display
-      const text = serverContent?.modelTurn?.parts?.find((p: any) => p.text)?.text || serverContent?.text;
-      if (text) {
-        const assistantMessage: AssistantMessage = {
-          id: createMessageId(),
-          sender: 'assistant',
-          text: String(text),
-          timestamp: Date.now(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        
-        // Background: Persist to Firebase
-        let conversationId = activeHistoryId;
-        if (conversationId) {
-          const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
-          push(messagesRef, {
-            text: String(text),
-            sender: 'assistant',
-            timestamp: serverTimestamp(),
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Error handling live server message:', err);
-    }
-  };
-
-      // Preferred textual content locations
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
       if (text) {
         const assistantMessage: AssistantMessage = {
@@ -765,7 +732,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         setMessages(prev => [...prev, assistantMessage]);
         setStatusText('Live response streaming');
 
-        // Persist streamed assistant segment to Firebase so live sessions are recorded
         try {
           let conversationId = activeHistoryId;
           if (!conversationId) {
@@ -860,7 +826,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             } else if (event.data instanceof ArrayBuffer) {
               textData = new TextDecoder().decode(event.data);
             } else {
-              // Fallback: try to coerce to string
               textData = String(event.data);
             }
 
@@ -891,7 +856,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         setInputState(1);
       };
 
-      // Start PCM capture and stream chunks to the session
       const inputAudioContext = new AudioContext();
       inputAudioContextRef.current = inputAudioContext;
       if (inputAudioContext.state === 'suspended') {
@@ -967,14 +931,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         };
         workletNode.connect(silenceGainNode);
       } else {
-  // Cast to 'any' to safely clear strict DOM environment typing restrictions for ScriptProcessor
-  const processorNode = (inputAudioContext as any).createScriptProcessor(2048, 1, 1);
-  micProcessorNodeRef.current = processorNode;
-  processorNode.connect(silenceGainNode);
-  processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
-    sendAudioChunk(event.inputBuffer.getChannelData(0));
-  };
-}
+        const processorNode = (inputAudioContext as any).createScriptProcessor(2048, 1, 1);
+        micProcessorNodeRef.current = processorNode;
+        processorNode.connect(silenceGainNode);
+        processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+          sendAudioChunk(event.inputBuffer.getChannelData(0));
+        };
+      }
 
       setStatusText('Listening...');
     } catch (err) {
@@ -992,15 +955,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       liveSessionTokenRef.current += 1;
       isLiveSessionStartingRef.current = false;
       isLiveSessionOpenRef.current = false;
-      // Stop recorder
       stopLiveCaptureOnly();
-      // Signal end of audio stream to server
       try {
         if (liveSessionRef.current?.readyState === WebSocket.OPEN) {
           liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
         }
       } catch (e) { /* ignore */ }
-      // Close session
       try { liveSessionRef.current?.close?.(); } catch (e) { /* ignore */ }
     } catch (err) {
       console.error('Error while stopping live session:', err);
@@ -1234,7 +1194,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           <footer className="absolute bottom-6 left-0 right-0 z-30 px-4">
             <div className="w-full max-w-xl mx-auto transition-all duration-300">
               
-              {/* Attachment Preview (if any) displayed elegantly right above the bar layout */}
+              {/* Attachment Preview */}
               {attachments.length > 0 && (
                 <div className="mb-2 mx-auto max-w-md flex items-center justify-between rounded-xl bg-[#1e1f20] border border-neutral-800/80 px-3 py-2 text-xs text-slate-300">
                   <span className="truncate flex-1 pr-2">{attachments[0].name}</span>
@@ -1248,7 +1208,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
               {inputState !== 4 && (
                 <div className="relative w-full h-[64px] bg-[#1e1f20] rounded-full flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                   
-                  {/* Attachment triggered clicker hook button */}
                   <button 
                     type="button" 
                     onClick={() => attachmentInputRef.current?.click()}
@@ -1267,7 +1226,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                     onChange={handleAttachmentChange}
                   />
 
-                  {/* Input form field or ambient loading voice lines container */}
                   <div className="flex-1 h-full flex items-center px-2 min-w-0">
                     {(inputState === 1 || inputState === 2) ? (
                       <input 
@@ -1285,7 +1243,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                         }}
                       />
                     ) : (
-                      /* State 3 listening ticks simulation view graphic components */
                       <div className="flex items-center justify-start gap-[4px] py-1 select-none overflow-hidden w-full h-full pl-1">
                         {[...Array(15)].map((_, i) => {
                           const animatedHeights = ["h-3", "h-2", "h-4", "h-3", "h-5", "h-3", "h-4", "h-2", "h-4", "h-5", "h-3", "h-2", "h-4", "h-3", "h-2"];
@@ -1301,10 +1258,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                     )}
                   </div>
 
-                  {/* Operational Action triggers buttons cluster panel */}
                   <div className="flex items-center gap-[9px] shrink-0">
                     
-                    {/* Microphone interactive selection control options */}
                     {(inputState === 1 || inputState === 2) && (
                       <button 
                         type="button"
@@ -1315,7 +1270,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                       </button>
                     )}
 
-                    {/* Quick termination stop option return hook (State 3) */}
                     {inputState === 3 && (
                       <button 
                         type="button"
@@ -1326,7 +1280,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                       </button>
                     )}
 
-                    {/* Submission / Waveform routing engine button handler */}
                     {inputState === 1 && !inputValue.trim() && attachments.length === 0 ? (
                       <button 
                         type="button"
@@ -1350,31 +1303,26 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                 </div>
               )}
 
-              {/* STATE 4: Fullscreen Live mode controls selection panel cluster block */}
+              {/* STATE 4: Fullscreen Live mode controls selection panel */}
               {inputState === 4 && (
                 <div className="w-full flex items-center justify-between px-2 py-4 animate-fade-in select-none bg-[#101114] rounded-3xl border border-neutral-800/40 p-4 shadow-xl">
-                  {/* Camera Button */}
                   <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
                     <VisionIcon />
                   </button>
 
-                  {/* Share Button */}
                   <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
                     <ShareUploadIcon />
                   </button>
 
-                  {/* Center glowing neon pulsing capsule graphic elements */}
                   <div className="relative w-[114px] h-[64px] bg-gradient-to-b from-[#08080a] to-[#0d0f14] rounded-full overflow-hidden border border-neutral-800/70 flex items-center justify-center shadow-lg">
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[86px] h-[18px] bg-[#38bdf8] rounded-full blur-[8px] opacity-80 animate-ambient-pulse" />
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[82px] h-[4px] bg-[#60a5fa] rounded-full opacity-90" />
                   </div>
 
-                  {/* Mute/Mic Control */}
                   <button type="button" className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md">
                     <MicIcon />
                   </button>
 
-                  {/* Close Control return to default mode */}
                   <button 
                     type="button"
                     onClick={() => setInputState(1)}
@@ -1389,7 +1337,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         </main>
       </div>
 
-      {/* Styled animation wrappers safely mounted under main application shell layout */}
       <style>{`
         @keyframes voice-bar-pulse {
           0%, 100% { transform: scaleY(1); opacity: 0.8; }
