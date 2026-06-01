@@ -20,8 +20,8 @@ const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }
 
 interface AdminPanelProps {
     userProfile: UserProfile;
-    initialTab?: 'questions' | 'courses' | 'users' | 'departments';
-    allowedTabs?: Array<'questions' | 'courses' | 'users' | 'departments'>;
+    initialTab?: AdminTab;
+    allowedTabs?: AdminTab[];
     pathname?: string;
     onNavigate?: (path: string) => void;
 }
@@ -54,6 +54,8 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
+type AdminTab = 'questions' | 'courses' | 'users' | 'departments';
+
 type CourseAdminView =
     | { mode: 'global' }
     | { mode: 'manager-root' }
@@ -61,7 +63,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: Array<'departments' | 'courses' | 'questions' | 'users'> = ['departments', 'courses', 'questions', 'users'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -311,13 +313,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     onNavigate,
 }) => {
     const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
-    const [activeTab, setActiveTab] = useState<'questions' | 'courses' | 'users' | 'departments'>(initialTab);
+    const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
     const visibleTabs = useMemo(
         () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
         [allowedTabs]
     );
     const resolvedPathname = pathname || internalPathname;
     const courseAdminView = useMemo(() => getCourseAdminView(resolvedPathname), [resolvedPathname]);
+    const isManagerCourseView = courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail';
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
@@ -576,8 +579,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [autoSyncToOfferingDepartments, setAutoSyncToOfferingDepartments] = useState(true);
 
     useEffect(() => {
-        const pathTab = resolvedPathname.split('/').filter(Boolean)[1];
-        const selectedTab = (pathTab && visibleTabs.includes(pathTab) ? pathTab : (visibleTabs[0] || 'departments')) as 'departments' | 'courses' | 'questions' | 'users';
+        const pathTab = resolvedPathname.split('/').filter(Boolean)[1] as AdminTab | undefined;
+        const selectedTab: AdminTab = pathTab && visibleTabs.includes(pathTab)
+            ? pathTab
+            : (visibleTabs[0] || 'departments');
         setActiveTab(selectedTab);
     }, [resolvedPathname, visibleTabs]);
 
@@ -589,7 +594,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }, [pathname]);
 
     useEffect(() => {
-        if (courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail') {
+        if (isManagerCourseView) {
             setDepartmentId(courseAdminView.departmentId);
             setTargetDepartmentIds([courseAdminView.departmentId]);
             setManagerSelectionDepartmentId(courseAdminView.departmentId);
@@ -619,7 +624,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             setManagerSelectionDepartmentId('');
             setManagerSelectionLevel('');
         }
-    }, [courseAdminView]);
+    }, [courseAdminView, isManagerCourseView]);
 
     const loadDepartmentCourses = async (selectedDepartmentId: string) => {
         if (!selectedDepartmentId) {
@@ -839,15 +844,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const handleDeleteCourseFromDepartment = useCallback(async (course: Course) => {
-        if (!courseAdminView.departmentId || !courseAdminView.level) return;
+        if (!isManagerCourseView) return;
+
+        const { departmentId: currentDepartmentId, level: currentLevel } = courseAdminView;
 
         const courseLabel = course.course_code || course.course_name || course.course_id;
-        const departmentLabel = allDepartments.find((dept) => dept.id === courseAdminView.departmentId)?.department_name || courseAdminView.departmentId;
-        const confirmed = window.confirm(`Delete ${courseLabel} from ${departmentLabel} (${courseAdminView.level})? This will remove the course and its stored textbook outline for this department.`);
+        const departmentLabel = allDepartments.find((dept) => dept.id === currentDepartmentId)?.department_name || currentDepartmentId;
+        const confirmed = window.confirm(`Delete ${courseLabel} from ${departmentLabel} (${currentLevel})? This will remove the course and its stored textbook outline for this department.`);
         if (!confirmed) return;
 
         try {
-            const departmentRef = dbRef(db, `departments_data/${courseAdminView.departmentId}`);
+            const departmentRef = dbRef(db, `departments_data/${currentDepartmentId}`);
             const departmentSnapshot = await get(departmentRef);
             const existingCourses = normalizeCourseList(departmentSnapshot.val()?.course_list);
             const targetCourseKey = getCourseMergeKey(course) || course.course_id;
@@ -858,18 +865,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             await update(departmentRef, { course_list: nextCourses });
             if (course.course_name) {
-                await remove(dbRef(db, `textbook_contexts/${courseAdminView.departmentId}/${courseAdminView.level}/${course.course_name}`));
+                await remove(dbRef(db, `textbook_contexts/${currentDepartmentId}/${currentLevel}/${course.course_name}`));
             }
 
             await fetchDepartments();
-            await loadDepartmentCourses(courseAdminView.departmentId);
-            handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level));
+            await loadDepartmentCourses(currentDepartmentId);
+            handleCourseTabNavigate(buildCourseManagerPath(currentDepartmentId, currentLevel));
             addToast(`Deleted ${course.course_name} from ${departmentLabel}.`, 'success');
         } catch (error: any) {
             console.error('Error deleting course:', error);
             addToast(error?.message || 'Failed to delete course', 'error');
         }
-    }, [addToast, allDepartments, courseAdminView.departmentId, courseAdminView.level, loadDepartmentCourses]);
+    }, [addToast, allDepartments, courseAdminView, isManagerCourseView, loadDepartmentCourses]);
 
     const handleAddQuestion = async () => {
         if (!uploadDepartmentId || !uploadLevel || !uploadCourseName || !year || !newQuestion.question || !newQuestion.correctAnswer) {
@@ -1090,7 +1097,7 @@ FORMAT:
                     ))
                     .filter((course: Course) => Boolean(course.course_id && course.course_name));
 
-                normalizedCourses.forEach((course) => {
+                normalizedCourses.forEach((course: Course) => {
                     normalizedImportedCourses = upsertCourseInList(normalizedImportedCourses, course);
                 });
             }
@@ -1154,6 +1161,10 @@ FORMAT:
         }
         const sourceCourseList = overrideCourseList || coursesList;
         const selectedCourse = sourceCourseList.find(c => c.course_id === courseId || getCourseMergeKey(c) === courseId);
+        if (!selectedCourse) {
+            addToast("Missing file or course information", "error");
+            return;
+        }
         let syncDepartmentIds = getUniqueIds(overrideDepartmentIds || [departmentId, ...targetDepartmentIds]);
 
         // If auto-sync is enabled and we only have the primary department selected,
@@ -1391,25 +1402,19 @@ FORMAT:
     };
 
     const selectedManagerDepartment = useMemo(
-        () => allDepartments.find((dept) => dept.id === courseAdminView.departmentId) || null,
-        [allDepartments, courseAdminView]
+        () => (isManagerCourseView ? allDepartments.find((dept) => dept.id === courseAdminView.departmentId) || null : null),
+        [allDepartments, courseAdminView, isManagerCourseView]
     );
 
     const managerCoursesForLevel = useMemo(
-        () => (
-            courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail'
-                ? coursesList.filter((course) => course.level === courseAdminView.level)
-                : []
-        ),
-        [courseAdminView, coursesList]
+        () => (isManagerCourseView ? coursesList.filter((course) => course.level === courseAdminView.level) : []),
+        [courseAdminView, coursesList, isManagerCourseView]
     );
 
     const selectedManagerCourse = useMemo(
         () => (
             courseAdminView.mode === 'manager-detail'
-                ? managerCoursesForLevel.find((course) => (
-                    matchesCourseIdentifier(course, courseAdminView.courseId)
-                )) || null
+                ? managerCoursesForLevel.find((course) => matchesCourseIdentifier(course, courseAdminView.courseId)) || null
                 : null
         ),
         [courseAdminView, managerCoursesForLevel]
