@@ -590,13 +590,14 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [firebaseUser]);
 
     const openChatWithUser = useCallback((otherUser: UserProfile) => {
-      void (async () => {
-        const chatId = await ensureChatThreadRecord(otherUser);
-        if (!chatId) return;
-        setActiveChat({ chatId, otherUser });
-        setTab('chats');
-      })();
-    }, [ensureChatThreadRecord]);
+      if (!firebaseUser) return;
+
+      const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
+      setActiveChat({ chatId, otherUser });
+      setTab('chats');
+
+      void ensureChatThreadRecord(otherUser);
+    }, [ensureChatThreadRecord, firebaseUser]);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, user => { 
