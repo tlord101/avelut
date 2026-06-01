@@ -14,6 +14,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { ListIcon } from './icons/ListIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { usePortalRoot } from '../utils/portal';
 
 // @ts-ignore
 const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
@@ -120,6 +121,7 @@ const TextChat: React.FC<{
     const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
     const [courseContext, setCourseContext] = useState<string>('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const portalRoot = usePortalRoot('vantutor-chat-composer-root');
 
     useEffect(() => {
         const fetchCourseContext = async () => {
@@ -422,7 +424,7 @@ const TextChat: React.FC<{
             </div>
         </div>
 
-        {typeof document !== 'undefined' && createPortal(
+        {portalRoot && createPortal(
             <ChatComposer
                 input={input}
                 setInput={setInput}
@@ -432,7 +434,7 @@ const TextChat: React.FC<{
                 onAttach={() => setIsVoiceMode(false)}
                 onSend={() => handleSendMessage()}
             />,
-            document.body
+            portalRoot
         )}
 
     );

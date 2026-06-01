@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { usePortalRoot } from '../utils/portal';
 
 export interface TourStep {
   target?: string;
@@ -97,6 +98,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ steps, isOpen, onClose, onBefor
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const portalRoot = usePortalRoot('vantutor-guided-tour-root');
 
   const updateTargetRect = useCallback(() => {
     const step = steps[currentStepIndex];
@@ -159,6 +161,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ steps, isOpen, onClose, onBefor
   };
 
   if (!isOpen) return null;
+  if (!portalRoot) return null;
 
   const currentStep = steps[currentStepIndex];
   const highlightStyle: React.CSSProperties = targetRect
@@ -189,7 +192,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ steps, isOpen, onClose, onBefor
         />
       )}
     </div>,
-    document.body
+    portalRoot
   );
 };
 
