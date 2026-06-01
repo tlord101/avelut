@@ -311,6 +311,7 @@ const App: React.FC = () => {
         return window.localStorage.getItem('vantutor_admin_authenticated') === 'true';
     });
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const [pendingMessengerChatId, setPendingMessengerChatId] = useState<string | null>(null);
 
     const currentPageLabel = activeItem === 'messenger' 
         ? 'Messenger' 
@@ -322,6 +323,34 @@ const App: React.FC = () => {
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
+
+        const applyMessengerTarget = useCallback((chatId: string | null | undefined) => {
+                if (!chatId) return;
+                setActiveItem('messenger');
+                setPendingMessengerChatId(chatId);
+        }, [setActiveItem]);
+
+        useEffect(() => {
+                if (typeof window === 'undefined') return;
+
+                const url = new URL(window.location.href);
+                const chatId = url.searchParams.get('openMessengerChatId');
+                if (chatId) {
+                    applyMessengerTarget(chatId);
+                    url.searchParams.delete('openMessengerChatId');
+                    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+                }
+
+                const handleServiceWorkerMessage = (event: MessageEvent) => {
+                    const data = event.data || {};
+                    if (data?.type === 'open-messenger-chat' && data.chatId) {
+                        applyMessengerTarget(String(data.chatId));
+                    }
+                };
+
+                navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
+                return () => navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
+        }, [applyMessengerTarget]);
 
     const { addToast } = useToast();
     const tourStatusRef = useRef<'unknown' | 'checked' | 'shown'>('unknown');
@@ -940,6 +969,7 @@ Write a concise but specific assessment based only on the facts above. Do not in
                             userProfile={userProfile}
                             userProgress={userProgress}
                             dashboardData={dashboardData}
+                                    initialMessengerChatId={pendingMessengerChatId}
                             handleLogout={handleLogout}
                             handleProfileUpdate={handleProfileUpdate}
                             handleDeleteAccount={handleAccountDeletion}

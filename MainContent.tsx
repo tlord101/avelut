@@ -19,6 +19,7 @@ interface MainContentProps {
     userProfile: UserProfile;
     userProgress: UserProgress;
     dashboardData: DashboardData | null;
+    initialMessengerChatId?: string | null;
     handleLogout: () => void;
     handleProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string; }>;
     handleDeleteAccount: () => Promise<{ success: boolean; error?: string; }>;
@@ -31,6 +32,7 @@ export const MainContent: React.FC<MainContentProps> = ({
     userProfile,
     userProgress,
     dashboardData,
+    initialMessengerChatId,
     handleLogout,
     handleProfileUpdate,
     handleDeleteAccount,
@@ -60,7 +62,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'messenger':
             return (
                 <ErrorBoundary>
-                    <Messenger userProfile={userProfile} />
+                    <Messenger userProfile={userProfile} initialChatId={initialMessengerChatId} />
                 </ErrorBoundary>
             );
         case 'chat':
