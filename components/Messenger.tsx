@@ -97,6 +97,31 @@ const createFallbackChatUser = (uid = ''): UserProfile => ({
   notifications_enabled: false,
 });
 
+const MESSENGER_CACHE_VERSION = 'v1';
+
+const getMessengerCacheKey = (uid: string, suffix: string) => `vantutor_messenger_${MESSENGER_CACHE_VERSION}_${uid}_${suffix}`;
+
+const readCachedJson = <T,>(key: string, fallback: T): T => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.warn('Failed to read messenger cache:', error);
+    return fallback;
+  }
+};
+
+const writeCachedJson = (key: string, value: unknown) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn('Failed to write messenger cache:', error);
+  }
+};
+
 // =======================================================
 // FUNCTIONAL VOICE NOTE PLAYER COMPONENT
 // =======================================================
@@ -436,10 +461,10 @@ const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
 
 export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: string | null }> = ({ userProfile, initialChatId = null }) => {
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
-    const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
-    const [chats, setChats] = useState<any[]>([]);
+  const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
+  const [chats, setChats] = useState<any[]>(() => readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, 'chats'), []));
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-    const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>(() => readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, 'messages_default'), []));
     const [isLoading, setIsLoading] = useState(true);
     const [tab, setTab] = useState<'chats' | 'people'>('chats');
     const [peopleSearchQuery, setPeopleSearchQuery] = useState("");
@@ -726,6 +751,11 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [firebaseUser]);
 
     useEffect(() => {
+      if (!firebaseUser) return;
+      writeCachedJson(getMessengerCacheKey(userProfile.uid, 'chats'), chats);
+    }, [chats, firebaseUser, userProfile.uid]);
+
+    useEffect(() => {
       if (!chats.length || !userMap.size) return;
       setChats(prevChats => prevChats.map(chat => {
         const resolvedUser = userMap.get(chat.otherUser?.uid);
@@ -742,7 +772,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [initialChatId, chats]);
 
     useEffect(() => {
-        if (!activeChat) return;
+      if (!activeChat) {
+        setMessages([]);
+        return;
+      }
+
+      setMessages(readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, `messages_${activeChat.chatId}`), []));
         setOptimisticMessages([]);
         const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
         onValue(messagesRef, (snap) => {
@@ -758,7 +793,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             }
         });
         return () => off(messagesRef);
-    }, [activeChat, firebaseUser]);
+    }, [activeChat, firebaseUser, userProfile.uid]);
+
+    useEffect(() => {
+      if (!firebaseUser || !activeChat) return;
+      writeCachedJson(getMessengerCacheKey(userProfile.uid, `messages_${activeChat.chatId}`), messages);
+    }, [activeChat, firebaseUser, messages, userProfile.uid]);
 
     const combinedMessageStream = useMemo(() => {
         return [...messages, ...optimisticMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
