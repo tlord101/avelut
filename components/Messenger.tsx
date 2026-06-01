@@ -549,6 +549,13 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
     const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
 
+    const getUnreadCountForUser = useCallback((otherUserId: string) => {
+      if (!firebaseUser) return 0;
+      const chatId = [firebaseUser.uid, otherUserId].sort().join('_');
+      const chat = chats.find(item => item.id === chatId);
+      return chat ? getUnreadCount(chat) : 0;
+    }, [chats, firebaseUser]);
+
     const ensureChatThreadRecord = useCallback(async (otherUser: UserProfile) => {
       if (!firebaseUser) return null;
       const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
@@ -1166,13 +1173,23 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                 </p>
                             </div>
                         </div>
-                    )) : filteredPeople.map(u => (
-                      <div key={u.uid} onClick={() => openChatWithUser(u)} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
+                    )) : filteredPeople.map(u => {
+                        const unreadCount = getUnreadCountForUser(u.uid);
+                        return (
+                        <div key={u.uid} onClick={() => openChatWithUser(u)} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
                             <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={u.photo_url} />
-                            <h3 className="text-[#212529] font-medium text-[15px]">{u.display_name}</h3>
-                            <span className="ml-auto text-[11px] text-[#6C757D] font-normal">{u.is_online ? <span className="text-[#28A745]">online</span> : formatLastSeen(u.last_seen)}</span>
+                            <div className="min-w-0 flex-1">
+                              <h3 className={`text-[15px] truncate ${unreadCount > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>{u.display_name}</h3>
+                              <p className="text-[11px] text-[#6C757D] font-normal">{u.is_online ? <span className="text-[#28A745]">online</span> : formatLastSeen(u.last_seen)}</p>
+                            </div>
+                            {unreadCount > 0 && (
+                              <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                {unreadCount > 99 ? '99+' : unreadCount}
+                              </span>
+                            )}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
