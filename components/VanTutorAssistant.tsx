@@ -707,9 +707,17 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     try {
       console.log('DEV DEBUG: Received Live Server WebSocket Packet:', msg);
       
+      // 1. Explicitly trap and acknowledge the setup handshake packet
+      if (msg?.setupComplete) {
+        console.log('DEV DEBUG: Live session handshake completed successfully.');
+        setStatusText('Live session active');
+        return;
+      }
+
       const serverContent = msg?.serverContent;
       if (!serverContent) return;
 
+      // 2. Wrap the audio extraction loop in a dedicated try/catch block
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
       parts.forEach((part: any, segmentIdx: number) => {
         try {
@@ -719,7 +727,8 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           const mime = String(inlineData.mimeType || '');
           if (!mime.includes('pcm') && !mime.includes('audio')) return;
 
-          if (!outputAudioContextRef.current) {
+          // Guard context creation against closed state
+          if (!outputAudioContextRef.current || outputAudioContextRef.current.state === 'closed') {
             outputAudioContextRef.current = new AudioContext();
           }
           
@@ -733,6 +742,53 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           console.error(`DEV INTEGRITY FAILURE EXCEPTION inside segment [${segmentIdx}]:`, err);
         }
       });
+
+      // 3. Process transcription frame safely
+      const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
+      if (text) {
+        const assistantMessage: AssistantMessage = {
+          id: createMessageId(),
+          sender: 'assistant',
+          text: String(text),
+          timestamp: Date.now(),
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+        setStatusText('Live response streaming');
+
+        try {
+          let conversationId = currentConversationIdRef.current;
+          if (!conversationId) {
+            const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
+            const newConversationRef = push(conversationsRef);
+            conversationId = newConversationRef.key || null;
+            if (conversationId) {
+              await set(newConversationRef, {
+                title: 'Live Voice Chat',
+                created_at: Date.now(),
+                last_updated_at: Date.now(),
+              });
+              setActiveHistoryId(conversationId);
+            }
+          }
+
+          if (conversationId) {
+            const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
+            await push(messagesRef, {
+              text: String(text),
+              sender: 'assistant',
+              timestamp: serverTimestamp(),
+            });
+            await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), { last_updated_at: Date.now() });
+          }
+        } catch (err) {
+          console.error('DEV DATALAYER ERROR: Failed to persist live text data frame onto cloud backend:', err);
+        }
+      }
+    } catch (err) {
+      console.error('DEV SERVER PACKET PROCESSING SYSTEM EXCEPTION:', err);
+    }
+  };
 
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
       if (text) {
