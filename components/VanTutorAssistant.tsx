@@ -695,40 +695,63 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const handleLiveServerMessage = async (msg: any) => {
     try {
-      console.debug('Live server message:', msg);
       const serverContent = msg?.serverContent;
-      // Extra debug: log raw serverContent if present for troubleshooting
-      if (serverContent) console.debug('Live serverContent object:', serverContent);
       if (!serverContent) return;
 
-      // FIX: Check flat serverContent.parts as well as deep modelTurn.parts 
-      // because Gemini Live API streams audio frames in flat arrays
+      // Extract parts from either modelTurn or flat serverContent
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
+      
       parts.forEach((part: any) => {
         try {
-          console.debug('Live part:', part?.type || '(no type)', { inlineData: !!part?.inlineData });
           const inlineData = part?.inlineData;
           if (!inlineData?.data) return;
+          
           const mime = String(inlineData.mimeType || '');
-          console.debug('Received inlineData mimeType:', mime, 'dataLength:', String(inlineData.data || '').length);
-          // Accept various mime type formats that represent raw PCM
+          // Accept data if it contains audio or pcm markers
           if (!mime.includes('pcm') && !mime.includes('audio')) return;
 
-          // Ensure output audio context is resumed on first play (user gesture may be required)
+          // Crucial: AudioContext must be resumed inside a message handler
           if (!outputAudioContextRef.current) {
             outputAudioContextRef.current = new AudioContext();
           }
-          try {
-            void outputAudioContextRef.current.resume();
-          } catch (e) {
-            // ignore resume errors
+          
+          const outputContext = outputAudioContextRef.current;
+          if (outputContext.state === 'suspended') {
+            void outputContext.resume();
           }
 
-          enqueueLivePcmAudio(String(inlineData.data), String(inlineData.mimeType || 'audio/pcm;rate=24000'));
+          enqueueLivePcmAudio(String(inlineData.data), mime || 'audio/pcm;rate=24000');
         } catch (err) {
-          console.warn('Error handling inline part:', err, part);
+          console.warn('Error handling audio part:', err);
         }
       });
+
+      // Handle transcript/text for UI display
+      const text = serverContent?.modelTurn?.parts?.find((p: any) => p.text)?.text || serverContent?.text;
+      if (text) {
+        const assistantMessage: AssistantMessage = {
+          id: createMessageId(),
+          sender: 'assistant',
+          text: String(text),
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Background: Persist to Firebase
+        let conversationId = activeHistoryId;
+        if (conversationId) {
+          const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
+          push(messagesRef, {
+            text: String(text),
+            sender: 'assistant',
+            timestamp: serverTimestamp(),
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error handling live server message:', err);
+    }
+  };
 
       // Preferred textual content locations
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
