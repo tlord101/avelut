@@ -46,9 +46,13 @@ const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }
 const ASSISTANT_MODEL = 'gemini-2.5-flash';
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const LIVE_API_KEY = process.env.API_KEY || '';
-const LIVE_WEBSOCKET_URL = LIVE_API_KEY
-  ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${LIVE_API_KEY}`
-  : '';
+const LIVE_ACCESS_TOKEN = process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
+// Gemini Live uses v1alpha for constrained ephemeral-token sessions and v1beta for API-key sessions.
+const LIVE_WEBSOCKET_URL = LIVE_ACCESS_TOKEN
+  ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${LIVE_ACCESS_TOKEN}`
+  : LIVE_API_KEY
+    ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${LIVE_API_KEY}`
+    : '';
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
@@ -827,18 +831,16 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         isLiveSessionStartingRef.current = false;
 
         socket.send(JSON.stringify({
-          setup: {
+          config: {
             model: LIVE_MODEL,
-            generationConfig: {
-              responseModalities: ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: 'Aoede',
-                  },
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Aoede',
                 },
               },
-            }
+            },
           },
         }));
 
@@ -916,12 +918,10 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
           liveSessionRef.current.send(JSON.stringify({
             realtimeInput: {
-              mediaChunks: [
-                {
-                  mimeType: 'audio/pcm;rate=16000',
-                  data: encodedAudio,
-                },
-              ],
+              audio: {
+                mimeType: 'audio/pcm;rate=16000',
+                data: encodedAudio,
+              },
             },
           }));
         } catch (err) {
