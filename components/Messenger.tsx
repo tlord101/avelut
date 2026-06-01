@@ -547,6 +547,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         });
     }, [allUsers, peopleSearchQuery]);
 
+    const userMap = useMemo(() => new Map(allUsers.map(user => [user.uid, user])), [allUsers]);
+
     const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
 
     const getUnreadCountForUser = useCallback((otherUserId: string) => {
@@ -691,7 +693,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             const chatList = Object.entries(snap.val() || {}).map(([chatId, details]: any) => ({
           id: chatId,
           ...details,
-          otherUser: allUsers.find(u => u.uid === details.otherUserId) || createFallbackChatUser(details.otherUserId || chatId)
+          otherUser: createFallbackChatUser(details.otherUserId || chatId)
             }));
 
             const nextUnreadCounts: Record<string, number> = {};
@@ -719,8 +721,17 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
             unreadCountsRef.current = nextUnreadCounts;
             setChats(chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+            setIsLoading(false);
         });
-    }, [firebaseUser, allUsers]);
+    }, [firebaseUser]);
+
+    useEffect(() => {
+      if (!chats.length || !userMap.size) return;
+      setChats(prevChats => prevChats.map(chat => {
+        const resolvedUser = userMap.get(chat.otherUser?.uid);
+        return resolvedUser ? { ...chat, otherUser: resolvedUser } : chat;
+      }));
+    }, [userMap]);
 
     useEffect(() => {
       if (!initialChatId || !chats.length) return;
