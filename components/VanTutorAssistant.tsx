@@ -553,7 +553,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
     const primaryAttachment = attachments[0] || null;
     const userText = prompt || getHistoryFallbackTitle(prompt, primaryAttachment);
-    const previousMessages = messages;
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
@@ -655,42 +654,56 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             },
           ],
         });
-
-        const responseText = (result.text || '').trim() || 'I could not generate a response right now. Please try again.';
-        const assistantMessage: AssistantMessage = {
-          id: createMessageId(),
-          sender: 'assistant',
-          text: responseText,
-          timestamp: Date.now(),
-        };
-        await push(messagesRef, {
-          text: responseText,
-          sender: 'assistant',
-          timestamp: serverTimestamp(),
-        });
-
-        const updates: { title?: string; last_updated_at: number } = {
-          last_updated_at: 0,
-        };
-        if (shouldGenerateTitle) {
-          updates.title = await generateChatTitle(userText, responseText);
+        if (!result.text) {
+          throw new Error('Gemini returned an empty response.');
         }
-
-        updates.last_updated_at = Date.now();
-        await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
-
-        setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
-        setStatusText('Response ready.');
-        clearAttachment();
+        return result.text.trim();
       });
 
       if (!aiResult.success) {
-        throw new Error(aiResult.message);
+        console.error('Gemini assistant error:', aiResult.message);
+        setMessages([
+          ...messages,
+          {
+            id: createMessageId(),
+            sender: 'assistant',
+            text: 'Sorry, I ran into a problem generating that reply. Please try again.',
+          },
+        ]);
+        setStatusText('Unable to respond right now.');
+        return;
       }
+
+      const responseText = aiResult.data || 'I could not generate a response right now. Please try again.';
+      const assistantMessage: AssistantMessage = {
+        id: createMessageId(),
+        sender: 'assistant',
+        text: responseText,
+        timestamp: Date.now(),
+      };
+      await push(messagesRef, {
+        text: responseText,
+        sender: 'assistant',
+        timestamp: serverTimestamp(),
+      });
+
+      const updates: { title?: string; last_updated_at: number } = {
+        last_updated_at: 0,
+      };
+      if (shouldGenerateTitle) {
+        updates.title = await generateChatTitle(userText, responseText);
+      }
+
+      updates.last_updated_at = Date.now();
+      await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
+
+      setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
+      setStatusText('Response ready.');
+      clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages([
-        ...previousMessages,
+        ...messages,
         {
           id: createMessageId(),
           sender: 'assistant',

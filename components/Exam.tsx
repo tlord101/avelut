@@ -134,6 +134,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
+  const isGeminiConfigured = Boolean(ai);
 
   useEffect(() => {
     // Check for available subjects (courses) in Past Questions FOR THE USER'S DEPT AND LEVEL
@@ -353,7 +354,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       });
 
       if (!result.success) {
-        throw new Error(result.message);
+        addToast(result.message, 'error');
+        setExamState('start');
+        return;
       }
     } catch (error: any) {
       console.error("Error generating exam questions:", error);
@@ -637,9 +640,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                 {canStartExam ? (
                     <button
                         onClick={generateQuestions}
-                        className="w-full mt-6 bg-lime-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-lime-700 transition-colors"
+                        disabled={!isGeminiConfigured}
+                        className="w-full mt-6 bg-lime-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-lime-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        Start AI Exam
+                        {isGeminiConfigured ? 'Start AI Exam' : 'AI Exam Unavailable (Missing API Key)'}
                     </button>
                 ) : (
                     <div className="mt-6 text-xs text-yellow-800 bg-yellow-50 p-3 rounded-lg border border-yellow-200">

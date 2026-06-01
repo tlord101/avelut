@@ -205,6 +205,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
+    const geminiModel = appSettings.primary_gemini_model;
     const { addToast } = useToast();
 
     const cleanupCamera = useCallback(() => {

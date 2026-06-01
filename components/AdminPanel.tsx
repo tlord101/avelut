@@ -316,14 +316,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
     const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
-const { settings: appSettings } = useAppSettings();
-const geminiModel = appSettings.primary_gemini_model;
-const [isSavingAppSettings, setIsSavingAppSettings] = useState(false);
-const [appSettingsDraft, setAppSettingsDraft] = useState(appSettings);
-const visibleTabs = useMemo(
-    () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
-    [allowedTabs]
-);
+    const { settings: appSettings } = useAppSettings();
+    const geminiModel = appSettings.primary_gemini_model;
+    const [isSavingAppSettings, setIsSavingAppSettings] = useState(false);
+    const [appSettingsDraft, setAppSettingsDraft] = useState(appSettings);
+    const visibleTabs = useMemo(
+        () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
+        [allowedTabs]
+    );
     const resolvedPathname = pathname || internalPathname;
     const courseAdminView = useMemo(() => getCourseAdminView(resolvedPathname), [resolvedPathname]);
     const isManagerCourseView = courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail';
@@ -1606,7 +1606,7 @@ FORMAT:
                     <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
                         <div>
                             <h3 className="text-xl font-black text-gray-900">App Controls</h3>
-                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and change the Gemini model string.</p>
+                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and set a valid Gemini model identifier.</p>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">

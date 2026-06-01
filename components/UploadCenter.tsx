@@ -583,7 +583,10 @@ FORMAT:
         });
 
         if (!aiResult.success) {
-          throw new Error(aiResult.message);
+          addToast(aiResult.message, 'error');
+          setIsUploading(false);
+          setIsUploadingCourseKey('');
+          return;
         }
       }
 

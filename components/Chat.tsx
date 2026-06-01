@@ -257,18 +257,23 @@ const TextChat: React.FC<{
                     model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: currentInput }] }]
                 });
-                const responseText = result.text || '';
-
-                await push(messagesRef, {
-                    text: responseText,
-                    sender: 'ai',
-                    timestamp: serverTimestamp()
-                });
+                if (!result.text) {
+                    throw new Error('Gemini returned an empty response.');
+                }
+                return result.text;
             });
 
             if (!aiResult.success) {
-                throw new Error(aiResult.message);
+                addToast(aiResult.message, 'error');
+                return;
             }
+
+            const responseText = (aiResult.data || '').trim();
+            await push(messagesRef, {
+                text: responseText,
+                sender: 'ai',
+                timestamp: serverTimestamp()
+            });
 
         } catch (error) {
             console.error('Error in chat:', error);
