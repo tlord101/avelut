@@ -47,12 +47,13 @@ const ASSISTANT_MODEL = 'gemini-2.5-flash';
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const LIVE_API_KEY = process.env.API_KEY || '';
 const LIVE_ACCESS_TOKEN = process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
-// Gemini Live uses v1alpha for constrained ephemeral-token sessions and v1beta for API-key sessions.
+
 const LIVE_WEBSOCKET_URL = LIVE_ACCESS_TOKEN
   ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${LIVE_ACCESS_TOKEN}`
   : LIVE_API_KEY
     ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${LIVE_API_KEY}`
     : '';
+
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const truncateTitle = (text: string) => {
@@ -293,6 +294,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const isLiveSessionOpenRef = useRef(false);
   const isLiveSessionStartingRef = useRef(false);
   const liveSessionTokenRef = useRef(0);
+  const currentConversationIdRef = useRef<string | null>(null);
+
+  // Synchronize dynamic updates smoothly into reference channels
+  useEffect(() => {
+    currentConversationIdRef.current = activeHistoryId;
+  }, [activeHistoryId]);
 
   const enqueueLivePcmAudio = (base64Data: string, mimeType?: string) => {
     try {
@@ -404,7 +411,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       nextHistory.sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt);
       setHistory(nextHistory);
       setIsHistoryLoading(false);
-      setActiveHistoryId(current => current && nextHistory.some(item => item.id === current) ? current : null);
     });
 
     return unsubscribe;
@@ -699,83 +705,56 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const handleLiveServerMessage = async (msg: any) => {
     try {
-      // DEV DIAGNOSTIC: Log full raw packet arrival
       console.log('DEV DEBUG: Received Live Server WebSocket Packet:', msg);
       
       const serverContent = msg?.serverContent;
-      if (!serverContent) {
-        console.warn('DEV WARNING: Packet received but has empty or null "serverContent" payload fields.');
-        return;
-      }
+      if (!serverContent) return;
 
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
-      if (parts.length === 0) {
-        console.log('DEV DEBUG: Packet content parts container array is currently empty.');
-      }
-
       parts.forEach((part: any, segmentIdx: number) => {
         try {
           const inlineData = part?.inlineData;
-          if (!inlineData) {
-            console.log(`DEV DEBUG: Part segment slot [${segmentIdx}] has no "inlineData" block descriptor.`);
-            return;
-          }
-          if (!inlineData?.data) {
-            console.warn(`DEV WARNING: Part segment slot [${segmentIdx}] has an inlineData wrapper but the critical "data" base64 payload field string is missing.`);
-            return;
-          }
+          if (!inlineData || !inlineData?.data) return;
 
           const mime = String(inlineData.mimeType || '');
-          console.log(`DEV DEBUG: Processing part [${segmentIdx}] metadata string identifier: "${mime}"`);
+          if (!mime.includes('pcm') && !mime.includes('audio')) return;
 
-          if (!mime.includes('pcm') && !mime.includes('audio')) {
-            console.log(`DEV DEBUG: Skipping part segment slot [${segmentIdx}] because metadata format tag "${mime}" is not audio tracking raw content binary stream fragments.`);
-            return;
-          }
-
-          // AUDIO LAYER ENGINE PERMISSIONS LIFECYCLE MONITORING
           if (!outputAudioContextRef.current) {
-            console.log('DEV AUDIOMANAGER INITIALIZATION: Creating output pipeline AudioContext object handle instance...');
             outputAudioContextRef.current = new AudioContext();
           }
           
           const outputContext = outputAudioContextRef.current;
-          console.log(`DEV AUDIOMANAGER STATUS: Current browser core hardware pipeline status loop is -> "${outputContext.state}"`);
-
           if (outputContext.state === 'suspended') {
-            console.warn('DEV AUDIOMANAGER ALERT: Audio pipeline state context is BLOCKED / SUSPENDED by user autoplay policy gates! Forcing explicit code execution wakeup bypass sequence trigger...');
-            void outputContext.resume()
-              .then(() => console.log('DEV AUDIOMANAGER: AudioContext state successfully woke up and unblocked. Current state:', outputAudioContextRef.current?.state))
-              .catch((err) => console.error('DEV AUDIOMANAGER CRITICAL HARDWARE LOCKOUT FAILURE: Browser engine rejected programmatic unblock call command ->', err));
+            void outputContext.resume();
           }
 
           enqueueLivePcmAudio(String(inlineData.data), mime || 'audio/pcm;rate=24000');
         } catch (err) {
-          console.error(`DEV INTEGRITY FAILURE EXCEPTION: Error thrown inside block parsing loop segment index [${segmentIdx}] structural evaluation ->`, err);
+          console.error(`DEV INTEGRITY FAILURE EXCEPTION inside segment [${segmentIdx}]:`, err);
         }
       });
 
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
       if (text) {
-        console.log('DEV TRANSCRIPT: Text payload segment frame extracted string ->', text);
         const assistantMessage: AssistantMessage = {
           id: createMessageId(),
           sender: 'assistant',
           text: String(text),
           timestamp: Date.now(),
         };
+        
         setMessages(prev => [...prev, assistantMessage]);
         setStatusText('Live response streaming');
 
         try {
-          let conversationId = activeHistoryId;
+          let conversationId = currentConversationIdRef.current;
           if (!conversationId) {
             const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
             const newConversationRef = push(conversationsRef);
             conversationId = newConversationRef.key || null;
             if (conversationId) {
               await set(newConversationRef, {
-                title: 'Live Chat',
+                title: 'Live Voice Chat',
                 created_at: Date.now(),
                 last_updated_at: Date.now(),
               });
@@ -793,11 +772,11 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), { last_updated_at: Date.now() });
           }
         } catch (err) {
-          console.error('DEV DATALAYER ERROR: Failed to persist live streaming response asset data segment onto cloud backend instance storage branches ->', err);
+          console.error('DEV DATALAYER ERROR: Failed to persist live text data frame onto cloud backend:', err);
         }
       }
     } catch (err) {
-      console.error('DEV SERVER PACKET PROCESSING SYSTEM EXCEPTION ERROR FALLBACK ROOT CATCH ->', err);
+      console.error('DEV SERVER PACKET PROCESSING SYSTEM EXCEPTION:', err);
     }
   };
 
@@ -808,9 +787,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       return;
     }
 
-    if (isLiveSessionStartingRef.current || isLiveSessionOpenRef.current) {
-      return;
-    }
+    if (isLiveSessionStartingRef.current || isLiveSessionOpenRef.current) return;
 
     isLiveSessionStartingRef.current = true;
     const sessionToken = liveSessionTokenRef.current + 1;
@@ -830,17 +807,30 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         isLiveSessionOpenRef.current = true;
         isLiveSessionStartingRef.current = false;
 
+        const systemInstructionText = [
+          'You are VanTutorAssistant running in an immediate full-duplex live voice conversation runtime.',
+          'Respond naturally, dynamically, and extremely concisely using pure conversation speech pattern structures.',
+          'Keep structural explanations down to a maximum of 1 or 2 verbal sentences per turn to ensure conversational fluidity.',
+          'Never vocalize or explain markdown syntax characters, bullet points, or complex LaTeX layouts verbally.',
+          courseContext ? `Ground your insights in this provided student academic landscape context:\n${courseContext}` : ''
+        ].filter(Boolean).join('\n');
+
         socket.send(JSON.stringify({
-          config: {
+          setup: {
             model: LIVE_MODEL,
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: 'Aoede',
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: 'Aoede',
+                  },
                 },
               },
             },
+            systemInstruction: {
+              parts: [{ text: systemInstructionText }]
+            }
           },
         }));
 
@@ -865,14 +855,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             const response = JSON.parse(textData);
             handleLiveServerMessage(response);
           } catch (error) {
-            console.error('DEV RECEPTION STRUCTURAL CRASH: Error parsing live channel string block text buffer packet format ->', error, event.data);
+            console.error('DEV RECEPTION PARSING ERROR:', error);
           }
         })();
       };
 
       socket.onerror = (event) => {
         if (sessionToken !== liveSessionTokenRef.current) return;
-        console.error('Live socket error event emitted directly from connection thread ->', event);
         isLiveSessionOpenRef.current = false;
         isLiveSessionStartingRef.current = false;
         stopLiveCaptureOnly();
@@ -899,7 +888,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         await outputAudioContextRef.current.resume();
       }
 
-      const sourceNode = inputAudioContext.createMediaStreamSource(stream as MediaStream);
+      const sourceNode = inputAudioContext.createMediaStreamSource(stream);
       micSourceNodeRef.current = sourceNode;
       const silenceGainNode = inputAudioContext.createGain();
       silenceGainNode.gain.value = 0;
@@ -918,15 +907,15 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
           liveSessionRef.current.send(JSON.stringify({
             realtimeInput: {
-              audio: {
+              mediaChunks: [{
                 mimeType: 'audio/pcm;rate=16000',
                 data: encodedAudio,
-              },
+              }]
             },
           }));
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage.includes('WebSocket is already in CLOSING or CLOSED state')) {
+          if (errorMessage.includes('CLOSING') || errorMessage.includes('CLOSED')) {
             if (sessionToken !== liveSessionTokenRef.current) return;
             isLiveSessionOpenRef.current = false;
             isLiveSessionStartingRef.current = false;
@@ -935,7 +924,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             setInputState(1);
             return;
           }
-          console.error('Failed to send realtime input:', err);
+          console.error('Failed to dispatch realtime chunk frame:', err);
         }
       };
 
@@ -975,7 +964,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       if (sessionToken === liveSessionTokenRef.current) {
         isLiveSessionStartingRef.current = false;
       }
-      console.error('Failed to start live session:', err);
+      console.error('Failed to spin up real-time hardware infrastructure:', err);
       setStatusText('Could not start live session');
       setInputState(1);
     }
@@ -994,7 +983,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       } catch (e) { /* ignore */ }
       try { liveSessionRef.current?.close?.(); } catch (e) { /* ignore */ }
     } catch (err) {
-      console.error('Error while stopping live session:', err);
+      console.error('Error while closing active channel loop cleanly:', err);
     } finally {
       liveSessionRef.current = null;
       setStatusText('Live stopped');
@@ -1007,7 +996,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     } else {
       void stopLiveSession();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputState]);
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
