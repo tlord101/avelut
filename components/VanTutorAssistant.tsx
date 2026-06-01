@@ -790,52 +790,6 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     }
   };
 
-      const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
-      if (text) {
-        const assistantMessage: AssistantMessage = {
-          id: createMessageId(),
-          sender: 'assistant',
-          text: String(text),
-          timestamp: Date.now(),
-        };
-        
-        setMessages(prev => [...prev, assistantMessage]);
-        setStatusText('Live response streaming');
-
-        try {
-          let conversationId = currentConversationIdRef.current;
-          if (!conversationId) {
-            const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}`);
-            const newConversationRef = push(conversationsRef);
-            conversationId = newConversationRef.key || null;
-            if (conversationId) {
-              await set(newConversationRef, {
-                title: 'Live Voice Chat',
-                created_at: Date.now(),
-                last_updated_at: Date.now(),
-              });
-              setActiveHistoryId(conversationId);
-            }
-          }
-
-          if (conversationId) {
-            const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
-            await push(messagesRef, {
-              text: String(text),
-              sender: 'assistant',
-              timestamp: serverTimestamp(),
-            });
-            await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), { last_updated_at: Date.now() });
-          }
-        } catch (err) {
-          console.error('DEV DATALAYER ERROR: Failed to persist live text data frame onto cloud backend:', err);
-        }
-      }
-    } catch (err) {
-      console.error('DEV SERVER PACKET PROCESSING SYSTEM EXCEPTION:', err);
-    }
-  };
-
   const startLiveSession = async () => {
     if (!LIVE_WEBSOCKET_URL) {
       setStatusText('Live API not configured');
