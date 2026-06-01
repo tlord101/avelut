@@ -313,7 +313,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       source.start(startAt);
       outputPlaybackTimeRef.current = startAt + audioBuffer.duration;
     } catch (error) {
-      console.error('Failed to enqueue live audio:', error);
+      console.error('DIAGNOSTIC EXCEPTION: Failed to enqueue live audio queue timeline ->', error);
     }
   };
 
@@ -695,34 +695,65 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
   const handleLiveServerMessage = async (msg: any) => {
     try {
+      // DEV DIAGNOSTIC: Log full raw packet arrival
+      console.log('DEV DEBUG: Received Live Server WebSocket Packet:', msg);
+      
       const serverContent = msg?.serverContent;
-      if (!serverContent) return;
+      if (!serverContent) {
+        console.warn('DEV WARNING: Packet received but has empty or null "serverContent" payload fields.');
+        return;
+      }
 
       const parts = serverContent?.parts || serverContent?.modelTurn?.parts || [];
-      parts.forEach((part: any) => {
+      if (parts.length === 0) {
+        console.log('DEV DEBUG: Packet content parts container array is currently empty.');
+      }
+
+      parts.forEach((part: any, segmentIdx: number) => {
         try {
           const inlineData = part?.inlineData;
-          if (!inlineData?.data) return;
-          const mime = String(inlineData.mimeType || '');
-          if (!mime.includes('pcm') && !mime.includes('audio')) return;
+          if (!inlineData) {
+            console.log(`DEV DEBUG: Part segment slot [${segmentIdx}] has no "inlineData" block descriptor.`);
+            return;
+          }
+          if (!inlineData?.data) {
+            console.warn(`DEV WARNING: Part segment slot [${segmentIdx}] has an inlineData wrapper but the critical "data" base64 payload field string is missing.`);
+            return;
+          }
 
+          const mime = String(inlineData.mimeType || '');
+          console.log(`DEV DEBUG: Processing part [${segmentIdx}] metadata string identifier: "${mime}"`);
+
+          if (!mime.includes('pcm') && !mime.includes('audio')) {
+            console.log(`DEV DEBUG: Skipping part segment slot [${segmentIdx}] because metadata format tag "${mime}" is not audio tracking raw content binary stream fragments.`);
+            return;
+          }
+
+          // AUDIO LAYER ENGINE PERMISSIONS LIFECYCLE MONITORING
           if (!outputAudioContextRef.current) {
+            console.log('DEV AUDIOMANAGER INITIALIZATION: Creating output pipeline AudioContext object handle instance...');
             outputAudioContextRef.current = new AudioContext();
           }
           
           const outputContext = outputAudioContextRef.current;
+          console.log(`DEV AUDIOMANAGER STATUS: Current browser core hardware pipeline status loop is -> "${outputContext.state}"`);
+
           if (outputContext.state === 'suspended') {
-            void outputContext.resume();
+            console.warn('DEV AUDIOMANAGER ALERT: Audio pipeline state context is BLOCKED / SUSPENDED by user autoplay policy gates! Forcing explicit code execution wakeup bypass sequence trigger...');
+            void outputContext.resume()
+              .then(() => console.log('DEV AUDIOMANAGER: AudioContext state successfully woke up and unblocked. Current state:', outputAudioContextRef.current?.state))
+              .catch((err) => console.error('DEV AUDIOMANAGER CRITICAL HARDWARE LOCKOUT FAILURE: Browser engine rejected programmatic unblock call command ->', err));
           }
 
           enqueueLivePcmAudio(String(inlineData.data), mime || 'audio/pcm;rate=24000');
         } catch (err) {
-          console.warn('Error handling inline part:', err, part);
+          console.error(`DEV INTEGRITY FAILURE EXCEPTION: Error thrown inside block parsing loop segment index [${segmentIdx}] structural evaluation ->`, err);
         }
       });
 
       const text = serverContent?.text || serverContent?.transcript || serverContent?.output_text || serverContent?.modelTurn?.parts?.[0]?.text;
       if (text) {
+        console.log('DEV TRANSCRIPT: Text payload segment frame extracted string ->', text);
         const assistantMessage: AssistantMessage = {
           id: createMessageId(),
           sender: 'assistant',
@@ -758,11 +789,11 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), { last_updated_at: Date.now() });
           }
         } catch (err) {
-          console.error('Failed to persist live assistant message:', err);
+          console.error('DEV DATALAYER ERROR: Failed to persist live streaming response asset data segment onto cloud backend instance storage branches ->', err);
         }
       }
     } catch (err) {
-      console.error('Error handling live server message:', err);
+      console.error('DEV SERVER PACKET PROCESSING SYSTEM EXCEPTION ERROR FALLBACK ROOT CATCH ->', err);
     }
   };
 
@@ -832,14 +863,14 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             const response = JSON.parse(textData);
             handleLiveServerMessage(response);
           } catch (error) {
-            console.error('Error parsing live message:', error, event.data);
+            console.error('DEV RECEPTION STRUCTURAL CRASH: Error parsing live channel string block text buffer packet format ->', error, event.data);
           }
         })();
       };
 
       socket.onerror = (event) => {
         if (sessionToken !== liveSessionTokenRef.current) return;
-        console.error('Live error', event);
+        console.error('Live socket error event emitted directly from connection thread ->', event);
         isLiveSessionOpenRef.current = false;
         isLiveSessionStartingRef.current = false;
         stopLiveCaptureOnly();
