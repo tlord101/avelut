@@ -4,6 +4,8 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as fir
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
 import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { useToast } from '../hooks/useToast';
+import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import type { Course, Topic } from '../types';
 import { getWindowPathname } from '../utils/pathname';
 
@@ -210,6 +212,9 @@ const previewTopics = (topics?: Topic[], maxItems = 3) => (Array.isArray(topics)
 
 export const UploadCenter: React.FC = () => {
   const { addToast } = useToast();
+  const { attemptApiCall } = useApiLimiter();
+  const { settings: appSettings } = useAppSettings();
+  const geminiModel = appSettings.primary_gemini_model;
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [user, setUser] = useState(firebaseAuth.currentUser);
@@ -497,6 +502,11 @@ export const UploadCenter: React.FC = () => {
       return;
     }
 
+    if (!appSettings.upload_center_uploads_enabled) {
+      addToast('Textbook uploads are currently disabled by an administrator.', 'error');
+      return;
+    }
+
     const pdfFiles = Array.from(files).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     if (!pdfFiles.length) {
       addToast('Please choose PDF files only.', 'error');
@@ -544,31 +554,40 @@ FORMAT:
   ]
 }`;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.5-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: prompt },
-                { inlineData: { mimeType: 'application/pdf', data: base64PDF } },
-              ],
+        const aiResult = await attemptApiCall(async () => {
+          const response = await ai.models.generateContent({
+            model: geminiModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: prompt },
+                  { inlineData: { mimeType: 'application/pdf', data: base64PDF } },
+                ],
+              },
+            ],
+            config: {
+              responseMimeType: 'application/json',
             },
-          ],
-          config: {
-            responseMimeType: 'application/json',
-          },
+          });
+
+          if (!response.text) {
+            throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
+          }
+
+          const responseData = JSON.parse(response.text);
+          const syllabusData = Array.isArray(responseData?.syllabus)
+            ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
+            : [];
+          extractedTopicGroups.push(syllabusData);
         });
 
-        if (!response.text) {
-          throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
+        if (!aiResult.success) {
+          addToast(aiResult.message, 'error');
+          setIsUploading(false);
+          setIsUploadingCourseKey('');
+          return;
         }
-
-        const responseData = JSON.parse(response.text);
-        const syllabusData = Array.isArray(responseData?.syllabus)
-          ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
-          : [];
-        extractedTopicGroups.push(syllabusData);
       }
 
       const mergedUrls = Array.from(new Set([
@@ -954,7 +973,24 @@ FORMAT:
           </div>
         )}
 
-        {activeView === 'upload' && (
+        {activeView === 'upload' && !appSettings.upload_center_uploads_enabled && (
+          <div className="mt-6 rounded-[28px] border border-orange-100 bg-white p-6 shadow-sm md:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">Uploads paused</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Textbook uploads are temporarily disabled.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+              An admin has paused textbook uploads from the upload center. You can still browse requests and return here when uploads reopen.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/upload-center')}
+              className="mt-6 rounded-full bg-slate-900 px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition hover:bg-orange-600"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        )}
+
+        {activeView === 'upload' && appSettings.upload_center_uploads_enabled && (
           <div className="mt-6 space-y-6">
             <section className="rounded-[28px] border border-orange-100 bg-white p-5 shadow-sm md:p-6">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">

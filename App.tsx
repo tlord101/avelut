@@ -15,6 +15,8 @@ import { MainContent } from './MainContent';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { BottomNavBar } from './components/BottomNavBar';
 import { useToast } from './hooks/useToast';
+import { useApiLimiter } from './hooks/useApiLimiter';
+import { useAppSettings } from './hooks/useAppSettings';
 import { navigationItems, adminNavigationItems } from './constants';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
@@ -22,6 +24,7 @@ import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { MenuIcon } from './components/icons/MenuIcon';
+import { ComingSoonScreen } from './components/ComingSoonScreen';
 
 declare var __app_id: string;
 
@@ -322,7 +325,9 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
+    const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
+    const isAdminRoute = getWindowPathname().startsWith('/admin');
 
         const applyMessengerTarget = useCallback((chatId: string | null | undefined) => {
                 if (!chatId) return;
@@ -353,6 +358,7 @@ const App: React.FC = () => {
         }, [applyMessengerTarget]);
 
     const { addToast } = useToast();
+    const { attemptApiCall } = useApiLimiter();
     const tourStatusRef = useRef<'unknown' | 'checked' | 'shown'>('unknown');
 
     const startTour = useCallback(() => {
@@ -673,38 +679,45 @@ Write a concise but specific assessment based only on the facts above. Do not in
             }
 
             try {
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                summary: { type: Type.STRING },
-                                strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                confidence: { type: Type.NUMBER },
-                                evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+                const result = await attemptApiCall(async () => {
+                    const response = await ai.models.generateContent({
+                        model: appSettings.primary_gemini_model,
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        config: {
+                            responseMimeType: 'application/json',
+                            responseSchema: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    summary: { type: Type.STRING },
+                                    strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    confidence: { type: Type.NUMBER },
+                                    evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                },
+                                required: ['summary', 'strengths', 'concerns', 'next_steps', 'confidence', 'evidence'],
                             },
-                            required: ['summary', 'strengths', 'concerns', 'next_steps', 'confidence', 'evidence'],
                         },
-                    },
-                });
-                if (!response.text) throw new Error('Gemini returned an empty assessment.');
+                    });
+                    if (!response.text) throw new Error('Gemini returned an empty assessment.');
 
-                const parsed = JSON.parse(response.text);
-                const assessment: DashboardAssessment = {
-                    summary: (parsed.summary || '').toString().trim(),
-                    strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map((item: any) => String(item)) : [],
-                    concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map((item: any) => String(item)) : [],
-                    next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map((item: any) => String(item)) : [],
-                    confidence: Math.max(0, Math.min(100, Number(parsed.confidence || 0))),
-                    evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item: any) => String(item)) : dashboardData.backedFacts,
-                    generated_at: Date.now(),
-                };
-                setDashboardData(prev => prev ? { ...prev, geminiAssessment: assessment } : prev);
+                    const parsed = JSON.parse(response.text);
+                    return {
+                        summary: (parsed.summary || '').toString().trim(),
+                        strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map((item: any) => String(item)) : [],
+                        concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map((item: any) => String(item)) : [],
+                        next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map((item: any) => String(item)) : [],
+                        confidence: Math.max(0, Math.min(100, Number(parsed.confidence || 0))),
+                        evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item: any) => String(item)) : dashboardData.backedFacts,
+                        generated_at: Date.now(),
+                    } as DashboardAssessment;
+                });
+
+                if (!result.success || !result.data) {
+                    throw new Error(result.message || 'Failed to generate dashboard assessment.');
+                }
+
+                setDashboardData(prev => prev ? { ...prev, geminiAssessment: result.data as DashboardAssessment } : prev);
             } catch (error) {
                 console.error('Failed to generate dashboard assessment:', error);
             }
@@ -830,12 +843,8 @@ Write a concise but specific assessment based only on the facts above. Do not in
       { target: 'body', title: "🎉 You're all set!", content: 'Enjoy exploring your learning journey. Tap "Finish" to start!', placement: 'center' },
     ];
 
-    if (isUploadCenterRoute) {
-        return (
-            <ErrorBoundary>
-                <UploadCenter />
-            </ErrorBoundary>
-        );
+    if (isLoading || isProfileLoading) {
+        return <AppLoader />;
     }
 
     if (activeItem === 'admin') {
@@ -914,14 +923,41 @@ Write a concise but specific assessment based only on the facts above. Do not in
         );
     }
     
-    if (isLoading || isProfileLoading) {
-        return <AppLoader />;
-    }
-
     if (!user) {
         return authView === 'login' 
             ? <Login onSwitchToSignUp={() => setAuthView('signup')} /> 
             : <SignUp onSwitchToLogin={() => setAuthView('login')} />;
+    }
+
+    if (isAppSettingsLoading) {
+        return <AppLoader />;
+    }
+
+    if (appSettings.coming_soon_enabled && !isAdminRoute) {
+        return (
+            <ComingSoonScreen
+                title="VANTUTOR is coming soon"
+                subtitle="We are polishing the full learning experience right now. Admins can reopen the app anytime."
+                supportText="If you are an admin, open the admin panel to manage launch settings."
+            />
+        );
+    }
+
+    if (isUploadCenterRoute) {
+        if (!appSettings.upload_center_uploads_enabled) {
+            return (
+                <ComingSoonScreen
+                    title="Textbook uploads are paused"
+                    subtitle="The upload center is temporarily locked by an administrator."
+                    supportText="Please check back later or contact an admin for access."
+                />
+            );
+        }
+        return (
+            <ErrorBoundary>
+                <UploadCenter />
+            </ErrorBoundary>
+        );
     }
 
     if (isOnboarding) {

@@ -8,28 +8,24 @@ const planConfigs = {
 };
 
 export const useApiLimiter = () => {
-  // Always use the 'smart' plan config for a free app.
-  const config = planConfigs.smart;
+  const config = planConfigs.free;
   const rateLimiter = useRef<RateLimiter>(new RateLimiter(config.maxRequests, config.intervalMs));
   
-  const attemptApiCall = useCallback((apiCallFn: () => Promise<void>)=> {
-    return new Promise<{ success: boolean; message: string }>((resolve) => {
-        const check = rateLimiter.current.check();
-        if (!check.allowed) {
-            resolve({ success: false, message: check.message });
-            return;
-        }
+  const attemptApiCall = useCallback(async <T,>(apiCallFn: () => Promise<T>) => {
+    const check = rateLimiter.current.check();
+    if (!check.allowed) {
+      return { success: false, message: check.message } as const;
+    }
 
-        apiCallFn().then(() => {
-            rateLimiter.current.record();
-            resolve({ success: true, message: '' });
-        }).catch((e: any) => {
-            // Don't record a failed request
-            console.error("API call failed:", e);
-            const errorMessage = e?.message || e?.toString() || 'An unexpected error occurred.';
-            resolve({ success: false, message: errorMessage });
-        });
-    });
+    try {
+      const data = await apiCallFn();
+      rateLimiter.current.record();
+      return { success: true, message: '', data } as const;
+    } catch (e: any) {
+      console.error("API call failed:", e);
+      const errorMessage = e?.message || e?.toString() || 'An unexpected error occurred.';
+      return { success: false, message: errorMessage } as const;
+    }
   }, []);
 
   return { attemptApiCall };

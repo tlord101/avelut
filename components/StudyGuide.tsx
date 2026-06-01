@@ -12,6 +12,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useApiLimiter } from '../hooks/useApiLimiter';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
@@ -239,6 +240,8 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const isAwardingTimeXpRef = useRef(false);
+    const { settings: appSettings } = useAppSettings();
+    const geminiModel = appSettings.primary_gemini_model;
     const profileSnapshotRef = useRef({
         display_name: userProfile.display_name || 'Learner',
         photo_url: userProfile.photo_url || '',
@@ -399,7 +402,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 `;
         const result = await attemptApiCall(async () => {
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: geminiModel,
                 config: { systemInstruction },
                 contents: [{ role: 'user', parts: [{ text: prompt }] }]
             });
