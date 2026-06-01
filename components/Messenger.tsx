@@ -553,12 +553,28 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       if (!firebaseUser) return null;
       const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
       const currentThreadRef = dbRef(db, `user_chats/${firebaseUser.uid}/${chatId}`);
+      const recipientThreadRef = dbRef(db, `user_chats/${otherUser.uid}/${chatId}`);
       const snapshot = await get(currentThreadRef);
+      const recipientSnapshot = await get(recipientThreadRef);
+      const now = Date.now();
 
       if (!snapshot.exists()) {
-        const now = firebaseServerTimestamp();
         await set(currentThreadRef, {
           otherUserId: otherUser.uid,
+          timestamp: now,
+          unreadCount: 0,
+          last_message: {
+            text: 'Start a conversation',
+            senderId: firebaseUser.uid,
+            timestamp: now,
+            type: 'text',
+          },
+        });
+      }
+
+      if (!recipientSnapshot.exists()) {
+        await set(recipientThreadRef, {
+          otherUserId: firebaseUser.uid,
           timestamp: now,
           unreadCount: 0,
           last_message: {
