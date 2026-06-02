@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -8,24 +9,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useToast } from '../hooks/useToast';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
-
-// Safely check for Vite's meta environment setup
-const apiKey = typeof window !== 'undefined' && (import.meta as any).env
-    ? (import.meta as any).env.VITE_API_KEY
-    : null;
-
-async function getAIClient() {
-    if (!apiKey) return null;
-    try {
-        const mod = await import('@google/genai');
-        const GoogleGenAI = (mod as any).GoogleGenAI || (mod as any).default;
-        if (!GoogleGenAI) return null;
-        return new GoogleGenAI({ apiKey });
-    } catch (e) {
-        console.error('Failed to load Google GenAI client:', e);
-        return null;
-    }
-}
 
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
@@ -206,6 +189,8 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
+    const geminiApiKey = appSettings.gemini_api_key.trim();
+    const aiClient = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
     const { addToast } = useToast();
 
     const cleanupCamera = useCallback(() => {
@@ -437,7 +422,6 @@ $$
 
 Make it visually engaging, well-spaced, and easy to follow!`;
 
-            const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
                 model: geminiModel,
@@ -471,7 +455,6 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
                 model: geminiModel,
@@ -505,7 +488,6 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             const customInstruction = customPrompt ? ` ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}`;
     
-            const aiClient = await getAIClient();
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
                 model: geminiModel,

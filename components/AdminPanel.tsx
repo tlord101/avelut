@@ -17,9 +17,6 @@ import { CheckIcon } from './icons/CheckIcon';
 import { getWindowPathname } from '../utils/pathname';
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS } from '../utils/appSettings';
 
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
-
 interface AdminPanelProps {
     userProfile: UserProfile;
     initialTab?: AdminTab;
@@ -318,7 +315,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
+    const geminiApiKey = appSettings.gemini_api_key.trim();
+    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
     const [isSavingAppSettings, setIsSavingAppSettings] = useState(false);
+    const [isTestingAppSettings, setIsTestingAppSettings] = useState(false);
     const [appSettingsDraft, setAppSettingsDraft] = useState(appSettings);
     const visibleTabs = useMemo(
         () => (allowedTabs && allowedTabs.length ? allowedTabs : DEFAULT_VISIBLE_TABS),
@@ -475,7 +475,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         const handleSuggestAnnouncement = async () => {
             if (!ai) {
-                addToast("AI features are unavailable because API_KEY is missing.", "error");
+                addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
                 return;
             }
             setIsSendingPush(true);
@@ -554,6 +554,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const nextSettings = {
             ...appSettingsDraft,
             primary_gemini_model: appSettingsDraft.primary_gemini_model.trim() || DEFAULT_APP_SETTINGS.primary_gemini_model,
+            gemini_api_key: appSettingsDraft.gemini_api_key.trim(),
         };
 
         setIsSavingAppSettings(true);
@@ -565,6 +566,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             addToast(error?.message || 'Failed to save app settings', 'error');
         } finally {
             setIsSavingAppSettings(false);
+        }
+    };
+
+    const handleTestGeminiSettings = async () => {
+        const modelToTest = appSettingsDraft.primary_gemini_model.trim() || DEFAULT_APP_SETTINGS.primary_gemini_model;
+        const apiKeyToTest = appSettingsDraft.gemini_api_key.trim();
+        if (!apiKeyToTest) {
+            addToast('Add a Gemini API key before running the hello test.', 'error');
+            return;
+        }
+
+        setIsTestingAppSettings(true);
+        try {
+            const testClient = new GoogleGenAI({ apiKey: apiKeyToTest });
+            const response = await testClient.models.generateContent({
+                model: modelToTest,
+                contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+            });
+            const preview = (response.text || '').trim();
+            if (!preview) {
+                throw new Error('The test returned an empty response.');
+            }
+            addToast(`Hello test successful: ${preview.slice(0, 120)}`, 'success');
+        } catch (error: any) {
+            console.error('Error testing Gemini settings:', error);
+            addToast(error?.message || 'Hello test failed.', 'error');
+        } finally {
+            setIsTestingAppSettings(false);
         }
     };
 
@@ -934,7 +963,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return;
         }
         if (!ai) {
-            addToast("AI features are unavailable because API_KEY is missing.", "error");
+            addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
             return;
         }
 
@@ -1031,7 +1060,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return;
         }
         if (!ai) {
-            addToast("AI features are unavailable because API_KEY is missing.", "error");
+            addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
             return;
         }
 
@@ -1184,7 +1213,7 @@ FORMAT:
         overrideCourseList?: Course[]
     ) => {
         if (!ai) {
-            addToast("AI features are unavailable because API_KEY is missing.", "error");
+            addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
             return;
         }
         const sourceCourseList = overrideCourseList || coursesList;
@@ -1606,7 +1635,7 @@ FORMAT:
                     <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
                         <div>
                             <h3 className="text-xl font-black text-gray-900">App Controls</h3>
-                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and set a valid Gemini model identifier.</p>
+                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and configure Gemini model + API key from Firebase.</p>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -1649,6 +1678,19 @@ FORMAT:
                             <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>
                         </label>
 
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-semibold text-gray-700">Gemini API key</span>
+                            <input
+                                type="password"
+                                value={appSettingsDraft.gemini_api_key}
+                                onChange={e => setAppSettingsDraft(prev => ({ ...prev, gemini_api_key: e.target.value }))}
+                                placeholder="AIza..."
+                                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                autoComplete="off"
+                            />
+                            <p className="mt-2 text-xs text-gray-500">This key is saved in Firebase app settings and used across all Gemini-powered features.</p>
+                        </label>
+
                         <div className="flex flex-wrap gap-3">
                             <button
                                 type="button"
@@ -1658,8 +1700,19 @@ FORMAT:
                             >
                                 {isSavingAppSettings ? 'Saving...' : 'Save App Settings'}
                             </button>
+                            <button
+                                type="button"
+                                onClick={handleTestGeminiSettings}
+                                disabled={isTestingAppSettings}
+                                className="rounded-xl border border-lime-200 bg-lime-50 px-5 py-3 text-sm font-black uppercase tracking-widest text-lime-700 hover:bg-lime-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isTestingAppSettings ? 'Testing...' : 'Test Hello'}
+                            </button>
                             <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                                 Current model: <span className="font-bold text-gray-900">{appSettings.primary_gemini_model}</span>
+                            </div>
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                                API key: <span className="font-bold text-gray-900">{appSettings.gemini_api_key ? 'Configured' : 'Not configured'}</span>
                             </div>
                         </div>
                     </div>

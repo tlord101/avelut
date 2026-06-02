@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
@@ -27,9 +27,6 @@ import { MenuIcon } from './components/icons/MenuIcon';
 import { ComingSoonScreen } from './components/ComingSoonScreen';
 
 declare var __app_id: string;
-
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const AppLoader: React.FC = () => {
   return (
@@ -326,6 +323,10 @@ const App: React.FC = () => {
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
+    const geminiApiKey = appSettings.gemini_api_key.trim();
+    const ai = useMemo(() => (
+        geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null
+    ), [geminiApiKey]);
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
     const isAdminRoute = getWindowPathname().startsWith('/admin');
 
@@ -668,7 +669,7 @@ Write a concise but specific assessment based only on the facts above. Do not in
                         `Completed ${dashboardData.completedTopicsCount} topics`,
                         `Tracked ${formatDurationForPrompt(dashboardData.totalStudySeconds)} of study time`,
                     ],
-                    concerns: ['Enable API_KEY to generate a Gemini assessment.'],
+                    concerns: ['Ask an admin to configure the Gemini API key in App Controls to generate assessments.'],
                     next_steps: ['Continue completing topics in the Study Guide.', 'Use exams to improve weak areas.'],
                     confidence: 0,
                     evidence: dashboardData.backedFacts,
@@ -724,7 +725,7 @@ Write a concise but specific assessment based only on the facts above. Do not in
         };
 
         void generateAssessment();
-    }, [userProfile, dashboardData]);
+    }, [userProfile, dashboardData, ai, appSettings.primary_gemini_model]);
 
     const handleLogout = async () => {
         try {

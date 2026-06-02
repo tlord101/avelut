@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
@@ -19,8 +19,6 @@ import { SparklesIcon } from './icons/SparklesIcon';
 import { LockIcon } from './icons/LockIcon';
 
 declare var __app_id: string;
-// @ts-ignore
-const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 // --- INLINE ICONS ---
 const CheckCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
@@ -242,6 +240,8 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const isAwardingTimeXpRef = useRef(false);
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
+    const geminiApiKey = appSettings.gemini_api_key.trim();
+    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
     const profileSnapshotRef = useRef({
         display_name: userProfile.display_name || 'Learner',
         photo_url: userProfile.photo_url || '',
@@ -388,6 +388,10 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
     }, [userProfile.uid, userProfile.department_id]);
 
     const initiateAutoTeach = async () => {
+        if (!ai) {
+            addToast('Gemini API key is not configured in App Controls.', 'error');
+            return;
+        }
         setIsLoading(true);
         const prompt = `
 Context:
@@ -498,6 +502,10 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
     const handleSend = async (messageText?: string) => {
         const textToSend = messageText || input;
         if ((!textToSend.trim() && !file) || isLoading || isIllustrating) return;
+        if (!ai) {
+            addToast('Gemini API key is not configured in App Controls.', 'error');
+            return;
+        }
         
         const tempInput = textToSend;
         const tempFile = file;
@@ -627,6 +635,10 @@ Student: "${tempInput}"
     const handleGenerateIllustration = async (promptText: string) => {
         if (!promptText) {
             addToast("Not enough context to create an image.", "info");
+            return;
+        }
+        if (!ai) {
+            addToast('Gemini API key is not configured in App Controls.', 'error');
             return;
         }
 
