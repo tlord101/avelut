@@ -25,6 +25,10 @@ export interface UserProfile {
     timestamp: number;
   };
   has_completed_tour?: boolean;
+  is_activated?: boolean;
+  subscription_status?: 'none' | 'premium' | 'personal_token';
+  personal_api_key?: string;
+  use_personal_token?: boolean;
 }
 
 export interface Message {
@@ -148,6 +152,10 @@ export interface AppSettings {
   gemini_api_key: string;
   upload_center_uploads_enabled: boolean;
   coming_soon_enabled: boolean;
+  paystack_public_key: string;
+  paystack_secret_key: string;
+  custom_user_limit_rpm: number;
+  custom_user_limit_tpm: number;
 }
 
 // Type for the new Notification System

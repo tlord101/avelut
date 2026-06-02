@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -189,8 +189,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const geminiApiKey = appSettings.gemini_api_key.trim();
-    const aiClient = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+    const aiClient = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
     const { addToast } = useToast();
 
     const cleanupCamera = useCallback(() => {

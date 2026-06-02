@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as firebaseAuth, firebaseSignOut, onAuthStateChanged, db, storage } from '../firebase';
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
 import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
@@ -212,8 +212,7 @@ export const UploadCenter: React.FC = () => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
-  const geminiApiKey = appSettings.gemini_api_key.trim();
-  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+  const ai = useMemo(() => createVanTutorAI(appSettings, null), [appSettings]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [user, setUser] = useState(firebaseAuth.currentUser);

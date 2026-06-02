@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
+import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -241,10 +242,9 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [shouldAutoTeach, setShouldAutoTeach] = useState(false);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const geminiApiKey = appSettings.gemini_api_key.trim();
     const ai = useMemo(
-        () => (!isAppSettingsLoading && geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null),
-        [isAppSettingsLoading, geminiApiKey]
+        () => createVanTutorAI(appSettings, userProfile),
+        [appSettings, userProfile]
     );
     const profileSnapshotRef = useRef({
         display_name: userProfile.display_name || 'Learner',

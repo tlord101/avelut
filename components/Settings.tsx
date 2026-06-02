@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile } from '../types';
 import { auth, storage, db, type FirebaseUser } from '../firebase';
+import { GoogleGenAI } from '@google/genai';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ref as dbRef, get } from 'firebase/database';
 import { useToast } from '../hooks/useToast';
@@ -43,6 +44,69 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
   // FIX: Use snake_case for display_name
   const [newDisplayName, setNewDisplayName] = useState(userProfile.display_name);
   const [isSaving, setIsSaving] = useState(false);
+  const [usePersonalToken, setUsePersonalToken] = useState(userProfile.use_personal_token || false);
+  const [personalApiKey, setPersonalApiKey] = useState(userProfile.personal_api_key || '');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isVerifyingKey, setIsVerifyingKey] = useState(false);
+
+  useEffect(() => {
+    setUsePersonalToken(userProfile.use_personal_token || false);
+    setPersonalApiKey(userProfile.personal_api_key || '');
+  }, [userProfile.use_personal_token, userProfile.personal_api_key]);
+
+  const handleSaveConnectionSettings = async () => {
+    if (usePersonalToken) {
+      if (!personalApiKey.trim()) {
+        addToast('Please enter a valid Gemini API Key.', 'error');
+        return;
+      }
+      setIsVerifyingKey(true);
+      try {
+        const testClient = new GoogleGenAI({ apiKey: personalApiKey.trim() });
+        const response = await testClient.models.generateContent({
+          model: 'gemini-2.5-flash-lite',
+          contents: [{ role: 'user', parts: [{ text: 'Hello, this is a test.' }] }]
+        });
+        if (!response.text) {
+          throw new Error('Key validation failed: Empty response.');
+        }
+        const result = await onProfileUpdate({
+          use_personal_token: true,
+          personal_api_key: personalApiKey.trim(),
+          subscription_status: 'personal_token',
+          is_activated: true
+        });
+        if (result.success) {
+          addToast('Personal API Key successfully verified and saved!', 'success');
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (e: any) {
+        console.error(e);
+        addToast('Invalid API Key. Please verify and try again.', 'error');
+      } finally {
+        setIsVerifyingKey(false);
+      }
+    } else {
+      setIsVerifyingKey(true);
+      try {
+        const result = await onProfileUpdate({
+          use_personal_token: false,
+          subscription_status: userProfile.subscription_status === 'personal_token' ? 'none' : userProfile.subscription_status,
+          is_activated: userProfile.subscription_status === 'premium'
+        });
+        if (result.success) {
+          addToast('Switched to default VanTutor AI!', 'success');
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (e: any) {
+        addToast('Failed to update connection settings.', 'error');
+      } finally {
+        setIsVerifyingKey(false);
+      }
+    }
+  };
   const [departmentName, setDepartmentName] = useState<string>('');
   const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
   const [levels, setLevels] = useState<string[]>([]);
@@ -373,6 +437,87 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
                 Notifications are blocked by your browser. You'll need to go into your browser's site settings for VANTUTOR to re-enable them.
             </p>
         )}
+      </div>
+
+      <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">VanTutor AI Connection</h3>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-gray-600 font-medium">Connection Mode</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setUsePersonalToken(false)}
+                className={`py-3 px-4 rounded-xl border text-center font-bold transition-all ${
+                  !usePersonalToken
+                    ? 'border-lime-600 bg-lime-50/50 text-lime-900 shadow-sm'
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                }`}
+              >
+                VanTutor Premium AI
+              </button>
+              <button
+                type="button"
+                onClick={() => setUsePersonalToken(true)}
+                className={`py-3 px-4 rounded-xl border text-center font-bold transition-all ${
+                  usePersonalToken
+                    ? 'border-lime-600 bg-lime-50/50 text-lime-900 shadow-sm'
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                }`}
+              >
+                Personal Google Token
+              </button>
+            </div>
+          </div>
+
+          {usePersonalToken ? (
+            <div className="space-y-3 pt-2">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Connect your personal Google Gemini API key. If you don't have one, get a free token from{' '}
+                <a
+                  href="https://aistudio.google.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-lime-600 font-bold hover:underline"
+                >
+                  Google AI Studio
+                </a>.
+              </p>
+              <div className="relative">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  placeholder="Paste your Gemini API key here"
+                  value={personalApiKey}
+                  onChange={(e) => setPersonalApiKey(e.target.value)}
+                  className="w-full bg-gray-55 border border-gray-300 rounded-lg py-2 px-3 pr-10 text-gray-900 font-medium focus:ring-1 focus:ring-lime-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-xs font-bold"
+                >
+                  {showApiKey ? 'HIDE' : 'SHOW'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Using VanTutor's centralized AI engine (subject to system usage limits). For unlimited usage and no queues, switch to a Personal Token.
+              </p>
+            </div>
+          )}
+
+          <div className="pt-2">
+            <button
+              onClick={handleSaveConnectionSettings}
+              disabled={isVerifyingKey || (usePersonalToken && !personalApiKey.trim())}
+              className="w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-[11px] text-white bg-lime-600 hover:bg-lime-700 transition-all disabled:opacity-50 active:scale-95"
+            >
+              {isVerifyingKey ? 'Saving Connection...' : 'Save Connection'}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">

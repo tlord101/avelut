@@ -8,6 +8,8 @@ import { SignUp } from './components/SignUp';
 import { AdminLogin } from './components/AdminLogin';
 import { UploadCenter } from './components/UploadCenter';
 import { Onboarding } from './components/Onboarding';
+import { ActivationScreen } from './components/ActivationScreen';
+import { createVanTutorAI } from './utils/inference';
 import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -323,10 +325,9 @@ const App: React.FC = () => {
     const [isTourOpen, setIsTourOpen] = useState(false);
     const dashboardAssessmentKeyRef = useRef('');
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
-    const geminiApiKey = appSettings.gemini_api_key.trim();
     const ai = useMemo(() => (
-        geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null
-    ), [geminiApiKey]);
+        createVanTutorAI(appSettings, userProfile)
+    ), [appSettings, userProfile]);
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
     const isAdminRoute = getWindowPathname().startsWith('/admin');
 
@@ -973,6 +974,19 @@ Write a concise but specific assessment based only on the facts above. Do not in
         );
     }
 
+    if (userProfile && !userProfile.is_activated && !userProfile.is_admin && !isAdminRoute) {
+        return (
+            <ActivationScreen
+                user={user}
+                userProfile={userProfile}
+                appSettings={appSettings}
+                handleProfileUpdate={handleProfileUpdate}
+                handleLogout={handleLogout}
+                addToast={addToast}
+            />
+        );
+    }
+
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     return (
@@ -996,6 +1010,7 @@ Write a concise but specific assessment based only on the facts above. Do not in
                     onMenuClick={() => setIsMobileSidebarOpen(true)}
                     onMessengerClick={() => setActiveItem('messenger')}
                     unreadMessagesCount={unreadMessagesCount}
+                    userProfile={userProfile}
                 />
                 <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
                     {userProfile && (

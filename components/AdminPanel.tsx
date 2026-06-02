@@ -14,6 +14,29 @@ import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { CheckIcon } from './icons/CheckIcon';
+import { 
+    Folder, 
+    BookOpen, 
+    HelpCircle, 
+    Users, 
+    Settings as SettingsIcon, 
+    LogOut, 
+    ChevronDown, 
+    Sparkles, 
+    RefreshCw, 
+    Trash2,
+    Shield,
+    TrendingUp,
+    Clock,
+    UserCheck,
+    CreditCard,
+    Key,
+    Activity,
+    Plus,
+    X,
+    Building,
+    Home
+} from 'lucide-react';
 import { getWindowPathname } from '../utils/pathname';
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS } from '../utils/appSettings';
 
@@ -313,6 +336,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
     const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const geminiApiKey = appSettings.gemini_api_key.trim();
@@ -555,6 +579,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             ...appSettingsDraft,
             primary_gemini_model: appSettingsDraft.primary_gemini_model.trim() || DEFAULT_APP_SETTINGS.primary_gemini_model,
             gemini_api_key: appSettingsDraft.gemini_api_key.trim(),
+            paystack_public_key: (appSettingsDraft.paystack_public_key || '').trim(),
+            paystack_secret_key: (appSettingsDraft.paystack_secret_key || '').trim(),
+            custom_user_limit_rpm: appSettingsDraft.custom_user_limit_rpm ?? 10,
+            custom_user_limit_tpm: appSettingsDraft.custom_user_limit_tpm ?? 250000,
         };
 
         setIsSavingAppSettings(true);
@@ -1580,513 +1608,641 @@ FORMAT:
     }, [onNavigate]);
 
     if (!userProfile.is_admin) {
-        return <div className="p-8 text-center text-red-600 font-bold">Access Denied. Admins only.</div>;
+        return (
+            <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
+                <div className="bg-slate-800 border border-slate-700/50 p-8 rounded-3xl max-w-md w-full shadow-2xl flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 border border-red-500/20">
+                        <Shield className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-black text-white">Access Denied</h3>
+                    <p className="text-sm text-slate-400">This area is reserved for administrators only. Please log in with authorized credentials.</p>
+                    <button
+                        onClick={() => handleCourseTabNavigate('/')}
+                        className="mt-4 px-6 py-3 rounded-xl bg-lime-500 hover:bg-lime-600 text-slate-950 font-bold uppercase tracking-widest text-xs transition shadow-lg shadow-lime-500/20"
+                    >
+                        Go to Platform Home
+                    </button>
+                </div>
+            </div>
+        );
     }
 
+    const navigationItems = [
+        { id: 'departments', label: 'Departments', icon: Building, path: '/admin' },
+        { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/admin/courses/manager' },
+        { id: 'questions', label: 'Past Questions', icon: HelpCircle, path: '/admin/questions' },
+        { id: 'users', label: 'User Control', icon: Users, path: '/admin/users' },
+        { id: 'app', label: 'App Settings', icon: SettingsIcon, path: '/admin/app' },
+    ];
+
+    const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
+
     return (
-        <div className="flex flex-col p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900">Admin Control Panel</h2>
-            
-            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {visibleTabs.includes('departments') && (
-                    <button 
-                        onClick={() => handleCourseTabNavigate('/admin')}
-                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'departments' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                    >
-                        Departments
-                    </button>
-                )}
-                {visibleTabs.includes('courses') && (
-                    <button 
-                        onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
-                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'courses' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                    >
-                        Courses
-                    </button>
-                )}
-                {visibleTabs.includes('questions') && (
-                    <button 
-                        onClick={() => handleCourseTabNavigate('/admin/questions')}
-                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'questions' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                    >
-                        Past Questions
-                    </button>
-                )}
-                {visibleTabs.includes('users') && (
-                    <button 
-                        onClick={() => handleCourseTabNavigate('/admin/users')}
-                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'users' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                    >
-                        User Management
-                    </button>
-                )}
-                {visibleTabs.includes('app') && (
-                    <button 
-                        onClick={() => handleCourseTabNavigate('/admin/app')}
-                        className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'app' ? 'text-lime-600 border-b-2 border-lime-600' : 'text-gray-500'}`}
-                    >
-                        App Controls
-                    </button>
-                )}
-            </div>
-
-            {activeTab === 'app' && (
-                <div className="space-y-6 max-w-3xl">
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
+        <div className="min-h-screen bg-slate-50 flex text-slate-800 w-full overflow-hidden font-sans">
+            {/* Sidebar - Desktop */}
+            <aside className="w-64 bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col justify-between border-r border-slate-900 sticky top-0 h-screen z-40 hidden md:flex">
+                <div className="flex flex-col gap-6 p-6">
+                    {/* Header Brand */}
+                    <div className="flex items-center gap-3 border-b border-slate-900 pb-5">
+                        <div className="w-9 h-9 rounded-xl bg-lime-500 flex items-center justify-center text-slate-950 shadow-lg shadow-lime-500/20">
+                            <LogoIcon className="w-5 h-5 text-slate-950" />
+                        </div>
                         <div>
-                            <h3 className="text-xl font-black text-gray-900">App Controls</h3>
-                            <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and configure Gemini model + API key from Firebase.</p>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                                <input
-                                    type="checkbox"
-                                    checked={appSettingsDraft.coming_soon_enabled}
-                                    onChange={e => setAppSettingsDraft(prev => ({ ...prev, coming_soon_enabled: e.target.checked }))}
-                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
-                                />
-                                <span>
-                                    <span className="block font-bold text-gray-900">Coming soon mode</span>
-                                    <span className="mt-1 block text-sm text-gray-500">Shows a polished coming soon screen to public users.</span>
-                                </span>
-                            </label>
-
-                            <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                                <input
-                                    type="checkbox"
-                                    checked={appSettingsDraft.upload_center_uploads_enabled}
-                                    onChange={e => setAppSettingsDraft(prev => ({ ...prev, upload_center_uploads_enabled: e.target.checked }))}
-                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
-                                />
-                                <span>
-                                    <span className="block font-bold text-gray-900">Upload center uploads</span>
-                                    <span className="mt-1 block text-sm text-gray-500">Turn textbook uploading on or off for upload center users.</span>
-                                </span>
-                            </label>
-                        </div>
-
-                        <label className="block">
-                            <span className="mb-2 block text-sm font-semibold text-gray-700">Primary Gemini model</span>
-                            <input
-                                type="text"
-                                value={appSettingsDraft.primary_gemini_model}
-                                onChange={e => setAppSettingsDraft(prev => ({ ...prev, primary_gemini_model: e.target.value }))}
-                                placeholder="gemini-2.5-flash-lite"
-                                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
-                            />
-                            <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>
-                        </label>
-
-                        <label className="block">
-                            <span className="mb-2 block text-sm font-semibold text-gray-700">Gemini API key</span>
-                            <input
-                                type="password"
-                                value={appSettingsDraft.gemini_api_key}
-                                onChange={e => setAppSettingsDraft(prev => ({ ...prev, gemini_api_key: e.target.value }))}
-                                placeholder="AIza..."
-                                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
-                                autoComplete="off"
-                            />
-                            <p className="mt-2 text-xs text-gray-500">This key is saved in Firebase app settings and used across all Gemini-powered features.</p>
-                        </label>
-
-                        <div className="flex flex-wrap gap-3">
-                            <button
-                                type="button"
-                                onClick={handleSaveAppSettings}
-                                disabled={isSavingAppSettings}
-                                className="rounded-xl bg-lime-600 px-5 py-3 text-sm font-black uppercase tracking-widest text-white hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {isSavingAppSettings ? 'Saving...' : 'Save App Settings'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleTestGeminiSettings}
-                                disabled={isTestingAppSettings}
-                                className="rounded-xl border border-lime-200 bg-lime-50 px-5 py-3 text-sm font-black uppercase tracking-widest text-lime-700 hover:bg-lime-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {isTestingAppSettings ? 'Testing...' : 'Test Hello'}
-                            </button>
-                            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                                Current model: <span className="font-bold text-gray-900">{appSettings.primary_gemini_model}</span>
-                            </div>
-                            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                                API key: <span className="font-bold text-gray-900">{appSettings.gemini_api_key ? 'Configured' : 'Not configured'}</span>
-                            </div>
+                            <h2 className="text-base font-black text-white leading-tight">VanTutor</h2>
+                            <p className="text-[10px] uppercase font-bold text-lime-400 tracking-widest mt-0.5">Admin Desk</p>
                         </div>
                     </div>
+
+                    {/* Nav Links */}
+                    <nav className="space-y-1.5">
+                        {activeNavItems.map((item) => {
+                            const IconComponent = item.icon;
+                            const isActive = activeTab === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    onClick={() => handleCourseTabNavigate(item.path)}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative group ${
+                                        isActive 
+                                            ? 'bg-lime-500/10 text-lime-400 font-bold border-l-4 border-lime-500' 
+                                            : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <IconComponent className={`w-4 h-4 transition-transform duration-200 ${isActive ? 'scale-110 text-lime-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
+                                    <span>{item.label}</span>
+                                    {isActive && (
+                                        <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-lime-500 animate-pulse"></div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </nav>
                 </div>
-            )}
 
-            {activeTab === 'departments' && (
-                <div className="space-y-6 max-w-2xl">
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                        <h3 className="font-bold text-gray-800 mb-4">Add New Department</h3>
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <input 
-                                type="text" 
-                                placeholder="Department Name (e.g., Computer Science)" 
-                                value={newDeptName} 
-                                onChange={e => setNewDeptName(e.target.value)}
-                                className="flex-1 p-2 border rounded-lg"
-                            />
-                            <button 
-                                onClick={handleAddDepartment}
-                                className="w-full sm:w-auto px-6 py-2 bg-lime-600 text-white rounded-lg font-bold hover:bg-lime-700"
-                            >
-                                Add
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                        <h3 className="font-bold text-gray-800 mb-4">Existing Departments</h3>
-                        <div className="space-y-2">
-                            {allDepartments.map(dept => (
-                                <div key={dept.id} className="p-3 border rounded-lg flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
-                                    <span>{dept.department_name}</span>
-                                    <span className="text-xs text-gray-500">{dept.levels?.join(', ')}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                {/* Footer Exit Link */}
+                <div className="p-6 border-t border-slate-900">
+                    <button
+                        onClick={() => handleCourseTabNavigate('/')}
+                        className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs uppercase tracking-widest font-black text-slate-400 hover:text-white hover:bg-slate-900 transition duration-200 border border-slate-800"
+                    >
+                        <Home className="w-4 h-4" />
+                        <span>Exit Admin Panel</span>
+                    </button>
                 </div>
-            )}
+            </aside>
 
-            {activeTab === 'questions' && (
-                <div className="space-y-8 max-w-2xl">
-                    {/* Automated Upload Section */}
-                    <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200">
-                        <h3 className="font-bold text-lime-800 mb-2 flex items-center gap-2">
-                            <span>✨</span> Automated PDF Extraction
-                        </h3>
-                        <p className="text-sm text-lime-700 mb-4">
-                            Upload a PDF of past questions to automatically populate the question bank.
-                        </p>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                            <select 
-                                value={uploadDepartmentId} 
-                                onChange={e => setUploadDepartmentId(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Department</option>
-                                {allDepartments.map(dept => (
-                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                                ))}
-                            </select>
-                            <select 
-                                value={uploadLevel} 
-                                onChange={e => setUploadLevel(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Level</option>
-                                {LEVELS.map(lvl => (
-                                    <option key={lvl} value={lvl}>{lvl}</option>
-                                ))}
-                            </select>
-                            <input 
-                                type="text" placeholder="Course Name (e.g., Mathematics)" 
-                                value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            />
-                            <input 
-                                type="text" placeholder="Year (e.g., 2023)" 
-                                value={year} onChange={e => setYear(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            />
-                        </div>
-
-                        <div className="flex flex-col gap-3">
-                            <input 
-                                type="file" 
-                                accept="application/pdf"
-                                onChange={e => setPqFile(e.target.files?.[0] || null)}
-                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
-                            />
-                            {isPQProcessing && (
-                                <div className="flex items-center gap-1.5 text-lime-600 text-sm font-medium">
-                                    <span className="animate-spin">⏳</span>
-                                    <span>{extractionProgress}</span>
-                                </div>
-                            )}
-                            <button 
-                                onClick={handlePQUpload}
-                                disabled={isPQProcessing || !pqFile}
-                                className={`w-full py-3 rounded-xl font-bold transition ${isPQProcessing || !pqFile ? 'bg-gray-300 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-sm'}`}
-                            >
-                                {isPQProcessing ? 'Processing Questions...' : 'Extract & Save from PDF'}
-                            </button>
-                        </div>
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
+                {/* Top Header Bar */}
+                <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs uppercase tracking-widest font-black text-slate-400 hidden sm:inline">Admin Desk</span>
+                        <span className="text-slate-300 hidden sm:inline">/</span>
+                        <span className="text-sm font-bold text-slate-800 capitalize">
+                            {activeTab === 'app' ? 'App Controls' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'users' ? 'User Control' : activeTab}
+                        </span>
                     </div>
 
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                            <div className="w-full border-t border-gray-300"></div>
+                    <div className="flex items-center gap-4 relative">
+                        <div className="hidden sm:flex flex-col text-right">
+                            <span className="text-sm font-bold text-slate-800 leading-tight">{userProfile.display_name || 'Administrator'}</span>
+                            <span className="text-[10px] text-lime-600 font-bold uppercase tracking-wider mt-0.5">System Admin</span>
                         </div>
-                        <div className="relative flex justify-center">
-                            <span className="px-3 bg-white text-sm text-gray-500 font-medium">OR MANUAL ENTRY</span>
-                        </div>
-                    </div>
 
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <select 
-                                value={uploadDepartmentId} 
-                                onChange={e => setUploadDepartmentId(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Department</option>
-                                {allDepartments.map(dept => (
-                                    <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                                ))}
-                            </select>
-                            <select 
-                                value={uploadLevel} 
-                                onChange={e => setUploadLevel(e.target.value)}
-                                className="p-2 border rounded-lg bg-white"
-                            >
-                                <option value="">Select Level</option>
-                                {LEVELS.map(lvl => (
-                                    <option key={lvl} value={lvl}>{lvl}</option>
-                                ))}
-                            </select>
-                            <input 
-                                type="text" placeholder="Course Name" 
-                                value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
-                            <input 
-                                type="text" placeholder="Year" 
-                                value={year} onChange={e => setYear(e.target.value)}
-                                className="p-2 border rounded-lg"
-                            />
-                        </div>
-                        <textarea 
-                            placeholder="Question Content" 
-                            value={newQuestion.question} 
-                            onChange={e => setNewQuestion({...newQuestion, question: e.target.value})}
-                            className="w-full p-2 border rounded-lg h-24"
-                        />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {newQuestion.options.map((opt, i) => (
-                                <input 
-                                    key={i} type="text" placeholder={`Option ${String.fromCharCode(65+i)}`}
-                                    value={opt} onChange={e => {
-                                        const opts = [...newQuestion.options];
-                                        opts[i] = e.target.value;
-                                        setNewQuestion({...newQuestion, options: opts});
-                                    }}
-                                    className="p-2 border rounded-lg"
-                                />
-                            ))}
-                        </div>
-                        <input 
-                            type="text" placeholder="Correct Answer (Exact string match)" 
-                            value={newQuestion.correctAnswer} 
-                            onChange={e => setNewQuestion({...newQuestion, correctAnswer: e.target.value})}
-                            className="w-full p-2 border rounded-lg"
-                        />
-                        <textarea 
-                            placeholder="Explanation (Optional)" 
-                            value={newQuestion.explanation} 
-                            onChange={e => setNewQuestion({...newQuestion, explanation: e.target.value})}
-                            className="w-full p-2 border rounded-lg h-20"
-                        />
                         <button 
-                            onClick={handleAddQuestion}
-                            className="w-full bg-gray-800 text-white py-3 rounded-xl font-bold hover:bg-gray-900 transition"
+                            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100 outline-none"
                         >
-                            Save Question Manually
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'courses' && (
-                <div className="space-y-6">
-                    {courseAdminView.mode === 'global' && (
-                        <div className="space-y-6">
-                            <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                                    <div>
-                                        <h3 className="text-xl font-black text-gray-900">All Courses</h3>
-                                        <p className="text-sm text-gray-500">Search every course across departments.</p>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
-                                            className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
-                                        >
-                                            Open Course Manager
-                                        </button>
-                                        <button
-                                            onClick={() => handleCourseTabNavigate('/admin/courses/add')}
-                                            className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
-                                        >
-                                            Course Addition
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col md:flex-row gap-3">
-                                    <input
-                                        type="text"
-                                        value={courseSearchQuery}
-                                        onChange={e => setCourseSearchQuery(e.target.value)}
-                                        placeholder="Search by course name, code, level, or department..."
-                                        className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none"
-                                    />
-                                    <button
-                                        onClick={handleMergeDuplicateCoursesAcrossDepartments}
-                                        className="px-4 py-3 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
-                                    >
-                                        Merge Same-Title Courses
-                                    </button>
-                                </div>
-
-                                {filteredGlobalCourses.length ? (
-                                    <div className="overflow-x-auto rounded-2xl border border-gray-100">
-                                        <table className="w-full min-w-[720px] text-left">
-                                            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                                <tr>
-                                                    <th className="px-6 py-3">Course</th>
-                                                    <th className="px-6 py-3">Departments</th>
-                                                    <th className="px-6 py-3">Level</th>
-                                                    <th className="px-6 py-3">Semester</th>
-                                                    <th className="px-6 py-3 text-right">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {filteredGlobalCourses.map(({ course, departmentIds }) => {
-                                                    const departmentNames = departmentIds
-                                                        .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
-                                                        .join(', ');
-                                                    const firstDepartmentId = departmentIds[0] || '';
-                                                    const hasMultipleDepartments = departmentIds.length > 1;
-                                                    const courseRouteIdentifier = getCourseRouteKey(course);
-                                                    return (
-                                                        <tr key={courseRouteIdentifier} className="hover:bg-gray-50">
-                                                            <td className="px-6 py-4">
-                                                                <div className="font-bold text-gray-900">{course.course_name}</div>
-                                                                <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-sm text-gray-600">{departmentNames}</td>
-                                                            <td className="px-6 py-4 text-sm text-gray-600">{course.level}</td>
-                                                            <td className="px-6 py-4">
-                                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-right">
-                                                                <button
-                                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, courseRouteIdentifier))}
-                                                                    title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
-                                                                    className="text-sm font-bold text-lime-600 hover:text-lime-700"
-                                                                >
-                                                                    {hasMultipleDepartments ? 'Open Primary' : 'Open'}
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-lime-500 to-emerald-600 flex items-center justify-center text-slate-950 font-bold overflow-hidden shadow-md shadow-lime-500/10">
+                                {userProfile.photo_url ? (
+                                    <img src={userProfile.photo_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="p-10 border border-dashed border-gray-200 rounded-2xl text-sm text-gray-500">
-                                        No courses found yet.
-                                    </div>
+                                    (userProfile.display_name || 'A').charAt(0).toUpperCase()
                                 )}
                             </div>
-                        </div>
-                    )}
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                    {courseAdminView.mode === 'manager-root' && (
-                        <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-5 max-w-3xl">
-                            <div>
-                                <h3 className="text-xl font-black text-gray-900">Course Manager</h3>
-                                <p className="text-sm text-gray-500">Choose a department and level, then drill into a course.</p>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <select
-                                    value={managerSelectionDepartmentId}
-                                    onChange={e => setManagerSelectionDepartmentId(e.target.value)}
-                                    className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none"
-                                >
-                                    <option value="">Select Department</option>
-                                    {allDepartments.map(dept => (
-                                        <option key={dept.id} value={dept.id}>{dept.department_name}</option>
-                                    ))}
-                                </select>
-                                <select
-                                    value={managerSelectionLevel}
-                                    onChange={e => setManagerSelectionLevel(e.target.value)}
-                                    className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none"
-                                >
-                                    <option value="">Select Level</option>
-                                    {LEVELS.map(level => (
-                                        <option key={level} value={level}>{level}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <button
-                                disabled={!managerSelectionDepartmentId || !managerSelectionLevel}
-                                onClick={() => handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel))}
-                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${!managerSelectionDepartmentId || !managerSelectionLevel ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
-                            >
-                                View Courses
-                            </button>
-                            <button
-                                onClick={() => handleCourseTabNavigate(buildCourseAddPath(managerSelectionDepartmentId || undefined, managerSelectionLevel || undefined))}
-                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs bg-gray-900 text-white hover:bg-black transition"
-                            >
-                                Course Addition
-                            </button>
-                            <button
-                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
-                                className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs bg-lime-600 text-white hover:bg-lime-700 transition"
-                            >
-                                Merge Same-Title Courses
-                            </button>
-                        </div>
-                    )}
+                        {isProfileMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setIsProfileMenuOpen(false)}></div>
+                                <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-slate-100 shadow-2xl rounded-2xl p-2 z-50 flex flex-col gap-1 transform origin-top-right transition-all">
+                                    <div className="px-3 py-2 border-b border-slate-50">
+                                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">System Account</p>
+                                        <p className="text-xs font-bold text-slate-800 truncate mt-1">{userProfile.email}</p>
+                                    </div>
 
-                    {courseAdminView.mode === 'add' && (
-                        <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-6 max-w-4xl">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <h3 className="text-xl font-black text-gray-900">Course Addition</h3>
-                                    <p className="text-sm text-gray-500">Upload course-form PDF(s), auto-extract courses with AI, then add to selected departments and level.</p>
+                                    <button
+                                        onClick={() => {
+                                            setIsProfileMenuOpen(false);
+                                            handleCourseTabNavigate('/admin/app');
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                                    >
+                                        <SettingsIcon className="w-4 h-4 text-slate-450" />
+                                        <span>System Configuration</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setIsProfileMenuOpen(false);
+                                            handleCourseTabNavigate('/');
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all border-t border-slate-50 mt-1"
+                                    >
+                                        <LogOut className="w-4 h-4 text-red-400" />
+                                        <span>Exit Admin Desk</span>
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
-                                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                            </>
+                        )}
+                    </div>
+                </header>
+
+                {/* Mobile Navigation bar */}
+                <div className="flex md:hidden bg-slate-950 text-slate-400 px-4 py-2 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-slate-900 sticky top-16 z-20">
+                    {activeNavItems.map((item) => {
+                        const isActive = activeTab === item.id;
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => handleCourseTabNavigate(item.path)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition ${
+                                    isActive ? 'bg-lime-500 text-slate-950' : 'hover:bg-slate-900 text-slate-350'
+                                }`}
+                            >
+                                {item.label}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Workspace Views */}
+                <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-slate-50">
+                    {activeTab === 'app' && (
+                        <div className="space-y-6 max-w-3xl">
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-5">
+                                <div>
+                                    <h3 className="text-xl font-black text-gray-900">App Controls</h3>
+                                    <p className="text-sm text-gray-500">Pause uploads, switch on coming soon mode, and configure Gemini model + API key from Firebase.</p>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 cursor-pointer hover:bg-gray-100/50 transition">
+                                        <input
+                                            type="checkbox"
+                                            checked={appSettingsDraft.coming_soon_enabled}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, coming_soon_enabled: e.target.checked }))}
+                                            className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                        />
+                                        <span>
+                                            <span className="block font-bold text-gray-900">Coming soon mode</span>
+                                            <span className="mt-1 block text-sm text-gray-500">Shows a polished coming soon screen to public users.</span>
+                                        </span>
+                                    </label>
+
+                                    <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 cursor-pointer hover:bg-gray-100/50 transition">
+                                        <input
+                                            type="checkbox"
+                                            checked={appSettingsDraft.upload_center_uploads_enabled}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, upload_center_uploads_enabled: e.target.checked }))}
+                                            className="mt-1 h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                        />
+                                        <span>
+                                            <span className="block font-bold text-gray-900">Upload center uploads</span>
+                                            <span className="mt-1 block text-sm text-gray-500">Turn textbook uploading on or off for upload center users.</span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-semibold text-gray-700">Primary Gemini model</span>
+                                    <input
+                                        type="text"
+                                        value={appSettingsDraft.primary_gemini_model}
+                                        onChange={e => setAppSettingsDraft(prev => ({ ...prev, primary_gemini_model: e.target.value }))}
+                                        placeholder="gemini-2.5-flash-lite"
+                                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>
+                                </label>
+
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-semibold text-gray-700">Gemini API key</span>
+                                    <input
+                                        type="password"
+                                        value={appSettingsDraft.gemini_api_key}
+                                        onChange={e => setAppSettingsDraft(prev => ({ ...prev, gemini_api_key: e.target.value }))}
+                                        placeholder="AIza..."
+                                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        autoComplete="off"
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500">This key is saved in Firebase app settings and used across all Gemini-powered features.</p>
+                                </label>
+
+                                <hr className="border-gray-100 my-4" />
+
+                                <div>
+                                    <h4 className="text-base font-black text-gray-900">Paystack Subscriptions Config</h4>
+                                    <p className="text-xs text-gray-500">Configure keys for premium subscriptions (₦5,000/semester).</p>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Paystack Public Key</span>
+                                        <input
+                                            type="text"
+                                            value={appSettingsDraft.paystack_public_key || ''}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, paystack_public_key: e.target.value }))}
+                                            placeholder="pk_test_..."
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        />
+                                    </label>
+
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Paystack Secret Key</span>
+                                        <input
+                                            type="password"
+                                            value={appSettingsDraft.paystack_secret_key || ''}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, paystack_secret_key: e.target.value }))}
+                                            placeholder="sk_test_..."
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                            autoComplete="off"
+                                        />
+                                    </label>
+                                </div>
+
+                                <hr className="border-gray-100 my-4" />
+
+                                <div>
+                                    <h4 className="text-base font-black text-gray-900">Personal API Key Usage Limits</h4>
+                                    <p className="text-xs text-gray-500">Set query rate and token usage limits for custom API key users.</p>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Max RPM (Requests Per Minute)</span>
+                                        <input
+                                            type="number"
+                                            value={appSettingsDraft.custom_user_limit_rpm ?? 10}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, custom_user_limit_rpm: Number(e.target.value) }))}
+                                            placeholder="10"
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        />
+                                    </label>
+
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Max TPM (Tokens Per Minute)</span>
+                                        <input
+                                            type="number"
+                                            value={appSettingsDraft.custom_user_limit_tpm ?? 250000}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, custom_user_limit_tpm: Number(e.target.value) }))}
+                                            placeholder="250000"
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-100">
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveAppSettings}
+                                        disabled={isSavingAppSettings}
+                                        className="rounded-xl bg-lime-600 px-5 py-3 text-sm font-black uppercase tracking-widest text-white hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60 transition shadow-lg shadow-lime-600/10"
+                                    >
+                                        {isSavingAppSettings ? 'Saving...' : 'Save App Settings'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleTestGeminiSettings}
+                                        disabled={isTestingAppSettings}
+                                        className="rounded-xl border border-lime-200 bg-lime-50 px-5 py-3 text-sm font-black uppercase tracking-widest text-lime-700 hover:bg-lime-100 disabled:cursor-not-allowed disabled:opacity-60 transition"
+                                    >
+                                        {isTestingAppSettings ? 'Testing...' : 'Test Hello'}
+                                    </button>
+                                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                                        Current model: <span className="font-bold text-gray-900">{appSettings.primary_gemini_model}</span>
+                                    </div>
+                                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                                        API key: <span className="font-bold text-gray-900">{appSettings.gemini_api_key ? 'Configured' : 'Not configured'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'departments' && (
+                        <div className="space-y-6 max-w-2xl">
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <Plus className="w-5 h-5 text-lime-600" />
+                                    <span>Add New Department</span>
+                                </h3>
+                                <div className="flex flex-col sm:flex-row gap-4">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Department Name (e.g., Computer Science)" 
+                                        value={newDeptName} 
+                                        onChange={e => setNewDeptName(e.target.value)}
+                                        className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition"
+                                    />
+                                    <button 
+                                        onClick={handleAddDepartment}
+                                        className="w-full sm:w-auto px-6 py-3 bg-lime-600 text-white rounded-xl font-bold hover:bg-lime-700 transition"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <Building className="w-5 h-5 text-slate-500" />
+                                    <span>Existing Departments</span>
+                                </h3>
+                                <div className="space-y-2">
+                                    {allDepartments.map(dept => (
+                                        <div key={dept.id} className="p-4 border border-gray-150 rounded-xl bg-gray-50/50 flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center hover:bg-gray-50 transition">
+                                            <span className="font-bold text-gray-900">{dept.department_name}</span>
+                                            <span className="text-xs bg-slate-200/80 text-slate-700 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">{dept.levels?.join(', ')}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'questions' && (
+                        <div className="space-y-8 max-w-2xl">
+                            {/* Automated Upload Section */}
+                            <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200 shadow-sm">
+                                <h3 className="font-bold text-lime-800 mb-2 flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-lime-600" />
+                                    <span>Automated PDF Extraction</span>
+                                </h3>
+                                <p className="text-sm text-lime-700 mb-4">
+                                    Upload a PDF of past questions to automatically populate the question bank using AI.
+                                </p>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                                    <select 
+                                        value={uploadDepartmentId} 
+                                        onChange={e => setUploadDepartmentId(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    >
+                                        <option value="">Select Department</option>
+                                        {allDepartments.map(dept => (
+                                            <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                        ))}
+                                    </select>
+                                    <select 
+                                        value={uploadLevel} 
+                                        onChange={e => setUploadLevel(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    >
+                                        <option value="">Select Level</option>
+                                        {LEVELS.map(lvl => (
+                                            <option key={lvl} value={lvl}>{lvl}</option>
+                                        ))}
+                                    </select>
+                                    <input 
+                                        type="text" placeholder="Course Name (e.g., Mathematics)" 
+                                        value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    />
+                                    <input 
+                                        type="text" placeholder="Year (e.g., 2023)" 
+                                        value={year} onChange={e => setYear(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    />
+                                </div>
+
+                                <div className="flex flex-col gap-3">
+                                    <input 
+                                        type="file" 
+                                        accept="application/pdf"
+                                        onChange={e => setPqFile(e.target.files?.[0] || null)}
+                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
+                                    />
+                                    {isPQProcessing && (
+                                        <div className="flex items-center gap-2 text-lime-700 text-sm font-medium animate-pulse">
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                            <span>{extractionProgress}</span>
+                                        </div>
+                                    )}
+                                    <button 
+                                        onClick={handlePQUpload}
+                                        disabled={isPQProcessing || !pqFile}
+                                        className={`w-full py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs transition shadow-md ${isPQProcessing || !pqFile ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-lime-600/10'}`}
+                                    >
+                                        {isPQProcessing ? 'Processing Questions...' : 'Extract & Save from PDF'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="w-full border-t border-gray-300"></div>
+                                </div>
+                                <div className="relative flex justify-center">
+                                    <span className="px-4 bg-slate-50 text-xs text-gray-400 font-black uppercase tracking-widest">OR MANUAL ENTRY</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <select 
+                                        value={uploadDepartmentId} 
+                                        onChange={e => setUploadDepartmentId(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    >
+                                        <option value="">Select Department</option>
+                                        {allDepartments.map(dept => (
+                                            <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                        ))}
+                                    </select>
+                                    <select 
+                                        value={uploadLevel} 
+                                        onChange={e => setUploadLevel(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    >
+                                        <option value="">Select Level</option>
+                                        {LEVELS.map(lvl => (
+                                            <option key={lvl} value={lvl}>{lvl}</option>
+                                        ))}
+                                    </select>
+                                    <input 
+                                        type="text" placeholder="Course Name" 
+                                        value={uploadCourseName} onChange={e => setUploadCourseName(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    />
+                                    <input 
+                                        type="text" placeholder="Year" 
+                                        value={year} onChange={e => setYear(e.target.value)}
+                                        className="p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                    />
+                                </div>
+                                <textarea 
+                                    placeholder="Question Content" 
+                                    value={newQuestion.question} 
+                                    onChange={e => setNewQuestion({...newQuestion, question: e.target.value})}
+                                    className="w-full p-3 border border-gray-200 rounded-xl h-24 bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition resize-none"
+                                />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {newQuestion.options.map((opt, i) => (
+                                        <input 
+                                            key={i} type="text" placeholder={`Option ${String.fromCharCode(65+i)}`}
+                                            value={opt} onChange={e => {
+                                                const opts = [...newQuestion.options];
+                                                opts[i] = e.target.value;
+                                                setNewQuestion({...newQuestion, options: opts});
+                                            }}
+                                            className="p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                        />
+                                    ))}
+                                </div>
+                                <input 
+                                    type="text" placeholder="Correct Answer (Exact string match)" 
+                                    value={newQuestion.correctAnswer} 
+                                    onChange={e => setNewQuestion({...newQuestion, correctAnswer: e.target.value})}
+                                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500"
+                                />
+                                <textarea 
+                                    placeholder="Explanation (Optional)" 
+                                    value={newQuestion.explanation} 
+                                    onChange={e => setNewQuestion({...newQuestion, explanation: e.target.value})}
+                                    className="w-full p-3 border border-gray-200 rounded-xl h-20 bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition resize-none"
+                                />
+                                <button 
+                                    onClick={handleAddQuestion}
+                                    className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-black transition uppercase tracking-widest text-xs shadow-md"
                                 >
-                                    Back to Manager
+                                    Save Question Manually
                                 </button>
                             </div>
+                        </div>
+                    )}
 
-                            <div className="space-y-4 rounded-2xl border border-gray-100 p-4 bg-gray-50">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-gray-500">Department Scope</label>
-                                        <select
-                                            value={courseImportTargetMode}
-                                            onChange={e => setCourseImportTargetMode(e.target.value as 'selected' | 'all')}
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
-                                        >
-                                            <option value="selected">Selected Department(s)</option>
-                                            <option value="all">All Departments</option>
-                                        </select>
+                    {activeTab === 'courses' && (
+                        <div className="space-y-6">
+                            {courseAdminView.mode === 'global' && (
+                                <div className="space-y-6">
+                                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-5">
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-xl font-black text-gray-900">All Courses</h3>
+                                                <p className="text-sm text-gray-500">Search every course across departments.</p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                                    className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition"
+                                                >
+                                                    Open Course Manager
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCourseTabNavigate('/admin/courses/add')}
+                                                    className="px-4 py-2.5 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700 transition"
+                                                >
+                                                    Course Addition
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col md:flex-row gap-3">
+                                            <input
+                                                type="text"
+                                                value={courseSearchQuery}
+                                                onChange={e => setCourseSearchQuery(e.target.value)}
+                                                placeholder="Search by course name, code, level, or department..."
+                                                className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition"
+                                            />
+                                            <button
+                                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                                className="px-4 py-3 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700 transition"
+                                            >
+                                                Merge Same-Title Courses
+                                            </button>
+                                        </div>
+
+                                        {filteredGlobalCourses.length ? (
+                                            <div className="overflow-x-auto rounded-2xl border border-gray-150">
+                                                <table className="w-full min-w-[720px] text-left">
+                                                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 font-bold">
+                                                        <tr>
+                                                            <th className="px-6 py-4">Course</th>
+                                                            <th className="px-6 py-4">Departments</th>
+                                                            <th className="px-6 py-4">Level</th>
+                                                            <th className="px-6 py-4">Semester</th>
+                                                            <th className="px-6 py-4 text-right">Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100 text-sm">
+                                                        {filteredGlobalCourses.map(({ course, departmentIds }) => {
+                                                            const departmentNames = departmentIds
+                                                                .map(id => allDepartments.find(dept => dept.id === id)?.department_name || id)
+                                                                .join(', ');
+                                                            const firstDepartmentId = departmentIds[0] || '';
+                                                            const hasMultipleDepartments = departmentIds.length > 1;
+                                                            const courseRouteIdentifier = getCourseRouteKey(course);
+                                                            return (
+                                                                <tr key={courseRouteIdentifier} className="hover:bg-slate-50/50 transition">
+                                                                    <td className="px-6 py-4">
+                                                                        <div className="font-bold text-gray-900">{course.course_name}</div>
+                                                                        <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 text-gray-600">{departmentNames}</td>
+                                                                    <td className="px-6 py-4 text-gray-600">{course.level}</td>
+                                                                    <td className="px-6 py-4">
+                                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700 border border-blue-150' : 'bg-orange-50 text-orange-700 border border-orange-150'}`}>
+                                                                            {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 text-right">
+                                                                        <button
+                                                                            onClick={() => handleCourseTabNavigate(buildCourseManagerPath(firstDepartmentId, course.level, courseRouteIdentifier))}
+                                                                            title={hasMultipleDepartments ? 'Opens the primary department view for this shared course' : 'Open this course'}
+                                                                            className="text-xs font-black uppercase tracking-wider text-lime-600 hover:text-lime-700"
+                                                                        >
+                                                                            {hasMultipleDepartments ? 'Open Primary' : 'Open'}
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="p-10 border border-dashed border-gray-200 rounded-2xl text-center text-sm text-gray-500">
+                                                No courses found yet.
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-gray-500">Target Level</label>
+                                </div>
+                            )}
+
+                            {courseAdminView.mode === 'manager-root' && (
+                                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-5 max-w-3xl">
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900">Course Manager</h3>
+                                        <p className="text-sm text-gray-500">Choose a department and level, then drill into a course.</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <select
-                                            value={courseImportLevelOverride}
-                                            onChange={e => setCourseImportLevelOverride(e.target.value)}
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
+                                            value={managerSelectionDepartmentId}
+                                            onChange={e => setManagerSelectionDepartmentId(e.target.value)}
+                                            className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-4 focus:ring-lime-100"
+                                        >
+                                            <option value="">Select Department</option>
+                                            {allDepartments.map(dept => (
+                                                <option key={dept.id} value={dept.id}>{dept.department_name}</option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            value={managerSelectionLevel}
+                                            onChange={e => setManagerSelectionLevel(e.target.value)}
+                                            className="p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-4 focus:ring-lime-100"
                                         >
                                             <option value="">Select Level</option>
                                             {LEVELS.map(level => (
@@ -2094,460 +2250,585 @@ FORMAT:
                                             ))}
                                         </select>
                                     </div>
-                                </div>
-
-                                {courseImportTargetMode === 'selected' && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-black uppercase tracking-widest text-gray-500">Select Department(s)</p>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                            {allDepartments.map((dept) => (
-                                                <label key={dept.id} className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl bg-white">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={courseImportDepartmentIds.includes(dept.id)}
-                                                        onChange={() => toggleCourseImportDepartment(dept.id)}
-                                                        className="rounded border-gray-300 text-lime-600 focus:ring-lime-500"
-                                                    />
-                                                    <span className="text-sm text-gray-700">{dept.department_name}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black uppercase tracking-widest text-gray-500">Academic Session (Optional)</label>
-                                    <input
-                                        type="text"
-                                        value={courseImportSessionOverride}
-                                        onChange={e => setCourseImportSessionOverride(e.target.value)}
-                                        placeholder="e.g. 2025/2026"
-                                        className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black uppercase tracking-widest text-gray-500">Course Form PDF(s)</label>
-                                    <input
-                                        type="file"
-                                        multiple
-                                        accept="application/pdf"
-                                        onChange={e => setCourseRegistrationFiles(e.target.files ? Array.from(e.target.files) : [])}
-                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
-                                    />
-                                    <p className="text-xs text-gray-500">
-                                        Duplicate courses are merged automatically, and first/second semester values are preserved for semester badges.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCourseRegistrationImport}
-                                disabled={isCourseImportDisabled}
-                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${isCourseImportDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
-                            >
-                                {isCourseImporting ? 'Importing Courses...' : 'Extract & Add Courses'}
-                            </button>
-                            {isCourseImporting && (
-                                <p className="text-sm font-medium text-lime-600">{courseImportProgress || 'Importing course registration forms...'}</p>
-                            )}
-                        </div>
-                    )}
-
-                    {courseAdminView.mode === 'manager-list' && (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between gap-3 flex-wrap">
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-widest text-gray-400">Course Manager</p>
-                                    <h3 className="text-2xl font-black text-gray-900">
-                                        {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
-                                    </h3>
-                                </div>
-                                <div className="flex gap-2">
                                     <button
-                                        onClick={() => {
-                                            setManagerSelectionDepartmentId('');
-                                            setManagerSelectionLevel('');
-                                            handleCourseTabNavigate('/admin/courses/manager');
-                                        }}
-                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                        disabled={!managerSelectionDepartmentId || !managerSelectionLevel}
+                                        onClick={() => handleCourseTabNavigate(buildCourseManagerPath(managerSelectionDepartmentId, managerSelectionLevel))}
+                                        className={`w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-xs transition shadow-md ${!managerSelectionDepartmentId || !managerSelectionLevel ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-lime-600/10'}`}
                                     >
-                                        Change Department
+                                        View Courses
                                     </button>
                                     <button
-                                        onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
-                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
+                                        onClick={() => handleCourseTabNavigate(buildCourseAddPath(managerSelectionDepartmentId || undefined, managerSelectionLevel || undefined))}
+                                        className="w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-xs bg-slate-900 text-white hover:bg-black transition shadow-md"
                                     >
                                         Course Addition
                                     </button>
                                     <button
                                         onClick={handleMergeDuplicateCoursesAcrossDepartments}
-                                        className="px-4 py-2 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700"
+                                        className="w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-xs bg-lime-600 text-white hover:bg-lime-700 transition shadow-md shadow-lime-600/10"
                                     >
                                         Merge Same-Title Courses
                                     </button>
                                 </div>
-                            </div>
-                            <div className="bg-white p-4 rounded-2xl border border-gray-200">
-                                {managerCoursesForLevel.length ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {managerCoursesForLevel.map((course) => {
-                                            const courseRouteIdentifier = getCourseRouteKey(course);
-                                            return (
-                                                <div
-                                                    key={courseRouteIdentifier}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier))}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier));
-                                                        }
-                                                    }}
-                                                    className="group flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 text-left hover:border-lime-200 hover:bg-lime-50 transition cursor-pointer"
-                                                >
-                                                    <div>
-                                                        <div className="font-bold text-gray-900">{course.course_name}</div>
-                                                        <div className="text-xs text-gray-500">{course.course_code || course.course_id}</div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${course.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                            {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                void handleDeleteCourseFromDepartment(course);
-                                                            }}
-                                                            className="rounded-full p-2 text-gray-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
-                                                            aria-label={`Delete ${course.course_name}`}
-                                                        >
-                                                            <TrashIcon className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="p-8 text-center text-gray-500">
-                                        No courses found for this department and level.
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                            )}
 
-                    {courseAdminView.mode === 'manager-detail' && (
-                        <div className="space-y-6">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <button
-                                    onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level))}
-                                    className="text-sm font-black text-gray-500 hover:text-gray-900"
-                                >
-                                    ← Back to Course List
-                                </button>
-                                <button
-                                    onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
-                                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black"
-                                >
-                                    Course Addition
-                                </button>
-                            </div>
-                            <div className="bg-white p-6 rounded-2xl border border-gray-200 space-y-6 max-w-4xl">
-                                {selectedManagerCourse ? (
-                                    <>
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-xs font-black uppercase tracking-widest text-gray-400">
-                                                    {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
-                                                </p>
-                                                <h3 className="text-2xl font-black text-gray-900 mt-1">{selectedManagerCourse.course_name}</h3>
-                                                <p className="text-sm text-gray-500 mt-1">{selectedManagerCourse.course_code || selectedManagerCourse.course_id}</p>
+                            {courseAdminView.mode === 'add' && (
+                                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6 max-w-4xl">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                                        <div>
+                                            <h3 className="text-xl font-black text-gray-900">Course Addition</h3>
+                                            <p className="text-sm text-gray-500">Upload course-form PDF(s), auto-extract courses with AI, then add to selected departments and level.</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition shadow-md"
+                                        >
+                                            Back to Manager
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4 rounded-2xl border border-gray-100 p-4 bg-gray-50">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-gray-500">Department Scope</label>
+                                                <select
+                                                    value={courseImportTargetMode}
+                                                    onChange={e => setCourseImportTargetMode(e.target.value as 'selected' | 'all')}
+                                                    className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-105"
+                                                >
+                                                    <option value="selected">Selected Department(s)</option>
+                                                    <option value="all">All Departments</option>
+                                                </select>
                                             </div>
-                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${selectedManagerCourse.semester === 'first' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                                                {selectedManagerCourse.semester === 'first' ? '1st Sem' : '2nd Sem'}
-                                            </span>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-gray-500">Target Level</label>
+                                                <select
+                                                    value={courseImportLevelOverride}
+                                                    onChange={e => setCourseImportLevelOverride(e.target.value)}
+                                                    className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-105"
+                                                >
+                                                    <option value="">Select Level</option>
+                                                    {LEVELS.map(level => (
+                                                        <option key={level} value={level}>{level}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
 
-                                        <div className="space-y-3">
-                                            <p className="text-xs font-black uppercase tracking-widest text-gray-400">Upload Textbook PDFs</p>
+                                        {courseImportTargetMode === 'selected' && (
+                                            <div className="space-y-2">
+                                                <p className="text-xs font-black uppercase tracking-widest text-gray-500">Select Department(s)</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                                    {allDepartments.map((dept) => (
+                                                        <label key={dept.id} className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl bg-white cursor-pointer hover:bg-slate-50 transition">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={courseImportDepartmentIds.includes(dept.id)}
+                                                                onChange={() => toggleCourseImportDepartment(dept.id)}
+                                                                className="rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                                            />
+                                                            <span className="text-sm font-medium text-gray-700">{dept.department_name}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-widest text-gray-500">Academic Session (Optional)</label>
+                                            <input
+                                                type="text"
+                                                value={courseImportSessionOverride}
+                                                onChange={e => setCourseImportSessionOverride(e.target.value)}
+                                                placeholder="e.g. 2025/2026"
+                                                className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-105"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-widest text-gray-500">Course Form PDF(s)</label>
                                             <input
                                                 type="file"
                                                 multiple
                                                 accept="application/pdf"
-                                                onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
-                                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200"
+                                                onChange={e => setCourseRegistrationFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
                                             />
-                                            <p className="text-xs text-gray-500">You can select and upload multiple PDF textbooks at once.</p>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <input
-                                                    id="auto-sync-textbooks"
-                                                    type="checkbox"
-                                                    checked={autoSyncToOfferingDepartments}
-                                                    onChange={e => setAutoSyncToOfferingDepartments(e.target.checked)}
-                                                    className="h-4 w-4"
-                                                />
-                                                <label htmlFor="auto-sync-textbooks" className="text-sm text-gray-600">Auto-sync to departments offering this course</label>
-                                            </div>
-                                            <button
-                                                disabled={!courseDetailFiles.length || isUploading}
-                                                onClick={async () => {
-                                                    if (!selectedManagerCourse) return;
-                                                    await handleTextbookUpload(selectedManagerCourse.course_id || selectedManagerCourse.course_name, courseDetailFiles);
-                                                    setCourseDetailFiles([]);
-                                                }}
-                                                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-sm transition ${!courseDetailFiles.length || isUploading ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-lime-600 text-white hover:bg-lime-700'}`}
-                                            >
-                                                {isUploading ? 'Uploading...' : 'Upload Textbooks'}
-                                            </button>
-                                            {isUploading && (
-                                                <p className="text-sm font-medium text-lime-600">{extractionProgress || 'Uploading textbooks...'}</p>
-                                            )}
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Duplicate courses are merged automatically, and first/second semester values are preserved for semester badges.
+                                            </p>
                                         </div>
-
-                                        {selectedManagerCourse.textbook_urls?.length ? (
-                                            <div className="space-y-2">
-                                                <p className="text-xs font-black uppercase tracking-widest text-gray-400">Uploaded Textbooks</p>
-                                                <div className="space-y-1">
-                                                    {selectedManagerCourse.textbook_urls.map((url) => (
-                                                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-sm text-lime-700 hover:underline">
-                                                            {url}
-                                                        </a>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : null}
-
-                                            <div className="flex justify-end items-center pt-4 border-t border-gray-50">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleDeleteCourseFromDepartment(selectedManagerCourse)}
-                                                    className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-500 transition hover:border-red-200 hover:bg-red-100 hover:text-red-700"
-                                                >
-                                                    <TrashIcon className="w-3.5 h-3.5" /> Delete Course
-                                                </button>
-                                            </div>
-                                        <div className="space-y-3">
-                                            <p className="text-xs font-black uppercase tracking-widest text-gray-400">Course Topics</p>
-                                            {isSelectedManagerCourseTopicsLoading ? (
-                                                <div className="p-6 rounded-2xl border border-dashed border-gray-200 text-sm text-gray-500">
-                                                    Loading course outline from uploaded textbooks...
-                                                </div>
-                                            ) : selectedManagerCourseTopics.length ? (
-                                                <div className="space-y-3">
-                                                    {selectedManagerCourseTopics.map((topic) => (
-                                                        <div key={topic.topic_id} className="rounded-2xl border border-gray-100 p-4 bg-gray-50">
-                                                            <div className="font-bold text-gray-900">{topic.topic_name}</div>
-                                                            {topic.topic_context ? <p className="text-sm text-gray-600 mt-1">{topic.topic_context}</p> : null}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="p-6 rounded-2xl border border-dashed border-gray-200 text-sm text-gray-500">
-                                                    No course outline yet. Upload textbooks to generate the course topics.
-                                                </div>
-                                            )}
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="p-8 text-center text-gray-500">
-                                        Course not found.
                                     </div>
-                                )}
-                            </div>
+
+                                    <button
+                                        onClick={handleCourseRegistrationImport}
+                                        disabled={isCourseImportDisabled}
+                                        className={`w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-xs transition shadow-md ${isCourseImportDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-lime-600/10'}`}
+                                    >
+                                        {isCourseImporting ? 'Importing Courses...' : 'Extract & Add Courses'}
+                                    </button>
+                                    {isCourseImporting && (
+                                        <p className="text-sm font-semibold text-lime-600 mt-2 animate-pulse">{courseImportProgress || 'Importing course registration forms...'}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {courseAdminView.mode === 'manager-list' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-200 pb-4">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Course Manager</p>
+                                            <h3 className="text-2xl font-black text-gray-900 mt-1">
+                                                {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
+                                            </h3>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setManagerSelectionDepartmentId('');
+                                                    setManagerSelectionLevel('');
+                                                    handleCourseTabNavigate('/admin/courses/manager');
+                                                }}
+                                                className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition shadow-md"
+                                            >
+                                                Change Department
+                                            </button>
+                                            <button
+                                                onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
+                                                className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition shadow-md"
+                                            >
+                                                Course Addition
+                                            </button>
+                                            <button
+                                                onClick={handleMergeDuplicateCoursesAcrossDepartments}
+                                                className="px-4 py-2.5 rounded-xl bg-lime-600 text-white text-xs font-black uppercase tracking-widest hover:bg-lime-700 transition shadow-md shadow-lime-600/10"
+                                            >
+                                                Merge Same-Title Courses
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                        {managerCoursesForLevel.length ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {managerCoursesForLevel.map((course) => {
+                                                    const courseRouteIdentifier = getCourseRouteKey(course);
+                                                    return (
+                                                        <div
+                                                            key={courseRouteIdentifier}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier))}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault();
+                                                                    handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level, courseRouteIdentifier));
+                                                                }
+                                                            }}
+                                                            className="group flex items-center justify-between gap-3 p-5 rounded-2xl border border-slate-100 bg-slate-50 text-left hover:border-lime-200 hover:bg-lime-50/50 transition duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                                                        >
+                                                            <div>
+                                                                <div className="font-bold text-gray-900 leading-tight group-hover:text-lime-700 transition">{course.course_name}</div>
+                                                                <div className="text-xs text-gray-500 mt-1 font-semibold">{course.course_code || course.course_id}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border ${course.semester === 'first' ? 'bg-blue-50 text-blue-700 border-blue-155' : 'bg-orange-50 text-orange-700 border-orange-155'}`}>
+                                                                    {course.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        void handleDeleteCourseFromDepartment(course);
+                                                                    }}
+                                                                    className="rounded-xl p-2.5 text-gray-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
+                                                                    aria-label={`Delete ${course.course_name}`}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="p-12 text-center text-gray-500 font-medium border border-dashed border-gray-200 rounded-xl">
+                                                No courses found for this department and level.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {courseAdminView.mode === 'manager-detail' && (
+                                <div className="space-y-6">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <button
+                                            onClick={() => handleCourseTabNavigate(buildCourseManagerPath(courseAdminView.departmentId, courseAdminView.level))}
+                                            className="text-xs uppercase tracking-widest font-black text-slate-400 hover:text-slate-900 transition"
+                                        >
+                                            ← Back to Course List
+                                        </button>
+                                        <button
+                                            onClick={() => handleCourseTabNavigate(buildCourseAddPath(courseAdminView.departmentId, courseAdminView.level))}
+                                            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition shadow-md"
+                                        >
+                                            Course Addition
+                                        </button>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6 max-w-4xl">
+                                        {selectedManagerCourse ? (
+                                            <>
+                                                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5">
+                                                    <div>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                            {selectedManagerDepartment?.department_name || courseAdminView.departmentId} • {courseAdminView.level}
+                                                        </p>
+                                                        <h3 className="text-2xl font-black text-gray-900 mt-1">{selectedManagerCourse.course_name}</h3>
+                                                        <p className="text-sm font-semibold text-slate-400 mt-1">{selectedManagerCourse.course_code || selectedManagerCourse.course_id}</p>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border ${selectedManagerCourse.semester === 'first' ? 'bg-blue-50 text-blue-700 border-blue-150' : 'bg-orange-50 text-orange-700 border-orange-150'}`}>
+                                                        {selectedManagerCourse.semester === 'first' ? '1st Sem' : '2nd Sem'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Upload Textbook PDFs</p>
+                                                    <input
+                                                        type="file"
+                                                        multiple
+                                                        accept="application/pdf"
+                                                        onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
+                                                    />
+                                                    <p className="text-xs text-gray-500">You can select and upload multiple PDF textbooks at once.</p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <input
+                                                            id="auto-sync-textbooks"
+                                                            type="checkbox"
+                                                            checked={autoSyncToOfferingDepartments}
+                                                            onChange={e => setAutoSyncToOfferingDepartments(e.target.checked)}
+                                                            className="h-4 w-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                                                        />
+                                                        <label htmlFor="auto-sync-textbooks" className="text-sm text-slate-600 font-medium">Auto-sync to departments offering this course</label>
+                                                    </div>
+                                                    <button
+                                                        disabled={!courseDetailFiles.length || isUploading}
+                                                        onClick={async () => {
+                                                            if (!selectedManagerCourse) return;
+                                                            await handleTextbookUpload(selectedManagerCourse.course_id || selectedManagerCourse.course_name, courseDetailFiles);
+                                                            setCourseDetailFiles([]);
+                                                        }}
+                                                        className={`w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-xs transition shadow-md ${!courseDetailFiles.length || isUploading ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' : 'bg-lime-600 text-white hover:bg-lime-700 shadow-lime-600/10'}`}
+                                                    >
+                                                        {isUploading ? 'Uploading...' : 'Upload Textbooks'}
+                                                    </button>
+                                                    {isUploading && (
+                                                        <p className="text-sm font-semibold text-lime-650 mt-2 animate-pulse">{extractionProgress || 'Uploading textbooks...'}</p>
+                                                    )}
+                                                </div>
+
+                                                {selectedManagerCourse.textbook_urls?.length ? (
+                                                    <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                        <p className="text-xs font-black uppercase tracking-widest text-slate-450">Uploaded Textbooks</p>
+                                                        <div className="space-y-2">
+                                                            {selectedManagerCourse.textbook_urls.map((url) => (
+                                                                <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-xs font-bold text-lime-700 hover:underline truncate">
+                                                                    {url}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+
+                                                <div className="space-y-3">
+                                                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Course Outline</p>
+                                                    {isSelectedManagerCourseTopicsLoading ? (
+                                                        <div className="p-8 rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-400 animate-pulse font-medium">
+                                                            Loading course outline from uploaded textbooks...
+                                                        </div>
+                                                    ) : selectedManagerCourseTopics.length ? (
+                                                        <div className="space-y-3">
+                                                            {selectedManagerCourseTopics.map((topic) => (
+                                                                <div key={topic.topic_id} className="rounded-xl border border-slate-100 p-4 bg-slate-50/50 hover:bg-slate-50 transition">
+                                                                    <div className="font-bold text-slate-800">{topic.topic_name}</div>
+                                                                    {topic.topic_context ? <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{topic.topic_context}</p> : null}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="p-8 rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-400 font-medium">
+                                                            No course outline yet. Upload textbooks to generate topics.
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex justify-end items-center pt-5 border-t border-slate-100">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleDeleteCourseFromDepartment(selectedManagerCourse)}
+                                                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-red-500 transition hover:bg-red-100 hover:text-red-700"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" /> Delete Course
+                                                    </button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="p-8 text-center text-gray-500 font-medium">
+                                                Course not found.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
-            )}
-            {activeTab === 'users' && (
-                <div className="space-y-6">
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
-                        <h3 className="font-bold text-gray-800">Broadcast Center</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Recipient Scope</label>
-                                <select
-                                    value={recipientMode}
-                                    onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
-                                >
-                                    <option value="all">All Users</option>
-                                    <option value="single">Single User</option>
-                                </select>
-                            </div>
-                            <div className="space-y-2 md:col-span-2">
-                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Target User</label>
-                                <select
-                                    value={selectedRecipientId}
-                                    onChange={(e) => setSelectedRecipientId(e.target.value)}
-                                    disabled={recipientMode === 'all'}
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
-                                >
-                                    <option value="">Select a user</option>
-                                    {allUsersList.map(user => (
-                                        <option key={user.uid} value={user.uid}>
-                                            {user.display_name} ({user.email || 'no-email'})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
-                                <h4 className="font-semibold text-gray-800">Send Push Notification</h4>
-                                <input
-                                    type="text"
-                                    value={announcementTitle}
-                                    onChange={(e) => setAnnouncementTitle(e.target.value)}
-                                    placeholder="Notification title"
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
-                                />
-                                <textarea
-                                    value={announcementMessage}
-                                    onChange={(e) => setAnnouncementMessage(e.target.value)}
-                                    placeholder="Notification message"
-                                    rows={4}
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
-                                />
-                                <select
-                                    value={notificationType}
-                                    onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
-                                >
-                                    <option value="study_update">Study Update</option>
-                                    <option value="exam_reminder">Exam Reminder</option>
-                                    <option value="welcome">Welcome</option>
-                                </select>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={handleSuggestAnnouncement}
-                                        disabled={isSendingPush}
-                                        className="w-full bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-50 transition disabled:opacity-60"
-                                    >
-                                        Suggest Message
-                                    </button>
-                                    <button
-                                        onClick={handleSendPushNotification}
-                                        disabled={isSendingPush}
-                                        className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-black transition disabled:opacity-60"
-                                    >
-                                        {isSendingPush ? 'Sending...' : 'Send Push Notification'}
-                                    </button>
+                    {activeTab === 'users' && (
+                        <div className="space-y-6">
+                            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
+                                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                    <Bell className="w-5 h-5 text-lime-600" />
+                                    <span>Broadcast Center</span>
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Recipient Scope</label>
+                                        <select
+                                            value={recipientMode}
+                                            onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
+                                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
+                                        >
+                                            <option value="all">All Users</option>
+                                            <option value="single">Single User</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Target User</label>
+                                        <select
+                                            value={selectedRecipientId}
+                                            onChange={(e) => setSelectedRecipientId(e.target.value)}
+                                            disabled={recipientMode === 'all'}
+                                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none disabled:bg-slate-100 disabled:text-slate-400 transition"
+                                        >
+                                            <option value="">Select a user</option>
+                                            {allUsersList.map(user => (
+                                                <option key={user.uid} value={user.uid}>
+                                                    {user.display_name} ({user.email || 'no-email'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+                                    <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4 shadow-sm">
+                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <Send className="w-4 h-4 text-slate-500" />
+                                            <span>Send Push Notification</span>
+                                        </h4>
+                                        <input
+                                            type="text"
+                                            value={announcementTitle}
+                                            onChange={(e) => setAnnouncementTitle(e.target.value)}
+                                            placeholder="Notification title"
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
+                                        />
+                                        <textarea
+                                            value={announcementMessage}
+                                            onChange={(e) => setAnnouncementMessage(e.target.value)}
+                                            placeholder="Notification message"
+                                            rows={3}
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none resize-none transition"
+                                        />
+                                        <select
+                                            value={notificationType}
+                                            onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition"
+                                        >
+                                            <option value="study_update">Study Update</option>
+                                            <option value="exam_reminder">Exam Reminder</option>
+                                            <option value="welcome">Welcome</option>
+                                        </select>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={handleSuggestAnnouncement}
+                                                disabled={isSendingPush}
+                                                className="w-full bg-white border border-gray-200 text-slate-700 py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-gray-50 transition disabled:opacity-60 shadow-sm outline-none"
+                                            >
+                                                Suggest Message
+                                            </button>
+                                            <button
+                                                onClick={handleSendPushNotification}
+                                                disabled={isSendingPush}
+                                                className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition disabled:opacity-60 shadow-md outline-none"
+                                            >
+                                                {isSendingPush ? 'Sending...' : 'Send Push'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4 shadow-sm">
+                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <Mail className="w-4 h-4 text-slate-500" />
+                                            <span>Send Email Broadcast</span>
+                                        </h4>
+                                        <input
+                                            type="text"
+                                            value={emailSubject}
+                                            onChange={(e) => setEmailSubject(e.target.value)}
+                                            placeholder="Email subject"
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
+                                        />
+                                        <textarea
+                                            value={emailBody}
+                                            onChange={(e) => setEmailBody(e.target.value)}
+                                            placeholder="Email body"
+                                            rows={3}
+                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none resize-none transition"
+                                        />
+                                        <button
+                                            onClick={handleSendEmail}
+                                            className="w-full bg-lime-600 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-lime-700 transition shadow-md shadow-lime-600/10"
+                                        >
+                                            Open Email Draft
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="border border-gray-100 rounded-2xl p-4 space-y-3">
-                                <h4 className="font-semibold text-gray-800">Send Email</h4>
-                                <input
-                                    type="text"
-                                    value={emailSubject}
-                                    onChange={(e) => setEmailSubject(e.target.value)}
-                                    placeholder="Email subject"
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none"
-                                />
-                                <textarea
-                                    value={emailBody}
-                                    onChange={(e) => setEmailBody(e.target.value)}
-                                    placeholder="Email body"
-                                    rows={4}
-                                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-lime-500/20 focus:border-lime-500 outline-none resize-none"
-                                />
-                                <button
-                                    onClick={handleSendEmail}
-                                    className="w-full bg-lime-600 text-white py-3 rounded-xl font-semibold hover:bg-lime-700 transition"
-                                >
-                                    Open Email Draft
-                                </button>
+                            {/* Responsive Metrics Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                                    <div className="w-12 h-12 rounded-xl bg-lime-100 flex items-center justify-center text-lime-600 border border-lime-250">
+                                        <Users className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-lime-800 text-[10px] font-black uppercase tracking-widest leading-none">Registered</p>
+                                        <h3 className="text-3xl font-black text-lime-950 mt-1">{allUsersList.length}</h3>
+                                    </div>
+                                </div>
+                                <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                                    <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-650 border border-indigo-250">
+                                        <CreditCard className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-indigo-800 text-[10px] font-black uppercase tracking-widest leading-none">Premium</p>
+                                        <h3 className="text-3xl font-black text-indigo-950 mt-1">
+                                            {allUsersList.filter(u => u.subscription_status === 'premium').length}
+                                        </h3>
+                                    </div>
+                                </div>
+                                <div className="bg-teal-50 p-6 rounded-2xl border border-teal-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                                    <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center text-teal-650 border border-teal-250">
+                                        <Key className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-teal-800 text-[10px] font-black uppercase tracking-widest leading-none">Google Tokens</p>
+                                        <h3 className="text-3xl font-black text-teal-950 mt-1">
+                                            {allUsersList.filter(u => u.subscription_status === 'personal_token').length}
+                                        </h3>
+                                    </div>
+                                </div>
+                                <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-650 border border-blue-250">
+                                        <Activity className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-blue-800 text-[10px] font-black uppercase tracking-widest leading-none">Active Today</p>
+                                        <h3 className="text-3xl font-black text-blue-950 mt-1">
+                                            {allUsersList.filter(u => {
+                                                const today = new Date().setHours(0,0,0,0);
+                                                return (u.last_activity_date || 0) >= today;
+                                            }).length}
+                                        </h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Users Table */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                    <h3 className="font-bold text-slate-800 text-sm">Users List</h3>
+                                    <button 
+                                        onClick={fetchUsers}
+                                        className="text-xs uppercase tracking-widest font-black text-lime-650 hover:text-lime-700 flex items-center gap-1.5 transition"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        <span>Refresh List</span>
+                                    </button>
+                                </div>
+                                <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
+                                    {isUsersLoading ? (
+                                        <div className="p-12 text-center text-slate-400 font-medium">Loading users...</div>
+                                    ) : (
+                                        <table className="w-full min-w-[920px] text-left border-collapse">
+                                            <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-6 py-4">User</th>
+                                                    <th className="px-6 py-4">Email</th>
+                                                    <th className="px-6 py-4">Dept / Level</th>
+                                                    <th className="px-6 py-4">Last Active</th>
+                                                    <th className="px-6 py-4">Activation Status</th>
+                                                    <th className="px-6 py-4">Role</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-600">
+                                                {allUsersList.map((user) => (
+                                                    <tr key={user.uid} className="hover:bg-slate-50/50 transition duration-150">
+                                                        <td className="px-6 py-4 flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-lg bg-lime-100 flex items-center justify-center text-lime-750 font-bold overflow-hidden shadow-sm">
+                                                                {user.photo_url ? (
+                                                                    <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    user.display_name?.charAt(0).toUpperCase() || '?'
+                                                                )}
+                                                            </div>
+                                                            <span className="font-bold text-slate-900">{user.display_name}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-500 font-medium">
+                                                            {user.email || 'Not Provided'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-500 font-medium">
+                                                            {user.department_id || 'Not Set'} / {user.level || '?' }L
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-450 font-medium text-[10px]">
+                                                            {user.last_activity_date ? new Date(user.last_activity_date).toLocaleString() : 'Never'}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            {user.subscription_status === 'premium' ? (
+                                                                <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-150 shadow-sm shadow-indigo-500/5">
+                                                                    Premium
+                                                                </span>
+                                                            ) : user.subscription_status === 'personal_token' ? (
+                                                                <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-teal-50 text-teal-700 border border-teal-150 shadow-sm shadow-teal-500/5">
+                                                                    Google Token
+                                                                </span>
+                                                            ) : user.is_activated ? (
+                                                                <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-green-50 text-green-700 border border-green-150 shadow-sm shadow-green-500/5">
+                                                                    Activated
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-150 shadow-sm shadow-amber-500/5">
+                                                                    Pending Activation
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase border ${user.is_admin ? 'bg-purple-50 text-purple-700 border-purple-150' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                                                    {user.is_admin ? 'Admin' : 'Student'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-lime-50 p-6 rounded-2xl border border-lime-200">
-                            <p className="text-lime-800 text-sm font-medium uppercase">Total Registered Users</p>
-                            <h3 className="text-4xl font-bold text-lime-900 mt-2">{allUsersList.length}</h3>
-                        </div>
-                        <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
-                            <p className="text-blue-800 text-sm font-medium uppercase">Active Today</p>
-                            <h3 className="text-4xl font-bold text-blue-900 mt-2">
-                                {allUsersList.filter(u => {
-                                    const today = new Date().setHours(0,0,0,0);
-                                    return (u.last_activity_date || 0) >= today;
-                                }).length}
-                            </h3>
-                        </div>
-                        <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200">
-                            <p className="text-orange-800 text-sm font-medium uppercase">Admin Accounts</p>
-                            <h3 className="text-4xl font-bold text-orange-900 mt-2">
-                                {allUsersList.filter(u => u.is_admin).length}
-                            </h3>
-                        </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold text-gray-800">Users List</h3>
-                            <button 
-                                onClick={fetchUsers}
-                                className="text-sm text-lime-600 hover:text-lime-700 font-medium"
-                            >
-                                Refresh List
-                            </button>
-                        </div>
-                        <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
-                            {isUsersLoading ? (
-                                <div className="p-10 text-center text-gray-500">Loading users...</div>
-                            ) : (
-                                <table className="w-full min-w-[820px] text-left">
-                                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                                        <tr>
-                                            <th className="px-6 py-3">User</th>
-                                            <th className="px-6 py-3">Email</th>
-                                            <th className="px-6 py-3">Dept / Level</th>
-                                            <th className="px-6 py-3">Last Active</th>
-                                            <th className="px-6 py-3">Role</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 text-sm">
-                                        {allUsersList.map((user) => (
-                                            <tr key={user.uid} className="hover:bg-gray-50 transition">
-                                                <td className="px-6 py-4 flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-lime-100 flex items-center justify-center text-lime-600 font-bold overflow-hidden">
-                                                        {user.photo_url ? (
-                                                            <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            user.display_name?.charAt(0) || '?'
-                                                        )}
-                                                    </div>
-                                                    <span className="font-medium text-gray-900">{user.display_name}</span>
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-600">
-                                                    {user.email || 'Not Provided'}
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-600">
-                                                    {user.department_id || 'Not Set'} / {user.level || '?' }L
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-500 text-xs">
-                                                    {user.last_activity_date ? new Date(user.last_activity_date).toLocaleString() : 'Never'}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${user.is_admin ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {user.is_admin ? 'Admin' : 'Student'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+                    )}
+                </main>
+            </div>
         </div>
     );
 };

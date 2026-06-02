@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GoogleGenAI } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
@@ -474,8 +474,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const geminiApiKey = appSettings.gemini_api_key.trim();
-    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+    const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
 
     useEffect(() => {
         setIsHistoryLoading(true);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
+import { Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course } from '../types';
@@ -132,8 +133,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
-  const geminiApiKey = appSettings.gemini_api_key.trim();
-  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+  const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
   const isGeminiConfigured = Boolean(ai);
 
   useEffect(() => {

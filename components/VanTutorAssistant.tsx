@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { createVanTutorAI } from '../utils/inference';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -270,8 +270,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
-  const geminiApiKey = appSettings.gemini_api_key.trim();
-  const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+  const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
   const liveWebSocketUrl = useMemo(() => {
     if (LIVE_ACCESS_TOKEN) {
       return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(LIVE_ACCESS_TOKEN)}`;

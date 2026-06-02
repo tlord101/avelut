@@ -4,6 +4,8 @@ import { NotificationBellIcon } from './icons/NotificationBellIcon';
 import { MenuIcon } from './icons/MenuIcon';
 import { MessengerIcon } from './icons/MessengerIcon';
 
+import type { UserProfile } from '../types';
+
 interface HeaderProps {
   currentPageLabel: string;
   onNotificationsClick?: () => void;
@@ -12,6 +14,7 @@ interface HeaderProps {
   onMessengerClick?: () => void;
   unreadMessagesCount?: number;
   rightActions?: React.ReactNode;
+  userProfile?: UserProfile;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -21,7 +24,8 @@ export const Header: React.FC<HeaderProps> = ({
     onMenuClick, 
     onMessengerClick, 
     unreadMessagesCount = 0,
-    rightActions
+    rightActions,
+    userProfile
 }) => {
     return (
         <header className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 md:pt-8 pb-6 bg-transparent">
@@ -34,10 +38,16 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <MenuIcon />
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <h2 className="text-2xl md:text-3xl font-bold text-charcoal tracking-tighter uppercase">
                         {currentPageLabel}
                     </h2>
+                    {userProfile?.use_personal_token && userProfile?.personal_api_key && (
+                        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-lime-500 to-emerald-600 text-white text-[10px] font-black tracking-widest uppercase rounded-full shadow-sm shadow-lime-500/20 border border-lime-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            Google AI Token Active
+                        </span>
+                    )}
                 </div>
             </div>
 
