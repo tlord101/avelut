@@ -238,10 +238,14 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const isAwardingTimeXpRef = useRef(false);
-    const { settings: appSettings } = useAppSettings();
+    const pendingAutoTeachRef = useRef(false);
+    const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const geminiApiKey = appSettings.gemini_api_key.trim();
-    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+    const ai = useMemo(
+        () => (!isAppSettingsLoading && geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null),
+        [isAppSettingsLoading, geminiApiKey]
+    );
     const profileSnapshotRef = useRef({
         display_name: userProfile.display_name || 'Learner',
         photo_url: userProfile.photo_url || '',
@@ -388,6 +392,9 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
     }, [userProfile.uid, userProfile.department_id]);
 
     const initiateAutoTeach = async () => {
+        if (isAppSettingsLoading) {
+            return;
+        }
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
             return;
@@ -462,8 +469,10 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                void initiateAutoTeach();
+                pendingAutoTeachRef.current = true;
+                return;
             } else {
+                pendingAutoTeachRef.current = false;
                 const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
                     id,
                     text: msg.text,
@@ -483,7 +492,15 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         return () => off(messagesRef, 'value', unsubscribe);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userProfile.uid, topic.topic_id]);
+    }, [userProfile.uid, topic.topic_id, isAppSettingsLoading]);
+
+    useEffect(() => {
+        if (isAppSettingsLoading || !pendingAutoTeachRef.current) return;
+        pendingAutoTeachRef.current = false;
+        if (!messages.length) {
+            void initiateAutoTeach();
+        }
+    }, [isAppSettingsLoading, messages.length]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
