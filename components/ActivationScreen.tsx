@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import type { FirebaseUser } from '../firebase';
+import { db } from '../firebase';
+import { ref as dbRef, push, set, update } from 'firebase/database';
 import type { UserProfile, AppSettings } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { LogoIcon } from './icons/LogoIcon';
@@ -47,15 +49,43 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
     const amount = 5000 * 100; // 5,000 NGN in kobo
     const publicKey = appSettings.paystack_public_key?.trim();
 
+    // Create payment log inside /usage_logs/payments
+    let paymentLogRef: any = null;
+    try {
+      paymentLogRef = push(dbRef(db, 'usage_logs/payments'));
+      await set(paymentLogRef, {
+        id: paymentLogRef.key,
+        user_id: user.uid,
+        email: email,
+        amount: 5000,
+        status: 'initiated',
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to create payment log:', err);
+    }
+
     if (!publicKey) {
       // Simulation / Demo Mode
       addToast('Demo Mode: Simulating secure checkout...', 'info');
       setTimeout(async () => {
+        const referenceId = 'demo_' + Math.random().toString(36).substring(2, 11);
+        if (paymentLogRef) {
+          try {
+            await update(paymentLogRef, {
+              status: 'success',
+              reference: referenceId
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
         const result = await handleProfileUpdate({
           is_activated: true,
           subscription_status: 'premium',
           use_personal_token: false,
-          paystack_reference: 'demo_' + Math.random().toString(36).substring(2, 11),
+          paystack_reference: referenceId,
         });
         if (result.success) {
           addToast('VanTutor Premium AI activated successfully!', 'success');
@@ -70,6 +100,11 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
     const isLoaded = await loadPaystackScript();
     if (!isLoaded) {
       addToast('Could not load payment gateway. Please try again.', 'error');
+      if (paymentLogRef) {
+        try {
+          await update(paymentLogRef, { status: 'failed', error: 'Script load failed' });
+        } catch (e) {}
+      }
       setIsActivating(false);
       return;
     }
@@ -81,6 +116,15 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
         amount: amount,
         currency: 'NGN',
         callback: async (response: any) => {
+          if (paymentLogRef) {
+            try {
+              await update(paymentLogRef, {
+                status: 'success',
+                reference: response?.reference || 'ref_missing'
+              });
+            } catch (e) {}
+          }
+
           const result = await handleProfileUpdate({
             is_activated: true,
             subscription_status: 'premium',
@@ -94,7 +138,12 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
           }
           setIsActivating(false);
         },
-        onClose: () => {
+        onClose: async () => {
+          if (paymentLogRef) {
+            try {
+              await update(paymentLogRef, { status: 'cancelled' });
+            } catch (e) {}
+          }
           addToast('Payment cancelled.', 'info');
           setIsActivating(false);
         },
@@ -102,6 +151,11 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
       handler.openIframe();
     } catch (e: any) {
       console.error(e);
+      if (paymentLogRef) {
+        try {
+          await update(paymentLogRef, { status: 'failed', error: e.message });
+        } catch (err) {}
+      }
       addToast('Error during payment processing.', 'error');
       setIsActivating(false);
     }

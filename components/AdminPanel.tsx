@@ -35,7 +35,14 @@ import {
     Plus,
     X,
     Building,
-    Home
+    Home,
+    Bell,
+    Send,
+    Mail,
+    CheckCircle,
+    AlertCircle,
+    MessageSquare,
+    ArrowUpRight
 } from 'lucide-react';
 import { getWindowPathname } from '../utils/pathname';
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS } from '../utils/appSettings';
@@ -76,7 +83,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'questions' | 'courses' | 'users' | 'departments' | 'app';
+type AdminTab = 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -85,7 +92,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users', 'app'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users', 'app', 'analytics', 'payments'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -362,6 +369,158 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [emailBody, setEmailBody] = useState('');
     const [isSendingPush, setIsSendingPush] = useState(false);
     const { addToast } = useToast();
+
+    // Analytics and Payments Real-Time Logging State
+    const [aiRequestLogs, setAiRequestLogs] = useState<any[]>([]);
+    const [paymentLogs, setPaymentLogs] = useState<any[]>([]);
+    const [refundLogs, setRefundLogs] = useState<any[]>([]);
+    const [complaintLogs, setComplaintLogs] = useState<any[]>([]);
+    const [isLogsLoading, setIsLogsLoading] = useState(false);
+
+    const fetchUsageLogs = async () => {
+        setIsLogsLoading(true);
+        try {
+            // Fetch AI requests
+            const aiRef = dbRef(db, 'usage_logs/ai_requests');
+            const aiSnap = await get(aiRef);
+            if (aiSnap.exists()) {
+                const data = aiSnap.val();
+                const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+                list.sort((a: any, b: any) => b.timestamp - a.timestamp);
+                setAiRequestLogs(list);
+            } else {
+                setAiRequestLogs([]);
+            }
+
+            // Fetch payments
+            const payRef = dbRef(db, 'usage_logs/payments');
+            const paySnap = await get(payRef);
+            if (paySnap.exists()) {
+                const data = paySnap.val();
+                const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+                list.sort((a: any, b: any) => b.timestamp - a.timestamp);
+                setPaymentLogs(list);
+            } else {
+                setPaymentLogs([]);
+            }
+
+            // Fetch refunds
+            const refundRef = dbRef(db, 'usage_logs/refunds');
+            const refundSnap = await get(refundRef);
+            if (refundSnap.exists()) {
+                const data = refundSnap.val();
+                const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+                list.sort((a: any, b: any) => b.timestamp - a.timestamp);
+                setRefundLogs(list);
+            } else {
+                setRefundLogs([]);
+            }
+
+            // Fetch complaints
+            const complaintRef = dbRef(db, 'usage_logs/complaints');
+            const complaintSnap = await get(complaintRef);
+            if (complaintSnap.exists()) {
+                const data = complaintSnap.val();
+                const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+                list.sort((a: any, b: any) => b.timestamp - a.timestamp);
+                setComplaintLogs(list);
+            } else {
+                setComplaintLogs([]);
+            }
+        } catch (e) {
+            console.error('Failed to load usage logs:', e);
+            addToast('Error loading real-time analytics data', 'error');
+        } finally {
+            setIsLogsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'analytics' || activeTab === 'payments') {
+            void fetchUsageLogs();
+        }
+    }, [activeTab]);
+
+    const handleApproveRefund = async (refund: any) => {
+        try {
+            await update(dbRef(db, `usage_logs/refunds/${refund.id}`), {
+                status: 'approved',
+                resolved_at: Date.now()
+            });
+
+            await update(dbRef(db, `users/${refund.user_id}`), {
+                is_activated: false,
+                subscription_status: 'none',
+                paystack_reference: null
+            });
+
+            addToast('Refund approved successfully! User access revoked.', 'success');
+            void fetchUsageLogs();
+            void fetchUsers();
+        } catch (e: any) {
+            addToast('Failed to approve refund: ' + e.message, 'error');
+        }
+    };
+
+    const handleResolveComplaint = async (complaint: any) => {
+        try {
+            await update(dbRef(db, `usage_logs/complaints/${complaint.id}`), {
+                status: 'resolved',
+                resolved_at: Date.now()
+            });
+
+            addToast('Complaint marked as resolved!', 'success');
+            void fetchUsageLogs();
+        } catch (e: any) {
+            addToast('Failed to resolve complaint: ' + e.message, 'error');
+        }
+    };
+
+    const handleSimulateRefund = async () => {
+        try {
+            const mockUser = allUsersList.find(u => u.subscription_status === 'premium') || allUsersList[0];
+            if (!mockUser) {
+                addToast('No users registered to simulate refund', 'error');
+                return;
+            }
+            const ref = push(dbRef(db, 'usage_logs/refunds'));
+            await set(ref, {
+                id: ref.key,
+                user_id: mockUser.uid,
+                email: mockUser.email || 'student@vantutor.com',
+                reason: 'Requested course change / accidental subscription',
+                status: 'pending',
+                timestamp: Date.now()
+            });
+            addToast('Simulated refund request created for ' + (mockUser.display_name || mockUser.email), 'success');
+            void fetchUsageLogs();
+        } catch (e: any) {
+            addToast('Failed to simulate refund: ' + e.message, 'error');
+        }
+    };
+
+    const handleSimulateComplaint = async () => {
+        try {
+            const mockUser = allUsersList[0];
+            if (!mockUser) {
+                addToast('No users registered to simulate complaint', 'error');
+                return;
+            }
+            const ref = push(dbRef(db, 'usage_logs/complaints'));
+            await set(ref, {
+                id: ref.key,
+                user_id: mockUser.uid,
+                email: mockUser.email || 'student@vantutor.com',
+                message: 'Paystack payment went through but the activation screen did not disappear immediately.',
+                status: 'pending',
+                timestamp: Date.now()
+            });
+            addToast('Simulated support complaint created!', 'success');
+            void fetchUsageLogs();
+        } catch (e: any) {
+            addToast('Failed to simulate complaint: ' + e.message, 'error');
+        }
+    };
 
     // Departments State
     const [allDepartments, setAllDepartments] = useState<any[]>([]);
@@ -1632,6 +1791,8 @@ FORMAT:
         { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/admin/courses/manager' },
         { id: 'questions', label: 'Past Questions', icon: HelpCircle, path: '/admin/questions' },
         { id: 'users', label: 'User Control', icon: Users, path: '/admin/users' },
+        { id: 'analytics', label: 'Usage Analytics', icon: Activity, path: '/admin/analytics' },
+        { id: 'payments', label: 'Payments Control', icon: CreditCard, path: '/admin/payments' },
         { id: 'app', label: 'App Settings', icon: SettingsIcon, path: '/admin/app' },
     ];
 
@@ -2823,6 +2984,642 @@ FORMAT:
                                             </tbody>
                                         </table>
                                     )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'analytics' && (
+                        <div className="space-y-6">
+                            {/* Real-time Traffic Matrix */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                        <Activity className="w-5 h-5 text-lime-600 animate-pulse" />
+                                        <span>Real-Time Traffic Monitor</span>
+                                    </h3>
+                                    <span className="px-2.5 py-1 bg-lime-50 text-lime-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-lime-150 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-lime-650 animate-ping"></span>
+                                        <span>Live</span>
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* 35 Mins Card */}
+                                    <div className="bg-slate-50 border border-slate-100 hover:border-lime-200 hover:bg-lime-50/10 p-5 rounded-2xl shadow-sm transition duration-200 flex items-center justify-between group">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Active (Last 35 Mins)</p>
+                                            <h4 className="text-3xl font-black text-slate-850 mt-1.5">
+                                                {allUsersList.filter(u => u.last_activity_date && u.last_activity_date >= Date.now() - 35 * 60 * 1000).length}
+                                            </h4>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 shadow-sm flex items-center justify-center text-slate-450 group-hover:text-lime-600 transition">
+                                            <Clock className="w-5 h-5" />
+                                        </div>
+                                    </div>
+
+                                    {/* 1 Hour Card */}
+                                    <div className="bg-slate-50 border border-slate-100 hover:border-lime-200 hover:bg-lime-50/10 p-5 rounded-2xl shadow-sm transition duration-200 flex items-center justify-between group">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Active (Last 1 Hour)</p>
+                                            <h4 className="text-3xl font-black text-slate-850 mt-1.5">
+                                                {allUsersList.filter(u => u.last_activity_date && u.last_activity_date >= Date.now() - 60 * 60 * 1000).length}
+                                            </h4>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 shadow-sm flex items-center justify-center text-slate-450 group-hover:text-lime-600 transition">
+                                            <Clock className="w-5 h-5" />
+                                        </div>
+                                    </div>
+
+                                    {/* 24 Hour Card */}
+                                    <div className="bg-slate-50 border border-slate-100 hover:border-lime-200 hover:bg-lime-50/10 p-5 rounded-2xl shadow-sm transition duration-200 flex items-center justify-between group">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Active (Last 24 Hours)</p>
+                                            <h4 className="text-3xl font-black text-slate-850 mt-1.5">
+                                                {allUsersList.filter(u => u.last_activity_date && u.last_activity_date >= Date.now() - 24 * 60 * 60 * 1000).length}
+                                            </h4>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 shadow-sm flex items-center justify-center text-slate-450 group-hover:text-lime-600 transition">
+                                            <Clock className="w-5 h-5" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Real-time AI Request Volumes */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-purple-650" />
+                                    <span>Real-Time AI Request Volumes</span>
+                                </h3>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                                    {/* AI Requests in 35m */}
+                                    <div className="bg-purple-50/30 border border-purple-100 p-5 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-purple-600">AI Requests (Last 35 Mins)</p>
+                                        <h4 className="text-3xl font-black text-purple-950 mt-1.5">
+                                            {aiRequestLogs.filter(r => r.timestamp && r.timestamp >= Date.now() - 35 * 60 * 1000).length}
+                                        </h4>
+                                        <p className="text-[10px] text-purple-500/80 font-bold mt-2 flex items-center gap-1">
+                                            <Activity className="w-3.5 h-3.5" />
+                                            <span>Real-time processed</span>
+                                        </p>
+                                    </div>
+
+                                    {/* AI Requests in 1h */}
+                                    <div className="bg-indigo-50/30 border border-indigo-100 p-5 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">AI Requests (Last 1 Hour)</p>
+                                        <h4 className="text-3xl font-black text-indigo-950 mt-1.5">
+                                            {aiRequestLogs.filter(r => r.timestamp && r.timestamp >= Date.now() - 60 * 60 * 1000).length}
+                                        </h4>
+                                        <p className="text-[10px] text-indigo-500/80 font-bold mt-2 flex items-center gap-1">
+                                            <TrendingUp className="w-3.5 h-3.5" />
+                                            <span>1h demand window</span>
+                                        </p>
+                                    </div>
+
+                                    {/* AI Requests in 24h */}
+                                    <div className="bg-teal-50/30 border border-teal-100 p-5 rounded-2xl">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-teal-600">AI Requests (Last 24 Hours)</p>
+                                        <h4 className="text-3xl font-black text-teal-950 mt-1.5">
+                                            {aiRequestLogs.filter(r => r.timestamp && r.timestamp >= Date.now() - 24 * 60 * 60 * 1000).length}
+                                        </h4>
+                                        <p className="text-[10px] text-teal-500/80 font-bold mt-2 flex items-center gap-1">
+                                            <CheckCircle className="w-3.5 h-3.5" />
+                                            <span>Cumulative 24h</span>
+                                        </p>
+                                    </div>
+
+                                    {/* Capacity Gauge */}
+                                    <div className="bg-amber-50/30 border border-amber-100 p-5 rounded-2xl flex flex-col justify-between">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Inference Load (Last Minute)</p>
+                                            <div className="flex items-baseline gap-1 mt-1.5">
+                                                <h4 className="text-3xl font-black text-amber-950">
+                                                    {aiRequestLogs.filter(r => r.timestamp && r.timestamp >= Date.now() - 60 * 1000).length}
+                                                </h4>
+                                                <span className="text-xs text-amber-700/70 font-bold">/ {appSettings?.custom_user_limit_rpm || 10} RPM</span>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+                                                    style={{ 
+                                                        width: `${Math.min(
+                                                            100, 
+                                                            (aiRequestLogs.filter(r => r.timestamp && r.timestamp >= Date.now() - 60 * 1000).length / (appSettings?.custom_user_limit_rpm || 10)) * 100
+                                                        )}%` 
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Premium vs Token Breakdown */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <div className="flex items-center justify-between p-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                                                <CreditCard className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <h5 className="font-bold text-slate-800 text-xs">Premium AI Queries</h5>
+                                                <p className="text-[10px] text-slate-450 font-medium">Processed using Vantutor's enterprise key</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-base font-black text-indigo-950">
+                                                {aiRequestLogs.filter(r => !r.use_personal_token).length}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 font-bold block">
+                                                {aiRequestLogs.length ? ((aiRequestLogs.filter(r => !r.use_personal_token).length / aiRequestLogs.length) * 100).toFixed(0) : 0}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between p-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                                                <Key className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <h5 className="font-bold text-slate-800 text-xs">Google Token Queries</h5>
+                                                <p className="text-[10px] text-slate-450 font-medium">Processed using student's personal key</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-base font-black text-teal-950">
+                                                {aiRequestLogs.filter(r => r.use_personal_token).length}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 font-bold block">
+                                                {aiRequestLogs.length ? ((aiRequestLogs.filter(r => r.use_personal_token).length / aiRequestLogs.length) * 100).toFixed(0) : 0}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* "Any Companies?" Custom / Institutional Domains Analysis */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <Building className="w-5 h-5 text-indigo-650" />
+                                            <span>Institutional & Custom Corporate Domains ("Any Companies?")</span>
+                                        </h3>
+                                        <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Custom organizational or university signups (excluding general email providers like Gmail, Yahoo, etc.)</p>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                                    {(() => {
+                                        const domains: { [domain: string]: { count: number; premiumCount: number; users: string[] } } = {};
+                                        allUsersList.forEach(u => {
+                                            if (!u.email) return;
+                                            const parts = u.email.split('@');
+                                            if (parts.length < 2) return;
+                                            const domain = parts[1].toLowerCase().trim();
+                                            const ignoreList = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'mail.com', 'zoho.com', 'yandex.com', 'protonmail.com', 'proton.me'];
+                                            if (ignoreList.includes(domain)) return;
+                                            if (!domains[domain]) {
+                                                domains[domain] = { count: 0, premiumCount: 0, users: [] };
+                                            }
+                                            domains[domain].count++;
+                                            if (u.subscription_status === 'premium') {
+                                                domains[domain].premiumCount++;
+                                            }
+                                            domains[domain].users.push(u.display_name || u.email);
+                                        });
+
+                                        const domainList = Object.keys(domains).map(d => ({
+                                            domain: d,
+                                            ...domains[d]
+                                        })).sort((a, b) => b.count - a.count);
+
+                                        if (!domainList.length) {
+                                            return (
+                                                <div className="p-8 text-center text-slate-400 font-semibold text-xs">
+                                                    No corporate or institutional email domains detected yet. All users are currently on standard personal email accounts.
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <table className="w-full text-left border-collapse">
+                                                <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                                                    <tr>
+                                                        <th className="px-6 py-3.5">Organization / Domain</th>
+                                                        <th className="px-6 py-3.5">Registered Users</th>
+                                                        <th className="px-6 py-3.5">Premium Subscribers</th>
+                                                        <th className="px-6 py-3.5">Users Preview</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-650">
+                                                    {domainList.map(item => (
+                                                        <tr key={item.domain} className="hover:bg-slate-50/50 transition">
+                                                            <td className="px-6 py-3.5 font-bold text-slate-900 flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded bg-indigo-500"></span>
+                                                                <span>{item.domain}</span>
+                                                            </td>
+                                                            <td className="px-6 py-3.5">
+                                                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">
+                                                                    {item.count} user{item.count !== 1 ? 's' : ''}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-indigo-650 font-black">
+                                                                {item.premiumCount > 0 ? (
+                                                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] uppercase bg-indigo-50 border border-indigo-150">
+                                                                        {item.premiumCount} premium
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-slate-400 font-medium">None</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-slate-500 font-medium text-[11px]">
+                                                                {item.users.slice(0, 3).join(', ')}
+                                                                {item.users.length > 3 && ` +${item.users.length - 3} more`}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Recent AI Requests Stream */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <Activity className="w-5 h-5 text-lime-650" />
+                                        <span>Recent AI Query Live Stream</span>
+                                    </h3>
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{aiRequestLogs.length} request logs cached</span>
+                                </div>
+                                <div className="max-h-[400px] overflow-y-auto">
+                                    {isLogsLoading ? (
+                                        <div className="p-12 text-center text-slate-400 font-medium">Refreshing stream...</div>
+                                    ) : aiRequestLogs.length === 0 ? (
+                                        <div className="p-12 text-center text-slate-400 font-medium">No recent AI query transactions found.</div>
+                                    ) : (
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-6 py-3.5">User</th>
+                                                    <th className="px-6 py-3.5">Model</th>
+                                                    <th className="px-6 py-3.5">Key Type</th>
+                                                    <th className="px-6 py-3.5">Time</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-650">
+                                                {aiRequestLogs.map((log) => {
+                                                    const u = allUsersList.find(user => user.uid === log.user_id);
+                                                    const displayEmail = u?.email || log.email || 'Anonymous Student';
+                                                    const displayName = u?.display_name || log.user_id?.slice(0, 8);
+                                                    return (
+                                                        <tr key={log.id} className="hover:bg-slate-50/50 transition">
+                                                            <td className="px-6 py-3.5 flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded bg-lime-100 flex items-center justify-center text-lime-750 font-black text-[10px]">
+                                                                    {displayName?.charAt(0).toUpperCase() || '?'}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-bold text-slate-900">{displayName}</p>
+                                                                    <p className="text-[9px] text-slate-450 font-medium -mt-0.5">{displayEmail}</p>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-3.5">
+                                                                <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono text-slate-600">
+                                                                    {log.model}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-3.5">
+                                                                {log.use_personal_token ? (
+                                                                    <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-150 text-[9px] font-black uppercase">
+                                                                        Google Token
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-150 text-[9px] font-black uppercase">
+                                                                        Premium AI
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-slate-450 font-bold text-[10px]">
+                                                                {(() => {
+                                                                    const seconds = Math.floor((Date.now() - log.timestamp) / 1000);
+                                                                    if (seconds < 60) return 'just now';
+                                                                    const minutes = Math.floor(seconds / 60);
+                                                                    if (minutes < 60) return `${minutes}m ago`;
+                                                                    const hours = Math.floor(minutes / 60);
+                                                                    if (hours < 24) return `${hours}h ago`;
+                                                                    return new Date(log.timestamp).toLocaleString();
+                                                                })()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'payments' && (
+                        <div className="space-y-6">
+                            {/* Checkout Conversion Metrics Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {/* Total Initiated */}
+                                <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between group hover:border-slate-300 transition">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Checkouts Initiated</p>
+                                        <h3 className="text-3xl font-black text-slate-900 mt-1">{paymentLogs.length}</h3>
+                                    </div>
+                                    <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 group-hover:text-slate-700 transition">
+                                        <CreditCard className="w-5 h-5" />
+                                    </div>
+                                </div>
+
+                                {/* Successful */}
+                                <div className="bg-green-50 border border-green-200 p-5 rounded-2xl shadow-sm flex items-center justify-between group hover:border-green-300 transition">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-green-700">Successful Purchases</p>
+                                        <h3 className="text-3xl font-black text-green-950 mt-1">
+                                            {paymentLogs.filter(p => p.status === 'success').length}
+                                        </h3>
+                                    </div>
+                                    <div className="w-11 h-11 rounded-xl bg-white border border-green-200 shadow-sm flex items-center justify-center text-green-600 group-hover:text-green-750 transition">
+                                        <CheckCircle className="w-5 h-5" />
+                                    </div>
+                                </div>
+
+                                {/* Cancelled/Failed */}
+                                <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl shadow-sm flex items-center justify-between group hover:border-amber-300 transition">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-amber-800">Cancelled / Failed</p>
+                                        <h3 className="text-3xl font-black text-amber-950 mt-1">
+                                            {paymentLogs.filter(p => p.status === 'cancelled' || p.status === 'failed').length}
+                                        </h3>
+                                    </div>
+                                    <div className="w-11 h-11 rounded-xl bg-white border border-amber-200 shadow-sm flex items-center justify-center text-amber-600 group-hover:text-amber-700 transition">
+                                        <X className="w-5 h-5" />
+                                    </div>
+                                </div>
+
+                                {/* Conversion Rate */}
+                                <div className="bg-indigo-50 border border-indigo-200 p-5 rounded-2xl shadow-sm flex items-center justify-between group hover:border-indigo-300 transition">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-indigo-750">Conversion Rate</p>
+                                        <h3 className="text-3xl font-black text-indigo-950 mt-1">
+                                            {paymentLogs.length 
+                                                ? ((paymentLogs.filter(p => p.status === 'success').length / paymentLogs.length) * 100).toFixed(1)
+                                                : '0.0'}%
+                                        </h3>
+                                    </div>
+                                    <div className="w-11 h-11 rounded-xl bg-white border border-indigo-200 shadow-sm flex items-center justify-center text-indigo-650 group-hover:text-indigo-750 transition">
+                                        <TrendingUp className="w-5 h-5" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Pending Refund Requests Manager */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <AlertCircle className="w-5 h-5 text-amber-600" />
+                                            <span>Student Refund & Premium Revocation Control</span>
+                                        </h3>
+                                        <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Approve refund requests to automatically deactivate user premium membership in real time</p>
+                                    </div>
+                                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-150">
+                                        {refundLogs.filter(r => r.status === 'pending').length} pending
+                                    </span>
+                                </div>
+                                <div className="p-4">
+                                    {refundLogs.length === 0 ? (
+                                        <div className="p-8 text-center text-slate-400 font-semibold text-xs">
+                                            No refund requests logged. Use the simulator control room below to test.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {refundLogs.map((refund) => (
+                                                <div 
+                                                    key={refund.id} 
+                                                    className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition duration-200 ${
+                                                        refund.status === 'approved' 
+                                                            ? 'bg-slate-50/70 border-slate-150 opacity-70' 
+                                                            : 'bg-amber-50/10 border-amber-200 hover:border-amber-300'
+                                                    }`}
+                                                >
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-slate-800 text-xs">{refund.email}</span>
+                                                            {refund.status === 'approved' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
+                                                                    Approved & Revoked
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-150">
+                                                                    Pending Approval
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[11px] font-medium text-slate-650 font-semibold">
+                                                            <span className="font-semibold text-slate-450 uppercase text-[9px] tracking-wider">Reason:</span> "{refund.reason}"
+                                                        </p>
+                                                        <p className="text-[9px] font-bold text-slate-400">
+                                                            Requested: {new Date(refund.timestamp).toLocaleString()}
+                                                            {refund.resolved_at && ` • Approved: ${new Date(refund.resolved_at).toLocaleString()}`}
+                                                        </p>
+                                                    </div>
+                                                    
+                                                    {refund.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleApproveRefund(refund)}
+                                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-md shadow-amber-600/10 outline-none flex items-center gap-1.5 self-start md:self-center"
+                                                        >
+                                                            <Shield className="w-3.5 h-3.5" />
+                                                            <span>Approve & Revoke Access</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Live Support Complaints / Tickets */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <MessageSquare className="w-5 h-5 text-red-500" />
+                                            <span>Support Complaints & Tickets</span>
+                                        </h3>
+                                        <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Real-time student issues, activations failures, and feedback</p>
+                                    </div>
+                                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-red-50 text-red-700 border border-red-150">
+                                        {complaintLogs.filter(c => c.status === 'pending').length} open
+                                    </span>
+                                </div>
+                                <div className="p-4">
+                                    {complaintLogs.length === 0 ? (
+                                        <div className="p-8 text-center text-slate-400 font-semibold text-xs">
+                                            No complaints or support tickets found. Use the simulator control room below to test.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {complaintLogs.map((complaint) => (
+                                                <div 
+                                                    key={complaint.id} 
+                                                    className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition duration-200 ${
+                                                        complaint.status === 'resolved' 
+                                                            ? 'bg-slate-50/70 border-slate-150 opacity-70' 
+                                                            : 'bg-red-50/5 border-red-200 hover:border-red-300'
+                                                    }`}
+                                                >
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-slate-850 text-xs">{complaint.email}</span>
+                                                            {complaint.status === 'resolved' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-50 text-green-700 border border-green-150">
+                                                                    Resolved
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-red-50 text-red-700 border border-red-150">
+                                                                    Pending Response
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[11px] font-medium text-slate-650">
+                                                            "{complaint.message}"
+                                                        </p>
+                                                        <p className="text-[9px] font-bold text-slate-400">
+                                                            Reported: {new Date(complaint.timestamp).toLocaleString()}
+                                                            {complaint.resolved_at && ` • Resolved: ${new Date(complaint.resolved_at).toLocaleString()}`}
+                                                        </p>
+                                                    </div>
+                                                    
+                                                    {complaint.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleResolveComplaint(complaint)}
+                                                            className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-md outline-none flex items-center gap-1.5 self-start md:self-center"
+                                                        >
+                                                            <CheckCircle className="w-3.5 h-3.5 text-lime-500" />
+                                                            <span>Mark Resolved</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Paystack Inline Transactions table */}
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <CreditCard className="w-5 h-5 text-indigo-650" />
+                                        <span>Live Paystack Checkout Transactions Audit</span>
+                                    </h3>
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{paymentLogs.length} attempts logged</span>
+                                </div>
+                                <div className="max-h-[350px] overflow-y-auto">
+                                    {isLogsLoading ? (
+                                        <div className="p-12 text-center text-slate-400 font-medium">Refreshing transactions...</div>
+                                    ) : paymentLogs.length === 0 ? (
+                                        <div className="p-12 text-center text-slate-400 font-medium">No Paystack checkout logs detected.</div>
+                                    ) : (
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-6 py-3.5">Student</th>
+                                                    <th className="px-6 py-3.5">Amount</th>
+                                                    <th className="px-6 py-3.5">Status</th>
+                                                    <th className="px-6 py-3.5">Reference</th>
+                                                    <th className="px-6 py-3.5">Time</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-650">
+                                                {paymentLogs.map((pay) => (
+                                                    <tr key={pay.id} className="hover:bg-slate-50/50 transition">
+                                                        <td className="px-6 py-3.5 font-bold text-slate-900">
+                                                            {pay.email}
+                                                        </td>
+                                                        <td className="px-6 py-3.5 font-mono font-bold text-slate-700">
+                                                            ₦{(pay.amount || 5000).toLocaleString()}
+                                                        </td>
+                                                        <td className="px-6 py-3.5">
+                                                            {pay.status === 'success' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-50 text-green-700 border border-green-150 shadow-sm shadow-green-500/5">
+                                                                    Successful
+                                                                </span>
+                                                            ) : pay.status === 'cancelled' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-150 text-slate-600 border border-slate-200">
+                                                                    Cancelled
+                                                                </span>
+                                                            ) : pay.status === 'failed' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-red-50 text-red-700 border border-red-150 shadow-sm shadow-red-500/5">
+                                                                    Failed
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-150 animate-pulse">
+                                                                    Initiated
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-3.5 font-mono text-[10px] text-slate-450">
+                                                            {pay.reference || (pay.error ? `Err: ${pay.error}` : 'N/A')}
+                                                        </td>
+                                                        <td className="px-6 py-3.5 text-slate-450 font-bold text-[10px]">
+                                                            {(() => {
+                                                                const seconds = Math.floor((Date.now() - pay.timestamp) / 1000);
+                                                                if (seconds < 60) return 'just now';
+                                                                const minutes = Math.floor(seconds / 60);
+                                                                if (minutes < 60) return `${minutes}m ago`;
+                                                                const hours = Math.floor(minutes / 60);
+                                                                if (hours < 24) return `${hours}h ago`;
+                                                                return new Date(pay.timestamp).toLocaleString();
+                                                            })()}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Testing Simulator Control Room */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white space-y-4 shadow-xl shadow-slate-950/20">
+                                <div className="flex items-center gap-2">
+                                    <Shield className="w-5 h-5 text-lime-400" />
+                                    <div>
+                                        <h4 className="font-bold text-sm tracking-wide">Developer Sandbox Simulator Control Room</h4>
+                                        <p className="text-[10px] text-slate-400 font-medium">Inject synthetic live database transactions to immediately test real-time analytics UI streams</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <button
+                                        onClick={handleSimulateRefund}
+                                        className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-lime-400 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider hover:text-white transition flex items-center justify-center gap-2 shadow-md outline-none"
+                                    >
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span>Inject Synthetic Refund Request</span>
+                                    </button>
+                                    
+                                    <button
+                                        onClick={handleSimulateComplaint}
+                                        className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-lime-400 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider hover:text-white transition flex items-center justify-center gap-2 shadow-md outline-none"
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                        <span>Inject Synthetic Support Ticket</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>

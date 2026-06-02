@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { AppSettings, UserProfile } from '../types';
+import { db } from '../firebase';
+import { ref as dbRef, push } from 'firebase/database';
 
 /**
  * Strips mathematical LaTeX/KaTeX symbols and complex code blocks from text
@@ -209,6 +211,18 @@ export const createVanTutorAI = (
 
           // 3. RPM Rate-Limiting Queue
           await globalRateLimiter.acquireToken();
+        }
+
+        // Log AI request asynchronously for real-time analytics
+        try {
+          void push(dbRef(db, 'usage_logs/ai_requests'), {
+            timestamp: Date.now(),
+            user_id: userProfile?.uid || 'anonymous',
+            model: appSettings.primary_gemini_model || 'gemini-2.5-flash-lite',
+            use_personal_token: usePersonalToken
+          });
+        } catch (err) {
+          console.error('Failed to log AI request:', err);
         }
 
         return rawClient.models.generateContent(processedParams);
