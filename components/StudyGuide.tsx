@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
@@ -238,10 +238,14 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const isAwardingTimeXpRef = useRef(false);
-    const { settings: appSettings } = useAppSettings();
+    const [shouldAutoTeach, setShouldAutoTeach] = useState(false);
+    const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const geminiApiKey = appSettings.gemini_api_key.trim();
-    const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
+    const ai = useMemo(
+        () => (!isAppSettingsLoading && geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null),
+        [isAppSettingsLoading, geminiApiKey]
+    );
     const profileSnapshotRef = useRef({
         display_name: userProfile.display_name || 'Learner',
         photo_url: userProfile.photo_url || '',
@@ -387,7 +391,10 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
         };
     }, [userProfile.uid, userProfile.department_id]);
 
-    const initiateAutoTeach = async () => {
+    const initiateAutoTeach = useCallback(async () => {
+        if (isAppSettingsLoading) {
+            return;
+        }
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
             return;
@@ -435,7 +442,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setIsLoading(false);
             onClose();
         }
-    };
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -462,8 +469,10 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                void initiateAutoTeach();
+                setShouldAutoTeach(true);
+                return;
             } else {
+                setShouldAutoTeach(false);
                 const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
                     id,
                     text: msg.text,
@@ -484,6 +493,12 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         return () => off(messagesRef, 'value', unsubscribe);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userProfile.uid, topic.topic_id]);
+
+    useEffect(() => {
+        if (isAppSettingsLoading || !shouldAutoTeach) return;
+        setShouldAutoTeach(false);
+        void initiateAutoTeach();
+    }, [isAppSettingsLoading, initiateAutoTeach, shouldAutoTeach]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -605,7 +620,7 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({
-                    model: 'gemini-3.1-flash-image-preview',
+                    model: geminiModel,
                     config: { systemInstruction },
                     contents: [{ role: 'user', parts }]
                 });
@@ -648,7 +663,7 @@ Student: "${tempInput}"
         const result = await attemptApiCall(async () => {
             const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
             const response = await ai.models.generateContent({
-                model: "gemini-3.1-flash-image-preview",
+                model: geminiModel,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
             });
 
