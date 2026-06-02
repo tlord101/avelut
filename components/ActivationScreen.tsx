@@ -55,6 +55,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
           is_activated: true,
           subscription_status: 'premium',
           use_personal_token: false,
+          paystack_reference: 'demo_' + Math.random().toString(36).substring(2, 11),
         });
         if (result.success) {
           addToast('VanTutor Premium AI activated successfully!', 'success');
@@ -84,6 +85,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
             is_activated: true,
             subscription_status: 'premium',
             use_personal_token: false,
+            paystack_reference: response?.reference || 'ref_missing',
           });
           if (result.success) {
             addToast('VanTutor Premium AI successfully activated!', 'success');

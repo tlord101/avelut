@@ -29,6 +29,7 @@ export interface UserProfile {
   subscription_status?: 'none' | 'premium' | 'personal_token';
   personal_api_key?: string;
   use_personal_token?: boolean;
+  paystack_reference?: string;
 }
 
 export interface Message {
