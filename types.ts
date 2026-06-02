@@ -30,6 +30,7 @@ export interface UserProfile {
   personal_api_key?: string;
   use_personal_token?: boolean;
   paystack_reference?: string;
+  selected_free_course_id?: string;
 }
 
 export interface Message {

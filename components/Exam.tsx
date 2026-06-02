@@ -662,7 +662,13 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                   Test yourself with real past questions uploaded by administrators for your course.
                 </p>
                 
-                {availablePQSubjects.length > 0 ? (
+                 {availablePQSubjects.filter(s => {
+                  if (userProfile?.subscription_status === 'premium' || userProfile?.is_admin) return true;
+                  if (!userProfile?.selected_free_course_id) return false;
+                  const subjectNormalized = s.toLowerCase().replace(/[\s_]/g, '');
+                  const selectedNormalized = userProfile.selected_free_course_id.toLowerCase().replace(/[\s_]/g, '');
+                  return subjectNormalized === selectedNormalized;
+                }).length > 0 ? (
                   <div className="mt-6 space-y-3">
                     <select 
                       className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500"
@@ -670,7 +676,13 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                       value={selectedPQSubject}
                     >
                       <option value="">Select Subject</option>
-                      {availablePQSubjects.map(s => (
+                      {availablePQSubjects.filter(s => {
+                        if (userProfile?.subscription_status === 'premium' || userProfile?.is_admin) return true;
+                        if (!userProfile?.selected_free_course_id) return false;
+                        const subjectNormalized = s.toLowerCase().replace(/[\s_]/g, '');
+                        const selectedNormalized = userProfile.selected_free_course_id.toLowerCase().replace(/[\s_]/g, '');
+                        return subjectNormalized === selectedNormalized;
+                      }).map(s => (
                         <option key={s} value={s}>{s.replace(/_/g, ' ').toUpperCase()}</option>
                       ))}
                     </select>
@@ -684,7 +696,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                   </div>
                 ) : (
                   <div className="mt-6 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                    No past questions available yet for your course.
+                    {!userProfile?.selected_free_course_id && userProfile?.subscription_status !== 'premium'
+                      ? 'Please unlock a free course in the Study Guide first to access past question mock exams.'
+                      : 'No past questions available yet for your unlocked course.'}
                   </div>
                 )}
               </div>

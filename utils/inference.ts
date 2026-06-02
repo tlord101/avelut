@@ -174,7 +174,8 @@ export const createVanTutorAI = (
   if (!apiKey) return null;
 
   const rawClient = new GoogleGenAI({ apiKey });
-  const limitRpm = appSettings.custom_user_limit_rpm || 10;
+  const isFreeCustomTokenUser = usePersonalToken && userProfile?.subscription_status === 'personal_token';
+  const limitRpm = isFreeCustomTokenUser ? 9 : (appSettings.custom_user_limit_rpm || 10);
   const limitTpm = appSettings.custom_user_limit_tpm || 250000;
 
   globalRateLimiter.setLimitRpm(limitRpm);

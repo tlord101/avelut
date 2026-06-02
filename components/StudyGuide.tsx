@@ -975,24 +975,69 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
     );
 };
 
-const CourseHeader: React.FC<{ course: Course, isExpanded: boolean, onClick: () => void }> = ({ course, isExpanded, onClick }) => {
+const CourseHeader: React.FC<{ 
+    course: Course, 
+    isExpanded: boolean, 
+    onClick: () => void,
+    isFreeUser: boolean,
+    selectedFreeCourseId?: string,
+    onSelectFreeCourse: () => void
+}> = ({ course, isExpanded, onClick, isFreeUser, selectedFreeCourseId, onSelectFreeCourse }) => {
     const courseLabel = course.course_code || course.course_id || course.course_name;
+    const isThisCourseUnlocked = selectedFreeCourseId === course.course_id;
+    const isAnyCourseUnlocked = !!selectedFreeCourseId;
+
     return (
         <div className="w-full max-w-4xl mx-auto py-2">
-            <button
-                onClick={onClick}
-                className={`w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none`}
-                aria-expanded={isExpanded}
-            >
-                <div className="flex items-center gap-3">
-                    <div className="text-sm font-black text-gray-700">{courseLabel}</div>
-                    <div className="text-xs text-gray-500">{course.course_name}</div>
+            <div className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition`}>
+                <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => {
+                    if (isFreeUser && isAnyCourseUnlocked && !isThisCourseUnlocked) {
+                        return; // Click is disabled/locked
+                    }
+                    onClick();
+                }}>
+                    <div className="flex items-center gap-3">
+                        <div className="text-sm font-black text-gray-700">{courseLabel}</div>
+                        <div className="text-xs text-gray-500">{course.course_name}</div>
+                    </div>
                 </div>
-                <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
-            </button>
+
+                <div className="mt-2 sm:mt-0 flex items-center gap-3 justify-between">
+                    {isFreeUser && (
+                        <>
+                            {!isAnyCourseUnlocked ? (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelectFreeCourse();
+                                    }}
+                                    className="px-3 py-1.5 bg-lime-600 hover:bg-lime-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-sm active:scale-95 whitespace-nowrap"
+                                >
+                                    Unlock as Free Course
+                                </button>
+                            ) : isThisCourseUnlocked ? (
+                                <span className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full font-black text-[9px] uppercase tracking-wider whitespace-nowrap">
+                                    Unlocked Free Course
+                                </span>
+                            ) : (
+                                <span className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-full font-black text-[9px] uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+                                    <LockIcon className="w-3 h-3 text-slate-400" />
+                                    <span>Locked</span>
+                                </span>
+                            )}
+                        </>
+                    )}
+                    
+                    {(!isFreeUser || isThisCourseUnlocked) && (
+                        <button onClick={onClick} className="p-1.5 text-gray-400 hover:text-gray-600 transition">
+                            <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                        </button>
+                    )}
+                </div>
+            </div>
         </div>
     );
-}
+};
 
 // utility to format seconds into H:MM or M:SS
 const formatDuration = (seconds: number): string => {
@@ -1017,6 +1062,23 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
     const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
   const { addToast } = useToast();
+
+  const isFreeUser = userProfile?.subscription_status !== 'premium';
+  
+  const handleSelectFreeCourse = async (course: Course) => {
+    const confirm = window.confirm(`Are you sure you want to select "${course.course_name}" as your single free course? This choice cannot be changed later.`);
+    if (!confirm) return;
+
+    try {
+      await update(dbRef(db, `users/${userProfile.uid}`), {
+        selected_free_course_id: course.course_id
+      });
+      addToast(`"${course.course_name}" has been unlocked successfully!`, 'success');
+    } catch (e: any) {
+      console.error(e);
+      addToast('Failed to unlock course: ' + e.message, 'error');
+    }
+  };
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -1210,6 +1272,23 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12">
+            {isFreeUser && (
+                <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl mb-6 text-sm text-slate-800 font-semibold max-w-4xl mx-auto flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">⚠️</div>
+                    <div>
+                        <h4 className="font-bold text-amber-900 mb-0.5">Free / Custom Token Limit 🎓</h4>
+                        {userProfile.selected_free_course_id ? (
+                            <p className="text-[11px] text-amber-800 leading-relaxed font-semibold">
+                                You are currently on the free/custom token tier. You have unlocked one course as your single active course. Upgrade to Premium to unlock all courses!
+                            </p>
+                        ) : (
+                            <p className="text-[11px] text-amber-800 leading-relaxed font-semibold">
+                                You can unlock and study <strong>exactly one course</strong> from your department curriculum to minimize API token costs. Please select the course you'd like to unlock from the list below.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
             {isLoading ? (
                 <StudyGuideSkeleton />
             ) : (
@@ -1223,6 +1302,9 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                         course={course}
                                         isExpanded={isExpanded}
                                         onClick={() => toggleCourse(course.course_id)}
+                                        isFreeUser={isFreeUser}
+                                        selectedFreeCourseId={userProfile.selected_free_course_id}
+                                        onSelectFreeCourse={() => handleSelectFreeCourse(course)}
                                     />
                                     <div className={`grid transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-8' : 'grid-rows-[0fr] opacity-0'}`}>
                                         <div className="overflow-hidden">

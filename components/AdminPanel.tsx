@@ -377,6 +377,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [complaintLogs, setComplaintLogs] = useState<any[]>([]);
     const [isLogsLoading, setIsLogsLoading] = useState(false);
 
+    // Activation Code Management States
+    const [activationCodes, setActivationCodes] = useState<any[]>([]);
+    const [newCodeApiKey, setNewCodeApiKey] = useState('');
+    const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+
     const fetchUsageLogs = async () => {
         setIsLogsLoading(true);
         try {
@@ -426,6 +431,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setComplaintLogs(list);
             } else {
                 setComplaintLogs([]);
+            }
+
+            // Fetch activation codes
+            const codesRef = dbRef(db, 'activation_codes');
+            const codesSnap = await get(codesRef);
+            if (codesSnap.exists()) {
+                const data = codesSnap.val();
+                const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+                list.sort((a: any, b: any) => b.created_at - a.created_at);
+                setActivationCodes(list);
+            } else {
+                setActivationCodes([]);
             }
         } catch (e) {
             console.error('Failed to load usage logs:', e);
@@ -519,6 +536,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             void fetchUsageLogs();
         } catch (e: any) {
             addToast('Failed to simulate complaint: ' + e.message, 'error');
+        }
+    };
+
+    const handleGenerateActivationCode = async () => {
+        if (!newCodeApiKey.trim()) {
+            addToast('Please enter an actual Gemini API key to generate a code', 'error');
+            return;
+        }
+        setIsGeneratingCode(true);
+        try {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ12345';
+            let code = '';
+            let isUnique = false;
+            let safetyCounter = 0;
+            
+            while (!isUnique && safetyCounter < 100) {
+                safetyCounter++;
+                code = '';
+                for (let i = 0; i < 5; i++) {
+                    code += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                const checkRef = dbRef(db, `activation_codes/${code}`);
+                const checkSnap = await get(checkRef);
+                if (!checkSnap.exists()) {
+                    isUnique = true;
+                }
+            }
+
+            await set(dbRef(db, `activation_codes/${code}`), {
+                code,
+                api_key: newCodeApiKey.trim(),
+                status: 'unused',
+                created_at: Date.now(),
+                used_by: '',
+                used_at: ''
+            });
+
+            addToast(`Activation code ${code} generated successfully!`, 'success');
+            setNewCodeApiKey('');
+            void fetchUsageLogs();
+        } catch (e: any) {
+            addToast('Failed to generate activation code: ' + e.message, 'error');
+        } finally {
+            setIsGeneratingCode(false);
+        }
+    };
+
+    const handleDeleteActivationCode = async (codeId: string) => {
+        try {
+            await remove(dbRef(db, `activation_codes/${codeId}`));
+            addToast('Activation code deleted!', 'success');
+            void fetchUsageLogs();
+        } catch (e: any) {
+            addToast('Failed to delete code: ' + e.message, 'error');
         }
     };
 
@@ -3591,6 +3662,89 @@ FORMAT:
                                             </tbody>
                                         </table>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* Free Premium Activation Code Generator */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                    <Key className="w-5 h-5 text-lime-600" />
+                                    <span>Free Premium Activation Code Generator</span>
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    Input a valid Google Gemini API key to generate a unique 5-digit code. Students can input this code to activate their premium accounts.
+                                </p>
+                                
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Paste Gemini API Key here"
+                                        value={newCodeApiKey}
+                                        onChange={(e) => setNewCodeApiKey(e.target.value)}
+                                        className="flex-1 p-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition font-mono"
+                                    />
+                                    <button
+                                        onClick={handleGenerateActivationCode}
+                                        disabled={isGeneratingCode || !newCodeApiKey.trim()}
+                                        className="bg-lime-600 hover:bg-lime-700 text-white font-bold px-6 py-3 rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-50"
+                                    >
+                                        {isGeneratingCode ? 'Generating...' : 'Generate Code'}
+                                    </button>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-4">
+                                    <h4 className="font-bold text-slate-800 text-xs mb-3">Generated Activation Codes</h4>
+                                    <div className="max-h-[250px] overflow-y-auto">
+                                        {activationCodes.length === 0 ? (
+                                            <p className="text-xs text-slate-400 italic">No activation codes generated yet.</p>
+                                        ) : (
+                                            <table className="w-full text-left border-collapse">
+                                                <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                                                    <tr>
+                                                        <th className="px-4 py-2">Code</th>
+                                                        <th className="px-4 py-2">Associated API Key</th>
+                                                        <th className="px-4 py-2">Status</th>
+                                                        <th className="px-4 py-2">Created</th>
+                                                        <th className="px-4 py-2">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-650">
+                                                    {activationCodes.map((item) => (
+                                                        <tr key={item.code} className="hover:bg-slate-50/50 transition">
+                                                            <td className="px-4 py-2 font-mono font-black text-sm text-slate-900">
+                                                                {item.code}
+                                                            </td>
+                                                            <td className="px-4 py-2 font-mono text-[10px] text-slate-450">
+                                                                {item.api_key ? `${item.api_key.slice(0, 6)}...${item.api_key.slice(-4)}` : 'N/A'}
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                {item.status === 'unused' ? (
+                                                                    <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-50 text-green-700 border border-green-150">
+                                                                        Unused
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
+                                                                        Used
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-slate-400 text-[10px]">
+                                                                {new Date(item.created_at).toLocaleDateString()}
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                <button
+                                                                    onClick={() => handleDeleteActivationCode(item.code)}
+                                                                    className="text-red-500 hover:text-red-700 font-bold uppercase text-[9px] tracking-wider transition"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

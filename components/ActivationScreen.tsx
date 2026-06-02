@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { FirebaseUser } from '../firebase';
 import { db } from '../firebase';
-import { ref as dbRef, push, set, update } from 'firebase/database';
+import { ref as dbRef, push, set, update, get } from 'firebase/database';
 import type { UserProfile, AppSettings } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { LogoIcon } from './icons/LogoIcon';
@@ -38,15 +38,16 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
   handleLogout,
   addToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'premium' | 'token'>('premium');
+  const [activeTab, setActiveTab] = useState<'premium' | 'token'>('token');
   const [enteredKey, setEnteredKey] = useState('');
+  const [enteredPromoCode, setEnteredPromoCode] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
 
   const handlePaystackPayment = async () => {
     setIsActivating(true);
     const email = user.email || `${user.uid}@vantutor.com`;
-    const amount = 5000 * 100; // 5,000 NGN in kobo
+    const amount = 2000 * 100; // 2,000 NGN in kobo
     const publicKey = appSettings.paystack_public_key?.trim();
 
     // Create payment log inside /usage_logs/payments
@@ -57,7 +58,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
         id: paymentLogRef.key,
         user_id: user.uid,
         email: email,
-        amount: 5000,
+        amount: 2000,
         status: 'initiated',
         timestamp: Date.now(),
       });
@@ -198,128 +199,209 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Decorative background glows */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-lime-500/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-80 h-80 bg-brand-500/10 rounded-full blur-[100px] pointer-events-none" />
+  const handlePromoCodeActivation = async () => {
+    const cleanCode = enteredPromoCode.trim().toUpperCase();
+    if (cleanCode.length !== 5) {
+      addToast('Please enter a valid 5-digit code.', 'error');
+      return;
+    }
 
+    setIsActivating(true);
+    try {
+      const codeRef = dbRef(db, `activation_codes/${cleanCode}`);
+      const codeSnap = await get(codeRef);
+      if (!codeSnap.exists()) {
+        addToast('Invalid activation code. Please check and try again.', 'error');
+        setIsActivating(false);
+        return;
+      }
+
+      const codeData = codeSnap.val();
+      if (codeData.status !== 'unused') {
+        addToast('This code has already been used.', 'error');
+        setIsActivating(false);
+        return;
+      }
+
+      const geminiKey = codeData.api_key;
+      if (!geminiKey) {
+        addToast('Invalid code configuration. Please contact admin.', 'error');
+        setIsActivating(false);
+        return;
+      }
+
+      // Update code node to mark as used
+      await update(codeRef, {
+        status: 'used',
+        used_by: user.uid,
+        used_at: Date.now()
+      });
+
+      // Update user profile to activated with premium using the promo code's API key
+      const result = await handleProfileUpdate({
+        is_activated: true,
+        subscription_status: 'premium',
+        personal_api_key: geminiKey,
+        use_personal_token: true,
+      });
+
+      if (result.success) {
+        addToast('VanTutor Premium activated successfully using code!', 'success');
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (e: any) {
+      console.error(e);
+      addToast('Activation failed: ' + e.message, 'error');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Decorative background glows */}
+      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-lime-200/40 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-80 h-80 bg-emerald-200/40 rounded-full blur-[100px] pointer-events-none" />
+ 
       <div className="w-full max-w-lg relative z-10 animate-fade-in">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl mb-4 animate-bounce">
-            <LogoIcon className="w-14 h-14 loader-logo text-lime-400" />
+          <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-md mb-4 animate-bounce">
+            <LogoIcon className="w-14 h-14 loader-logo text-lime-600" />
           </div>
-          <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-lime-300 via-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            Activate VanTutor AI
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 bg-gradient-to-r from-slate-900 via-emerald-800 to-lime-700 bg-clip-text text-transparent">
+            Connect Google AI Account
           </h1>
-          <p className="text-sm text-slate-400 mt-2 max-w-sm">
-            We partner with Google AI to bring you curriculum-tailored learning. Choose how you'd like to power your personal companion.
+          <p className="text-sm text-slate-650 mt-2 max-w-sm">
+            We partner with Google AI to bring you curriculum-tailored learning. Connect your Google AI account to activate your personal study companion.
           </p>
         </div>
-
-        <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-[28px] p-6 shadow-2xl">
-          <div className="grid grid-cols-2 gap-3 mb-6 p-1 bg-slate-950/80 rounded-2xl border border-slate-800/80">
+ 
+        <div className="bg-white border border-slate-200 backdrop-blur-xl rounded-[28px] p-6 shadow-xl">
+          <div className="grid grid-cols-2 gap-3 mb-6 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+            <button
+              onClick={() => setActiveTab('token')}
+              className={`py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                activeTab === 'token'
+                  ? 'bg-white text-slate-900 shadow-sm border-slate-200/60'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
+              }`}
+            >
+              🔑 Connect Google AI
+            </button>
             <button
               onClick={() => setActiveTab('premium')}
-              className={`py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              className={`py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
                 activeTab === 'premium'
-                  ? 'bg-gradient-to-r from-lime-500 to-emerald-600 text-white shadow-lg shadow-lime-500/15'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-white text-slate-900 shadow-sm border-slate-200/60'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
               }`}
             >
               👑 Subscribe Premium
             </button>
-            <button
-              onClick={() => setActiveTab('token')}
-              className={`py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                activeTab === 'token'
-                  ? 'bg-gradient-to-r from-lime-500 to-emerald-600 text-white shadow-lg shadow-lime-500/15'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              🔑 Personal Token
-            </button>
           </div>
-
+ 
           {activeTab === 'premium' ? (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="bg-slate-950 border border-slate-800/60 rounded-2xl p-5">
-                <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <span>VanTutor AI Premium Plan</span>
-                  <span className="text-[10px] bg-lime-500/20 text-lime-400 px-2 py-0.5 rounded-full uppercase">Best Choice</span>
+                  <span className="text-[10px] bg-lime-100 text-lime-700 border border-lime-200 px-2 py-0.5 rounded-full uppercase">Best Choice</span>
                 </h3>
-                <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+                <p className="text-slate-600 text-xs mt-2 leading-relaxed font-semibold">
                   Enjoy unlimited access to advanced study guides, real timed mock exams, visual problem solvers, and peer Messenger.
                 </p>
-                <div className="mt-4 flex items-baseline gap-1.5 border-t border-slate-800/80 pt-4">
-                  <span className="text-2xl font-black text-white">₦5,000</span>
-                  <span className="text-xs text-slate-500">/ semester</span>
+                <div className="mt-4 flex items-baseline gap-1.5 border-t border-slate-200 pt-4">
+                  <span className="text-2xl font-black text-slate-900">₦2,000</span>
+                  <span className="text-xs text-slate-500 font-bold">/ semester</span>
                 </div>
               </div>
-
+ 
               <div className="space-y-3">
                 <button
                   onClick={handlePaystackPayment}
                   disabled={isActivating}
-                  className="w-full py-3.5 bg-gradient-to-r from-lime-500 to-emerald-600 hover:from-lime-400 hover:to-emerald-500 text-slate-950 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-lime-500/20 active:scale-95 disabled:opacity-50"
+                  className="w-full py-3.5 bg-gradient-to-r from-lime-600 to-emerald-600 hover:from-lime-500 hover:to-emerald-550 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
                 >
                   {isActivating ? 'Connecting Gateway...' : 'Pay with Paystack'}
                 </button>
-                <p className="text-[10px] text-center text-slate-500 leading-normal">
+                <p className="text-[10px] text-center text-slate-500 leading-normal font-semibold">
                   Payments are securely processed in partnership with Google AI and Paystack.
                 </p>
               </div>
             </div>
           ) : (
             <div className="space-y-5 animate-in fade-in duration-300">
-              <div className="bg-slate-950 border border-slate-800/60 rounded-2xl p-5">
-                <h3 className="text-md font-bold text-white">Use Free Google Personal Token</h3>
-                <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <h3 className="text-md font-bold text-slate-900">Connect Google AI Account</h3>
+                <p className="text-slate-600 text-xs mt-2 leading-relaxed font-semibold">
                   Link your own Gemini API key for free. If you don't have one, visit the Google AI Studio console to get your key instantly.
                 </p>
                 <a
                   href="https://aistudio.google.com/api-keys"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 mt-3 text-xs font-black text-lime-400 hover:text-lime-300 hover:underline uppercase tracking-wider"
+                  className="inline-flex items-center justify-center gap-2 w-full py-3 bg-lime-600 hover:bg-lime-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 text-center mt-4"
                 >
-                  Get Free Key from Google AI Studio ↗
+                  Copy AI Token (Google AI Studio) ↗
                 </a>
+                <p className="text-[10px] text-slate-500 leading-relaxed mt-2 text-center font-semibold">
+                  Click above to copy the API key from Google. If you don't have one, click 'Create API key', then copy it and paste it below.
+                </p>
               </div>
-
+ 
               <div className="space-y-4">
                 <div className="relative">
                   <input
                     type={showKey ? 'text' : 'password'}
-                    placeholder="Enter your Gemini API Key"
+                    placeholder="Paste Gemini API Key here"
                     value={enteredKey}
                     onChange={(e) => setEnteredKey(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl py-3 px-4 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition-all font-mono"
+                    className="w-full bg-white border border-slate-200 focus:border-lime-500 rounded-xl py-3 px-4 pr-12 text-sm text-slate-800 placeholder-slate-400 focus:outline-none transition-all font-mono shadow-sm"
                   />
                   <button
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-[10px] font-black uppercase"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-550 hover:text-slate-800 text-[10px] font-black uppercase"
                   >
                     {showKey ? 'Hide' : 'Show'}
                   </button>
                 </div>
-
+ 
                 <button
                   onClick={handleTokenActivation}
                   disabled={isActivating || !enteredKey.trim()}
-                  className="w-full py-3.5 bg-gradient-to-r from-lime-500 to-emerald-600 hover:from-lime-400 hover:to-emerald-500 text-slate-950 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-lime-500/20 active:scale-95 disabled:opacity-50"
+                  className="w-full py-3.5 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
                 >
                   {isActivating ? 'Verifying with Google AI...' : 'Activate Personal Key'}
                 </button>
+
+                {/* Promo Code section */}
+                <div className="border-t border-slate-100 pt-5 mt-5 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Have a Free Premium Activation Code?</h4>
+                  <input
+                    type="text"
+                    placeholder="Enter 5-digit code (e.g. A3K1Z)"
+                    value={enteredPromoCode}
+                    onChange={(e) => setEnteredPromoCode(e.target.value.toUpperCase().trim())}
+                    className="w-full bg-white border border-slate-200 focus:border-lime-500 rounded-xl py-3 px-4 text-sm text-slate-800 placeholder-slate-400 focus:outline-none transition-all font-mono uppercase shadow-sm"
+                  />
+                  <button
+                    onClick={handlePromoCodeActivation}
+                    disabled={isActivating || enteredPromoCode.trim().length !== 5}
+                    className="w-full py-3.5 bg-gradient-to-r from-lime-600 to-emerald-600 hover:from-lime-500 hover:to-emerald-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
+                  >
+                    {isActivating ? 'Verifying Code...' : 'Activate with Code'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
-
+ 
         <div className="flex justify-center mt-6">
           <button
             onClick={handleLogout}
-            className="text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors"
+            className="text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 transition-colors"
           >
             Logout & Exit
           </button>
