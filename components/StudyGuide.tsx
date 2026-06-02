@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
@@ -238,7 +238,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const isAwardingTimeXpRef = useRef(false);
-    const pendingAutoTeachRef = useRef(false);
+    const [shouldAutoTeach, setShouldAutoTeach] = useState(false);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const geminiApiKey = appSettings.gemini_api_key.trim();
@@ -391,7 +391,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
         };
     }, [userProfile.uid, userProfile.department_id]);
 
-    const initiateAutoTeach = async () => {
+    const initiateAutoTeach = useCallback(async () => {
         if (isAppSettingsLoading) {
             return;
         }
@@ -442,7 +442,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setIsLoading(false);
             onClose();
         }
-    };
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -469,10 +469,10 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                pendingAutoTeachRef.current = true;
+                setShouldAutoTeach(true);
                 return;
             } else {
-                pendingAutoTeachRef.current = false;
+                setShouldAutoTeach(false);
                 const fetchedMessages: Message[] = Object.entries(data).map(([id, msg]: [string, any]) => ({
                     id,
                     text: msg.text,
@@ -492,15 +492,13 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         return () => off(messagesRef, 'value', unsubscribe);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userProfile.uid, topic.topic_id, isAppSettingsLoading]);
+    }, [userProfile.uid, topic.topic_id]);
 
     useEffect(() => {
-        if (isAppSettingsLoading || !pendingAutoTeachRef.current) return;
-        pendingAutoTeachRef.current = false;
-        if (!messages.length) {
-            void initiateAutoTeach();
-        }
-    }, [isAppSettingsLoading, messages.length]);
+        if (isAppSettingsLoading || !shouldAutoTeach) return;
+        setShouldAutoTeach(false);
+        void initiateAutoTeach();
+    }, [isAppSettingsLoading, initiateAutoTeach, shouldAutoTeach]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
