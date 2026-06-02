@@ -270,6 +270,13 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
+  const usePersonalToken = !!(
+    userProfile?.use_personal_token &&
+    userProfile?.personal_api_key?.trim()
+  );
+  const geminiApiKey = usePersonalToken
+    ? userProfile!.personal_api_key!.trim()
+    : appSettings.gemini_api_key?.trim() || '';
   const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
   const liveWebSocketUrl = useMemo(() => {
     if (LIVE_ACCESS_TOKEN) {
