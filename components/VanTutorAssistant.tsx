@@ -1252,7 +1252,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           </section>
 
           {/* Integrated VanTutor Input Layout Panel */}
-          <footer className="absolute bottom-6 left-0 right-0 z-30 px-4">
+          <footer className="absolute bottom-[84px] md:bottom-6 left-0 right-0 z-30 px-4">
             <div className="w-full max-w-xl mx-auto transition-all duration-300">
               
               {/* Attachment Preview */}
