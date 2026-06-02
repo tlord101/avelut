@@ -605,7 +605,7 @@ Student: "${tempInput}"
                 }
 
                 const response = await ai.models.generateContent({
-                    model: 'gemini-3.1-flash-image-preview',
+                    model: geminiModel,
                     config: { systemInstruction },
                     contents: [{ role: 'user', parts }]
                 });
@@ -648,7 +648,7 @@ Student: "${tempInput}"
         const result = await attemptApiCall(async () => {
             const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
             const response = await ai.models.generateContent({
-                model: "gemini-3.1-flash-image-preview",
+                model: geminiModel,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
             });
 
