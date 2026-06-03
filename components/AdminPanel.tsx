@@ -22,6 +22,8 @@ import {
     Settings as SettingsIcon, 
     LogOut, 
     ChevronDown, 
+    ChevronRight,
+    Moon,
     Sparkles, 
     RefreshCw, 
     Trash2,
@@ -83,7 +85,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments';
+type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -92,7 +94,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['departments', 'courses', 'questions', 'users', 'app', 'analytics', 'payments'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'app', 'analytics', 'payments'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -377,6 +379,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [complaintLogs, setComplaintLogs] = useState<any[]>([]);
     const [isLogsLoading, setIsLogsLoading] = useState(false);
 
+    const userRequestCounts = useMemo(() => {
+        const now = Date.now();
+        const limit5m = now - 5 * 60 * 1000;
+        const limit10m = now - 10 * 60 * 1000;
+        const limit30m = now - 30 * 60 * 1000;
+        const limit1h = now - 60 * 60 * 1000;
+
+        const counts: Record<string, { m5: number; m10: number; m30: number; h1: number }> = {};
+
+        allUsersList.forEach(u => {
+            counts[u.uid] = { m5: 0, m10: 0, m30: 0, h1: 0 };
+        });
+
+        aiRequestLogs.forEach(log => {
+            const uid = log.user_id;
+            if (!uid || !counts[uid]) return;
+
+            const ts = log.timestamp;
+            if (!ts) return;
+
+            if (ts >= limit5m) counts[uid].m5++;
+            if (ts >= limit10m) counts[uid].m10++;
+            if (ts >= limit30m) counts[uid].m30++;
+            if (ts >= limit1h) counts[uid].h1++;
+        });
+
+        return counts;
+    }, [allUsersList, aiRequestLogs]);
+
     // Activation Code Management States
     const [activationCodes, setActivationCodes] = useState<any[]>([]);
     const [newCodeApiKey, setNewCodeApiKey] = useState('');
@@ -453,7 +484,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        if (activeTab === 'analytics' || activeTab === 'payments') {
+        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users') {
             void fetchUsageLogs();
         }
     }, [activeTab]);
@@ -897,7 +928,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const pathTab = resolvedPathname.split('/').filter(Boolean)[1] as AdminTab | undefined;
         const selectedTab: AdminTab = pathTab && visibleTabs.includes(pathTab)
             ? pathTab
-            : (visibleTabs[0] || 'departments');
+            : 'dashboard';
         setActiveTab(selectedTab);
     }, [resolvedPathname, visibleTabs]);
 
@@ -1858,7 +1889,8 @@ FORMAT:
     }
 
     const navigationItems = [
-        { id: 'departments', label: 'Departments', icon: Building, path: '/admin' },
+        { id: 'dashboard', label: 'Dashboard', icon: Home, path: '/admin' },
+        { id: 'departments', label: 'Departments', icon: Building, path: '/admin/departments' },
         { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/admin/courses/manager' },
         { id: 'questions', label: 'Past Questions', icon: HelpCircle, path: '/admin/questions' },
         { id: 'users', label: 'User Control', icon: Users, path: '/admin/users' },
@@ -1870,98 +1902,221 @@ FORMAT:
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
 
     return (
-        <div className="min-h-screen bg-slate-50 flex text-slate-800 w-full overflow-hidden font-sans">
+        <div className="min-h-screen bg-[#14181c] flex text-slate-100 w-full overflow-hidden font-sans select-none vantutor-admin dark">
             {/* Sidebar - Desktop */}
-            <aside className="w-64 bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col justify-between border-r border-slate-900 sticky top-0 h-screen z-40 hidden md:flex">
-                <div className="flex flex-col gap-6 p-6">
+            <aside className="w-64 bg-[#1e2229] text-slate-350 flex-shrink-0 flex flex-col justify-between border-r border-[#2b303c] sticky top-0 h-screen z-40 hidden md:flex">
+                <div className="flex flex-col gap-4">
                     {/* Header Brand */}
-                    <div className="flex items-center gap-3 border-b border-slate-900 pb-5">
-                        <div className="w-9 h-9 rounded-xl bg-lime-500 flex items-center justify-center text-slate-950 shadow-lg shadow-lime-500/20">
-                            <LogoIcon className="w-5 h-5 text-slate-950" />
+                    <div className="flex items-center gap-3 border-b border-[#2b303c] pb-4 px-6 pt-5">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white text-sm font-black shadow-md">
+                            A
                         </div>
                         <div>
-                            <h2 className="text-base font-black text-white leading-tight">VanTutor</h2>
-                            <p className="text-[10px] uppercase font-bold text-lime-400 tracking-widest mt-0.5">Admin Desk</p>
+                            <h2 className="text-sm font-black text-slate-200 tracking-wide leading-tight">AdminLTE 4</h2>
+                            <p className="text-[9px] uppercase font-bold text-lime-500 tracking-widest -mt-0.5">VanTutor Admin</p>
+                        </div>
+                    </div>
+
+                    {/* Sidebar Search */}
+                    <div className="px-4 py-2">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search..."
+                                className="w-full bg-[#242930] text-[11px] text-slate-200 pl-8 pr-3 py-1.5 rounded-lg border border-[#2b303c] outline-none focus:border-lime-500/50 transition font-semibold"
+                            />
+                            <svg className="w-3 h-3 text-slate-500 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                         </div>
                     </div>
 
                     {/* Nav Links */}
-                    <nav className="space-y-1.5">
-                        {activeNavItems.map((item) => {
-                            const IconComponent = item.icon;
-                            const isActive = activeTab === item.id;
-                            return (
-                                <button
-                                    key={item.id}
-                                    onClick={() => handleCourseTabNavigate(item.path)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative group ${
-                                        isActive 
-                                            ? 'bg-lime-500/10 text-lime-400 font-bold border-l-4 border-lime-500' 
-                                            : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
-                                    }`}
-                                >
-                                    <IconComponent className={`w-4 h-4 transition-transform duration-200 ${isActive ? 'scale-110 text-lime-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
-                                    <span>{item.label}</span>
-                                    {isActive && (
-                                        <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-lime-500 animate-pulse"></div>
-                                    )}
-                                </button>
-                            );
-                        })}
+                    <nav className="flex-1 overflow-y-auto px-2 space-y-4 py-2 max-h-[calc(100vh-170px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {/* Category: MAIN NAVIGATION */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Main Navigation</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'dashboard'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <Home className="w-4 h-4" />
+                                <span>Dashboard</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'dashboard' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                        </div>
+
+                        {/* Category: ACADEMIC DATA */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Academic Data</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/departments')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'departments'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <Building className="w-4 h-4" />
+                                <span>Departments</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'departments' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'courses'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <BookOpen className="w-4 h-4" />
+                                <span>Course Catalog</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'courses' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/questions')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'questions'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <HelpCircle className="w-4 h-4" />
+                                <span>Past Questions</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'questions' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                        </div>
+
+                        {/* Category: USER MANAGEMENT */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-500">User Management</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/users')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'users'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <Users className="w-4 h-4" />
+                                <span>User Control</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'users' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                        </div>
+
+                        {/* Category: FINANCIALS & TRAFFIC */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Financials & Traffic</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/payments')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'payments'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <CreditCard className="w-4 h-4" />
+                                <span>Payments Control</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'payments' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/analytics')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'analytics'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <Activity className="w-4 h-4" />
+                                <span>Usage Analytics</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'analytics' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                        </div>
+
+                        {/* Category: SYSTEM CONFIG */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-500">System Configuration</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/app')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'app'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
+                                        : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
+                                }`}
+                            >
+                                <SettingsIcon className="w-4 h-4" />
+                                <span>App Settings</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'app' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                            </button>
+                        </div>
                     </nav>
                 </div>
 
-                {/* Footer Exit Link */}
-                <div className="p-6 border-t border-slate-900">
-                    <button
-                        onClick={() => handleCourseTabNavigate('/')}
-                        className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs uppercase tracking-widest font-black text-slate-400 hover:text-white hover:bg-slate-900 transition duration-200 border border-slate-800"
-                    >
-                        <Home className="w-4 h-4" />
-                        <span>Exit Admin Panel</span>
-                    </button>
-                </div>
+
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
+            <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto bg-[#14181c]">
                 {/* Top Header Bar */}
-                <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs uppercase tracking-widest font-black text-slate-400 hidden sm:inline">Admin Desk</span>
-                        <span className="text-slate-300 hidden sm:inline">/</span>
-                        <span className="text-sm font-bold text-slate-800 capitalize">
-                            {activeTab === 'app' ? 'App Controls' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'users' ? 'User Control' : activeTab}
-                        </span>
+                <header className="h-14 bg-[#1e2229] border-b border-[#2b303c] px-6 flex items-center justify-between sticky top-0 z-30 shadow-md flex-shrink-0 text-slate-350">
+                    <div className="flex items-center gap-4">
+                        <button className="text-slate-400 hover:text-white transition">
+                            <MenuIcon className="w-5 h-5" />
+                        </button>
+
+                        <button
+                            className="text-[10px] uppercase font-black hover:text-white transition tracking-widest text-slate-400"
+                        >
+                            Documentation
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-4 relative">
-                        <div className="hidden sm:flex flex-col text-right">
-                            <span className="text-sm font-bold text-slate-800 leading-tight">{userProfile.display_name || 'Administrator'}</span>
-                            <span className="text-[10px] text-lime-600 font-bold uppercase tracking-wider mt-0.5">System Admin</span>
-                        </div>
+                        <button className="text-slate-400 hover:text-white transition">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </button>
+                        
+                        <button className="text-slate-400 hover:text-white transition relative">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[7px] font-black border border-[#1e2229]">3</span>
+                        </button>
+
+                        <button className="text-slate-400 hover:text-white transition relative">
+                            <Bell className="w-4 h-4" />
+                            <span className="absolute -top-1.5 -right-1.5 bg-yellow-500 text-slate-950 rounded-full w-3.5 h-3.5 flex items-center justify-center text-[7px] font-black border border-[#1e2229]">15</span>
+                        </button>
+
+                        <button className="text-slate-400 hover:text-white transition">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4h4m12 4V4h-4M4 16v4h4m12-4v4h-4"></path></svg>
+                        </button>
+
+                        <button className="text-slate-400 hover:text-white transition">
+                            <Moon className="w-4 h-4" />
+                        </button>
 
                         <button 
                             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100 outline-none"
+                            className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-800 transition outline-none"
                         >
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-lime-500 to-emerald-600 flex items-center justify-center text-slate-950 font-bold overflow-hidden shadow-md shadow-lime-500/10">
+                            <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-350 font-bold overflow-hidden border border-slate-700">
                                 {userProfile.photo_url ? (
                                     <img src={userProfile.photo_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
                                     (userProfile.display_name || 'A').charAt(0).toUpperCase()
                                 )}
                             </div>
-                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                            <span className="text-xs font-bold text-slate-300 hidden md:inline">{userProfile.display_name || 'Alexander Pierce'}</span>
                         </button>
-
+                        
                         {isProfileMenuOpen && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setIsProfileMenuOpen(false)}></div>
-                                <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-slate-100 shadow-2xl rounded-2xl p-2 z-50 flex flex-col gap-1 transform origin-top-right transition-all">
-                                    <div className="px-3 py-2 border-b border-slate-50">
-                                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">System Account</p>
-                                        <p className="text-xs font-bold text-slate-800 truncate mt-1">{userProfile.email}</p>
+                                <div className="absolute right-0 top-full mt-2 w-60 bg-[#1e2229] border border-[#2b303c] shadow-2xl rounded-xl p-2 z-50 flex flex-col gap-1 text-slate-300">
+                                    <div className="px-3 py-2 border-b border-[#2b303c]">
+                                        <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black leading-none">System Account</p>
+                                        <p className="text-xs font-bold text-slate-200 truncate mt-1">{userProfile.email}</p>
                                     </div>
 
                                     <button
@@ -1969,22 +2124,13 @@ FORMAT:
                                             setIsProfileMenuOpen(false);
                                             handleCourseTabNavigate('/admin/app');
                                         }}
-                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-[#242930] hover:text-white transition"
                                     >
-                                        <SettingsIcon className="w-4 h-4 text-slate-450" />
+                                        <SettingsIcon className="w-3.5 h-3.5 text-slate-450" />
                                         <span>System Configuration</span>
                                     </button>
 
-                                    <button
-                                        onClick={() => {
-                                            setIsProfileMenuOpen(false);
-                                            handleCourseTabNavigate('/');
-                                        }}
-                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all border-t border-slate-50 mt-1"
-                                    >
-                                        <LogOut className="w-4 h-4 text-red-400" />
-                                        <span>Exit Admin Desk</span>
-                                    </button>
+
                                 </div>
                             </>
                         )}
@@ -1992,15 +2138,15 @@ FORMAT:
                 </header>
 
                 {/* Mobile Navigation bar */}
-                <div className="flex md:hidden bg-slate-950 text-slate-400 px-4 py-2 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-slate-900 sticky top-16 z-20">
+                <div className="flex md:hidden bg-[#1e2229] text-slate-400 px-4 py-2 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-[#2b303c] sticky top-14 z-20">
                     {activeNavItems.map((item) => {
                         const isActive = activeTab === item.id;
                         return (
                             <button
                                 key={item.id}
                                 onClick={() => handleCourseTabNavigate(item.path)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition ${
-                                    isActive ? 'bg-lime-500 text-slate-950' : 'hover:bg-slate-900 text-slate-350'
+                                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider whitespace-nowrap transition ${
+                                    isActive ? 'bg-[#343a40] text-white shadow-sm font-black' : 'hover:bg-[#242930] text-slate-350'
                                 }`}
                             >
                                 {item.label}
@@ -2010,7 +2156,215 @@ FORMAT:
                 </div>
 
                 {/* Workspace Views */}
-                <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-slate-50">
+                <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-[#14181c]">
+                    {/* Content Header Title and Breadcrumbs */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-[#2b303c] gap-3">
+                        <div>
+                            <h1 className="text-2xl font-black text-slate-100 tracking-wide capitalize">
+                                {activeTab === 'app' ? 'App Settings' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab}
+                            </h1>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                            <span className="hover:text-slate-300 cursor-pointer transition" onClick={() => handleCourseTabNavigate('/admin')}>Home</span>
+                            <span>/</span>
+                            <span className="text-slate-350 capitalize font-black">{activeTab}</span>
+                        </div>
+                    </div>
+
+                    {activeTab === 'dashboard' && (
+                        <div className="space-y-6">
+                            {/* Info Boxes */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="bg-[#007bff] text-white rounded-xl overflow-hidden shadow-lg border border-blue-600 relative group select-none flex flex-col justify-between">
+                                    <div className="p-6">
+                                        <h3 className="text-3xl font-black">{paymentLogs.length}</h3>
+                                        <p className="text-xs uppercase font-black tracking-widest text-blue-100/90 mt-1">Total Payments</p>
+                                    </div>
+                                    <div className="absolute right-4 top-4 text-white/10 group-hover:scale-110 transition duration-300">
+                                        <CreditCard className="w-16 h-16" />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleCourseTabNavigate('/admin/payments')}
+                                        className="w-full bg-black/15 hover:bg-black/25 text-white/90 hover:text-white py-2 text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-1 transition border-t border-blue-500"
+                                    >
+                                        <span>More info</span>
+                                        <ArrowUpRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="bg-[#198754] text-white rounded-xl overflow-hidden shadow-lg border border-green-600 relative group select-none flex flex-col justify-between">
+                                    <div className="p-6">
+                                        <h3 className="text-3xl font-black">{aiRequestLogs.length}</h3>
+                                        <p className="text-xs uppercase font-black tracking-widest text-green-100/90 mt-1">AI Inference Queries</p>
+                                    </div>
+                                    <div className="absolute right-4 top-4 text-white/10 group-hover:scale-110 transition duration-300">
+                                        <Sparkles className="w-16 h-16" />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleCourseTabNavigate('/admin/analytics')}
+                                        className="w-full bg-black/15 hover:bg-black/25 text-white/90 hover:text-white py-2 text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-1 transition border-t border-green-500"
+                                    >
+                                        <span>More info</span>
+                                        <ArrowUpRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="bg-[#ffc107] text-[#1f2d3d] rounded-xl overflow-hidden shadow-lg border border-yellow-500 relative group select-none flex flex-col justify-between">
+                                    <div className="p-6">
+                                        <h3 className="text-3xl font-black">{allUsersList.length}</h3>
+                                        <p className="text-xs uppercase font-black tracking-widest text-[#1f2d3d]/80 mt-1">User Registrations</p>
+                                    </div>
+                                    <div className="absolute right-4 top-4 text-black/5 group-hover:scale-110 transition duration-300">
+                                        <Users className="w-16 h-16" />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleCourseTabNavigate('/admin/users')}
+                                        className="w-full bg-black/5 hover:bg-black/10 text-[#1f2d3d]/90 hover:text-black py-2 text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-1 transition border-t border-yellow-400"
+                                    >
+                                        <span>More info</span>
+                                        <ArrowUpRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="bg-[#dc3545] text-white rounded-xl overflow-hidden shadow-lg border border-red-600 relative group select-none flex flex-col justify-between">
+                                    <div className="p-6">
+                                        <h3 className="text-3xl font-black">
+                                            {allUsersList.filter(u => u.subscription_status === 'premium').length}
+                                        </h3>
+                                        <p className="text-xs uppercase font-black tracking-widest text-red-100/90 mt-1">Premium Students</p>
+                                    </div>
+                                    <div className="absolute right-4 top-4 text-white/10 group-hover:scale-110 transition duration-300">
+                                        <Shield className="w-16 h-16" />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleCourseTabNavigate('/admin/users')}
+                                        className="w-full bg-black/15 hover:bg-black/25 text-white/90 hover:text-white py-2 text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-1 transition border-t border-red-500"
+                                    >
+                                        <span>More info</span>
+                                        <ArrowUpRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Charts Row */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Line Chart */}
+                                <div className="lg:col-span-2 bg-[#1e2229] border border-[#2b303c] rounded-xl p-5 shadow-lg space-y-4">
+                                    <div className="flex justify-between items-center border-b border-[#2b303c] pb-3">
+                                        <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400">AI Request Traffic Value</h4>
+                                        <span className="text-[10px] text-lime-400 font-bold bg-lime-950 px-2.5 py-0.5 rounded-full">Last 7 Hours</span>
+                                    </div>
+                                    
+                                    <div className="w-full h-48 relative">
+                                        {(() => {
+                                            const hours = Array.from({ length: 7 }, (_, i) => {
+                                                const d = new Date();
+                                                d.setHours(d.getHours() - i);
+                                                return d;
+                                            }).reverse();
+
+                                            const history = hours.map(h => {
+                                                const start = new Date(h).setMinutes(0, 0, 0);
+                                                const end = new Date(h).setMinutes(59, 59, 999);
+                                                const count = aiRequestLogs.filter(log => log.timestamp >= start && log.timestamp <= end).length;
+                                                return {
+                                                    label: h.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                                    count
+                                                };
+                                            });
+
+                                            const maxVal = Math.max(...history.map(d => d.count), 5);
+                                            const points = history.map((d, idx) => {
+                                                const x = 30 + idx * 70;
+                                                const y = 140 - (d.count / maxVal) * 100;
+                                                return { x, y };
+                                            });
+
+                                            return (
+                                                <svg className="w-full h-full" viewBox="0 0 500 170">
+                                                    {/* Grid Lines */}
+                                                    <line x1="30" y1="40" x2="470" y2="40" stroke="#2b303c" strokeWidth="1" strokeDasharray="3,3" />
+                                                    <line x1="30" y1="90" x2="470" y2="90" stroke="#2b303c" strokeWidth="1" strokeDasharray="3,3" />
+                                                    <line x1="30" y1="140" x2="470" y2="140" stroke="#2b303c" strokeWidth="1" />
+                                                    
+                                                    {/* SVG Path */}
+                                                    {points.length > 0 && (
+                                                        <>
+                                                            <path
+                                                                d={`M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`}
+                                                                fill="none"
+                                                                stroke="#198754"
+                                                                strokeWidth="3.5"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                            />
+                                                            <path
+                                                                d={`M 30,140 L ${points.map(p => `${p.x},${p.y}`).join(' L ')} L 450,140 Z`}
+                                                                fill="url(#chartGrad)"
+                                                                opacity="0.15"
+                                                            />
+                                                        </>
+                                                    )}
+                                                    
+                                                    {/* Data Dots */}
+                                                    {points.map((p, idx) => (
+                                                        <g key={idx}>
+                                                            <circle cx={p.x} cy={p.y} r="4.5" fill="#198754" stroke="#1e2229" strokeWidth="1.5" />
+                                                            <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#198754" className="text-[9px] font-black">{history[idx].count}</text>
+                                                        </g>
+                                                    ))}
+
+                                                    {/* X Axis Labels */}
+                                                    {points.map((p, idx) => (
+                                                        <text key={idx} x={p.x} y="158" textAnchor="middle" fill="#525c6c" className="text-[8px] font-bold">{history[idx].label}</text>
+                                                    ))}
+
+                                                    <defs>
+                                                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="0%" stopColor="#198754" />
+                                                            <stop offset="100%" stopColor="#198754" stopOpacity="0" />
+                                                        </linearGradient>
+                                                    </defs>
+                                                </svg>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+
+                                {/* World Map representation */}
+                                <div className="bg-[#007bff] text-white rounded-xl p-5 shadow-lg border border-blue-600 flex flex-col justify-between h-full relative overflow-hidden group select-none min-h-[240px]">
+                                    <div className="flex justify-between items-center border-b border-white/20 pb-3">
+                                        <h4 className="font-black text-xs uppercase tracking-widest text-blue-100">User Distribution Map</h4>
+                                        <div className="flex items-center gap-1 bg-black/10 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-lime-400 animate-pulse"></span>
+                                            <span>Live Load</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 flex items-center justify-center p-4 relative opacity-90 hover:opacity-100 transition duration-300">
+                                        <svg className="w-full max-w-[280px] h-auto opacity-75" viewBox="0 0 100 50" fill="currentColor">
+                                            <path d="M5,10 h5 v2 h-5 z M20,8 h8 v4 h-8 z M15,22 h10 v6 h-10 z M45,15 h6 v6 h-6 z M60,10 h15 v8 h-15 z M75,25 h8 v4 h-8 z M40,30 h8 v3 h-8 z M25,35 h6 v2 h-6 z M70,5 h4 v2 h-4 z M50,40 h5 v2 h-5 z" fill="rgba(255,255,255,0.45)" />
+                                            <circle cx="24" cy="15" r="1.5" fill="#a3e635" className="animate-ping" />
+                                            <circle cx="24" cy="15" r="1" fill="#a3e635" />
+                                            <circle cx="68" cy="14" r="1.5" fill="#a3e635" className="animate-ping" />
+                                            <circle cx="68" cy="14" r="1" fill="#a3e635" />
+                                            <circle cx="48" cy="22" r="1.5" fill="#a3e635" className="animate-ping" />
+                                            <circle cx="48" cy="22" r="1" fill="#a3e635" />
+                                        </svg>
+
+                                        <div className="absolute left-2 bottom-2 bg-black/25 rounded border border-white/10 flex flex-col font-mono text-[9px] font-black">
+                                            <button className="px-1.5 py-0.5 border-b border-white/10 hover:bg-black/10">+</button>
+                                            <button className="px-1.5 py-0.5 hover:bg-black/10">-</button>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-[10px] font-black text-blue-100 uppercase tracking-widest text-center pt-2 select-none">
+                                        Vantutor Active Hubs (Global)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {activeTab === 'app' && (
                         <div className="space-y-6 max-w-3xl">
                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-5">
@@ -2982,7 +3336,7 @@ FORMAT:
                                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                                     <h3 className="font-bold text-slate-800 text-sm">Users List</h3>
                                     <button 
-                                        onClick={fetchUsers}
+                                        onClick={() => { void fetchUsers(); void fetchUsageLogs(); }}
                                         className="text-xs uppercase tracking-widest font-black text-lime-650 hover:text-lime-700 flex items-center gap-1.5 transition"
                                     >
                                         <RefreshCw className="w-3.5 h-3.5" />
@@ -2993,13 +3347,14 @@ FORMAT:
                                     {isUsersLoading ? (
                                         <div className="p-12 text-center text-slate-400 font-medium">Loading users...</div>
                                     ) : (
-                                        <table className="w-full min-w-[920px] text-left border-collapse">
+                                        <table className="w-full min-w-[1050px] text-left border-collapse">
                                             <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
                                                 <tr>
                                                     <th className="px-6 py-4">User</th>
                                                     <th className="px-6 py-4">Email</th>
                                                     <th className="px-6 py-4">Dept / Level</th>
                                                     <th className="px-6 py-4">Last Active</th>
+                                                    <th className="px-6 py-4">Requests (5m / 10m / 30m / 1h)</th>
                                                     <th className="px-6 py-4">Activation Status</th>
                                                     <th className="px-6 py-4">Role</th>
                                                 </tr>
@@ -3025,6 +3380,22 @@ FORMAT:
                                                         </td>
                                                         <td className="px-6 py-4 text-slate-450 font-medium text-[10px]">
                                                             {user.last_activity_date ? new Date(user.last_activity_date).toLocaleString() : 'Never'}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-purple-500/5 animate-fade-in" title="Requests in last 5 minutes">
+                                                                    5m: <span className="font-black text-purple-900">{userRequestCounts[user.uid]?.m5 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-blue-500/5 animate-fade-in" title="Requests in last 10 minutes">
+                                                                    10m: <span className="font-black text-blue-900">{userRequestCounts[user.uid]?.m10 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-indigo-500/5 animate-fade-in" title="Requests in last 30 minutes">
+                                                                    30m: <span className="font-black text-indigo-900">{userRequestCounts[user.uid]?.m30 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-pink-50 text-pink-700 border border-pink-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-pink-500/5 animate-fade-in" title="Requests in last 1 hour">
+                                                                    1h: <span className="font-black text-pink-900">{userRequestCounts[user.uid]?.h1 || 0}</span>
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             {user.subscription_status === 'premium' ? (

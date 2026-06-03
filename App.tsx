@@ -913,62 +913,19 @@ Write a concise but specific assessment based only on the facts above. Do not in
         } as UserProfile;
 
         return (
-            <div className="min-h-screen md:h-screen flex flex-col md:flex-row bg-gray-50 overflow-x-hidden md:overflow-hidden">
-                <Sidebar
-                    activeItem="admin"
-                    onItemClick={setActiveItem}
+            <ErrorBoundary>
+                <AdminPanel
                     userProfile={mockAdminProfile}
-                    onLogout={() => {
-                        setIsAdminAuthenticated(false);
-                        setActiveItem('dashboard');
-                    }}
-                    isMobileSidebarOpen={isMobileSidebarOpen}
-                    onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
-                    items={adminNavigationItems}
-                    secondaryItems={[]}
-                />
-                
-                <main className="flex-1 flex flex-col min-w-0">
-                    <Header 
-                        currentPageLabel="Admin Control Panel"
-                        onMenuClick={() => setIsMobileSidebarOpen(true)}
-                        rightActions={
-                            <div className="flex items-center gap-4">
-                                <span className="text-xs font-semibold px-2 py-1 bg-lime-100 text-lime-700 rounded-full uppercase">Admin Workspace</span>
-                                <button 
-                                    onClick={() => {
-                                        setIsAdminAuthenticated(false);
-                                        setActiveItem('dashboard');
-                                    }}
-                                    className="text-sm font-medium text-gray-500 hover:text-gray-900"
-                                >
-                                    Exit Admin
-                                </button>
-                            </div>
+                    pathname={adminPath}
+                    onNavigate={(path) => {
+                        setAdminPath(path);
+                        if (typeof window !== 'undefined') { window.history.pushState(null, '', path); }
+                        if (!path.startsWith('/admin')) {
+                            setActiveItem(resolveActiveItemFromPath(path));
                         }
-                    />
-                    <div className="flex-1 min-h-0 px-4 pb-20 md:pb-8 md:overflow-y-auto">
-                        <ErrorBoundary>
-                            <AdminPanel
-                                userProfile={mockAdminProfile}
-                                pathname={adminPath}
-                                onNavigate={(path) => {
-                                    setAdminPath(path);
-                                    if (typeof window !== 'undefined') { window.history.pushState(null, '', path); }
-                                }}
-                            />
-                        </ErrorBoundary>
-                    </div>
-                </main>
-
-                <BottomNavBar
-                    activeItem="admin"
-                    onItemClick={setActiveItem}
-                    isVisible={!isMobileSidebarOpen}
-                    userProfile={mockAdminProfile}
-                    items={adminNavigationItems}
+                    }}
                 />
-            </div>
+            </ErrorBoundary>
         );
     }
     
