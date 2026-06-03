@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'firebase/database';
 import type { UserProfile, LeaderboardEntry } from '../types';
@@ -42,19 +43,37 @@ interface LeaderboardProps {
 
 export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
   const [activeTab, setActiveTab] = useState<'overall' | 'weekly'>('overall');
-  const [overallData, setOverallData] = useState<LeaderboardEntry[]>([]);
-  const [weeklyData, setWeeklyData] = useState<LeaderboardEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [overallData, setOverallData] = useState<LeaderboardEntry[]>(() => {
+    return readCachedJson<LeaderboardEntry[]>(`vantutor_leaderboard_overall_${userProfile.department_id}`, []);
+  });
+  const [weeklyData, setWeeklyData] = useState<LeaderboardEntry[]>(() => {
+    const weekId = getWeekId(new Date());
+    return readCachedJson<LeaderboardEntry[]>(`vantutor_leaderboard_weekly_${weekId}_${userProfile.department_id}`, []);
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = readCachedJson<LeaderboardEntry[]>(
+      `vantutor_leaderboard_${activeTab}_${userProfile.department_id}`,
+      []
+    );
+    return cached.length === 0;
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    
     const weekId = getWeekId(new Date());
     const path = activeTab === 'overall' 
         ? `leaderboard_overall/${userProfile.department_id}` 
         : `leaderboard_weekly/${weekId}/${userProfile.department_id}`;
+    const cacheKey = activeTab === 'overall'
+        ? `vantutor_leaderboard_overall_${userProfile.department_id}`
+        : `vantutor_leaderboard_weekly_${weekId}_${userProfile.department_id}`;
+
+    const cached = readCachedJson<LeaderboardEntry[]>(cacheKey, []);
+    if (cached.length === 0) {
+      setIsLoading(true);
+    }
+    setError(null);
+    
     const leaderboardRef = query(dbRef(db, path), orderByChild('xp'), limitToLast(100));
 
     const unsubscribe = onValue(leaderboardRef, (snapshot) => {
@@ -66,12 +85,14 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
             // Firebase sorts ascending by child, so we reverse for descending leaderboard
             const sortedData = data.sort((a, b) => (b.xp || 0) - (a.xp || 0));
             
+            writeCachedJson(cacheKey, sortedData);
             if (activeTab === 'overall') {
                 setOverallData(sortedData as LeaderboardEntry[]);
             } else {
                 setWeeklyData(sortedData as LeaderboardEntry[]);
             }
         } else {
+            writeCachedJson(cacheKey, []);
             if (activeTab === 'overall') setOverallData([]);
             else setWeeklyData([]);
         }
