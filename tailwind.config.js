@@ -8,6 +8,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Lora', 'Georgia', 'ui-serif', 'serif'],
+        serif: ['Lora', 'Georgia', 'ui-serif', 'serif'],
+      },
       colors: {
         brand: {
           50: '#EEF8FD',

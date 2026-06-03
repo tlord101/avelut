@@ -5,6 +5,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html, body, input, select, textarea, button {
+    font-family: 'Lora', Georgia, ui-serif, serif;
+  }
+}
+
 @layer utilities {
   @keyframes glow-pulse {
     50% {
