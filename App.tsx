@@ -5,7 +5,7 @@ import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updatePr
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course, DashboardAssessment } from './types';
 import { Login } from './components/Login';
-import { SignUp } from './components/SignUp';
+import { SignUp } from './components/SignUp'; 
 import { AdminLogin } from './components/AdminLogin';
 import { UploadCenter } from './components/UploadCenter';
 import { Onboarding } from './components/Onboarding';
