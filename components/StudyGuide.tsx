@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createVanTutorAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
@@ -1055,8 +1056,13 @@ interface StudyGuideProps {
   userProgress: UserProgress;
 }
 export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgress }) => {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>(() => {
+    return readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
+    return cached.length === 0;
+  });
   const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string }) | null>(null);
     const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'second', searchTerm: '' });
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
@@ -1120,38 +1126,38 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         ));
 
         // Enrich each course with syllabus/topics from shared canonical path if available
-        const enrichedCourses: Course[] = [];
-        for (const course of coursesForLevel) {
-            try {
-                if (course.textbook_shared_key) {
-                    const sharedRef = dbRef(db, `textbook_contexts/shared/${course.textbook_shared_key}`);
-                    const sharedSnap = await get(sharedRef);
-                    if (sharedSnap.exists()) {
-                        const sharedVal = sharedSnap.val();
-                        const syllabus = Array.isArray(sharedVal.syllabus) ? sharedVal.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
-                        enrichedCourses.push({ ...course, topics: syllabus });
-                        continue;
+        const enrichedCourses: Course[] = await Promise.all(
+            coursesForLevel.map(async (course) => {
+                try {
+                    if (course.textbook_shared_key) {
+                        const sharedRef = dbRef(db, `textbook_contexts/shared/${course.textbook_shared_key}`);
+                        const sharedSnap = await get(sharedRef);
+                        if (sharedSnap.exists()) {
+                            const sharedVal = sharedSnap.val();
+                            const syllabus = Array.isArray(sharedVal.syllabus) ? sharedVal.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
+                            return { ...course, topics: syllabus };
+                        }
                     }
-                }
 
-                // Fallback: per-department textbook context
-                const perDeptRef = dbRef(db, `textbook_contexts/${userProfile.department_id}/${course.level}/${course.course_name}`);
-                const perDeptSnap = await get(perDeptRef);
-                if (perDeptSnap.exists()) {
-                    const val = perDeptSnap.val();
-                    const syllabus = Array.isArray(val.syllabus) ? val.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
-                    enrichedCourses.push({ ...course, topics: syllabus });
-                    continue;
-                }
+                    // Fallback: per-department textbook context
+                    const perDeptRef = dbRef(db, `textbook_contexts/${userProfile.department_id}/${course.level}/${course.course_name}`);
+                    const perDeptSnap = await get(perDeptRef);
+                    if (perDeptSnap.exists()) {
+                        const val = perDeptSnap.val();
+                        const syllabus = Array.isArray(val.syllabus) ? val.syllabus.map((t, i) => sanitizeTopicMetadata(t, i)) : [];
+                        return { ...course, topics: syllabus };
+                    }
 
-                enrichedCourses.push(course);
-            } catch (e) {
-                console.error('Error enriching course with textbook syllabus:', e);
-                enrichedCourses.push(course);
-            }
-        }
+                    return course;
+                } catch (e) {
+                    console.error('Error enriching course with textbook syllabus:', e);
+                    return course;
+                }
+            })
+        );
 
         setCourses(enrichedCourses);
+        writeCachedJson(`vantutor_courses_${userProfile.uid}`, enrichedCourses);
       } catch (err) {
         console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');

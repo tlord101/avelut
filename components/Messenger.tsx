@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { readCachedJson, writeCachedJson } from '../utils/cache';
 import type { UserProfile } from '../types';
 import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
@@ -101,26 +102,7 @@ const MESSENGER_CACHE_VERSION = 'v1';
 
 const getMessengerCacheKey = (uid: string, suffix: string) => `vantutor_messenger_${MESSENGER_CACHE_VERSION}_${uid}_${suffix}`;
 
-const readCachedJson = <T,>(key: string, fallback: T): T => {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch (error) {
-    console.warn('Failed to read messenger cache:', error);
-    return fallback;
-  }
-};
 
-const writeCachedJson = (key: string, value: unknown) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.warn('Failed to write messenger cache:', error);
-  }
-};
 
 // =======================================================
 // FUNCTIONAL VOICE NOTE PLAYER COMPONENT

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { readCachedJson, writeCachedJson } from './utils/cache';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
@@ -251,7 +252,7 @@ const App: React.FC = () => {
     const [userProgress, setUserProgress] = useState<UserProgress>({});
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
-    const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+
     
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(true);
@@ -418,12 +419,26 @@ const App: React.FC = () => {
             setIsProfileLoading(false);
             return;
         }
-        setIsProfileLoading(true);
+        const cacheKey = `vantutor_profile_${user.uid}`;
+        const cachedProfile = readCachedJson<UserProfile | null>(cacheKey, null);
+        if (cachedProfile) {
+            setUserProfile(cachedProfile);
+            setIsProfileLoading(false);
+            if (!cachedProfile.department_id) {
+                setIsOnboarding(true);
+            } else {
+                setIsOnboarding(false);
+            }
+        } else {
+            setIsProfileLoading(true);
+        }
+
         const userRef = dbRef(db, `users/${user.uid}`);
         
         const unsubscribeProfile = onValue(userRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
+                writeCachedJson(cacheKey, data);
                 if (!data.department_id) {
                     setIsOnboarding(true);
                 } else {
@@ -444,7 +459,9 @@ const App: React.FC = () => {
             setIsProfileLoading(false);
         }, (error) => {
             console.error("Error fetching user profile:", error);
-            addToast("Failed to load your profile.", "error");
+            if (!cachedProfile) {
+                addToast("Failed to load your profile.", "error");
+            }
             setIsProfileLoading(false);
         });
         
@@ -475,16 +492,7 @@ const App: React.FC = () => {
         syncAuthIdentityToProfile();
     }, [user]);
 
-    useEffect(() => {
-        if (!userProfile) return;
-        const usersRef = dbRef(db, 'users');
-        const unsubscribeAllUsers = onValue(usersRef, (snapshot) => {
-            const data = snapshot.val() || {};
-            const userList: UserProfile[] = Object.values(data);
-            setAllUsers(userList.filter(u => u.uid !== userProfile.uid));
-        });
-        return () => off(usersRef, 'value', unsubscribeAllUsers);
-    }, [userProfile]);
+
 
     useEffect(() => {
         if (!userProfile || !user) return;
@@ -515,9 +523,15 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (!userProfile) return;
+        const cacheKey = `vantutor_progress_${userProfile.uid}`;
+        const cachedProgress = readCachedJson<UserProgress>(cacheKey, {});
+        setUserProgress(cachedProgress);
+
         const progressRef = dbRef(db, `user_progress/${userProfile.uid}`);
         const unsubscribeProgress = onValue(progressRef, (snapshot) => {
-            setUserProgress(snapshot.val() || {});
+            const data = snapshot.val() || {};
+            setUserProgress(data);
+            writeCachedJson(cacheKey, data);
         });
         return () => { off(progressRef, 'value', unsubscribeProgress); };
     }, [userProfile]);
@@ -527,11 +541,28 @@ const App: React.FC = () => {
             setUnreadMessagesCount(0);
             return;
         }
+
+        const cacheKeyDashboard = `vantutor_dashboard_${userProfile.uid}`;
+        const cachedDashboard = readCachedJson<DashboardData | null>(cacheKeyDashboard, null);
+        if (cachedDashboard) {
+            setDashboardData(cachedDashboard);
+        }
+
+        const cacheKeyNotif = `vantutor_notifications_${userProfile.uid}`;
+        const cachedNotif = readCachedJson<NotificationType[]>(cacheKeyNotif, []);
+        setNotifications(cachedNotif);
         
         const setupDashboardData = async () => {
             try {
-                const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
-                const departmentData = departmentSnapshot.val();
+                const deptCacheKey = `vantutor_dept_data_${userProfile.department_id}`;
+                let departmentData = readCachedJson<any>(deptCacheKey, null);
+                if (!departmentData) {
+                    const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
+                    departmentData = departmentSnapshot.val();
+                    if (departmentData) {
+                        writeCachedJson(deptCacheKey, departmentData);
+                    }
+                }
                 if (!departmentData) return;
 
                 const normalizedUserLevel = normalizeLevelValue(userProfile.level);
@@ -574,7 +605,7 @@ const App: React.FC = () => {
                 const understandingScore = Math.max(0, Math.min(100, Math.round((progressPercent * 0.55) + (examAverageScore * 0.45))));
                 const understandingLabel = understandingScore >= 85 ? 'Excellent' : understandingScore >= 70 ? 'Strong' : understandingScore >= 50 ? 'Growing' : 'Needs focus';
 
-                setDashboardData({ 
+                const nextDashboardData = { 
                     totalTopics, 
                     completedTopicsCount, 
                     completedCoursesCount,
@@ -593,7 +624,9 @@ const App: React.FC = () => {
                         `Average exam score: ${Math.round(examAverageScore)}%`,
                     ],
                     examHistory: examHistory
-                });
+                };
+                setDashboardData(nextDashboardData);
+                writeCachedJson(cacheKeyDashboard, nextDashboardData);
             } catch (error) {
                 console.error("Error setting up dashboard data:", (error as Error).message || error);
             }
@@ -607,7 +640,9 @@ const App: React.FC = () => {
             const notificationList: NotificationType[] = Object.entries(data).map(([id, n]: [string, any]) => ({
                 id, ...n, timestamp: n.timestamp
             })).sort((a,b) => b.timestamp - a.timestamp);
-            setNotifications(notificationList.slice(0, 20));
+            const truncatedNotif = notificationList.slice(0, 20);
+            setNotifications(truncatedNotif);
+            writeCachedJson(cacheKeyNotif, truncatedNotif);
         });
 
         const userChatsRef = dbRef(db, `user_chats/${userProfile.uid}`);
@@ -622,7 +657,11 @@ const App: React.FC = () => {
         const unsubscribeExamHistory = onValue(examHistoryRef, (snapshot) => {
             const data = snapshot.val() || {};
             const examHistory = Object.values(data).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
-            setDashboardData(prev => prev ? { ...prev, examHistory } : null);
+            setDashboardData(prev => {
+                const next = prev ? { ...prev, examHistory } : null;
+                if (next) writeCachedJson(cacheKeyDashboard, next);
+                return next;
+            });
         });
 
         return () => {
@@ -676,7 +715,11 @@ Write a concise but specific assessment based only on the facts above. Do not in
                     evidence: dashboardData.backedFacts,
                     generated_at: Date.now(),
                 };
-                setDashboardData(prev => prev ? { ...prev, geminiAssessment: fallbackAssessment } : prev);
+                setDashboardData(prev => {
+                    const next = prev ? { ...prev, geminiAssessment: fallbackAssessment } : prev;
+                    if (next) writeCachedJson(`vantutor_dashboard_${userProfile.uid}`, next);
+                    return next;
+                });
                 return;
             }
 
@@ -719,7 +762,11 @@ Write a concise but specific assessment based only on the facts above. Do not in
                     throw new Error(result.message || 'Failed to generate dashboard assessment.');
                 }
 
-                setDashboardData(prev => prev ? { ...prev, geminiAssessment: result.data as DashboardAssessment } : prev);
+                setDashboardData(prev => {
+                    const next = prev ? { ...prev, geminiAssessment: result.data as DashboardAssessment } : prev;
+                    if (next) writeCachedJson(`vantutor_dashboard_${userProfile.uid}`, next);
+                    return next;
+                });
             } catch (error) {
                 console.error('Failed to generate dashboard assessment:', error);
             }

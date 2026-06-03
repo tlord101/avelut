@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createVanTutorAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db } from '../firebase';
@@ -40,13 +41,21 @@ const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
 
 
 const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHistoryItem) => void }> = ({ userProfile, onReview }) => {
-    const [history, setHistory] = useState<ExamHistoryItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [history, setHistory] = useState<ExamHistoryItem[]>(() => {
+        return readCachedJson<ExamHistoryItem[]>(`vantutor_exam_history_${userProfile.uid}`, []);
+    });
+    const [isLoading, setIsLoading] = useState(() => {
+        const cached = readCachedJson<ExamHistoryItem[]>(`vantutor_exam_history_${userProfile.uid}`, []);
+        return cached.length === 0;
+    });
 
     useEffect(() => {
         const historyRef = dbRef(db, `exam_history/${userProfile.uid}`);
-        
-        setIsLoading(true);
+        const cacheKey = `vantutor_exam_history_${userProfile.uid}`;
+        const cached = readCachedJson<ExamHistoryItem[]>(cacheKey, []);
+        if (cached.length === 0) {
+            setIsLoading(true);
+        }
         const unsubscribe = onValue(historyRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -58,8 +67,10 @@ const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHis
                     return timeB - timeA;
                 });
                 setHistory(historyList);
+                writeCachedJson(cacheKey, historyList);
             } else {
                 setHistory([]);
+                writeCachedJson(cacheKey, []);
             }
             setIsLoading(false);
         }, (error) => {
@@ -124,10 +135,17 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; explanation: string } | null>(null);
   const [score, setScore] = useState(0);
   const [reviewExam, setReviewExam] = useState<ExamHistoryItem | null>(null);
-  const [completedTopicNames, setCompletedTopicNames] = useState<string[]>([]);
-  const [availablePQSubjects, setAvailablePQSubjects] = useState<string[]>([]);
+  const [completedTopicNames, setCompletedTopicNames] = useState<string[]>(() => {
+    return readCachedJson<string[]>(`vantutor_completed_topics_${userProfile.uid}`, []);
+  });
+  const [availablePQSubjects, setAvailablePQSubjects] = useState<string[]>(() => {
+    return readCachedJson<string[]>(`vantutor_pq_subjects_${userProfile.department_id}_${userProfile.level}`, []);
+  });
   const [selectedPQSubject, setSelectedPQSubject] = useState<string>('');
-  const [isTopicDataLoading, setIsTopicDataLoading] = useState(true);
+  const [isTopicDataLoading, setIsTopicDataLoading] = useState(() => {
+    const cached = readCachedJson<string[]>(`vantutor_completed_topics_${userProfile.uid}`, []);
+    return cached.length === 0;
+  });
   const [timeLeft, setTimeLeft] = useState(0);
   const { addToast } = useToast();
   const { attemptApiCall } = useApiLimiter();
@@ -137,14 +155,19 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const isGeminiConfigured = Boolean(ai);
 
   useEffect(() => {
-    // Check for available subjects (courses) in Past Questions FOR THE USER'S DEPT AND LEVEL
+    const cacheKey = `vantutor_pq_subjects_${userProfile.department_id}_${userProfile.level}`;
     const pqRef = dbRef(db, `past_questions/${userProfile.department_id}/${userProfile.level}`);
     get(pqRef).then(snap => {
         if(snap.exists()) {
-            setAvailablePQSubjects(Object.keys(snap.val()));
+            const subjects = Object.keys(snap.val());
+            setAvailablePQSubjects(subjects);
+            writeCachedJson(cacheKey, subjects);
         } else {
             setAvailablePQSubjects([]);
+            writeCachedJson(cacheKey, []);
         }
+    }).catch(err => {
+        console.error("Failed to fetch PQ subjects:", err);
     });
   }, [userProfile.department_id, userProfile.level]);
 
@@ -156,13 +179,13 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
   useEffect(() => {
     const fetchCompletedTopics = async () => {
-        setIsTopicDataLoading(true);
         const completedTopicIds = Object.keys(userProgress).filter(
             topicId => userProgress[topicId]?.is_complete
         );
 
         if (completedTopicIds.length === 0) {
             setCompletedTopicNames([]);
+            writeCachedJson(`vantutor_completed_topics_${userProfile.uid}`, []);
             setIsTopicDataLoading(false);
             return;
         }
@@ -182,6 +205,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                     });
                 });
                 setCompletedTopicNames(topicNames);
+                writeCachedJson(`vantutor_completed_topics_${userProfile.uid}`, topicNames);
             }
         } catch (error) {
             console.error("Error fetching department data for exam generation:", error);
