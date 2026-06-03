@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
 admin.initializeApp();
 
 // 1. Send push notification when a new notification is written to the database (admin pushes)
@@ -165,3 +166,59 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
 
     return Promise.all(promises);
 });
+
+// 4. Programmatic SMTP email delivery from database queue
+exports.processEmailQueue = functions.database.ref('/email_queue/{queueId}')
+    .onCreate(async (snapshot, context) => {
+        const queueId = context.params.queueId;
+        const job = snapshot.val();
+        if (!job) return null;
+
+        try {
+            // Retrieve SMTP settings
+            const configSnap = await admin.database().ref('app_settings/email_config').once('value');
+            const config = configSnap.val();
+
+            if (!config || !config.host || !config.port || !config.user || !config.pass) {
+                throw new Error("SMTP configuration is missing or incomplete in app_settings/email_config.");
+            }
+
+            // Create transport
+            const transporter = nodemailer.createTransport({
+                host: config.host,
+                port: parseInt(config.port, 10),
+                secure: config.secure === true,
+                auth: {
+                    user: config.user,
+                    pass: config.pass
+                }
+            });
+
+            const fromName = config.from_name || 'VanTutor';
+            const fromEmail = config.from_email || config.user;
+
+            const mailOptions = {
+                from: `"${fromName}" <${fromEmail}>`,
+                to: fromEmail, // Send to self as main recipient
+                bcc: job.recipients, // Recipients in BCC to protect privacy
+                subject: job.subject,
+                text: job.body
+            };
+
+            await transporter.sendMail(mailOptions);
+
+            // Update queue item to success
+            return snapshot.ref.update({
+                status: 'success',
+                sent_at: Date.now()
+            });
+
+        } catch (error) {
+            console.error(`Error processing email queue job ${queueId}:`, error);
+            return snapshot.ref.update({
+                status: 'failed',
+                error_message: error.message,
+                failed_at: Date.now()
+            });
+        }
+    });

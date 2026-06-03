@@ -5,7 +5,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import { useAppSettings } from '../hooks/useAppSettings';
-import type { UserProfile, Question, Course, Topic } from '../types';
+import type { UserProfile, Question, Course, Topic, EmailConfig } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { MenuIcon } from './icons/MenuIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -85,7 +85,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments' | 'notifications' | 'emails';
+type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments' | 'notifications' | 'emails' | 'email-configs';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -94,7 +94,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'notifications', 'emails', 'app', 'analytics', 'payments'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'notifications', 'emails', 'app', 'analytics', 'payments', 'email-configs'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -374,6 +374,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [sentEmails, setSentEmails] = useState<any[]>([]);
     const [isSentNotificationsLoading, setIsSentNotificationsLoading] = useState(false);
     const [isSentEmailsLoading, setIsSentEmailsLoading] = useState(false);
+    const [emailConfig, setEmailConfig] = useState<EmailConfig>({
+        host: '',
+        port: 587,
+        user: '',
+        pass: '',
+        secure: false,
+        from_email: '',
+        from_name: ''
+    });
+    const [emailConfigDraft, setEmailConfigDraft] = useState<EmailConfig>({
+        host: '',
+        port: 587,
+        user: '',
+        pass: '',
+        secure: false,
+        from_email: '',
+        from_name: ''
+    });
+    const [isEmailConfigLoading, setIsEmailConfigLoading] = useState(false);
+    const [isEmailConfigSaving, setIsEmailConfigSaving] = useState(false);
     const { addToast } = useToast();
 
     // Analytics and Payments Real-Time Logging State
@@ -739,6 +759,106 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
+    };
+
+    const fetchEmailConfig = async () => {
+        setIsEmailConfigLoading(true);
+        try {
+            const snap = await get(dbRef(db, 'app_settings/email_config'));
+            if (snap.exists()) {
+                const config = snap.val() as EmailConfig;
+                const normalized = {
+                    host: config.host || '',
+                    port: typeof config.port === 'number' ? config.port : parseInt(config.port as any, 10) || 587,
+                    user: config.user || '',
+                    pass: config.pass || '',
+                    secure: !!config.secure,
+                    from_email: config.from_email || '',
+                    from_name: config.from_name || ''
+                };
+                setEmailConfig(normalized);
+                setEmailConfigDraft(normalized);
+            }
+        } catch (error) {
+            console.error("Error fetching SMTP config:", error);
+        } finally {
+            setIsEmailConfigLoading(false);
+        }
+    };
+
+    const handleSaveEmailConfig = async () => {
+        setIsEmailConfigSaving(true);
+        try {
+            const nextConfig = {
+                ...emailConfigDraft,
+                host: emailConfigDraft.host.trim(),
+                port: Number(emailConfigDraft.port) || 587,
+                user: emailConfigDraft.user.trim(),
+                pass: emailConfigDraft.pass.trim(),
+                secure: !!emailConfigDraft.secure,
+                from_email: emailConfigDraft.from_email.trim(),
+                from_name: emailConfigDraft.from_name.trim()
+            };
+
+            await set(dbRef(db, 'app_settings/email_config'), nextConfig);
+            setEmailConfig(nextConfig);
+            addToast("SMTP configuration saved successfully", "success");
+        } catch (error: any) {
+            console.error("Error saving SMTP config:", error);
+            addToast(error.message || "Failed to save configuration", "error");
+        } finally {
+            setIsEmailConfigSaving(false);
+        }
+    };
+
+    const handleTestEmailConfig = async () => {
+        const adminEmail = auth.currentUser?.email;
+        if (!adminEmail) {
+            addToast("Could not find your administrator email address", "error");
+            return;
+        }
+
+        setIsEmailConfigSaving(true);
+        try {
+            const nextConfig = {
+                ...emailConfigDraft,
+                host: emailConfigDraft.host.trim(),
+                port: Number(emailConfigDraft.port) || 587,
+                user: emailConfigDraft.user.trim(),
+                pass: emailConfigDraft.pass.trim(),
+                secure: !!emailConfigDraft.secure,
+                from_email: emailConfigDraft.from_email.trim(),
+                from_name: emailConfigDraft.from_name.trim()
+            };
+
+            await set(dbRef(db, 'app_settings/email_config'), nextConfig);
+            setEmailConfig(nextConfig);
+
+            const testJobRef = push(dbRef(db, 'email_queue'));
+            const testJobId = testJobRef.key;
+
+            if (!testJobId) {
+                throw new Error("Failed to create email queue job ID");
+            }
+
+            await set(dbRef(db, `email_queue/${testJobId}`), {
+                subject: "⚡ VANTUTOR SMTP Connection Test",
+                body: `Hello! If you are reading this email, your SMTP settings for Host: ${nextConfig.host} are configured correctly and fully functional.`,
+                recipients: [adminEmail],
+                status: 'pending',
+                timestamp: Date.now(),
+                sent_by: adminEmail
+            });
+
+            addToast("Test email queued. Please check your inbox shortly.", "success");
+        } catch (error: any) {
+            console.error("Error testing SMTP config:", error);
+            addToast(error.message || "Failed to queue test email", "error");
+        } finally {
+            setIsEmailConfigSaving(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'users') {
             void fetchUsers();
@@ -748,6 +868,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         } else if (activeTab === 'emails') {
             void fetchSentEmails();
             void fetchUsers();
+        } else if (activeTab === 'email-configs') {
+            void fetchEmailConfig();
         }
     }, [activeTab]);
 
@@ -903,19 +1025,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return;
         }
 
-        const encodedSubject = encodeURIComponent(subject);
-        const encodedBody = encodeURIComponent(body);
-        const mailtoLink = recipientMode === 'single'
-            ? `mailto:${emailList[0]}?subject=${encodedSubject}&body=${encodedBody}`
-            : `mailto:?bcc=${encodeURIComponent(emailList.join(','))}&subject=${encodedSubject}&body=${encodedBody}`;
-        if (mailtoLink.length > MAX_MAILTO_LINK_LENGTH) {
-            addToast("Too many recipients for one email draft. Please send emails in multiple single-user sends.", "error");
-            return;
-        }
-
         try {
-            window.open(mailtoLink, '_blank', 'noopener,noreferrer');
-            addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''}.`, "success");
+            const queueRef = push(dbRef(db, 'email_queue'));
+            const queueId = queueRef.key;
+            if (!queueId) {
+                throw new Error("Failed to generate queue ID");
+            }
+
+            const adminEmail = auth.currentUser?.email || 'admin';
+
+            await set(dbRef(db, `email_queue/${queueId}`), {
+                subject,
+                body,
+                recipients: emailList,
+                status: 'pending',
+                timestamp: Date.now(),
+                sent_by: adminEmail
+            });
 
             // Log the email broadcast
             const logId = push(dbRef(db, 'sent_emails')).key;
@@ -929,15 +1055,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     recipient: targetLabel,
                     recipients_count: emailList.length,
                     timestamp: Date.now(),
-                    sent_by: auth.currentUser?.email || 'admin'
+                    sent_by: adminEmail
                 });
-                setEmailSubject('');
-                setEmailBody('');
-                void fetchSentEmails();
             }
+
+            setEmailSubject('');
+            setEmailBody('');
+            addToast(`Email queued for delivery to ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''} via SMTP.`, "success");
+            void fetchSentEmails();
         } catch (error: any) {
-            console.error("Error opening email client:", error);
-            addToast(error?.message || "Could not open your email client.", "error");
+            console.error("Error queueing email broadcast:", error);
+            addToast(error?.message || "Could not queue email broadcast.", "error");
         }
     };
 
@@ -2005,6 +2133,7 @@ FORMAT:
         { id: 'analytics', label: 'Usage Analytics', icon: Activity, path: '/admin/analytics' },
         { id: 'payments', label: 'Payments Control', icon: CreditCard, path: '/admin/payments' },
         { id: 'app', label: 'App Settings', icon: SettingsIcon, path: '/admin/app' },
+        { id: 'email-configs', label: 'Email Settings', icon: Mail, path: '/admin/email-configs' },
     ];
 
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
@@ -2187,6 +2316,18 @@ FORMAT:
                                 <span>App Settings</span>
                                 <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'app' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
                             </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/email-configs')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'email-configs'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-900'
+                                }`}
+                            >
+                                <Mail className="w-4 h-4" />
+                                <span>Email Settings</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'email-configs' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
                         </div>
                     </nav>
                 </div>
@@ -2298,7 +2439,7 @@ FORMAT:
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-gray-200 gap-3">
                         <div>
                             <h1 className="text-2xl font-black text-slate-800 tracking-wide capitalize">
-                                {activeTab === 'app' ? 'App Settings' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab}
+                                {activeTab === 'app' ? 'App Settings' : activeTab === 'email-configs' ? 'Email Configuration' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab}
                             </h1>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
@@ -3766,6 +3907,140 @@ FORMAT:
                                             </tbody>
                                         </table>
                                     )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'email-configs' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Left Column: Form */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 h-fit lg:col-span-2">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Mail className="w-5 h-5 text-lime-600" />
+                                    <span>SMTP Configuration Settings</span>
+                                </h3>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">SMTP Host</label>
+                                        <input
+                                            type="text"
+                                            value={emailConfigDraft.host}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, host: e.target.value })}
+                                            placeholder="smtp.gmail.com"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-805"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">SMTP Port</label>
+                                        <input
+                                            type="number"
+                                            value={emailConfigDraft.port || ''}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, port: Number(e.target.value) || 0 })}
+                                            placeholder="587"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-850"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">SMTP Username</label>
+                                        <input
+                                            type="text"
+                                            value={emailConfigDraft.user}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, user: e.target.value })}
+                                            placeholder="user@example.com"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-850"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">SMTP Password</label>
+                                        <input
+                                            type="password"
+                                            value={emailConfigDraft.pass}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, pass: e.target.value })}
+                                            placeholder="••••••••"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-850"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Sender Name</label>
+                                        <input
+                                            type="text"
+                                            value={emailConfigDraft.from_name}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, from_name: e.target.value })}
+                                            placeholder="VanTutor"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-805"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Sender Email</label>
+                                        <input
+                                            type="email"
+                                            value={emailConfigDraft.from_email}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, from_email: e.target.value })}
+                                            placeholder="no-reply@example.com"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-805"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 pt-3">
+                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={emailConfigDraft.secure}
+                                            onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, secure: e.target.checked })}
+                                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                                        />
+                                        <span className="text-xs font-bold text-slate-700">Use Secure Connection (SSL/TLS for Port 465)</span>
+                                    </label>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <button
+                                        onClick={handleTestEmailConfig}
+                                        disabled={isEmailConfigSaving || isEmailConfigLoading}
+                                        className="w-full bg-slate-100 border border-slate-200 text-slate-750 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-slate-200 transition disabled:opacity-60 shadow-sm outline-none font-black"
+                                    >
+                                        Test SMTP Settings
+                                    </button>
+                                    <button
+                                        onClick={handleSaveEmailConfig}
+                                        disabled={isEmailConfigSaving || isEmailConfigLoading}
+                                        className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-blue-700 transition disabled:opacity-60 shadow-md outline-none font-black"
+                                    >
+                                        {isEmailConfigSaving ? 'Saving...' : 'Save Configuration'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Right Column: Connection Guide Info */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                                    <span>SMTP Configuration Guide</span>
+                                </h3>
+                                <div className="text-xs text-slate-600 space-y-3 font-medium">
+                                    <p>Connecting your outgoing email server allows you to programmatically broadcast emails to all students from the server without local app prompts.</p>
+                                    
+                                    <div className="border-t border-slate-200 pt-3 space-y-2">
+                                        <p className="font-bold text-slate-800">Gmail Settings:</p>
+                                        <ul className="list-disc pl-4 space-y-1">
+                                            <li>SMTP Host: <code className="bg-white px-1 py-0.5 rounded border border-slate-200 font-mono">smtp.gmail.com</code></li>
+                                            <li>SMTP Port: <code className="bg-white px-1 py-0.5 rounded border border-slate-200 font-mono">465</code> (SSL/TLS) or <code className="bg-white px-1 py-0.5 rounded border border-slate-200 font-mono">587</code> (STARTTLS)</li>
+                                            <li>Authentication requires a custom <span className="font-bold text-blue-600">Google App Password</span>, not your personal account password.</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="border-t border-slate-200 pt-3 space-y-2">
+                                        <p className="font-bold text-slate-800">Secure Protocol guidelines:</p>
+                                        <p>Check the box if you are connecting over port 465 (traditional SMTPS). Leave it unchecked for port 587 (which negotiates security over STARTTLS).</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>

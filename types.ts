@@ -234,3 +234,13 @@ export interface ToastMessage {
   type: ToastType;
   message: string;
 }
+
+export interface EmailConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  secure: boolean;
+  from_email: string;
+  from_name: string;
+}
