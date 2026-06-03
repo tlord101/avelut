@@ -1005,6 +1005,8 @@ Write a concise but specific assessment based only on the facts above. Do not in
                 onLogout={handleLogout}
                 isMobileSidebarOpen={isMobileSidebarOpen}
                 onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+                unreadCount={unreadCount}
+                unreadMessagesCount={unreadMessagesCount}
             />
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <Header 

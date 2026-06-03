@@ -1,0 +1,167 @@
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+
+// 1. Send push notification when a new notification is written to the database (admin pushes)
+exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/{notificationId}')
+    .onCreate(async (snapshot, context) => {
+        const userId = context.params.userId;
+        const notification = snapshot.val();
+        
+        if (!notification) return null;
+
+        // Fetch user's FCM token
+        const userSnap = await admin.database().ref(`/users/${userId}`).once('value');
+        const userData = userSnap.val();
+
+        if (!userData || !userData.fcm_token || !userData.notifications_enabled) {
+            console.log(`Skipping notification for user ${userId}. FCM Token: ${userData ? userData.fcm_token : 'none'}, Notifications Enabled: ${userData ? userData.notifications_enabled : 'false'}`);
+            return null;
+        }
+
+        const message = {
+            token: userData.fcm_token,
+            notification: {
+                title: notification.title || 'VANTUTOR',
+                body: notification.message || '',
+            },
+            data: {
+                type: notification.type || 'study_update',
+                timestamp: String(notification.timestamp || Date.now())
+            },
+            webpush: {
+                notification: {
+                    icon: '/logo.svg',
+                    badge: '/logo.svg',
+                }
+            }
+        };
+
+        try {
+            const response = await admin.messaging().send(message);
+            console.log('Successfully sent admin push notification:', response);
+            return response;
+        } catch (error) {
+            console.error('Error sending admin push notification:', error);
+            return null;
+        }
+    });
+
+// 2. Send push notification for chat messages
+exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageId}')
+    .onCreate(async (snapshot, context) => {
+        const chatId = context.params.chatId;
+        const messageVal = snapshot.val();
+
+        if (!messageVal) return null;
+
+        const senderId = messageVal.senderId;
+        const text = messageVal.text || '';
+        const type = messageVal.type || 'text';
+
+        // Find recipient in /user_chats/{senderId}/{chatId}
+        const userChatSnap = await admin.database().ref(`/user_chats/${senderId}/${chatId}`).once('value');
+        const userChatData = userChatSnap.val();
+
+        if (!userChatData || !userChatData.otherUserId) {
+            console.log('Could not find otherUserId in user_chats');
+            return null;
+        }
+
+        const recipientId = userChatData.otherUserId;
+
+        // Read sender's display name
+        const senderSnap = await admin.database().ref(`/users/${senderId}`).once('value');
+        const senderData = senderSnap.val();
+        const senderName = (senderData && senderData.display_name) ? senderData.display_name : 'Someone';
+
+        // Read recipient's FCM token and check if they enabled notifications
+        const recipientSnap = await admin.database().ref(`/users/${recipientId}`).once('value');
+        const recipientData = recipientSnap.val();
+
+        if (!recipientData || !recipientData.fcm_token || !recipientData.notifications_enabled) {
+            console.log(`Skipping message push for user ${recipientId}. No token or notifications disabled.`);
+            return null;
+        }
+
+        let bodyPreview = text;
+        if (type === 'voice') bodyPreview = '🎵 Sent a voice message';
+        else if (type === 'image') bodyPreview = '📷 Sent an image';
+        else if (type === 'file') bodyPreview = '📄 Sent a file';
+
+        const payload = {
+            token: recipientData.fcm_token,
+            notification: {
+                title: senderName,
+                body: bodyPreview,
+            },
+            data: {
+                chatId: chatId,
+                type: 'private_chat'
+            },
+            webpush: {
+                notification: {
+                    icon: senderData.photo_url || '/logo.svg',
+                    badge: '/logo.svg',
+                }
+            }
+        };
+
+        try {
+            const response = await admin.messaging().send(payload);
+            console.log('Successfully sent message push notification:', response);
+            return response;
+        } catch (error) {
+            console.error('Error sending message push notification:', error);
+            return null;
+        }
+    });
+
+// 3. Scheduled function to send automatic reminders to inactive users
+exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+    const usersSnap = await admin.database().ref('/users').once('value');
+    if (!usersSnap.exists()) return null;
+
+    const users = usersSnap.val();
+    const now = Date.now();
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+    const promises = [];
+
+    for (const userId in users) {
+        const user = users[userId];
+        if (user.notifications_enabled && user.fcm_token && user.last_activity_date && user.last_activity_date < twentyFourHoursAgo) {
+            const message = {
+                token: user.fcm_token,
+                notification: {
+                    title: '📚 Ready to study?',
+                    body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on VANTUTOR.`,
+                },
+                webpush: {
+                    notification: {
+                        icon: '/logo.svg',
+                        badge: '/logo.svg',
+                    }
+                }
+            };
+            
+            // Log reminder notification in user's notifications list
+            const notifRef = admin.database().ref(`/notifications/${userId}`).push();
+            const logPromise = notifRef.set({
+                type: 'study_update',
+                title: '📚 Daily Study Reminder',
+                message: "It's time to continue your learning path!",
+                is_read: false,
+                timestamp: now
+            });
+
+            const sendPromise = admin.messaging().send(message)
+                .then(res => console.log(`Sent reminder to ${userId}`))
+                .catch(err => console.error(`Failed to send reminder to ${userId}:`, err));
+
+            promises.push(logPromise);
+            promises.push(sendPromise);
+        }
+    }
+
+    return Promise.all(promises);
+});

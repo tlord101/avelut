@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, serverTimestamp } from "firebase/database";
 import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
 import { 
   getAuth, 
   GoogleAuthProvider, 
@@ -27,11 +28,13 @@ const db = getDatabase(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 
 export { 
   db, 
   storage, 
   auth, 
+  messaging,
   googleProvider,
   serverTimestamp,
   signInAnonymously, 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { db, storage } from '../firebase';
+import { db, storage, auth } from '../firebase';
 import { ref as dbRef, set, push, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -85,7 +85,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments';
+type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments' | 'notifications' | 'emails';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -94,7 +94,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'app', 'analytics', 'payments'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'notifications', 'emails', 'app', 'analytics', 'payments'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -370,6 +370,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [emailSubject, setEmailSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
     const [isSendingPush, setIsSendingPush] = useState(false);
+    const [sentNotifications, setSentNotifications] = useState<any[]>([]);
+    const [sentEmails, setSentEmails] = useState<any[]>([]);
+    const [isSentNotificationsLoading, setIsSentNotificationsLoading] = useState(false);
+    const [isSentEmailsLoading, setIsSentEmailsLoading] = useState(false);
     const { addToast } = useToast();
 
     // Analytics and Payments Real-Time Logging State
@@ -695,9 +699,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
+    const fetchSentNotifications = async () => {
+        setIsSentNotificationsLoading(true);
+        try {
+            const snap = await get(dbRef(db, 'sent_notifications'));
+            if (snap.exists()) {
+                const logs = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({
+                    id,
+                    ...val
+                })).sort((a, b) => b.timestamp - a.timestamp);
+                setSentNotifications(logs);
+            } else {
+                setSentNotifications([]);
+            }
+        } catch (error) {
+            console.error("Error fetching sent notifications logs:", error);
+        } finally {
+            setIsSentNotificationsLoading(false);
+        }
+    };
+
+    const fetchSentEmails = async () => {
+        setIsSentEmailsLoading(true);
+        try {
+            const snap = await get(dbRef(db, 'sent_emails'));
+            if (snap.exists()) {
+                const logs = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({
+                    id,
+                    ...val
+                })).sort((a, b) => b.timestamp - a.timestamp);
+                setSentEmails(logs);
+            } else {
+                setSentEmails([]);
+            }
+        } catch (error) {
+            console.error("Error fetching sent emails logs:", error);
+        } finally {
+            setIsSentEmailsLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'users') {
-            fetchUsers();
+            void fetchUsers();
+        } else if (activeTab === 'notifications') {
+            void fetchSentNotifications();
+            void fetchUsers();
+        } else if (activeTab === 'emails') {
+            void fetchSentEmails();
+            void fetchUsers();
         }
     }, [activeTab]);
 
@@ -755,6 +805,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             await update(dbRef(db), updates);
             setAnnouncementTitle('');
             setAnnouncementMessage('');
+            
+            // Log the notification broadcast
+            const logId = push(dbRef(db, 'sent_notifications')).key;
+            if (logId) {
+                const targetLabel = recipientMode === 'all' 
+                    ? 'All Users' 
+                    : allUsersList.find(u => u.uid === selectedRecipientId)?.display_name || selectedRecipientId;
+                await set(dbRef(db, `sent_notifications/${logId}`), {
+                    title,
+                    message,
+                    type: notificationType,
+                    recipient: targetLabel,
+                    timestamp: Date.now(),
+                    sent_by: auth.currentUser?.email || 'admin'
+                });
+                void fetchSentNotifications();
+            }
+
             const successfulSends = targetUsers.length - skippedUsers.length;
             if (skippedUsers.length > 0) {
                 const skippedPreview = skippedUsers.slice(0, MAX_SKIPPED_USERS_PREVIEW).join(', ');
@@ -770,45 +838,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
-        const handleSuggestAnnouncement = async () => {
-            if (!ai) {
-                addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
-                return;
-            }
-            setIsSendingPush(true);
-            try {
-                const prompt = `Create a short notification title (max 8 words) and a concise notification message (max 200 characters) for a ${notificationType.replace('_', ' ')} to students. Return only a JSON object with keys \"title\" and \"message\".`;
+    const handleSuggestAnnouncement = async () => {
+        if (!ai) {
+            addToast("AI features are unavailable because the Gemini API key is not configured in App Controls.", "error");
+            return;
+        }
+        setIsSendingPush(true);
+        try {
+            const prompt = `Create a short notification title (max 8 words) and a concise notification message (max 200 characters) for a ${notificationType.replace('_', ' ')} to students. Return only a JSON object with keys \"title\" and \"message\".`;
 
-                const response = await ai.models.generateContent({
-                    model: geminiModel,
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                message: { type: Type.STRING }
-                            },
-                            required: ['title', 'message']
-                        }
+            const response = await ai.models.generateContent({
+                model: geminiModel,
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            message: { type: Type.STRING }
+                        },
+                        required: ['title', 'message']
                     }
-                });
+                }
+            });
 
-                if (!response.text) throw new Error('AI returned an empty suggestion.');
-                const data = JSON.parse(response.text);
-                setAnnouncementTitle((data.title || '').toString());
-                setAnnouncementMessage((data.message || '').toString());
-                addToast('Suggested announcement generated.', 'success');
-            } catch (error: any) {
-                console.error('Error generating suggestion:', error);
-                addToast(error?.message || 'Failed to generate suggestion', 'error');
-            } finally {
-                setIsSendingPush(false);
-            }
-        };
+            if (!response.text) throw new Error('AI returned an empty suggestion.');
+            const data = JSON.parse(response.text);
+            setAnnouncementTitle((data.title || '').toString());
+            setAnnouncementMessage((data.message || '').toString());
+            addToast('Suggested announcement generated.', 'success');
+        } catch (error: any) {
+            console.error('Error generating suggestion:', error);
+            addToast(error?.message || 'Failed to generate suggestion', 'error');
+        } finally {
+            setIsSendingPush(false);
+        }
+    };
 
-    const handleSendEmail = () => {
+    const handleSendEmail = async () => {
         const subject = emailSubject.trim();
         const body = emailBody.trim();
         if (!subject || !body) {
@@ -816,7 +884,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return;
         }
 
-        const targetUsers = getTargetUsers();
+        const getTargetUsersList = () => {
+            if (recipientMode === 'all') {
+                return allUsersList;
+            }
+            return allUsersList.filter(user => user.uid === selectedRecipientId);
+        };
+
+        const targetUsers = getTargetUsersList();
         if (targetUsers.length === 0) {
             addToast("Please select a valid recipient", "error");
             return;
@@ -841,6 +916,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         try {
             window.open(mailtoLink, '_blank', 'noopener,noreferrer');
             addToast(`Email draft prepared for ${emailList.length} recipient${emailList.length !== 1 ? 's' : ''}.`, "success");
+
+            // Log the email broadcast
+            const logId = push(dbRef(db, 'sent_emails')).key;
+            if (logId) {
+                const targetLabel = recipientMode === 'all'
+                    ? 'All Users'
+                    : allUsersList.find(u => u.uid === selectedRecipientId)?.display_name || selectedRecipientId;
+                await set(dbRef(db, `sent_emails/${logId}`), {
+                    subject,
+                    body,
+                    recipient: targetLabel,
+                    recipients_count: emailList.length,
+                    timestamp: Date.now(),
+                    sent_by: auth.currentUser?.email || 'admin'
+                });
+                setEmailSubject('');
+                setEmailBody('');
+                void fetchSentEmails();
+            }
         } catch (error: any) {
             console.error("Error opening email client:", error);
             addToast(error?.message || "Could not open your email client.", "error");
@@ -1906,6 +2000,8 @@ FORMAT:
         { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/admin/courses/manager' },
         { id: 'questions', label: 'Past Questions', icon: HelpCircle, path: '/admin/questions' },
         { id: 'users', label: 'User Control', icon: Users, path: '/admin/users' },
+        { id: 'notifications', label: 'Send Notifications', icon: Bell, path: '/admin/notifications' },
+        { id: 'emails', label: 'Send Emails', icon: Mail, path: '/admin/emails' },
         { id: 'analytics', label: 'Usage Analytics', icon: Activity, path: '/admin/analytics' },
         { id: 'payments', label: 'Payments Control', icon: CreditCard, path: '/admin/payments' },
         { id: 'app', label: 'App Settings', icon: SettingsIcon, path: '/admin/app' },
@@ -2015,6 +2111,35 @@ FORMAT:
                                 <Users className="w-4 h-4" />
                                 <span>User Control</span>
                                 <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'users' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
+                        </div>
+
+                        {/* Category: COMMUNICATIONS */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Communications</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/notifications')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'notifications'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-900'
+                                }`}
+                            >
+                                <Bell className="w-4 h-4" />
+                                <span>Send Notifications</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'notifications' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/emails')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'emails'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-900'
+                                }`}
+                            >
+                                <Mail className="w-4 h-4" />
+                                <span>Send Emails</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'emails' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
                             </button>
                         </div>
 
@@ -3183,116 +3308,8 @@ FORMAT:
 
                     {activeTab === 'users' && (
                         <div className="space-y-6">
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-                                <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                    <Bell className="w-5 h-5 text-lime-600" />
-                                    <span>Broadcast Center</span>
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Recipient Scope</label>
-                                        <select
-                                            value={recipientMode}
-                                            onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
-                                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
-                                        >
-                                            <option value="all">All Users</option>
-                                            <option value="single">Single User</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Target User</label>
-                                        <select
-                                            value={selectedRecipientId}
-                                            onChange={(e) => setSelectedRecipientId(e.target.value)}
-                                            disabled={recipientMode === 'all'}
-                                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none disabled:bg-slate-100 disabled:text-slate-400 transition"
-                                        >
-                                            <option value="">Select a user</option>
-                                            {allUsersList.map(user => (
-                                                <option key={user.uid} value={user.uid}>
-                                                    {user.display_name} ({user.email || 'no-email'})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-                                    <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4 shadow-sm">
-                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                            <Send className="w-4 h-4 text-slate-500" />
-                                            <span>Send Push Notification</span>
-                                        </h4>
-                                        <input
-                                            type="text"
-                                            value={announcementTitle}
-                                            onChange={(e) => setAnnouncementTitle(e.target.value)}
-                                            placeholder="Notification title"
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
-                                        />
-                                        <textarea
-                                            value={announcementMessage}
-                                            onChange={(e) => setAnnouncementMessage(e.target.value)}
-                                            placeholder="Notification message"
-                                            rows={3}
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none resize-none transition"
-                                        />
-                                        <select
-                                            value={notificationType}
-                                            onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-lime-100 focus:border-lime-500 transition"
-                                        >
-                                            <option value="study_update">Study Update</option>
-                                            <option value="exam_reminder">Exam Reminder</option>
-                                            <option value="welcome">Welcome</option>
-                                        </select>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button
-                                                onClick={handleSuggestAnnouncement}
-                                                disabled={isSendingPush}
-                                                className="w-full bg-white border border-gray-200 text-slate-700 py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-gray-50 transition disabled:opacity-60 shadow-sm outline-none"
-                                            >
-                                                Suggest Message
-                                            </button>
-                                            <button
-                                                onClick={handleSendPushNotification}
-                                                disabled={isSendingPush}
-                                                className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition disabled:opacity-60 shadow-md outline-none"
-                                            >
-                                                {isSendingPush ? 'Sending...' : 'Send Push'}
-                                            </button>
-                                        </div>
-                                    </div>
 
-                                    <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4 shadow-sm">
-                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                            <Mail className="w-4 h-4 text-slate-500" />
-                                            <span>Send Email Broadcast</span>
-                                        </h4>
-                                        <input
-                                            type="text"
-                                            value={emailSubject}
-                                            onChange={(e) => setEmailSubject(e.target.value)}
-                                            placeholder="Email subject"
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none transition"
-                                        />
-                                        <textarea
-                                            value={emailBody}
-                                            onChange={(e) => setEmailBody(e.target.value)}
-                                            placeholder="Email body"
-                                            rows={3}
-                                            className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-lime-100 focus:border-lime-500 outline-none resize-none transition"
-                                        />
-                                        <button
-                                            onClick={handleSendEmail}
-                                            className="w-full bg-lime-600 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-lime-700 transition shadow-md shadow-lime-600/10"
-                                        >
-                                            Open Email Draft
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
 
                             {/* Responsive Metrics Cards */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -3444,6 +3461,305 @@ FORMAT:
                                                                 <option value="premium">Premium</option>
                                                                 <option value="personal_token">Google Token</option>
                                                             </select>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'notifications' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Left Column: Form */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 h-fit">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Bell className="w-5 h-5 text-lime-600" />
+                                    <span>Send Push Notification</span>
+                                </h3>
+                                
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Recipient Scope</label>
+                                        <select
+                                            value={recipientMode}
+                                            onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
+                                            className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-800 font-medium"
+                                        >
+                                            <option value="all">All Users</option>
+                                            <option value="single">Single User</option>
+                                        </select>
+                                    </div>
+
+                                    {recipientMode === 'single' && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-wider text-slate-400">Target User</label>
+                                            <select
+                                                value={selectedRecipientId}
+                                                onChange={(e) => setSelectedRecipientId(e.target.value)}
+                                                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-800 font-medium"
+                                            >
+                                                <option value="">Select a user</option>
+                                                {allUsersList.map(user => (
+                                                    <option key={user.uid} value={user.uid}>
+                                                        {user.display_name} ({user.email || 'no-email'})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Notification Title</label>
+                                        <input
+                                            type="text"
+                                            value={announcementTitle}
+                                            onChange={(e) => setAnnouncementTitle(e.target.value)}
+                                            placeholder="Notification title"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-800 font-medium"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Notification Message</label>
+                                        <textarea
+                                            value={announcementMessage}
+                                            onChange={(e) => setAnnouncementMessage(e.target.value)}
+                                            placeholder="Notification message"
+                                            rows={4}
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none resize-none transition text-slate-800 font-medium"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Notification Type</label>
+                                        <select
+                                            value={notificationType}
+                                            onChange={(e) => setNotificationType(e.target.value as 'study_update' | 'exam_reminder' | 'welcome')}
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition text-slate-800 font-medium"
+                                        >
+                                            <option value="study_update">Study Update</option>
+                                            <option value="exam_reminder">Exam Reminder</option>
+                                            <option value="welcome">Welcome</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <button
+                                            onClick={handleSuggestAnnouncement}
+                                            disabled={isSendingPush}
+                                            className="w-full bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition disabled:opacity-60 shadow-sm outline-none font-black"
+                                        >
+                                            Suggest Message
+                                        </button>
+                                        <button
+                                            onClick={handleSendPushNotification}
+                                            disabled={isSendingPush}
+                                            className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 transition disabled:opacity-60 shadow-md outline-none font-black"
+                                        >
+                                            {isSendingPush ? 'Sending...' : 'Send Push'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Columns: Logs */}
+                            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                        <Clock className="w-5 h-5 text-slate-500" />
+                                        <span>Sent Notifications History</span>
+                                    </h3>
+                                    <button 
+                                        onClick={fetchSentNotifications}
+                                        className="text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition"
+                                    >
+                                        Refresh Logs
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-x-auto">
+                                    {isSentNotificationsLoading ? (
+                                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
+                                            <div className="w-6 h-6 border-2 border-slate-350 border-t-blue-600 rounded-full animate-spin"></div>
+                                            <span className="text-xs font-semibold">Loading delivery history...</span>
+                                        </div>
+                                    ) : sentNotifications.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                                            <Bell className="w-8 h-8 opacity-40 mb-2 text-slate-400" />
+                                            <p className="text-sm font-bold text-slate-700">No notifications sent yet</p>
+                                            <p className="text-xs opacity-75 mt-0.5">Use the form on the left to send push notifications.</p>
+                                        </div>
+                                    ) : (
+                                        <table className="w-full text-left border-collapse min-w-[600px]">
+                                            <thead>
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Recipient</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Notification Details</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Type</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sent By</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Time</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {sentNotifications.map((log) => (
+                                                    <tr key={log.id} className="hover:bg-slate-50/50 transition">
+                                                        <td className="py-4 text-xs font-bold text-slate-700 max-w-[120px] truncate">{log.recipient}</td>
+                                                        <td className="py-4 text-xs space-y-1">
+                                                            <div className="font-bold text-slate-800">{log.title}</div>
+                                                            <div className="text-slate-500 max-w-[280px] truncate" title={log.message}>{log.message}</div>
+                                                        </td>
+                                                        <td className="py-4 text-xs">
+                                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider border
+                                                                ${log.type === 'study_update' ? 'bg-indigo-50 border-indigo-205 text-indigo-700' : 
+                                                                  log.type === 'exam_reminder' ? 'bg-amber-50 border-amber-205 text-amber-800' : 
+                                                                  'bg-teal-50 border-teal-205 text-teal-700'}`}
+                                                            >
+                                                                {log.type ? log.type.replace('_', ' ') : 'notification'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-4 text-xs text-slate-500 font-semibold">{log.sent_by}</td>
+                                                        <td className="py-4 text-xs text-slate-500 font-semibold text-right whitespace-nowrap">
+                                                            {new Date(log.timestamp).toLocaleString()}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'emails' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Left Column: Form */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 h-fit">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Mail className="w-5 h-5 text-lime-600" />
+                                    <span>Send Email Broadcast</span>
+                                </h3>
+                                
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Recipient Scope</label>
+                                        <select
+                                            value={recipientMode}
+                                            onChange={(e) => setRecipientMode(e.target.value as 'all' | 'single')}
+                                            className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-800 font-medium"
+                                        >
+                                            <option value="all">All Users</option>
+                                            <option value="single">Single User</option>
+                                        </select>
+                                    </div>
+
+                                    {recipientMode === 'single' && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-wider text-slate-400">Target User</label>
+                                            <select
+                                                value={selectedRecipientId}
+                                                onChange={(e) => setSelectedRecipientId(e.target.value)}
+                                                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-800 font-medium"
+                                            >
+                                                <option value="">Select a user</option>
+                                                {allUsersList.map(user => (
+                                                    <option key={user.uid} value={user.uid}>
+                                                        {user.display_name} ({user.email || 'no-email'})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Email Subject</label>
+                                        <input
+                                            type="text"
+                                            value={emailSubject}
+                                            onChange={(e) => setEmailSubject(e.target.value)}
+                                            placeholder="Email subject"
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-805"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Email Body</label>
+                                        <textarea
+                                            value={emailBody}
+                                            onChange={(e) => setEmailBody(e.target.value)}
+                                            placeholder="Email body content..."
+                                            rows={6}
+                                            className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none resize-none transition text-slate-805"
+                                        />
+                                    </div>
+
+                                    <button
+                                        onClick={handleSendEmail}
+                                        className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 transition shadow-md shadow-blue-600/10 font-black"
+                                    >
+                                        Open Email Draft
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Right Columns: Logs */}
+                            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                        <Clock className="w-5 h-5 text-slate-500" />
+                                        <span>Sent Emails History</span>
+                                    </h3>
+                                    <button 
+                                        onClick={fetchSentEmails}
+                                        className="text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition"
+                                    >
+                                        Refresh Logs
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-x-auto">
+                                    {isSentEmailsLoading ? (
+                                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
+                                            <div className="w-6 h-6 border-2 border-slate-350 border-t-blue-600 rounded-full animate-spin"></div>
+                                            <span className="text-xs font-semibold">Loading email history...</span>
+                                        </div>
+                                    ) : sentEmails.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                                            <Mail className="w-8 h-8 opacity-40 mb-2 text-slate-400" />
+                                            <p className="text-sm font-bold text-slate-700">No emails sent yet</p>
+                                            <p className="text-xs opacity-75 mt-0.5">Use the form on the left to prepare and send email broadcasts.</p>
+                                        </div>
+                                    ) : (
+                                        <table className="w-full text-left border-collapse min-w-[600px]">
+                                            <thead>
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Recipient</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Email Details</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Recipients Count</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sent By</th>
+                                                    <th className="pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Time</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {sentEmails.map((log) => (
+                                                    <tr key={log.id} className="hover:bg-slate-50/50 transition">
+                                                        <td className="py-4 text-xs font-bold text-slate-700 max-w-[120px] truncate">{log.recipient}</td>
+                                                        <td className="py-4 text-xs space-y-1">
+                                                            <div className="font-bold text-slate-805">{log.subject}</div>
+                                                            <div className="text-slate-500 max-w-[280px] truncate" title={log.body}>{log.body}</div>
+                                                        </td>
+                                                        <td className="py-4 text-xs">
+                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider border bg-teal-50 border-teal-200 text-teal-700">
+                                                                {log.recipients_count || 1} recipient{log.recipients_count !== 1 ? 's' : ''}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-4 text-xs text-slate-500 font-semibold">{log.sent_by}</td>
+                                                        <td className="py-4 text-xs text-slate-500 font-semibold text-right whitespace-nowrap">
+                                                            {new Date(log.timestamp).toLocaleString()}
                                                         </td>
                                                     </tr>
                                                 ))}

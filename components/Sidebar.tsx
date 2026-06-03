@@ -22,6 +22,8 @@ interface SidebarProps {
   onCloseMobileSidebar: () => void;
   items?: NavItem[];
   secondaryItems?: NavItem[];
+  unreadCount?: number;
+  unreadMessagesCount?: number;
 }
 
 const NavButton: React.FC<{
@@ -29,7 +31,9 @@ const NavButton: React.FC<{
     isActive: boolean;
     isExpanded: boolean;
     onClick: () => void;
-}> = ({ item, isActive, isExpanded, onClick }) => (
+    unreadCount?: number;
+    unreadMessagesCount?: number;
+}> = ({ item, isActive, isExpanded, onClick, unreadCount = 0, unreadMessagesCount = 0 }) => (
     <li className="relative">
         <button
             onClick={onClick}
@@ -39,14 +43,22 @@ const NavButton: React.FC<{
             ${
                 isActive
                 ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/10'
-                : 'text-slate-650 opacity-85 hover:bg-white/50 hover:text-blue-600 hover:opacity-100'
+                : 'text-slate-655 opacity-85 hover:bg-white/50 hover:text-blue-600 hover:opacity-100'
             }`}
         >
             {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-white rounded-r-full"></div>}
             <span className={`flex-shrink-0 transition-all duration-300 ease-in-out ${isExpanded ? 'mr-4' : 'mr-0'} ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-600'}`}>{item.icon}</span>
-            <span className={`font-semibold whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+            <span className={`font-semibold whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out flex-1 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                 {item.label}
             </span>
+            {isExpanded && item.id === 'messenger' && unreadMessagesCount > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-black rounded-full h-4 min-w-4 px-1 flex items-center justify-center shadow-sm">
+                    {unreadMessagesCount}
+                </span>
+            )}
+            {!isExpanded && item.id === 'messenger' && unreadMessagesCount > 0 && (
+                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
         </button>
     </li>
 );
@@ -59,7 +71,9 @@ const SidebarContent: React.FC<{
     onLogout: () => void;
     items?: NavItem[];
     secondaryItems?: NavItem[];
-}> = ({ isExpanded, activeItem, onItemClick, userProfile, onLogout, items = navigationItems, secondaryItems = secondaryNavigationItems }) => (
+    unreadCount?: number;
+    unreadMessagesCount?: number;
+}> = ({ isExpanded, activeItem, onItemClick, userProfile, onLogout, items = navigationItems, secondaryItems = secondaryNavigationItems, unreadCount = 0, unreadMessagesCount = 0 }) => (
     <div className="h-full p-4 flex flex-col bg-transparent">
       {/* Top Section: Logo */}
       <div className="flex items-center mb-10 flex-shrink-0 px-2 pt-2">
@@ -74,7 +88,7 @@ const SidebarContent: React.FC<{
         <p className={`text-[10px] font-black text-slate-400 opacity-80 uppercase tracking-widest mb-4 transition-opacity duration-300 ease-in-out ${isExpanded ? 'pl-3 opacity-100' : 'opacity-0'}`}>Menu</p>
         <ul className="space-y-1">
           {items.map((item) => (
-              <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
+              <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} unreadCount={unreadCount} unreadMessagesCount={unreadMessagesCount} />
           ))}
         </ul>
       </nav>
@@ -83,19 +97,22 @@ const SidebarContent: React.FC<{
       <div className="flex-shrink-0">
          <ul className="space-y-1 pt-4 border-t border-white/40">
               {secondaryItems.map((item) => (
-                  <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} />
+                  <NavButton key={item.id} item={item} isActive={activeItem === item.id} isExpanded={isExpanded} onClick={() => onItemClick(item.id)} unreadCount={unreadCount} unreadMessagesCount={unreadMessagesCount} />
               ))}
                <li>
                   <button
                       onClick={onLogout}
-                      className={`w-full flex items-center p-3 rounded-xl text-left transition-colors duration-300 ease-in-out text-slate-650 opacity-85 hover:bg-red-50 hover:text-red-600 hover:opacity-100 group ${isExpanded ? 'justify-start' : 'justify-center'}`}
+                      className={`w-full flex items-center p-3 rounded-xl text-left transition-colors duration-300 ease-in-out text-slate-655 opacity-85 hover:bg-red-50 hover:text-red-600 hover:opacity-100 group ${isExpanded ? 'justify-start' : 'justify-center'}`}
                   >
                       <span className="flex-shrink-0 text-slate-500 group-hover:text-red-600"><LogoutIcon /></span>
                       <span className={`font-semibold ml-4 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>Logout</span>
                   </button>
               </li>
           </ul>
-        <div className="mt-6 p-3 bg-white/45 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm">
+        <div className="mt-6 p-3 bg-white/45 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm relative">
+          {unreadCount > 0 && (
+             <span className="absolute top-2 right-2 flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-white" title={`${unreadCount} unread notifications`} />
+          )}
           <div className="flex items-center">
             <Avatar display_name={userProfile?.display_name || null} photo_url={userProfile?.photo_url} className="w-10 h-10 flex-shrink-0" />
             <div className={`ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
@@ -109,7 +126,7 @@ const SidebarContent: React.FC<{
 );
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userProfile, onLogout, isMobileSidebarOpen, onCloseMobileSidebar, items, secondaryItems }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userProfile, onLogout, isMobileSidebarOpen, onCloseMobileSidebar, items, secondaryItems, unreadCount = 0, unreadMessagesCount = 0 }) => {
   const handleMobileItemClick = (id: string) => {
     onItemClick(id);
     onCloseMobileSidebar();
@@ -136,6 +153,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
             onLogout={handleMobileLogout}
             items={navItems}
             secondaryItems={secondaryItems}
+            unreadCount={unreadCount}
+            unreadMessagesCount={unreadMessagesCount}
            />
         </aside>
       </div>
@@ -152,6 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
             onLogout={onLogout}
             items={navItems}
             secondaryItems={secondaryItems}
+            unreadCount={unreadCount}
+            unreadMessagesCount={unreadMessagesCount}
         />
       </aside>
     </>

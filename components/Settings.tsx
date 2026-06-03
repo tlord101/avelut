@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile } from '../types';
-import { auth, storage, db, type FirebaseUser } from '../firebase';
+import { auth, storage, db, messaging, type FirebaseUser } from '../firebase';
+import { getToken } from 'firebase/messaging';
 import { GoogleGenAI } from '@google/genai';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ref as dbRef, get } from 'firebase/database';
@@ -183,14 +184,22 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
 
         if (permission === 'granted') {
             try {
-                // FIX: Use snake_case for notifications_enabled
-                await onProfileUpdate({ notifications_enabled: true });
+                let fcmToken = '';
+                if (messaging) {
+                    try {
+                        fcmToken = await getToken(messaging, { vapidKey: 'BDW-aRndY4U24Dk7o_5gHl2S3jYk3H7nK_aR0p8oOqKz6bL8i4sU_7_YV1uQ' });
+                    } catch (tokenErr) {
+                        console.warn("Could not retrieve FCM token:", tokenErr);
+                    }
+                }
+
+                await onProfileUpdate({ notifications_enabled: true, fcm_token: fcmToken || null });
                 setIsNotificationSwitchOn(true);
                 addToast('Push notifications enabled!', 'success');
                 
                 const registration = await navigator.serviceWorker.ready;
                 registration.showNotification('VANTUTOR', {
-                    body: 'You will now receive important updates.',
+                    body: 'You will now receive important updates on your device.',
                     icon: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20viewBox%3D%220%200%2052%2042%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M4.33331%2017.5L26%204.375L47.6666%2017.5L26%2030.625L4.33331%2017.5Z%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M41.5%2021V29.75C41.5%2030.825%2040.85%2032.55%2039.4166%2033.25L27.75%2039.375C26.6666%2039.9%2025.3333%2039.9%2024.25%2039.375L12.5833%2033.25C11.15%2032.55%2010.5%2030.825%2010.5%2029.75V21%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M47.6667%2017.5V26.25%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E',
                     badge: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20viewBox%3D%220%200%2052%2042%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M4.33331%2017.5L26%204.375L47.6666%2017.5L26%2030.625L4.33331%2017.5Z%22%20fill%3D%22%2523FFFFFF%22%2F%3E%3C%2Fsvg%3E'
                 });
@@ -203,8 +212,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
     } else {
         // Toggling OFF
         try {
-            // FIX: Use snake_case for notifications_enabled
-            await onProfileUpdate({ notifications_enabled: false });
+            await onProfileUpdate({ notifications_enabled: false, fcm_token: null });
             setIsNotificationSwitchOn(false);
             addToast('Push notifications disabled from VANTUTOR.', 'info');
         } catch (err) {

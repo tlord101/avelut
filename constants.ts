@@ -10,6 +10,7 @@ import { ChatIcon } from './components/icons/ChatIcon';
 import { HelpIcon } from './components/icons/HelpIcon';
 import { GraduationCapIcon } from './components/icons/GraduationCapIcon';
 import { LeaderboardIcon } from './components/icons/LeaderboardIcon';
+import { MessengerIcon } from './components/icons/MessengerIcon';
 
 // Define SVG icons for secondary navigation
 const SettingsIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
@@ -42,6 +43,7 @@ export const navigationItems: NavItem[] = [
   { id: 'study_guide', label: 'Study Guide', icon: React.createElement(StudyGuideIcon) },
   { id: 'visual_solver', label: 'Visual Solver', icon: React.createElement(CameraIcon) },
   { id: 'chat', label: 'Chat', icon: React.createElement(ChatIcon) },
+  { id: 'messenger', label: 'Messages', icon: React.createElement(MessengerIcon) },
   { id: 'exam', label: 'Exam', icon: React.createElement(ExamIcon) },
 ];
 
