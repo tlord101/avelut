@@ -759,8 +759,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
-    };
-
     const fetchEmailConfig = async () => {
         setIsEmailConfigLoading(true);
         try {
