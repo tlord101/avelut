@@ -508,7 +508,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users') {
+        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users' || activeTab === 'dashboard') {
             void fetchUsageLogs();
         }
     }, [activeTab]);
@@ -858,7 +858,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        if (activeTab === 'users') {
+        if (activeTab === 'users' || activeTab === 'dashboard') {
             void fetchUsers();
         } else if (activeTab === 'notifications') {
             void fetchSentNotifications();
