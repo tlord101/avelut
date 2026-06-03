@@ -377,6 +377,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [complaintLogs, setComplaintLogs] = useState<any[]>([]);
     const [isLogsLoading, setIsLogsLoading] = useState(false);
 
+    const userRequestCounts = useMemo(() => {
+        const now = Date.now();
+        const limit5m = now - 5 * 60 * 1000;
+        const limit10m = now - 10 * 60 * 1000;
+        const limit30m = now - 30 * 60 * 1000;
+        const limit1h = now - 60 * 60 * 1000;
+
+        const counts: Record<string, { m5: number; m10: number; m30: number; h1: number }> = {};
+
+        allUsersList.forEach(u => {
+            counts[u.uid] = { m5: 0, m10: 0, m30: 0, h1: 0 };
+        });
+
+        aiRequestLogs.forEach(log => {
+            const uid = log.user_id;
+            if (!uid || !counts[uid]) return;
+
+            const ts = log.timestamp;
+            if (!ts) return;
+
+            if (ts >= limit5m) counts[uid].m5++;
+            if (ts >= limit10m) counts[uid].m10++;
+            if (ts >= limit30m) counts[uid].m30++;
+            if (ts >= limit1h) counts[uid].h1++;
+        });
+
+        return counts;
+    }, [allUsersList, aiRequestLogs]);
+
     // Activation Code Management States
     const [activationCodes, setActivationCodes] = useState<any[]>([]);
     const [newCodeApiKey, setNewCodeApiKey] = useState('');
@@ -453,7 +482,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        if (activeTab === 'analytics' || activeTab === 'payments') {
+        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users') {
             void fetchUsageLogs();
         }
     }, [activeTab]);
@@ -2982,7 +3011,7 @@ FORMAT:
                                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                                     <h3 className="font-bold text-slate-800 text-sm">Users List</h3>
                                     <button 
-                                        onClick={fetchUsers}
+                                        onClick={() => { void fetchUsers(); void fetchUsageLogs(); }}
                                         className="text-xs uppercase tracking-widest font-black text-lime-650 hover:text-lime-700 flex items-center gap-1.5 transition"
                                     >
                                         <RefreshCw className="w-3.5 h-3.5" />
@@ -2993,13 +3022,14 @@ FORMAT:
                                     {isUsersLoading ? (
                                         <div className="p-12 text-center text-slate-400 font-medium">Loading users...</div>
                                     ) : (
-                                        <table className="w-full min-w-[920px] text-left border-collapse">
+                                        <table className="w-full min-w-[1050px] text-left border-collapse">
                                             <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
                                                 <tr>
                                                     <th className="px-6 py-4">User</th>
                                                     <th className="px-6 py-4">Email</th>
                                                     <th className="px-6 py-4">Dept / Level</th>
                                                     <th className="px-6 py-4">Last Active</th>
+                                                    <th className="px-6 py-4">Requests (5m / 10m / 30m / 1h)</th>
                                                     <th className="px-6 py-4">Activation Status</th>
                                                     <th className="px-6 py-4">Role</th>
                                                 </tr>
@@ -3025,6 +3055,22 @@ FORMAT:
                                                         </td>
                                                         <td className="px-6 py-4 text-slate-450 font-medium text-[10px]">
                                                             {user.last_activity_date ? new Date(user.last_activity_date).toLocaleString() : 'Never'}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-purple-500/5 animate-fade-in" title="Requests in last 5 minutes">
+                                                                    5m: <span className="font-black text-purple-900">{userRequestCounts[user.uid]?.m5 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-blue-500/5 animate-fade-in" title="Requests in last 10 minutes">
+                                                                    10m: <span className="font-black text-blue-900">{userRequestCounts[user.uid]?.m10 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-indigo-500/5 animate-fade-in" title="Requests in last 30 minutes">
+                                                                    30m: <span className="font-black text-indigo-900">{userRequestCounts[user.uid]?.m30 || 0}</span>
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-pink-50 text-pink-700 border border-pink-150/70 hover:scale-105 transition cursor-default shadow-sm shadow-pink-500/5 animate-fade-in" title="Requests in last 1 hour">
+                                                                    1h: <span className="font-black text-pink-900">{userRequestCounts[user.uid]?.h1 || 0}</span>
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             {user.subscription_status === 'premium' ? (
