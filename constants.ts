@@ -47,7 +47,6 @@ export const navigationItems: NavItem[] = [
 
 export const adminNavigationItems: NavItem[] = [
     { id: 'admin', label: 'Admin Panel', icon: React.createElement(GraduationCapIcon) },
-    { id: 'dashboard', label: 'Student View', icon: React.createElement(DashboardIcon) },
 ];
 
 export const secondaryNavigationItems: NavItem[] = [

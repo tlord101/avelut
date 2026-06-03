@@ -2054,16 +2054,7 @@ FORMAT:
                     </nav>
                 </div>
 
-                {/* Footer Exit Link */}
-                <div className="p-4 border-t border-[#2b303c]">
-                    <button
-                        onClick={() => handleCourseTabNavigate('/')}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] uppercase tracking-widest font-black text-slate-400 hover:text-white hover:bg-slate-900 transition duration-200 border border-slate-800"
-                    >
-                        <Home className="w-4 h-4" />
-                        <span>Exit Admin Panel</span>
-                    </button>
-                </div>
+
             </aside>
 
             {/* Main Content Area */}
@@ -2074,13 +2065,7 @@ FORMAT:
                         <button className="text-slate-400 hover:text-white transition">
                             <MenuIcon className="w-5 h-5" />
                         </button>
-                        <button
-                            onClick={() => handleCourseTabNavigate('/')}
-                            className="text-[10px] uppercase font-black hover:text-white transition tracking-widest text-slate-400"
-                        >
-                            Live platform
-                        </button>
-                        <span className="text-slate-700">|</span>
+
                         <button
                             className="text-[10px] uppercase font-black hover:text-white transition tracking-widest text-slate-400"
                         >
@@ -2145,16 +2130,7 @@ FORMAT:
                                         <span>System Configuration</span>
                                     </button>
 
-                                    <button
-                                        onClick={() => {
-                                            setIsProfileMenuOpen(false);
-                                            handleCourseTabNavigate('/');
-                                        }}
-                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all border-t border-[#2b303c] mt-1"
-                                    >
-                                        <LogOut className="w-3.5 h-3.5" />
-                                        <span>Exit Admin Desk</span>
-                                    </button>
+
                                 </div>
                             </>
                         )}
