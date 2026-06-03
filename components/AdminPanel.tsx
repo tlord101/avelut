@@ -1902,7 +1902,7 @@ FORMAT:
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
 
     return (
-        <div className="min-h-screen bg-[#14181c] flex text-slate-100 w-full overflow-hidden font-sans select-none vantutor-admin dark">
+        <div className="min-h-screen bg-[#f4f6f9] flex text-slate-800 w-full overflow-hidden font-sans select-none vantutor-admin">
             {/* Sidebar - Desktop */}
             <aside className="w-64 bg-[#1e2229] text-slate-350 flex-shrink-0 flex flex-col justify-between border-r border-[#2b303c] sticky top-0 h-screen z-40 hidden md:flex">
                 <div className="flex flex-col gap-4">
@@ -2058,7 +2058,7 @@ FORMAT:
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto bg-[#14181c]">
+            <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto bg-[#f4f6f9]">
                 {/* Top Header Bar */}
                 <header className="h-14 bg-[#1e2229] border-b border-[#2b303c] px-6 flex items-center justify-between sticky top-0 z-30 shadow-md flex-shrink-0 text-slate-350">
                     <div className="flex items-center gap-4">
@@ -2156,18 +2156,18 @@ FORMAT:
                 </div>
 
                 {/* Workspace Views */}
-                <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-[#14181c]">
+                <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-[#f4f6f9] text-slate-800">
                     {/* Content Header Title and Breadcrumbs */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-[#2b303c] gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-gray-200 gap-3">
                         <div>
-                            <h1 className="text-2xl font-black text-slate-100 tracking-wide capitalize">
+                            <h1 className="text-2xl font-black text-slate-800 tracking-wide capitalize">
                                 {activeTab === 'app' ? 'App Settings' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab}
                             </h1>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
-                            <span className="hover:text-slate-300 cursor-pointer transition" onClick={() => handleCourseTabNavigate('/admin')}>Home</span>
+                            <span className="hover:text-slate-800 cursor-pointer transition" onClick={() => handleCourseTabNavigate('/admin')}>Home</span>
                             <span>/</span>
-                            <span className="text-slate-350 capitalize font-black">{activeTab}</span>
+                            <span className="text-slate-700 capitalize font-black">{activeTab}</span>
                         </div>
                     </div>
 
@@ -2249,10 +2249,10 @@ FORMAT:
                             {/* Charts Row */}
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* Line Chart */}
-                                <div className="lg:col-span-2 bg-[#1e2229] border border-[#2b303c] rounded-xl p-5 shadow-lg space-y-4">
-                                    <div className="flex justify-between items-center border-b border-[#2b303c] pb-3">
-                                        <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400">AI Request Traffic Value</h4>
-                                        <span className="text-[10px] text-lime-400 font-bold bg-lime-950 px-2.5 py-0.5 rounded-full">Last 7 Hours</span>
+                                <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
+                                    <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+                                        <h4 className="font-bold text-xs uppercase tracking-widest text-slate-500">AI Request Traffic Value</h4>
+                                        <span className="text-[10px] text-lime-700 font-bold bg-lime-100 px-2.5 py-0.5 rounded-full">Last 7 Hours</span>
                                     </div>
                                     
                                     <div className="w-full h-48 relative">
@@ -2283,9 +2283,9 @@ FORMAT:
                                             return (
                                                 <svg className="w-full h-full" viewBox="0 0 500 170">
                                                     {/* Grid Lines */}
-                                                    <line x1="30" y1="40" x2="470" y2="40" stroke="#2b303c" strokeWidth="1" strokeDasharray="3,3" />
-                                                    <line x1="30" y1="90" x2="470" y2="90" stroke="#2b303c" strokeWidth="1" strokeDasharray="3,3" />
-                                                    <line x1="30" y1="140" x2="470" y2="140" stroke="#2b303c" strokeWidth="1" />
+                                                    <line x1="30" y1="40" x2="470" y2="40" stroke="#f1f3f5" strokeWidth="1" strokeDasharray="3,3" />
+                                                    <line x1="30" y1="90" x2="470" y2="90" stroke="#f1f3f5" strokeWidth="1" strokeDasharray="3,3" />
+                                                    <line x1="30" y1="140" x2="470" y2="140" stroke="#e9ecef" strokeWidth="1" />
                                                     
                                                     {/* SVG Path */}
                                                     {points.length > 0 && (
@@ -2309,7 +2309,7 @@ FORMAT:
                                                     {/* Data Dots */}
                                                     {points.map((p, idx) => (
                                                         <g key={idx}>
-                                                            <circle cx={p.x} cy={p.y} r="4.5" fill="#198754" stroke="#1e2229" strokeWidth="1.5" />
+                                                            <circle cx={p.x} cy={p.y} r="4.5" fill="#198754" stroke="#ffffff" strokeWidth="1.5" />
                                                             <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#198754" className="text-[9px] font-black">{history[idx].count}</text>
                                                         </g>
                                                     ))}
