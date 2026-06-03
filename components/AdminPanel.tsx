@@ -22,6 +22,8 @@ import {
     Settings as SettingsIcon, 
     LogOut, 
     ChevronDown, 
+    ChevronRight,
+    Moon,
     Sparkles, 
     RefreshCw, 
     Trash2,
@@ -1900,14 +1902,14 @@ FORMAT:
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
 
     return (
-        <div className="min-h-screen bg-[#14181c] flex text-slate-100 w-full overflow-hidden font-sans select-none">
+        <div className="min-h-screen bg-[#14181c] flex text-slate-100 w-full overflow-hidden font-sans select-none vantutor-admin dark">
             {/* Sidebar - Desktop */}
             <aside className="w-64 bg-[#1e2229] text-slate-350 flex-shrink-0 flex flex-col justify-between border-r border-[#2b303c] sticky top-0 h-screen z-40 hidden md:flex">
                 <div className="flex flex-col gap-4">
                     {/* Header Brand */}
                     <div className="flex items-center gap-3 border-b border-[#2b303c] pb-4 px-6 pt-5">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-lime-400 text-xs font-black shadow-md shadow-lime-500/5">
-                            VT
+                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white text-sm font-black shadow-md">
+                            A
                         </div>
                         <div>
                             <h2 className="text-sm font-black text-slate-200 tracking-wide leading-tight">AdminLTE 4</h2>
@@ -1936,13 +1938,13 @@ FORMAT:
                                 onClick={() => handleCourseTabNavigate('/admin')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'dashboard'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <Home className="w-4 h-4" />
                                 <span>Dashboard</span>
-                                {activeTab === 'dashboard' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'dashboard' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                         </div>
 
@@ -1953,37 +1955,37 @@ FORMAT:
                                 onClick={() => handleCourseTabNavigate('/admin/departments')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'departments'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <Building className="w-4 h-4" />
                                 <span>Departments</span>
-                                {activeTab === 'departments' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'departments' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                             <button
                                 onClick={() => handleCourseTabNavigate('/admin/courses/manager')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'courses'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <BookOpen className="w-4 h-4" />
                                 <span>Course Catalog</span>
-                                {activeTab === 'courses' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'courses' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                             <button
                                 onClick={() => handleCourseTabNavigate('/admin/questions')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'questions'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <HelpCircle className="w-4 h-4" />
                                 <span>Past Questions</span>
-                                {activeTab === 'questions' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'questions' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                         </div>
 
@@ -1994,13 +1996,13 @@ FORMAT:
                                 onClick={() => handleCourseTabNavigate('/admin/users')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'users'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <Users className="w-4 h-4" />
                                 <span>User Control</span>
-                                {activeTab === 'users' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'users' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                         </div>
 
@@ -2011,25 +2013,25 @@ FORMAT:
                                 onClick={() => handleCourseTabNavigate('/admin/payments')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'payments'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <CreditCard className="w-4 h-4" />
                                 <span>Payments Control</span>
-                                {activeTab === 'payments' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'payments' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                             <button
                                 onClick={() => handleCourseTabNavigate('/admin/analytics')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'analytics'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <Activity className="w-4 h-4" />
                                 <span>Usage Analytics</span>
-                                {activeTab === 'analytics' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'analytics' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                         </div>
 
@@ -2040,13 +2042,13 @@ FORMAT:
                                 onClick={() => handleCourseTabNavigate('/admin/app')}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
                                     activeTab === 'app'
-                                        ? 'bg-lime-500 text-slate-950 font-black shadow-md'
+                                        ? 'bg-[#343a40] text-white font-black shadow-md'
                                         : 'text-slate-400 hover:bg-[#242930] hover:text-slate-200'
                                 }`}
                             >
                                 <SettingsIcon className="w-4 h-4" />
                                 <span>App Settings</span>
-                                {activeTab === 'app' && <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'app' ? 'text-slate-200 rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                             </button>
                         </div>
                     </nav>
@@ -2106,7 +2108,7 @@ FORMAT:
                         </button>
 
                         <button className="text-slate-400 hover:text-white transition">
-                            <Clock className="w-4 h-4" />
+                            <Moon className="w-4 h-4" />
                         </button>
 
                         <button 
@@ -2120,7 +2122,7 @@ FORMAT:
                                     (userProfile.display_name || 'A').charAt(0).toUpperCase()
                                 )}
                             </div>
-                            <span className="text-xs font-bold text-slate-300 hidden md:inline">{userProfile.display_name || 'System Admin'}</span>
+                            <span className="text-xs font-bold text-slate-300 hidden md:inline">{userProfile.display_name || 'Alexander Pierce'}</span>
                         </button>
                         
                         {isProfileMenuOpen && (
@@ -2168,7 +2170,7 @@ FORMAT:
                                 key={item.id}
                                 onClick={() => handleCourseTabNavigate(item.path)}
                                 className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider whitespace-nowrap transition ${
-                                    isActive ? 'bg-lime-500 text-slate-950 shadow-sm' : 'hover:bg-[#242930] text-slate-350'
+                                    isActive ? 'bg-[#343a40] text-white shadow-sm font-black' : 'hover:bg-[#242930] text-slate-350'
                                 }`}
                             >
                                 {item.label}

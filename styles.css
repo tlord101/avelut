@@ -311,91 +311,86 @@
   }
 }
 
-/* AdminLTE 4 Dark Theme Overrides */
-.admin-dark {
+/* Custom AdminLTE 4 Dark Theme Styles override */
+.vantutor-admin.dark {
   background-color: #14181c !important;
   color: #f1f5f9 !important;
 }
-.admin-dark .bg-white {
-  background-color: #1e2229 !important;
-}
-.admin-dark .bg-slate-50,
-.admin-dark .bg-slate-50\/50,
-.admin-dark .bg-gray-50,
-.admin-dark .bg-gray-50\/50 {
+.vantutor-admin.dark .bg-slate-50,
+.vantutor-admin.dark .bg-slate-50\/50,
+.vantutor-admin.dark .bg-gray-50,
+.vantutor-admin.dark .bg-gray-50\/50,
+.vantutor-admin.dark main {
   background-color: #14181c !important;
 }
-.admin-dark .border-gray-200,
-.admin-dark .border-slate-200,
-.admin-dark .border-gray-150,
-.admin-dark .border-slate-100 {
+.vantutor-admin.dark .bg-white,
+.vantutor-admin.dark .bg-slate-100 {
+  background-color: #1e2229 !important;
   border-color: #2b303c !important;
 }
-.admin-dark .text-gray-900,
-.admin-dark .text-gray-800,
-.admin-dark .text-slate-900,
-.admin-dark .text-slate-800 {
+.vantutor-admin.dark .border-slate-100,
+.vantutor-admin.dark .border-slate-200,
+.vantutor-admin.dark .border-gray-200,
+.vantutor-admin.dark .border-gray-150 {
+  border-color: #2b303c !important;
+}
+.vantutor-admin.dark .text-slate-800,
+.vantutor-admin.dark .text-slate-900,
+.vantutor-admin.dark .text-gray-800,
+.vantutor-admin.dark .text-gray-900 {
   color: #f1f5f9 !important;
 }
-.admin-dark .text-gray-700,
-.admin-dark .text-slate-700 {
-  color: #cbd5e1 !important;
-}
-.admin-dark .text-gray-500,
-.admin-dark .text-slate-500,
-.admin-dark .text-slate-450 {
+.vantutor-admin.dark .text-slate-550,
+.vantutor-admin.dark .text-slate-500,
+.vantutor-admin.dark .text-slate-400,
+.vantutor-admin.dark .text-gray-500,
+.vantutor-admin.dark .text-gray-400 {
   color: #94a3b8 !important;
 }
-.admin-dark input,
-.admin-dark select,
-.admin-dark textarea {
+.vantutor-admin.dark input,
+.vantutor-admin.dark select,
+.vantutor-admin.dark textarea {
   background-color: #242930 !important;
+  border-color: #2b303c !important;
   color: #f1f5f9 !important;
+}
+.vantutor-admin.dark input:focus,
+.vantutor-admin.dark select:focus,
+.vantutor-admin.dark textarea:focus {
+  border-color: #3b82f6 !important;
+  background-color: #1a1e22 !important;
+}
+.vantutor-admin.dark table {
+  background-color: #1e2229 !important;
   border-color: #2b303c !important;
 }
-.admin-dark input:focus,
-.admin-dark select:focus,
-.admin-dark textarea:focus {
-  border-color: #84cc16 !important;
-  box-shadow: 0 0 0 4px rgba(132, 204, 22, 0.1) !important;
-}
-.admin-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
-.admin-dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #2b303c !important;
-}
-.admin-dark .bg-slate-100 {
-  background-color: #242930 !important;
-}
-.admin-dark thead.bg-slate-50,
-.admin-dark thead.bg-gray-50 {
+.vantutor-admin.dark table thead,
+.vantutor-admin.dark table thead tr {
   background-color: #181c20 !important;
+  color: #94a3b8 !important;
 }
-.admin-dark tbody tr:hover {
-  background-color: rgba(36, 41, 48, 0.4) !important;
+.vantutor-admin.dark table thead th {
+  border-bottom: 2px solid #2b303c !important;
 }
-.admin-dark .bg-lime-50 {
-  background-color: rgba(132, 204, 22, 0.05) !important;
-  border-color: rgba(132, 204, 22, 0.2) !important;
+.vantutor-admin.dark table tbody tr {
+  border-bottom: 1px solid #2b303c !important;
 }
-.admin-dark .text-lime-800,
-.admin-dark .text-lime-700 {
-  color: #a3e635 !important;
+.vantutor-admin.dark table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
 }
-.admin-dark .bg-indigo-50 {
-  background-color: rgba(99, 102, 241, 0.08) !important;
-  border-color: rgba(99, 102, 241, 0.2) !important;
-  color: #818cf8 !important;
+.vantutor-admin.dark .bg-slate-200\/80,
+.vantutor-admin.dark .bg-slate-200 {
+  background-color: #242930 !important;
+  color: #94a3b8 !important;
 }
-.admin-dark .bg-green-50 {
-  background-color: rgba(34, 197, 94, 0.08) !important;
-  border-color: rgba(34, 197, 94, 0.2) !important;
-  color: #4ade80 !important;
+.vantutor-admin.dark .bg-lime-50 {
+  background-color: rgba(163, 230, 53, 0.05) !important;
+  border-color: rgba(163, 230, 53, 0.2) !important;
+  color: #bef264 !important;
 }
-.admin-dark .bg-amber-50 {
-  background-color: rgba(245, 158, 11, 0.08) !important;
-  border-color: rgba(245, 158, 11, 0.2) !important;
-  color: #fbbf24 !important;
+.vantutor-admin.dark .text-lime-800 {
+  color: #bef264 !important;
 }
-.admin-dark hr {
-  border-color: #2b303c !important;
-}
+.vantutor-admin.dark .border-lime-200 {
+  border-color: rgba(163, 230, 53, 0.2) !important;
+}
