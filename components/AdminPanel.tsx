@@ -860,6 +860,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     useEffect(() => {
         if (activeTab === 'users' || activeTab === 'dashboard') {
             void fetchUsers();
+            void fetchSentNotifications();
+            void fetchSentEmails();
         } else if (activeTab === 'notifications') {
             void fetchSentNotifications();
             void fetchUsers();
@@ -2637,6 +2639,208 @@ FORMAT:
                                     <div className="text-[10px] font-black text-blue-100 uppercase tracking-widest text-center pt-2 select-none">
                                         Vantutor Active Hubs (Global)
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* New Analytics Charts Row */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                                {/* Student Subscription Analysis */}
+                                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
+                                    {(() => {
+                                        const totalUsers = allUsersList.length || 1;
+                                        const premiumCount = allUsersList.filter(u => u.subscription_status === 'premium').length;
+                                        const tokenCount = allUsersList.filter(u => u.subscription_status === 'google_token').length;
+                                        const freeCount = Math.max(0, totalUsers - premiumCount - tokenCount);
+
+                                        const premiumPct = Math.round((premiumCount / totalUsers) * 100);
+                                        const tokenPct = Math.round((tokenCount / totalUsers) * 100);
+                                        const freePct = Math.round((freeCount / totalUsers) * 100);
+
+                                        // SVG Donut Calculations
+                                        const radius = 35;
+                                        const circumference = 2 * Math.PI * radius; // ~219.91
+                                        
+                                        const premiumDash = (premiumCount / totalUsers) * circumference;
+                                        const tokenDash = (tokenCount / totalUsers) * circumference;
+                                        const freeDash = (freeCount / totalUsers) * circumference;
+
+                                        const premiumOffset = 0;
+                                        const tokenOffset = -premiumDash;
+                                        const freeOffset = -(premiumDash + tokenDash);
+
+                                        return (
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+                                                    <h4 className="font-bold text-xs uppercase tracking-widest text-slate-500">Student Subscription Analysis</h4>
+                                                    <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2.5 py-0.5 rounded-full">Live Ratios</span>
+                                                </div>
+                                                
+                                                <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
+                                                    {/* SVG Donut */}
+                                                    <div className="relative w-32 h-32 flex items-center justify-center">
+                                                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                                            {/* Background track */}
+                                                            <circle
+                                                                cx="50"
+                                                                cy="50"
+                                                                r={radius}
+                                                                fill="transparent"
+                                                                stroke="#f1f5f9"
+                                                                strokeWidth="10"
+                                                            />
+                                                            
+                                                            {/* Free Users Segment */}
+                                                            {freeCount > 0 && (
+                                                                <circle
+                                                                    cx="50"
+                                                                    cy="50"
+                                                                    r={radius}
+                                                                    fill="transparent"
+                                                                    stroke="#94a3b8" // Slate
+                                                                    strokeWidth="10"
+                                                                    strokeDasharray={`${freeDash} ${circumference}`}
+                                                                    strokeDashoffset={freeOffset}
+                                                                    className="transition-all duration-500 hover:stroke-slate-500 cursor-pointer"
+                                                                    strokeLinecap="round"
+                                                                />
+                                                            )}
+                                                            
+                                                            {/* Google Token Users Segment */}
+                                                            {tokenCount > 0 && (
+                                                                <circle
+                                                                    cx="50"
+                                                                    cy="50"
+                                                                    r={radius}
+                                                                    fill="transparent"
+                                                                    stroke="#a3e635" // Lime
+                                                                    strokeWidth="10"
+                                                                    strokeDasharray={`${tokenDash} ${circumference}`}
+                                                                    strokeDashoffset={tokenOffset}
+                                                                    className="transition-all duration-500 hover:stroke-lime-500 cursor-pointer"
+                                                                    strokeLinecap="round"
+                                                                />
+                                                            )}
+
+                                                            {/* Premium Users Segment */}
+                                                            {premiumCount > 0 && (
+                                                                <circle
+                                                                    cx="50"
+                                                                    cy="50"
+                                                                    r={radius}
+                                                                    fill="transparent"
+                                                                    stroke="#0088CC" // Azure Brand
+                                                                    strokeWidth="10"
+                                                                    strokeDasharray={`${premiumDash} ${circumference}`}
+                                                                    strokeDashoffset={premiumOffset}
+                                                                    className="transition-all duration-500 hover:stroke-brand-600 cursor-pointer"
+                                                                    strokeLinecap="round"
+                                                                />
+                                                            )}
+                                                        </svg>
+                                                        
+                                                        {/* Centered label */}
+                                                        <div className="absolute text-center select-none">
+                                                            <span className="block text-xl font-black text-slate-800">{totalUsers}</span>
+                                                            <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400">Students</span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Legends and Metrics */}
+                                                    <div className="flex-1 space-y-2.5 min-w-[150px]">
+                                                        <div className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-[#0088CC]"></span>
+                                                                <span className="font-bold text-slate-600">Premium</span>
+                                                            </div>
+                                                            <div className="text-right font-black">
+                                                                <span className="text-slate-800">{premiumCount}</span>
+                                                                <span className="text-[10px] text-slate-400 ml-1">({premiumPct}%)</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-[#a3e635]"></span>
+                                                                <span className="font-bold text-slate-600">Google Token</span>
+                                                            </div>
+                                                            <div className="text-right font-black">
+                                                                <span className="text-slate-800">{tokenCount}</span>
+                                                                <span className="text-[10px] text-slate-400 ml-1">({tokenPct}%)</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-[#94a3b8]"></span>
+                                                                <span className="font-bold text-slate-600">Standard / Free</span>
+                                                            </div>
+                                                            <div className="text-right font-black">
+                                                                <span className="text-slate-800">{freeCount}</span>
+                                                                <span className="text-[10px] text-slate-400 ml-1">({freePct}%)</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* System Activity Comparison */}
+                                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
+                                    {(() => {
+                                        const aiQueriesCount = aiRequestLogs.length;
+                                        const notificationsCount = sentNotifications.length;
+                                        const emailsCount = sentEmails.length;
+
+                                        const maxCount = Math.max(aiQueriesCount, notificationsCount, emailsCount, 5);
+
+                                        // Calculate bar heights (percentage of height 100)
+                                        const aiHeight = (aiQueriesCount / maxCount) * 100;
+                                        const notificationHeight = (notificationsCount / maxCount) * 100;
+                                        const emailHeight = (emailsCount / maxCount) * 100;
+
+                                        return (
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+                                                    <h4 className="font-bold text-xs uppercase tracking-widest text-slate-500">System Activity Comparison</h4>
+                                                    <span className="text-[10px] text-purple-700 font-bold bg-purple-100 px-2.5 py-0.5 rounded-full">All-Time Volume</span>
+                                                </div>
+                                                
+                                                <div className="h-32 flex items-end justify-around gap-4 pt-6 pb-2 px-4 relative">
+                                                    {/* AI Requests Bar */}
+                                                    <div className="flex flex-col items-center gap-2 w-1/4 h-full justify-end group cursor-pointer">
+                                                        <div className="w-full bg-gradient-to-t from-emerald-600 to-teal-400 hover:from-emerald-500 hover:to-teal-350 rounded-t-lg relative transition-all duration-500" style={{ height: `${Math.max(6, aiHeight)}%` }}>
+                                                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition duration-200 pointer-events-none">
+                                                                {aiQueriesCount}
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">AI Queries</span>
+                                                    </div>
+
+                                                    {/* Notifications Bar */}
+                                                    <div className="flex flex-col items-center gap-2 w-1/4 h-full justify-end group cursor-pointer">
+                                                        <div className="w-full bg-gradient-to-t from-amber-500 to-orange-400 hover:from-amber-400 hover:to-orange-350 rounded-t-lg relative transition-all duration-500" style={{ height: `${Math.max(6, notificationHeight)}%` }}>
+                                                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition duration-200 pointer-events-none">
+                                                                {notificationsCount}
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[9px] font-black uppercase text-amber-700 tracking-wider">Pushes</span>
+                                                    </div>
+
+                                                    {/* Emails Bar */}
+                                                    <div className="flex flex-col items-center gap-2 w-1/4 h-full justify-end group cursor-pointer">
+                                                        <div className="w-full bg-gradient-to-t from-blue-600 to-indigo-400 hover:from-blue-500 hover:to-indigo-350 rounded-t-lg relative transition-all duration-500" style={{ height: `${Math.max(6, emailHeight)}%` }}>
+                                                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition duration-200 pointer-events-none">
+                                                                {emailsCount}
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[9px] font-black uppercase text-blue-700 tracking-wider">Emails</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>
