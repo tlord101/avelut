@@ -440,9 +440,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const fetchUsageLogs = async () => {
         setIsLogsLoading(true);
         try {
-            // Fetch AI requests
-            const aiRef = dbRef(db, 'usage_logs/ai_requests');
-            const aiSnap = await get(aiRef);
+            const [aiSnap, paySnap, refundSnap, complaintSnap, codesSnap] = await Promise.all([
+                get(dbRef(db, 'usage_logs/ai_requests')),
+                get(dbRef(db, 'usage_logs/payments')),
+                get(dbRef(db, 'usage_logs/refunds')),
+                get(dbRef(db, 'usage_logs/complaints')),
+                get(dbRef(db, 'activation_codes'))
+            ]);
+
             if (aiSnap.exists()) {
                 const data = aiSnap.val();
                 const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
@@ -452,9 +457,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setAiRequestLogs([]);
             }
 
-            // Fetch payments
-            const payRef = dbRef(db, 'usage_logs/payments');
-            const paySnap = await get(payRef);
             if (paySnap.exists()) {
                 const data = paySnap.val();
                 const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
@@ -464,9 +466,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setPaymentLogs([]);
             }
 
-            // Fetch refunds
-            const refundRef = dbRef(db, 'usage_logs/refunds');
-            const refundSnap = await get(refundRef);
             if (refundSnap.exists()) {
                 const data = refundSnap.val();
                 const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
@@ -476,9 +475,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setRefundLogs([]);
             }
 
-            // Fetch complaints
-            const complaintRef = dbRef(db, 'usage_logs/complaints');
-            const complaintSnap = await get(complaintRef);
             if (complaintSnap.exists()) {
                 const data = complaintSnap.val();
                 const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
@@ -488,9 +484,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setComplaintLogs([]);
             }
 
-            // Fetch activation codes
-            const codesRef = dbRef(db, 'activation_codes');
-            const codesSnap = await get(codesRef);
             if (codesSnap.exists()) {
                 const data = codesSnap.val();
                 const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
