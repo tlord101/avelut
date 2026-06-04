@@ -60,17 +60,17 @@ export const MessageComponent = memo(
                 isLastMessage && "opacity-100"
               )}
             >
-              <MessageAction tooltip="Copy" delayDuration={100}>
+              <MessageAction tooltip="Copy">
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <Copy />
                 </Button>
               </MessageAction>
-              <MessageAction tooltip="Upvote" delayDuration={100}>
+              <MessageAction tooltip="Upvote">
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <ThumbsUp />
                 </Button>
               </MessageAction>
-              <MessageAction tooltip="Downvote" delayDuration={100}>
+              <MessageAction tooltip="Downvote">
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <ThumbsDown />
                 </Button>
@@ -89,7 +89,7 @@ export const MessageComponent = memo(
                 "flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
               )}
             >
-              <MessageAction tooltip="Copy" delayDuration={100}>
+              <MessageAction tooltip="Copy">
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <Copy />
                 </Button>

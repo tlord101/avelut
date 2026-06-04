@@ -26,11 +26,12 @@ export interface UserProfile {
   };
   has_completed_tour?: boolean;
   is_activated?: boolean;
-  subscription_status?: 'none' | 'premium' | 'personal_token';
+  subscription_status?: 'none' | 'free' | 'basic' | 'pro' | 'personal_token' | 'premium';
   personal_api_key?: string;
   use_personal_token?: boolean;
   paystack_reference?: string;
   selected_free_course_id?: string;
+  fcm_token?: string;
 }
 
 export interface Message {
@@ -90,6 +91,7 @@ export interface Course {
   semester?: 'first' | 'second';
   textbook_url?: string;
   textbook_urls?: string[];
+  textbook_shared_key?: string;
 }
 
 export interface Department {
@@ -149,6 +151,34 @@ export interface DashboardData {
     examHistory: ExamHistoryItem[];
 }
 
+export interface PlanLimit {
+  courses: number;
+  ai_requests_per_course: number;
+  exams: number;
+  visual_messages: number;
+}
+
+export interface PlanConfig {
+  name: string;
+  description: string;
+  price: number;
+  limits: PlanLimit;
+}
+
+export interface UsageSettings {
+  plans: {
+    free: PlanConfig;
+    basic: PlanConfig;
+    pro: PlanConfig;
+  };
+  additional_prices: {
+    visual_messages_price: number;
+    visual_messages_count: number;
+    studyguide_course_price: number;
+    studyguide_request_price: number;
+  };
+}
+
 export interface AppSettings {
   primary_gemini_model: string;
   gemini_api_key: string;
@@ -158,6 +188,7 @@ export interface AppSettings {
   paystack_secret_key: string;
   custom_user_limit_rpm: number;
   custom_user_limit_tpm: number;
+  usage_settings?: UsageSettings;
 }
 
 // Type for the new Notification System

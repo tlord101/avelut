@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     model: openai("gpt-4.1-nano"),
     system:
       "You are a helpful assistant with access to tools. Use the getCurrentDate tool when users ask about dates, time, or current information. You are also able to use the getTime tool to get the current time in a specific timezone.",
-    messages: convertToModelMessages(messages),
+    messages: await convertToModelMessages(messages),
     tools: {
       getTime: tool({
         description: "Get the current time in a specific timezone",

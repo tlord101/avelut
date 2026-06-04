@@ -4,7 +4,6 @@ import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { MoreVerticalIcon } from './icons/MoreVerticalIcon';
 import { PencilIcon } from './icons/PencilIcon';
-import { TrashIcon } from './icons/TrashIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { ChatBubbleIcon } from './icons/ChatBubbleIcon';

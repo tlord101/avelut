@@ -3,6 +3,7 @@ import { readCachedJson, writeCachedJson } from './utils/cache';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
+import { DEFAULT_USAGE_SETTINGS } from './utils/appSettings';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course, DashboardAssessment } from './types';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp'; 
@@ -367,6 +368,22 @@ const App: React.FC = () => {
         setActiveItem('dashboard');
         setTimeout(() => setIsTourOpen(true), 300);
     }, [setActiveItem]);
+
+    useEffect(() => {
+        const checkAndSeedUsageSettings = async () => {
+            try {
+                const usageSettingsRef = dbRef(db, 'app_settings/global/usage_settings');
+                const snapshot = await get(usageSettingsRef);
+                if (!snapshot.exists()) {
+                    await set(usageSettingsRef, DEFAULT_USAGE_SETTINGS);
+                    console.log('Seeded default usage settings to Firebase successfully.');
+                }
+            } catch (err) {
+                console.error('Failed to seed usage settings:', err);
+            }
+        };
+        checkAndSeedUsageSettings();
+    }, []);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
@@ -922,6 +939,7 @@ const App: React.FC = () => {
                             activeItem={activeItem}
                             user={user}
                             userProfile={userProfile}
+                            appSettings={appSettings}
                             userProgress={userProgress}
                             dashboardData={dashboardData}
                                     initialMessengerChatId={pendingMessengerChatId}

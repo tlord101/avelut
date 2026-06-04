@@ -12,6 +12,9 @@ import { db, storage } from '../firebase';
 import type { Course, UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useToast } from '../hooks/useToast';
+import { LimitExceededModal } from './LimitExceededModal';
+import { checkVisualMessagesLimit, incrementVisualMessagesUsed } from '../utils/usage';
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -275,8 +278,22 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
+
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
+
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
+  const { addToast } = useToast();
+
+  useEffect(() => {
+    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
+    const unsubscribe = onValue(usageRef, (snapshot) => {
+      setUsageStats(snapshot.val() || {});
+    });
+    return () => unsubscribe();
+  }, [userProfile.uid]);
   const geminiModel = appSettings.primary_gemini_model;
   const usePersonalToken = !!(
     userProfile?.use_personal_token &&
@@ -568,6 +585,19 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
     const prompt = inputValue.trim();
     if ((!prompt && attachments.length === 0) || isSending) return;
 
+    // Check message limits
+    const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+    if (!limitCheck.allowed) {
+      setLimitModalData({
+        limit: limitCheck.limit,
+        used: limitCheck.used,
+        price: limitCheck.price,
+        batchCount: limitCheck.count
+      });
+      setShowLimitModal(true);
+      return;
+    }
+
     const primaryAttachment = attachments[0] || null;
     const userText = prompt || getHistoryFallbackTitle(prompt, primaryAttachment);
     const userMessage: AssistantMessage = {
@@ -694,6 +724,10 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       }
 
       const responseText = aiResult.data || 'I could not generate a response right now. Please try again.';
+      
+      // Increment message usage counter
+      await incrementVisualMessagesUsed(userProfile.uid);
+
       const assistantMessage: AssistantMessage = {
         id: createMessageId(),
         sender: 'assistant',
@@ -1410,6 +1444,20 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
           </footer>
         </main>
       </div>
+
+      <LimitExceededModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+        userProfile={userProfile}
+        appSettings={appSettings}
+        featureType="visual_messages"
+        limitValue={limitModalData.limit}
+        usedValue={limitModalData.used}
+        price={limitModalData.price}
+        batchCount={limitModalData.batchCount}
+        addToast={addToast}
+        onSuccessPurchase={() => {}}
+      />
 
       <style>{`
         @keyframes voice-bar-pulse {

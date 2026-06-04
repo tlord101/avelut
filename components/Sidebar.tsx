@@ -4,6 +4,8 @@ import { LogoIcon } from './icons/LogoIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { navigationItems, secondaryNavigationItems, adminNavigationItems } from '../constants';
 import { Avatar } from './Avatar';
+import { VerificationBadge } from './VerificationBadge';
+
 
 
 // SVG icons defined directly in the component to avoid creating new files
@@ -116,7 +118,10 @@ const SidebarContent: React.FC<{
           <div className="flex items-center">
             <Avatar display_name={userProfile?.display_name || null} photo_url={userProfile?.photo_url} className="w-10 h-10 flex-shrink-0" />
             <div className={`ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <p className="font-bold text-slate-800">{userProfile?.display_name}</p>
+              <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                <span>{userProfile?.display_name}</span>
+                <VerificationBadge status={userProfile?.subscription_status} />
+              </p>
               <p className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest">{userProfile?.level} Level</p>
             </div>
           </div>

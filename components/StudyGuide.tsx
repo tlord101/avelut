@@ -6,7 +6,7 @@ import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
-import type { UserProfile, Message, Course, Topic, UserProgress } from '../types';
+import type { UserProfile, Message, Course, Topic, UserProgress, AppSettings } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,8 @@ import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { LockIcon } from './icons/LockIcon';
+import { LimitExceededModal } from './LimitExceededModal';
+import { checkStudyGuideCoursesLimit, checkStudyGuideCourseRequestsLimit, incrementCourseRequestsUsed } from '../utils/usage';
 
 declare var __app_id: string;
 
@@ -225,15 +227,19 @@ const StudyGuideSkeleton: React.FC = () => (
 // --- LEARNING INTERFACE COMPONENT (UNCHANGED LOGIC, STYLED TO FIT) ---
 interface LearningInterfaceProps {
     userProfile: UserProfile;
-    topic: Topic & { courseName: string };
+    topic: Topic & { courseName: string; courseId?: string; course_id?: string };
     onClose: () => void;
+    usageStats: any;
 }
 
-const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose }) => {
+const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const [fileData, setFileData] = useState<string | null>(null);
+    const [showLimitModal, setShowLimitModal] = useState(false);
+    const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
+    const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5, courseId: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [isIllustrating, setIsIllustrating] = useState(false);
     const [textbookContext, setTextbookContext] = useState<string>('');
@@ -315,7 +321,7 @@ Scope control (very important):
 ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}` : ''}${textbookContext}`;
 
     useEffect(() => {
-        let intervalId: ReturnType<typeof window.setInterval> | null = null;
+        let intervalId: any = null;
 
         const awardTimeBasedXp = async () => {
             if (isAwardingTimeXpRef.current) return;
@@ -400,6 +406,23 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             addToast('Gemini API key is not configured in App Controls.', 'error');
             return;
         }
+
+        const courseId = topic.courseId || topic.course_id || 'unknown';
+        const limitCheck = checkStudyGuideCourseRequestsLimit(courseId, userProfile, usageStats, appSettings);
+        if (!limitCheck.allowed) {
+            setLimitModalFeature('ai_requests_per_course');
+            setLimitModalData({
+                limit: limitCheck.limit,
+                used: limitCheck.used,
+                price: limitCheck.price,
+                batchCount: limitCheck.count,
+                courseId
+            });
+            setShowLimitModal(true);
+            onClose();
+            return;
+        }
+
         setIsLoading(true);
         const prompt = `
 Context:
@@ -436,6 +459,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 timestamp: Date.now() 
             };
             setMessages([botMessage]);
+            await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
         });
 
         if (!result.success) {
@@ -443,7 +467,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setIsLoading(false);
             onClose();
         }
-    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid]);
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, usageStats, topic.courseId, topic.course_id]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -520,6 +544,21 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         if ((!textToSend.trim() && !file) || isLoading || isIllustrating) return;
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
+            return;
+        }
+
+        const courseId = topic.courseId || topic.course_id || 'unknown';
+        const limitCheck = checkStudyGuideCourseRequestsLimit(courseId, userProfile, usageStats, appSettings);
+        if (!limitCheck.allowed) {
+            setLimitModalFeature('ai_requests_per_course');
+            setLimitModalData({
+                limit: limitCheck.limit,
+                used: limitCheck.used,
+                price: limitCheck.price,
+                batchCount: limitCheck.count,
+                courseId
+            });
+            setShowLimitModal(true);
             return;
         }
         
@@ -634,6 +673,7 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(newBotMsgRef, botMessageData);
+                await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
 
             });
 
@@ -890,6 +930,21 @@ Student: "${tempInput}"
                 {file && <div className="text-xs text-gray-600 mt-2 flex items-center gap-2 bg-gray-200 p-1 px-2 rounded-md w-fit"><FileIcon /><span>{file.name}</span><button onClick={() => { setFile(null); setFileData(null); }} className="text-red-500 hover:text-red-400">&times;</button></div>}
                 
             </footer>
+
+            <LimitExceededModal
+                isOpen={showLimitModal}
+                onClose={() => setShowLimitModal(false)}
+                userProfile={userProfile}
+                appSettings={appSettings}
+                featureType={limitModalFeature}
+                limitValue={limitModalData.limit}
+                usedValue={limitModalData.used}
+                price={limitModalData.price}
+                batchCount={limitModalData.batchCount}
+                addToast={addToast}
+                onSuccessPurchase={() => {}}
+                courseId={limitModalData.courseId}
+            />
         </div>
     );
 };
@@ -980,22 +1035,21 @@ const CourseHeader: React.FC<{
     course: Course, 
     isExpanded: boolean, 
     onClick: () => void,
-    isFreeUser: boolean,
-    selectedFreeCourseId?: string,
-    onSelectFreeCourse: () => void
-}> = ({ course, isExpanded, onClick, isFreeUser, selectedFreeCourseId, onSelectFreeCourse }) => {
+    isUnlocked: boolean,
+    isExempt: boolean,
+    onUnlock: () => void
+}> = ({ course, isExpanded, onClick, isUnlocked, isExempt, onUnlock }) => {
     const courseLabel = course.course_code || course.course_id || course.course_name;
-    const isThisCourseUnlocked = selectedFreeCourseId === course.course_id;
-    const isAnyCourseUnlocked = !!selectedFreeCourseId;
 
     return (
         <div className="w-full max-w-4xl mx-auto py-2">
             <div className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition`}>
                 <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => {
-                    if (isFreeUser && isAnyCourseUnlocked && !isThisCourseUnlocked) {
-                        return; // Click is disabled/locked
+                    if (isExempt || isUnlocked) {
+                        onClick();
+                    } else {
+                        onUnlock();
                     }
-                    onClick();
                 }}>
                     <div className="flex items-center gap-3">
                         <div className="text-sm font-black text-gray-700">{courseLabel}</div>
@@ -1004,32 +1058,27 @@ const CourseHeader: React.FC<{
                 </div>
 
                 <div className="mt-2 sm:mt-0 flex items-center gap-3 justify-between">
-                    {isFreeUser && (
+                    {!isExempt && (
                         <>
-                            {!isAnyCourseUnlocked ? (
+                            {isUnlocked ? (
+                                <span className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full font-black text-[9px] uppercase tracking-wider whitespace-nowrap">
+                                    Unlocked Course
+                                </span>
+                            ) : (
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onSelectFreeCourse();
+                                        onUnlock();
                                     }}
-                                    className="px-3 py-1.5 bg-lime-600 hover:bg-lime-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-sm active:scale-95 whitespace-nowrap"
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-sm active:scale-95 whitespace-nowrap"
                                 >
-                                    Unlock as Free Course
+                                    Unlock Course
                                 </button>
-                            ) : isThisCourseUnlocked ? (
-                                <span className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full font-black text-[9px] uppercase tracking-wider whitespace-nowrap">
-                                    Unlocked Free Course
-                                </span>
-                            ) : (
-                                <span className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-full font-black text-[9px] uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-                                    <LockIcon className="w-3 h-3 text-slate-400" />
-                                    <span>Locked</span>
-                                </span>
                             )}
                         </>
                     )}
                     
-                    {(!isFreeUser || isThisCourseUnlocked) && (
+                    {(isExempt || isUnlocked) && (
                         <button onClick={onClick} className="p-1.5 text-gray-400 hover:text-gray-600 transition">
                             <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
                         </button>
@@ -1059,32 +1108,29 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [courses, setCourses] = useState<Course[]>(() => {
     return readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
   });
-  const [isLoading, setIsLoading] = useState(() => {
-    const cached = readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
-    return cached.length === 0;
-  });
-  const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string }) | null>(null);
-    const [filter, setFilter] = useState<{ semester: 'first' | 'second' | 'all'; searchTerm: string }>({ semester: 'second', searchTerm: '' });
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
-    const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string; courseId?: string; course_id?: string }) | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
+  const [filter, setFilter] = useState({ searchTerm: '', semester: 'all' as 'all' | 'first' | 'second' });
   const { addToast } = useToast();
 
-  const isFreeUser = userProfile?.subscription_status !== 'premium';
-  
-  const handleSelectFreeCourse = async (course: Course) => {
-    const confirm = window.confirm(`Are you sure you want to select "${course.course_name}" as your single free course? This choice cannot be changed later.`);
-    if (!confirm) return;
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('courses');
+  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
+  const { settings: appSettings } = useAppSettings();
 
-    try {
-      await update(dbRef(db, `users/${userProfile.uid}`), {
-        selected_free_course_id: course.course_id
-      });
-      addToast(`"${course.course_name}" has been unlocked successfully!`, 'success');
-    } catch (e: any) {
-      console.error(e);
-      addToast('Failed to unlock course: ' + e.message, 'error');
-    }
-  };
+  useEffect(() => {
+    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
+    const unsubscribe = onValue(usageRef, (snapshot) => {
+      setUsageStats(snapshot.val() || {});
+    });
+    return () => unsubscribe();
+  }, [userProfile.uid]);
+
+  const isUserExempt = !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
+  const isFreeUser = !isUserExempt && (userProfile?.subscription_status === 'free' || !userProfile?.subscription_status);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -1168,16 +1214,55 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     fetchCourses();
   }, [userProfile.department_id, userProfile.level, addToast]);
   
-  const toggleCourse = (courseId: string) => {
-    setExpandedCourses(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(courseId)) {
+  const toggleCourse = async (courseId: string) => {
+    if (expandedCourses.has(courseId)) {
+        setExpandedCourses(prev => {
+            const newSet = new Set(prev);
             newSet.delete(courseId);
-        } else {
+            return newSet;
+        });
+        return;
+    }
+
+    const isUnlockedInDb = usageStats?.unlocked_courses?.[courseId];
+    if (isUserExempt || isUnlockedInDb) {
+        setExpandedCourses(prev => {
+            const newSet = new Set(prev);
             newSet.add(courseId);
-        }
-        return newSet;
-    });
+            return newSet;
+        });
+        return;
+    }
+
+    // Limit course outline expansion by checking checkStudyGuideCoursesLimit
+    const limitCheck = checkStudyGuideCoursesLimit(userProfile, usageStats, appSettings);
+    if (!limitCheck.allowed) {
+        setLimitModalFeature('courses');
+        setLimitModalData({
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+            price: limitCheck.price,
+            batchCount: 1
+        });
+        setShowLimitModal(true);
+        return;
+    }
+
+    // Lock course in database
+    try {
+        const path = `users/${userProfile.uid}/usage_stats/unlocked_courses/${courseId}`;
+        await update(dbRef(db), { [path]: true });
+        addToast('New course outline unlocked successfully!', 'success');
+        
+        setExpandedCourses(prev => {
+            const newSet = new Set(prev);
+            newSet.add(courseId);
+            return newSet;
+        });
+    } catch (e: any) {
+        console.error(e);
+        addToast('Failed to unlock course: ' + e.message, 'error');
+    }
   };
 
   const handleMarkTopicComplete = async (course: Course, topic: Topic) => {
@@ -1241,6 +1326,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         userProfile={userProfile}
         topic={selectedTopic}
         onClose={() => setSelectedTopic(null)}
+        usageStats={usageStats}
       />
     );
   }
@@ -1302,15 +1388,16 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     <div className="max-w-4xl mx-auto space-y-6">
                         {filteredCourses.map(course => {
                             const isExpanded = expandedCourses.has(course.course_id);
+                            const isUnlocked = isUserExempt || !!(usageStats?.unlocked_courses?.[course.course_id]);
                             return (
                                 <div key={course.course_id} className="relative">
                                     <CourseHeader
                                         course={course}
                                         isExpanded={isExpanded}
                                         onClick={() => toggleCourse(course.course_id)}
-                                        isFreeUser={isFreeUser}
-                                        selectedFreeCourseId={userProfile.selected_free_course_id}
-                                        onSelectFreeCourse={() => handleSelectFreeCourse(course)}
+                                        isUnlocked={isUnlocked}
+                                        isExempt={isUserExempt}
+                                        onUnlock={() => toggleCourse(course.course_id)}
                                     />
                                     <div className={`grid transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-8' : 'grid-rows-[0fr] opacity-0'}`}>
                                         <div className="overflow-hidden">
@@ -1321,7 +1408,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                         topic={topic}
                                                         isCompleted={userProgress[topic.topic_id]?.is_complete || false}
                                                         studyDurationSeconds={userProgress[topic.topic_id]?.study_duration_seconds || 0}
-                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name })}
+                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name, courseId: course.course_id, course_id: course.course_id })}
                                                         onMarkComplete={() => void handleMarkTopicComplete(course, topic)}
                                                         index={index}
                                                         pathColor="bg-gray-100"
@@ -1346,6 +1433,20 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 )
             )}
         </div>
+
+        <LimitExceededModal
+            isOpen={showLimitModal}
+            onClose={() => setShowLimitModal(false)}
+            userProfile={userProfile}
+            appSettings={appSettings}
+            featureType={limitModalFeature}
+            limitValue={limitModalData.limit}
+            usedValue={limitModalData.used}
+            price={limitModalData.price}
+            batchCount={limitModalData.batchCount}
+            addToast={addToast}
+            onSuccessPurchase={() => {}}
+        />
     </div>
   );
 };

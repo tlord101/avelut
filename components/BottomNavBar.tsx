@@ -12,7 +12,7 @@ interface BottomNavBarProps {
   onItemClick: (id: string) => void;
   isVisible: boolean;
   userProfile: UserProfile | null;
-  items?: { id: string, icon: JSX.Element, label: string }[];
+  items?: { id: string, icon: React.ReactElement, label: string }[];
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items }) => {

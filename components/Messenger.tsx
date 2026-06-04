@@ -4,6 +4,7 @@ import type { UserProfile } from '../types';
 import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
+import { VerificationBadge } from './VerificationBadge';
 import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
@@ -495,7 +496,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         ? `New message from ${chat.otherUser.display_name}`
         : 'New message received';
 
-      const options: NotificationOptions = {
+      const options: any = {
         body: summaryText,
         icon: '/logo.svg',
         badge: '/logo.svg',
@@ -630,10 +631,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             const data = snap.val() || {};
             setAllUsers(Object.entries(data).map(([uid, u]: any) => ({
                 uid,
-                display_name: u.displayName || u.display_name,
-                photo_url: u.photoURL || u.photo_url,
-                is_online: u.is_online,
-                last_seen: u.last_seen
+                display_name: u.displayName || u.display_name || 'Learner',
+                photo_url: u.photoURL || u.photo_url || '',
+                is_online: u.is_online || false,
+                last_seen: u.last_seen || 0,
+                subscription_status: u.subscription_status || 'free',
+                department_id: u.department_id || '',
+                level: u.level || '',
+                current_streak: u.current_streak || 0,
+                last_activity_date: u.last_activity_date || 0,
+                notifications_enabled: u.notifications_enabled || false,
             })));
         });
     }, []);
@@ -760,6 +767,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                             current_streak: u.current_streak || 0,
                             last_activity_date: u.last_activity_date || Date.now(),
                             notifications_enabled: !!u.notifications_enabled,
+                            subscription_status: u.subscription_status || 'free',
                         };
                         setFetchedUserProfiles(prev => ({ ...prev, [otherUserId]: profile }));
                     }
@@ -1218,10 +1226,13 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         }}
                         className={`flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition ${activeChat?.chatId === c.id ? 'bg-[#F8F9FA]' : ''}`}
                       >
-                            <Avatar className="w-11 h-11 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={c.otherUser?.photo_url} />
+                             <Avatar className="w-11 h-11 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={c.otherUser?.photo_url} display_name={c.otherUser?.display_name || 'Learner'} />
                             <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-center mb-0.5">
-                                    <h3 className={`text-[15px] truncate ${getUnreadCount(c) > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>{c.otherUser?.display_name}</h3>
+                                    <h3 className={`text-[15px] truncate flex items-center gap-1.5 ${getUnreadCount(c) > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>
+                                      <span>{c.otherUser?.display_name}</span>
+                                      <VerificationBadge status={c.otherUser?.subscription_status} />
+                                    </h3>
                                     <span className="text-[12px] text-[#6C757D]">10:16 AM</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
@@ -1244,9 +1255,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         const unreadCount = getUnreadCountForUser(u.uid);
                         return (
                         <div key={u.uid} onClick={() => openChatWithUser(u)} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
-                            <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={u.photo_url} />
+                             <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={u.photo_url} display_name={u.display_name || 'Learner'} />
                             <div className="min-w-0 flex-1">
-                              <h3 className={`text-[15px] truncate ${unreadCount > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>{u.display_name}</h3>
+                              <h3 className={`text-[15px] truncate flex items-center gap-1.5 ${unreadCount > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>
+                                <span>{u.display_name}</span>
+                                <VerificationBadge status={u.subscription_status} />
+                              </h3>
                               <p className="text-[11px] text-[#6C757D] font-normal">{u.is_online ? <span className="text-[#28A745]">online</span> : formatLastSeen(u.last_seen)}</p>
                             </div>
                             {unreadCount > 0 && (
@@ -1268,9 +1282,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         {/* 1. FIXED Header Bar */}
                         <div className="h-16 bg-white flex items-center px-6 gap-3 z-30 shadow-sm shrink-0 border-b border-[#E9ECEF]">
                             <button onClick={() => setActiveChat(null)} className="lg:hidden text-[#6C757D] mr-1 text-lg">←</button>
-                            <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} />
+                             <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} display_name={selectedChatUser.display_name || 'Learner'} />
                             <div className="flex-1 min-w-0">
-                              <h2 className="font-semibold text-[#212529] text-[16px] leading-tight truncate">{selectedChatUser.display_name}</h2>
+                              <h2 className="font-semibold text-[#212529] text-[16px] leading-tight truncate flex items-center gap-1.5">
+                                <span>{selectedChatUser.display_name}</span>
+                                <VerificationBadge status={selectedChatUser.subscription_status} />
+                              </h2>
                                 <p className="text-[12px] text-[#6C757D] font-normal mt-0.5 flex items-center">
                                 {selectedChatUser.is_online ? (
                                         <>
@@ -1312,7 +1329,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                     <div key={msg.id} className="space-y-1">
                                         <div className={`flex items-end space-x-2.5 w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                                             {!isMe && (
-                                                <Avatar className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} />
+                                                <Avatar className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} display_name={selectedChatUser.display_name || 'Learner'} />
                                             )}
                                             
                                             <div className={`px-5 py-3.5 shadow-sm max-w-[80%] text-[15px] md:text-[16px] relative select-text ${

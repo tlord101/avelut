@@ -1,6 +1,6 @@
 import React from 'react';
 import type { FirebaseUser } from './firebase';
-import type { UserProfile, UserProgress, DashboardData } from './types';
+import type { UserProfile, UserProgress, DashboardData, AppSettings } from './types';
 import { Dashboard } from './components/Dashboard';
 import { StudyGuide } from './components/StudyGuide';
 import { VisualSolver } from './components/VisualSolver';
@@ -17,6 +17,7 @@ interface MainContentProps {
     activeItem: string;
     user: FirebaseUser | null;
     userProfile: UserProfile;
+    appSettings: AppSettings;
     userProgress: UserProgress;
     dashboardData: DashboardData | null;
     initialMessengerChatId?: string | null;
@@ -30,6 +31,7 @@ export const MainContent: React.FC<MainContentProps> = ({
     activeItem,
     user,
     userProfile,
+    appSettings,
     userProgress,
     dashboardData,
     initialMessengerChatId,
@@ -56,7 +58,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'exam':
             return <Exam userProfile={userProfile} userProgress={userProgress} />;
         case 'settings':
-            return <Settings user={user} userProfile={userProfile} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
+            return <Settings user={user} userProfile={userProfile} appSettings={appSettings} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} onDeleteAccount={handleDeleteAccount} />;
         case 'help':
             return <Help onStartTour={startTour} />;
         case 'messenger':

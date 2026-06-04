@@ -1,4 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { db } from '../firebase';
+import { ref as dbRef, onValue } from 'firebase/database';
+import { checkVisualMessagesLimit, incrementVisualMessagesUsed } from '../utils/usage';
+import { LimitExceededModal } from './LimitExceededModal';
 import { createVanTutorAI } from '../utils/inference';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -9,6 +13,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useToast } from '../hooks/useToast';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
+import { LogoIcon } from './icons/LogoIcon';
 
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
@@ -175,6 +180,19 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const [error, setError] = useState<string>('');
     const [cropBox, setCropBox] = useState<CropBox>({ x: 0.05, y: 0.125, width: 0.9, height: 0.75 });
     const [customPrompt, setCustomPrompt] = useState<string>('');
+
+    const [usageStats, setUsageStats] = useState<any>(null);
+    const [showLimitModal, setShowLimitModal] = useState(false);
+    const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('visual_messages');
+    const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
+
+    useEffect(() => {
+        const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
+        const unsubscribe = onValue(usageRef, (snapshot) => {
+            setUsageStats(snapshot.val() || {});
+        });
+        return () => unsubscribe();
+    }, [userProfile.uid]);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -358,6 +376,20 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const handleAnalyze = useCallback(async () => {
         if (!scannedImage) return;
 
+        // Perform limit check
+        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        if (!limitCheck.allowed) {
+            setLimitModalFeature('visual_messages');
+            setLimitModalData({
+                limit: limitCheck.limit,
+                used: limitCheck.used,
+                price: limitCheck.price,
+                batchCount: limitCheck.count
+            });
+            setShowLimitModal(true);
+            return;
+        }
+
         setCameraState('analyzing');
         
         const result = await attemptApiCall(async () => {
@@ -431,6 +463,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
 
             setAnalysisResult(result.text || '');
+            await incrementVisualMessagesUsed(userProfile.uid);
         });
         
         if (result.success) {
@@ -439,11 +472,25 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
 
     const handleQuickAnswer = useCallback(async () => {
         if (!scannedImage) return;
     
+        // Perform limit check
+        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        if (!limitCheck.allowed) {
+            setLimitModalFeature('visual_messages');
+            setLimitModalData({
+                limit: limitCheck.limit,
+                used: limitCheck.used,
+                price: limitCheck.price,
+                batchCount: limitCheck.count
+            });
+            setShowLimitModal(true);
+            return;
+        }
+
         setCameraState('analyzing');
         
         const result = await attemptApiCall(async () => {
@@ -464,6 +511,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
     
             setAnalysisResult(result.text || '');
+            await incrementVisualMessagesUsed(userProfile.uid);
         });
         
         if (result.success) {
@@ -472,11 +520,25 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
 
     const handleSolution = useCallback(async () => {
         if (!scannedImage) return;
     
+        // Perform limit check
+        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        if (!limitCheck.allowed) {
+            setLimitModalFeature('visual_messages');
+            setLimitModalData({
+                limit: limitCheck.limit,
+                used: limitCheck.used,
+                price: limitCheck.price,
+                batchCount: limitCheck.count
+            });
+            setShowLimitModal(true);
+            return;
+        }
+
         setCameraState('analyzing');
         
         const result = await attemptApiCall(async () => {
@@ -497,6 +559,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
     
             setAnalysisResult(result.text || '');
+            await incrementVisualMessagesUsed(userProfile.uid);
         });
         
         if (result.success) {
@@ -505,7 +568,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, customPrompt, attemptApiCall, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
 
     const handleRetake = () => {
         setScannedImage(null);
@@ -712,6 +775,19 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                 <canvas ref={canvasRef} className="hidden"></canvas>
                 {renderContent()}
             </div>
+            <LimitExceededModal
+                isOpen={showLimitModal}
+                onClose={() => setShowLimitModal(false)}
+                userProfile={userProfile}
+                appSettings={appSettings}
+                featureType={limitModalFeature}
+                limitValue={limitModalData.limit}
+                usedValue={limitModalData.used}
+                price={limitModalData.price}
+                batchCount={limitModalData.batchCount}
+                addToast={addToast}
+                onSuccessPurchase={() => {}}
+            />
         </div>
     );
 };

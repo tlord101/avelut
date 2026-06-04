@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { GoogleGenAI } from '@google/genai';
 import { createVanTutorAI } from '../utils/inference';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
@@ -302,6 +303,7 @@ const TextChat: React.FC<{
     };
 
     return (
+        <>
         <div className="flex-1 flex w-full h-full overflow-hidden bg-white">
             <div className="flex w-full">
                 {/* Desktop History Sidebar */}
@@ -309,17 +311,15 @@ const TextChat: React.FC<{
                     <ChatHistoryPanel 
                         conversations={conversations}
                         activeConversationId={activeConversationId}
-                        setActiveConversationId={setActiveConversationId}
-                        isHistoryLoading={isHistoryLoading}
-                        handleDeleteConversation={handleDeleteConversation}
-                        handleRenameConversation={handleRenameConversation}
-                        handleClearAll={handleClearAll}
-                        handleNewChat={handleNewChat}
-                        isDeleting={isDeleting}
-                        userProfile={userProfile}
-                        onCloseMobilePanel={() => {}}
-                        isMobilePanelOpen={false}
                         onSelectConversation={(id) => setActiveConversationId(id)}
+                        onNewChat={handleNewChat}
+                        onDeleteConversation={handleDeleteConversation}
+                        onRenameConversation={handleRenameConversation}
+                        onClearAll={handleClearAll}
+                        isDeleting={isDeleting}
+                        isMobilePanelOpen={false}
+                        onCloseMobilePanel={() => {}}
+                        userProfile={userProfile}
                     />
                 </div>
 
@@ -370,7 +370,7 @@ const TextChat: React.FC<{
                                     <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
                                         <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                                             <div className="flex-shrink-0">
-                                                <Avatar user={msg.sender === 'user' ? userProfile : { display_name: 'VanTutor', isAdmin: true }} size="sm" isAI={msg.sender === 'ai'} />
+                                                <Avatar display_name={msg.sender === 'user' ? userProfile.display_name : 'VanTutor'} photo_url={msg.sender === 'user' ? userProfile.photo_url : null} className="w-8 h-8" />
                                             </div>
                                             <div className={`mt-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
                                                 <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
@@ -416,26 +416,21 @@ const TextChat: React.FC<{
                             <ChatHistoryPanel 
                                 conversations={conversations}
                                 activeConversationId={activeConversationId}
-                                setActiveConversationId={(id) => {
-                                    setActiveConversationId(id);
-                                    setIsMobilePanelOpen(false);
-                                }}
-                                isHistoryLoading={isHistoryLoading}
-                                handleDeleteConversation={handleDeleteConversation}
-                                handleRenameConversation={handleRenameConversation}
-                                handleClearAll={handleClearAll}
-                                handleNewChat={() => {
-                                    handleNewChat();
-                                    setIsMobilePanelOpen(false);
-                                }}
-                                isDeleting={isDeleting}
-                                isMobilePanelOpen={true}
-                                onCloseMobilePanel={() => setIsMobilePanelOpen(false)}
-                                userProfile={userProfile}
                                 onSelectConversation={(id) => {
                                     setActiveConversationId(id);
                                     setIsMobilePanelOpen(false);
                                 }}
+                                onNewChat={() => {
+                                    handleNewChat();
+                                    setIsMobilePanelOpen(false);
+                                }}
+                                onDeleteConversation={handleDeleteConversation}
+                                onRenameConversation={handleRenameConversation}
+                                onClearAll={handleClearAll}
+                                isDeleting={isDeleting}
+                                isMobilePanelOpen={true}
+                                onCloseMobilePanel={() => setIsMobilePanelOpen(false)}
+                                userProfile={userProfile}
                             />
                         </div>
                     </div>
@@ -455,7 +450,7 @@ const TextChat: React.FC<{
             />,
             portalRoot
         )}
-
+        </>
     );
 };
 

@@ -9,6 +9,10 @@ import { useToast } from '../hooks/useToast';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { VerificationBadge } from './VerificationBadge';
+import { triggerPaystackPurchase } from '../utils/usage';
+import { DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
+import type { AppSettings } from '../types';
 
 
 declare var __app_id: string;
@@ -16,6 +20,7 @@ declare var __app_id: string;
 interface SettingsProps {
   user: FirebaseUser | null;
   userProfile: UserProfile;
+  appSettings: AppSettings;
   onLogout: () => void;
   onProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
   onDeleteAccount: () => Promise<{ success: boolean; error?: string }>;
@@ -40,7 +45,8 @@ const Switch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void;
   </button>
 );
 
-export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout, onProfileUpdate, onDeleteAccount }) => {
+export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettings, onLogout, onProfileUpdate, onDeleteAccount }) => {
+  const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
   const [isEditingName, setIsEditingName] = useState(false);
   // FIX: Use snake_case for display_name
   const [newDisplayName, setNewDisplayName] = useState(userProfile.display_name);
@@ -55,57 +61,98 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
     setPersonalApiKey(userProfile.personal_api_key || '');
   }, [userProfile.use_personal_token, userProfile.personal_api_key]);
 
-  const handleSaveConnectionSettings = async () => {
-    if (usePersonalToken) {
-      if (!personalApiKey.trim()) {
-        addToast('Please enter a valid Gemini API Key.', 'error');
-        return;
+  const handleSwitchToFreePlan = async () => {
+    setIsVerifyingKey(true);
+    try {
+      const result = await onProfileUpdate({
+        is_activated: true,
+        subscription_status: 'free',
+        use_personal_token: false,
+      });
+      if (result.success) {
+        addToast('Switched to Free Plan successfully!', 'success');
+      } else {
+        addToast('Failed to switch plan.', 'error');
       }
-      setIsVerifyingKey(true);
-      try {
-        const testClient = new GoogleGenAI({ apiKey: personalApiKey.trim() });
-        const response = await testClient.models.generateContent({
-          model: 'gemini-2.5-flash-lite',
-          contents: [{ role: 'user', parts: [{ text: 'Hello, this is a test.' }] }]
-        });
-        if (!response.text) {
-          throw new Error('Key validation failed: Empty response.');
-        }
+    } catch (err) {
+      console.error(err);
+      addToast('Error switching plan.', 'error');
+    } finally {
+      setIsVerifyingKey(false);
+    }
+  };
+
+  const handleUpgradePlan = async (planKey: 'basic' | 'pro') => {
+    const activePlan = usageSettings.plans[planKey];
+    const amount = activePlan.price;
+    const publicKey = appSettings.paystack_public_key?.trim();
+    const email = user?.email || `${userProfile.uid}@vantutor.com`;
+
+    setIsVerifyingKey(true);
+
+    await triggerPaystackPurchase({
+      publicKey,
+      email,
+      amount,
+      userId: userProfile.uid,
+      purchaseType: 'subscription',
+      metadata: { plan_tier: planKey, upgrade: true },
+      addToast,
+      onSuccess: async (reference) => {
         const result = await onProfileUpdate({
-          use_personal_token: true,
-          personal_api_key: personalApiKey.trim(),
-          subscription_status: 'personal_token',
-          is_activated: true
-        });
-        if (result.success) {
-          addToast('Personal API Key successfully verified and saved!', 'success');
-        } else {
-          throw new Error(result.error);
-        }
-      } catch (e: any) {
-        console.error(e);
-        addToast('Invalid API Key. Please verify and try again.', 'error');
-      } finally {
-        setIsVerifyingKey(false);
-      }
-    } else {
-      setIsVerifyingKey(true);
-      try {
-        const result = await onProfileUpdate({
+          is_activated: true,
+          subscription_status: planKey,
           use_personal_token: false,
-          subscription_status: userProfile.subscription_status === 'personal_token' ? 'none' : userProfile.subscription_status,
-          is_activated: userProfile.subscription_status === 'premium'
+          paystack_reference: reference,
         });
         if (result.success) {
-          addToast('Switched to default VanTutor AI!', 'success');
+          addToast(`VanTutor ${activePlan.name} activated successfully!`, 'success');
         } else {
-          throw new Error(result.error);
+          addToast('Payment received but upgrade failed. Contact support.', 'error');
         }
-      } catch (e: any) {
-        addToast('Failed to update connection settings.', 'error');
-      } finally {
+        setIsVerifyingKey(false);
+      },
+      onCancel: () => {
+        setIsVerifyingKey(false);
+      },
+      onError: (err) => {
+        console.error(err);
         setIsVerifyingKey(false);
       }
+    });
+  };
+
+  const handleSaveConnectionSettings = async () => {
+    if (!personalApiKey.trim()) {
+      addToast('Please enter a valid Gemini API Key.', 'error');
+      return;
+    }
+    setIsVerifyingKey(true);
+    try {
+      const testClient = new GoogleGenAI({ apiKey: personalApiKey.trim() });
+      const response = await testClient.models.generateContent({
+        model: 'gemini-2.5-flash-lite',
+        contents: [{ role: 'user', parts: [{ text: 'Hello, this is a test.' }] }]
+      });
+      if (!response.text) {
+        throw new Error('Key validation failed: Empty response.');
+      }
+      const result = await onProfileUpdate({
+        use_personal_token: true,
+        personal_api_key: personalApiKey.trim(),
+        subscription_status: 'personal_token',
+        is_activated: true
+      });
+      if (result.success) {
+        addToast('Personal API Key successfully verified and saved!', 'success');
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (e: any) {
+      console.error(e);
+      addToast('Invalid API Key. Please verify and try again.', 'error');
+    } finally {
+      setIsVerifyingKey(false);
     }
   };
   const [departmentName, setDepartmentName] = useState<string>('');
@@ -353,10 +400,11 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {/* FIX: Use snake_case for display_name */}
                 <span className="text-gray-800 font-medium">{userProfile.display_name}</span>
-                <button onClick={() => setIsEditingName(true)} className="text-sm text-lime-600 hover:underline">
+                <VerificationBadge status={userProfile.subscription_status} />
+                <button onClick={() => setIsEditingName(true)} className="ml-2 text-sm text-lime-600 hover:underline">
                   Edit
                 </button>
               </div>
@@ -448,84 +496,178 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">VanTutor AI Connection</h3>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-gray-600 font-medium">Connection Mode</label>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setUsePersonalToken(false)}
-                className={`py-3 px-4 rounded-xl border text-center font-bold transition-all ${
-                  !usePersonalToken
-                    ? 'border-lime-600 bg-lime-50/50 text-lime-900 shadow-sm'
-                    : 'border-gray-200 hover:bg-gray-50 text-gray-700'
-                }`}
-              >
-                VanTutor Premium AI
-              </button>
-              <button
-                type="button"
-                onClick={() => setUsePersonalToken(true)}
-                className={`py-3 px-4 rounded-xl border text-center font-bold transition-all ${
-                  usePersonalToken
-                    ? 'border-lime-600 bg-lime-50/50 text-lime-900 shadow-sm'
-                    : 'border-gray-200 hover:bg-gray-50 text-gray-700'
-                }`}
-              >
-                Personal Google Token
-              </button>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Subscription & Plans</h3>
+        <p className="text-xs text-gray-500 mb-6 font-semibold">
+          Manage your account subscription plan. Upgrade or connect your own API key to bypass limits.
+        </p>
+
+        {/* Current active plan callout */}
+        <div className="mb-6 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center">
+          <div>
+            <span className="text-[10px] uppercase font-black tracking-widest text-slate-400">Current Status</span>
+            <div className="flex items-center gap-2 mt-1">
+              <h4 className="font-extrabold text-slate-900 text-sm">
+                {userProfile.subscription_status === 'pro' && 'Pro Plan'}
+                {userProfile.subscription_status === 'basic' && 'Basic Plan'}
+                {(userProfile.subscription_status === 'free' || !userProfile.subscription_status) && 'Free Plan'}
+                {userProfile.subscription_status === 'personal_token' && 'Personal Google Token'}
+                {userProfile.subscription_status === 'premium' && 'Premium Plan'}
+              </h4>
+              <VerificationBadge status={userProfile.subscription_status || 'free'} />
+            </div>
+          </div>
+          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 shadow-sm">
+            Active Tier
+          </span>
+        </div>
+
+        {/* Plan Upgrade Grid Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+          {/* Free Card */}
+          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'free' || !userProfile.subscription_status ? 'border-blue-600 bg-blue-50/10' : 'border-gray-200'}`}>
+            <div>
+              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.free.name || 'Free Plan'}</h4>
+              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.free.description}</p>
+              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
+                <li>• {usageSettings.plans.free.limits.courses} Courses</li>
+                <li>• {usageSettings.plans.free.limits.ai_requests_per_course} Requests/course (2h)</li>
+                <li>• {usageSettings.plans.free.limits.exams} Practice exams</li>
+                <li>• {usageSettings.plans.free.limits.visual_messages} Messages limit</li>
+              </ul>
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-150">
+              {userProfile.subscription_status === 'free' || !userProfile.subscription_status ? (
+                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+              ) : (
+                <button
+                  onClick={handleSwitchToFreePlan}
+                  disabled={isVerifyingKey}
+                  className="w-full py-2 bg-gray-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                >
+                  Switch Free
+                </button>
+              )}
             </div>
           </div>
 
-          {usePersonalToken ? (
-            <div className="space-y-3 pt-2">
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Connect your personal Google Gemini API key. If you don't have one, get a free token from{' '}
-                <a
-                  href="https://aistudio.google.com/api-keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-lime-600 font-bold hover:underline"
-                >
-                  Google AI Studio
-                </a>.
-              </p>
-              <div className="relative">
-                <input
-                  type={showApiKey ? 'text' : 'password'}
-                  placeholder="Paste your Gemini API key here"
-                  value={personalApiKey}
-                  onChange={(e) => setPersonalApiKey(e.target.value)}
-                  className="w-full bg-gray-55 border border-gray-300 rounded-lg py-2 px-3 pr-10 text-gray-900 font-medium focus:ring-1 focus:ring-lime-500 focus:outline-none"
-                />
+          {/* Basic Card */}
+          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'basic' ? 'border-blue-600 bg-blue-50/10' : 'border-gray-200'}`}>
+            <div>
+              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.basic.name || 'Basic Plan'}</h4>
+              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.basic.description}</p>
+              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
+                <li>• {usageSettings.plans.basic.limits.courses} Courses</li>
+                <li>• {usageSettings.plans.basic.limits.ai_requests_per_course} Requests/course (2h)</li>
+                <li>• {usageSettings.plans.basic.limits.exams} Practice exams</li>
+                <li>• {usageSettings.plans.basic.limits.visual_messages} Messages limit</li>
+                <li className="text-blue-650 font-bold">★ Twitter Blue Badge</li>
+              </ul>
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-150">
+              {userProfile.subscription_status === 'basic' ? (
+                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+              ) : (
                 <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-xs font-bold"
+                  onClick={() => handleUpgradePlan('basic')}
+                  disabled={isVerifyingKey}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
                 >
-                  {showApiKey ? 'HIDE' : 'SHOW'}
+                  Buy ₦{(usageSettings.plans.basic.price || 1000).toLocaleString()}
                 </button>
-              </div>
+              )}
             </div>
-          ) : (
-            <div className="pt-2">
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Using VanTutor's centralized AI engine (subject to system usage limits). For unlimited usage and no queues, switch to a Personal Token.
-              </p>
-            </div>
-          )}
+          </div>
 
-          <div className="pt-2">
-            <button
-              onClick={handleSaveConnectionSettings}
-              disabled={isVerifyingKey || (usePersonalToken && !personalApiKey.trim())}
-              className="w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-[11px] text-white bg-lime-600 hover:bg-lime-700 transition-all disabled:opacity-50 active:scale-95"
-            >
-              {isVerifyingKey ? 'Saving Connection...' : 'Save Connection'}
-            </button>
+          {/* Pro Card */}
+          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'pro' ? 'border-purple-600 bg-purple-50/10' : 'border-gray-200'}`}>
+            <div>
+              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.pro.name || 'Pro Plan'}</h4>
+              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.pro.description}</p>
+              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
+                <li>• {usageSettings.plans.pro.limits.courses} Courses</li>
+                <li>• {usageSettings.plans.pro.limits.ai_requests_per_course} Requests/course (2h)</li>
+                <li>• {usageSettings.plans.pro.limits.exams} Practice exams</li>
+                <li>• {usageSettings.plans.pro.limits.visual_messages} Messages limit</li>
+                <li className="text-purple-650 font-bold">★ Purple check badge</li>
+              </ul>
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-150">
+              {userProfile.subscription_status === 'pro' ? (
+                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+              ) : (
+                <button
+                  onClick={() => handleUpgradePlan('pro')}
+                  disabled={isVerifyingKey}
+                  className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                >
+                  Buy ₦{(usageSettings.plans.pro.price || 2500).toLocaleString()}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Token Card */}
+          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'personal_token' ? 'border-emerald-600 bg-emerald-50/10' : 'border-gray-200'}`}>
+            <div>
+              <h4 className="font-extrabold text-sm text-gray-900">Developer Key</h4>
+              <p className="text-[10px] text-gray-500 mt-1 font-semibold">Use your personal Google Gemini API key to activate and bypass all limits.</p>
+              <ul className="text-[10px] text-emerald-700 mt-3 space-y-1 font-semibold">
+                <li>• Unlimited Courses</li>
+                <li>• Unlimited Requests</li>
+                <li>• Unlimited Solves</li>
+                <li>• Custom Dev Badge</li>
+              </ul>
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-150">
+              {userProfile.subscription_status === 'personal_token' ? (
+                <span className="text-xs text-emerald-700 font-black block">Active Token</span>
+              ) : (
+                <button
+                  onClick={() => {
+                    setUsePersonalToken(true);
+                  }}
+                  disabled={isVerifyingKey}
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                >
+                  Configure Key
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Developer API Key Fields (always visible or expanded if mode chosen) */}
+        {(usePersonalToken || userProfile.subscription_status === 'personal_token') && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 mt-4 animate-in fade-in duration-300">
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Configure Google API Token</h4>
+            <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
+              Visit the <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Google AI Studio</a> console to copy your free API token, then paste it below.
+            </p>
+            <div className="relative">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                placeholder="Paste Gemini API key here"
+                value={personalApiKey}
+                onChange={(e) => setPersonalApiKey(e.target.value)}
+                className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg py-2 px-3 pr-10 text-gray-900 font-medium focus:outline-none transition-all font-mono text-xs shadow-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-[10px] font-black"
+              >
+                {showApiKey ? 'HIDE' : 'SHOW'}
+              </button>
+            </div>
+            <button
+              onClick={handleSaveConnectionSettings}
+              disabled={isVerifyingKey || !personalApiKey.trim()}
+              className="w-full py-2 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              {isVerifyingKey ? 'Verifying Key...' : 'Validate & Save Developer Token'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">

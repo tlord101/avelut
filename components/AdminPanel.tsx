@@ -47,7 +47,7 @@ import {
     ArrowUpRight
 } from 'lucide-react';
 import { getWindowPathname } from '../utils/pathname';
-import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS } from '../utils/appSettings';
+import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS, DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
 
 interface AdminPanelProps {
     userProfile: UserProfile;
@@ -85,7 +85,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments' | 'notifications' | 'emails' | 'email-configs';
+type AdminTab = 'dashboard' | 'questions' | 'courses' | 'users' | 'departments' | 'app' | 'analytics' | 'payments' | 'notifications' | 'emails' | 'email-configs' | 'usage-settings' | 'usage-analytics' | 'purchase-logs';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -94,7 +94,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'notifications', 'emails', 'app', 'analytics', 'payments', 'email-configs'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'departments', 'courses', 'questions', 'users', 'notifications', 'emails', 'app', 'analytics', 'payments', 'email-configs', 'usage-settings', 'usage-analytics', 'purchase-logs'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -503,7 +503,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users' || activeTab === 'dashboard') {
+        if (activeTab === 'analytics' || activeTab === 'payments' || activeTab === 'users' || activeTab === 'dashboard' || activeTab === 'purchase-logs' || activeTab === 'usage-analytics') {
             void fetchUsageLogs();
         }
     }, [activeTab]);
@@ -867,7 +867,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'users' || activeTab === 'dashboard') {
+        if (activeTab === 'users' || activeTab === 'dashboard' || activeTab === 'usage-analytics') {
             void fetchUsers();
             void fetchSentNotifications();
             void fetchSentEmails();
@@ -1087,6 +1087,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             paystack_secret_key: (appSettingsDraft.paystack_secret_key || '').trim(),
             custom_user_limit_rpm: appSettingsDraft.custom_user_limit_rpm ?? 10,
             custom_user_limit_tpm: appSettingsDraft.custom_user_limit_tpm ?? 250000,
+            usage_settings: appSettingsDraft.usage_settings || DEFAULT_USAGE_SETTINGS,
         };
 
         setIsSavingAppSettings(true);
@@ -2143,6 +2144,9 @@ FORMAT:
         { id: 'payments', label: 'Payments Control', icon: CreditCard, path: '/admin/payments' },
         { id: 'app', label: 'App Settings', icon: SettingsIcon, path: '/admin/app' },
         { id: 'email-configs', label: 'Email Settings', icon: Mail, path: '/admin/email-configs' },
+        { id: 'usage-settings', label: 'Usage Settings', icon: SettingsIcon, path: '/admin/usage-settings' },
+        { id: 'usage-analytics', label: 'Usage Analytics', icon: Activity, path: '/admin/usage-analytics' },
+        { id: 'purchase-logs', label: 'Purchase Logs', icon: CreditCard, path: '/admin/purchase-logs' },
     ];
 
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
@@ -2310,6 +2314,47 @@ FORMAT:
                             </button>
                         </div>
 
+                        {/* Category: SUBSCRIPTION & LIMITS */}
+                        <div className="space-y-1">
+                            <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Subscription & Limits</p>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/usage-settings')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'usage-settings'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-905'
+                                }`}
+                            >
+                                <SettingsIcon className="w-4 h-4" />
+                                <span>Usage Settings</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'usage-settings' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/usage-analytics')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'usage-analytics'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-905'
+                                }`}
+                            >
+                                <Activity className="w-4 h-4" />
+                                <span>Usage Analytics</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'usage-analytics' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
+                            <button
+                                onClick={() => handleCourseTabNavigate('/admin/purchase-logs')}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all relative group ${
+                                    activeTab === 'purchase-logs'
+                                        ? 'bg-blue-600 text-white font-black shadow-md shadow-blue-500/10'
+                                        : 'text-slate-650 hover:bg-white/40 hover:text-slate-905'
+                                }`}
+                            >
+                                <CreditCard className="w-4 h-4" />
+                                <span>Purchase Logs</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ml-auto transition-transform ${activeTab === 'purchase-logs' ? 'text-slate-200 rotate-90' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            </button>
+                        </div>
+
                         {/* Category: SYSTEM CONFIG */}
                         <div className="space-y-1">
                             <p className="px-4 text-[9px] font-black uppercase tracking-widest text-slate-400">System Configuration</p>
@@ -2448,7 +2493,7 @@ FORMAT:
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-gray-200 gap-3">
                         <div>
                             <h1 className="text-2xl font-black text-slate-800 tracking-wide capitalize">
-                                {activeTab === 'app' ? 'App Settings' : activeTab === 'email-configs' ? 'Email Configuration' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab}
+                                {activeTab === 'app' ? 'App Settings' : activeTab === 'email-configs' ? 'Email Configuration' : activeTab === 'questions' ? 'Past Questions' : activeTab === 'courses' ? 'Course Catalog' : activeTab === 'users' ? 'User Control' : activeTab === 'payments' ? 'Payments Control' : activeTab === 'analytics' ? 'Usage Analytics' : activeTab === 'usage-settings' ? 'Subscription Plans & Limit Settings' : activeTab === 'usage-analytics' ? 'Subscription Tier Analytics' : activeTab === 'purchase-logs' ? 'Paystack Purchase Transaction Logs' : activeTab}
                             </h1>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
@@ -2658,7 +2703,7 @@ FORMAT:
                                     {(() => {
                                         const totalUsers = allUsersList.length || 1;
                                         const premiumCount = allUsersList.filter(u => u.subscription_status === 'premium').length;
-                                        const tokenCount = allUsersList.filter(u => u.subscription_status === 'google_token').length;
+                                        const tokenCount = allUsersList.filter(u => u.subscription_status === 'personal_token').length;
                                         const freeCount = Math.max(0, totalUsers - premiumCount - tokenCount);
 
                                         const premiumPct = Math.round((premiumCount / totalUsers) * 100);
@@ -2851,6 +2896,521 @@ FORMAT:
                                         );
                                     })()}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+                    {activeTab === 'usage-settings' && (
+                        <div className="space-y-6 max-w-4xl">
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-5">
+                                <div>
+                                    <h3 className="text-xl font-black text-gray-900">Subscription Plans & Limit Settings</h3>
+                                    <p className="text-sm text-gray-500 font-semibold">Configure limits and details for Free, Basic, and Pro tiers, as well as pricing for pay-as-you-go extra usage credits.</p>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {/* Free Plan */}
+                                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-4">
+                                        <h4 className="font-extrabold text-sm text-slate-850 uppercase tracking-wider flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                                            <span>Free Plan Settings</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.name || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.name = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Description</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.description || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.description = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.visual_messages ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.limits.visual_messages = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.courses ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.limits.courses = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.ai_requests_per_course ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.limits.ai_requests_per_course = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Exams Generated Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.exams ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.free.limits.exams = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Basic Plan */}
+                                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-4">
+                                        <h4 className="font-extrabold text-sm text-slate-850 uppercase tracking-wider flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                                            <span>Basic Plan Settings</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.name || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.name = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Description</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.description || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.description = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Basic Plan Price (₦)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.price ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.price = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.visual_messages ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.limits.visual_messages = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.courses ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.limits.courses = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.ai_requests_per_course ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.basic.limits.ai_requests_per_course = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Pro Plan */}
+                                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-4">
+                                        <h4 className="font-extrabold text-sm text-slate-850 uppercase tracking-wider flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                                            <span>Pro Plan Settings</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.name || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.name = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Plan Description</label>
+                                                <input
+                                                    type="text"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.description || ''}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.description = e.target.value;
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Pro Plan Price (₦)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.price ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.price = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.visual_messages ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.limits.visual_messages = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.courses ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.limits.courses = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.ai_requests_per_course ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.plans.pro.limits.ai_requests_per_course = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Pay-as-you-go Extra Unit Prices */}
+                                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-4">
+                                        <h4 className="font-extrabold text-sm text-slate-850 uppercase tracking-wider flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                            <span>Pay-As-You-Go Extra Resource Prices</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Batch Price (₦)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.additional_prices?.visual_messages_price ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.additional_prices.visual_messages_price = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Batch Count (e.g. 10 messages)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.additional_prices?.visual_messages_count ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.additional_prices.visual_messages_count = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Extra Course Unlock Price (₦)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.additional_prices?.studyguide_course_price ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.additional_prices.studyguide_course_price = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Extra Lesson AI Queries Price (₦)</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.additional_prices?.studyguide_request_price ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.additional_prices.studyguide_request_price = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleSaveAppSettings}
+                                    disabled={isSavingAppSettings}
+                                    className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase tracking-wider text-xs transition shadow-md shadow-blue-500/10 active:scale-95 disabled:opacity-50"
+                                >
+                                    {isSavingAppSettings ? 'Saving Config...' : 'Save Subscription settings'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'usage-analytics' && (
+                        <div className="space-y-6 max-w-4xl">
+                            {/* Summary Metrics */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Free Tier Users</p>
+                                        <h3 className="text-3xl font-black text-slate-900 mt-1">{allUsersList.filter(user => (user.subscription_status || 'free') === 'free').length}</h3>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-550 font-extrabold text-sm">🎓</div>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Basic Tier Users</p>
+                                        <h3 className="text-3xl font-black text-blue-650 mt-1">{allUsersList.filter(user => user.subscription_status === 'basic').length}</h3>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-extrabold text-sm">✓</div>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pro Tier Users</p>
+                                        <h3 className="text-3xl font-black text-purple-650 mt-1">{allUsersList.filter(user => user.subscription_status === 'pro').length}</h3>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 font-extrabold text-sm">✦</div>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Developer Tokens</p>
+                                        <h3 className="text-3xl font-black text-emerald-650 mt-1">{allUsersList.filter(user => user.subscription_status === 'personal_token').length}</h3>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 font-extrabold text-sm">⚙</div>
+                                </div>
+                            </div>
+
+                            {/* Chart/Tiers Grid */}
+                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Subscription Ratio Breakdown</h3>
+                                <div className="space-y-3 font-semibold text-xs text-slate-700">
+                                    {(() => {
+                                        const total = Math.max(1, allUsersList.length);
+                                        const freeCount = allUsersList.filter(user => (user.subscription_status || 'free') === 'free').length;
+                                        const basicCount = allUsersList.filter(user => user.subscription_status === 'basic').length;
+                                        const proCount = allUsersList.filter(user => user.subscription_status === 'pro').length;
+                                        const devCount = allUsersList.filter(user => user.subscription_status === 'personal_token').length;
+
+                                        const freePct = ((freeCount / total) * 100);
+                                        const basicPct = ((basicCount / total) * 100);
+                                        const proPct = ((proCount / total) * 100);
+                                        const devPct = ((devCount / total) * 100);
+                                        return (
+                                            <div className="space-y-4 pt-2">
+                                                <div className="w-full h-4 rounded-full bg-slate-100 flex overflow-hidden">
+                                                    <div style={{ width: `${freePct}%` }} className="bg-slate-400 transition-all duration-500" title={`Free: ${freePct.toFixed(1)}%`}></div>
+                                                    <div style={{ width: `${basicPct}%` }} className="bg-blue-500 transition-all duration-500" title={`Basic: ${basicPct.toFixed(1)}%`}></div>
+                                                    <div style={{ width: `${proPct}%` }} className="bg-purple-500 transition-all duration-500" title={`Pro: ${proPct.toFixed(1)}%`}></div>
+                                                    <div style={{ width: `${devPct}%` }} className="bg-emerald-500 transition-all duration-500" title={`Dev Token: ${devPct.toFixed(1)}%`}></div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-semibold text-slate-655">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded bg-slate-400"></span>
+                                                        <span>Free Plan: {freePct.toFixed(1)}% ({freeCount})</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded bg-blue-500"></span>
+                                                        <span>Basic Plan: {basicPct.toFixed(1)}% ({basicCount})</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded bg-purple-500"></span>
+                                                        <span>Pro Plan: {proPct.toFixed(1)}% ({proCount})</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded bg-emerald-500"></span>
+                                                        <span>Dev Token: {devPct.toFixed(1)}% ({devCount})</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'purchase-logs' && (
+                        <div className="space-y-6 max-w-5xl">
+                            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                    <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-wider">Paystack Purchase Transaction Logs</h3>
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{paymentLogs.length} attempts logged</span>
+                                </div>
+
+                                {paymentLogs.length === 0 ? (
+                                    <div className="p-12 text-center text-slate-450 text-xs font-semibold">
+                                        No purchase logs found in database.
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse text-xs">
+                                            <thead>
+                                                <tr className="bg-slate-50 text-slate-500 border-b border-slate-250 font-black uppercase tracking-wider">
+                                                    <th className="py-3 px-4">Timestamp</th>
+                                                    <th className="py-3 px-4">User</th>
+                                                    <th className="py-3 px-4">Type</th>
+                                                    <th className="py-3 px-4">Amount</th>
+                                                    <th className="py-3 px-4">Reference</th>
+                                                    <th className="py-3 px-4">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-150 font-medium text-slate-700">
+                                                {paymentLogs.map(log => {
+                                                    const formattedDate = new Date(log.timestamp).toLocaleString();
+                                                    const statusColor = log.status === 'success' 
+                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                                        : log.status === 'initiated' 
+                                                            ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' 
+                                                            : 'bg-rose-50 text-rose-700 border border-rose-200';
+                                                    return (
+                                                        <tr key={log.id} className="hover:bg-slate-50/50">
+                                                            <td className="py-3 px-4 whitespace-nowrap font-bold text-slate-500">{formattedDate}</td>
+                                                            <td className="py-3 px-4">
+                                                                <span className="block font-bold text-slate-800">{log.email}</span>
+                                                                <span className="block text-[10px] font-semibold text-slate-450 font-mono select-all">{log.user_id}</span>
+                                                            </td>
+                                                            <td className="py-3 px-4 font-extrabold uppercase tracking-wide text-slate-650">
+                                                                {log.purchase_type?.replace(/_/g, ' ')}
+                                                            </td>
+                                                            <td className="py-3 px-4 font-black text-slate-800">
+                                                                ₦{log.amount?.toLocaleString()}
+                                                            </td>
+                                                            <td className="py-3 px-4 font-mono select-all text-slate-600">{log.reference || '-'}</td>
+                                                            <td className="py-3 px-4">
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black tracking-wider ${statusColor}`}>
+                                                                    {log.status}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

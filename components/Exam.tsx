@@ -4,7 +4,9 @@ import { createVanTutorAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
-import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course } from '../types';
+import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course, AppSettings } from '../types';
+import { checkExamsLimit, incrementExamsGenerated } from '../utils/usage';
+import { LimitExceededModal } from './LimitExceededModal';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -150,6 +152,18 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const { addToast } = useToast();
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
+
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5 });
+
+  useEffect(() => {
+    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
+    const unsubscribe = onValue(usageRef, (snapshot) => {
+      setUsageStats(snapshot.val() || {});
+    });
+    return () => unsubscribe();
+  }, [userProfile.uid]);
   const geminiModel = appSettings.primary_gemini_model;
   const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
   const isGeminiConfigured = Boolean(ai);
@@ -325,6 +339,19 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
 
   const generateQuestions = async () => {
+    // Check exam limits
+    const limitCheck = checkExamsLimit(userProfile, usageStats, appSettings);
+    if (!limitCheck.allowed) {
+      setLimitModalData({
+        limit: limitCheck.limit,
+        used: limitCheck.used,
+        price: limitCheck.price,
+        batchCount: limitCheck.count
+      });
+      setShowLimitModal(true);
+      return;
+    }
+
     setExamState('generating');
     try {
       if (!ai) {
@@ -372,6 +399,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           throw new Error("Failed to generate valid questions from AI response.");
         }
         const newQuestions = responseData.questions;
+
+        // Increment exam usage counter
+        await incrementExamsGenerated(userProfile.uid);
+
         setQuestions(newQuestions);
         setTimeLeft(newQuestions.length * TIME_PER_QUESTION_SECONDS);
         setExamState('in_progress');
@@ -434,11 +465,13 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                     <LoadingSpinner text="" />
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 tracking-tighter mb-2">Assembling your Exam...</h3>
-                <p className="text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse text-center max-w-xs">{extractionProgress || 'Gemini is selecting questions based on your mastery'}</p>
+                <p className="text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse text-center max-w-xs">Gemini is selecting questions based on your mastery</p>
             </div>
         );
       
       case 'in_progress':
+        const currentQuestion = questions[currentQuestionIndex];
+        if (!currentQuestion) return null;
         return (
           <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100">
@@ -743,6 +776,20 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   return (
     <div className="flex-1 flex flex-col w-full bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
       {renderContent()}
+
+      <LimitExceededModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+        userProfile={userProfile}
+        appSettings={appSettings}
+        featureType="exams"
+        limitValue={limitModalData.limit}
+        usedValue={limitModalData.used}
+        price={limitModalData.price}
+        batchCount={limitModalData.batchCount}
+        addToast={addToast}
+        onSuccessPurchase={() => {}}
+      />
     </div>
   );
 };

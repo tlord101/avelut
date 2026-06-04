@@ -582,7 +582,6 @@ FORMAT:
 
         if (!aiResult.success) {
           addToast(aiResult.message, 'error');
-          setIsUploading(false);
           setIsUploadingCourseKey('');
           return;
         }

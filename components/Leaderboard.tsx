@@ -5,6 +5,7 @@ import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'fi
 import type { UserProfile, LeaderboardEntry } from '../types';
 import { Avatar } from './Avatar';
 import { LogoIcon } from './icons/LogoIcon';
+import { VerificationBadge } from './VerificationBadge';
 
 const getWeekId = (date: Date): string => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -27,9 +28,12 @@ const RankItem: React.FC<{rank: number, user: LeaderboardEntry, isCurrentUser: b
                 <span className={rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : 'text-yellow-600'}>{rank}</span>
             ) : rank}
         </div>
-        <Avatar displayName={user.display_name} photoURL={user.photo_url} className="w-10 h-10 ml-4" />
+        <Avatar display_name={user.display_name} photo_url={user.photo_url} className="w-10 h-10 ml-4" />
         <div className="flex-1 ml-4">
-            <p className="font-semibold text-gray-800">{user.display_name}</p>
+            <p className="font-semibold text-gray-800 flex items-center gap-1.5">
+                <span>{user.display_name}</span>
+                <VerificationBadge status={(user as any).subscription_status} />
+            </p>
         </div>
         <div className="font-bold text-lime-600 text-lg">
             {(user.xp || 0).toLocaleString()} XP
