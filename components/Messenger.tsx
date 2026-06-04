@@ -446,7 +446,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
   const [chats, setChats] = useState<any[]>(() => readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, 'chats'), []));
-    const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+    const [allUsers, setAllUsers] = useState<UserProfile[]>(() => readCachedJson<UserProfile[]>(getMessengerCacheKey(userProfile.uid, 'all_users'), []));
   const [messages, setMessages] = useState<any[]>(() => readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, 'messages_default'), []));
     const [isLoading, setIsLoading] = useState(true);
     const [tab, setTab] = useState<'chats' | 'people'>('chats');
@@ -481,8 +481,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     
     // Study Partners contact system states
     const [showPartnerModal, setShowPartnerModal] = useState(false);
-    const [studyPartners, setStudyPartners] = useState<Record<string, boolean>>({});
-    const [partnerRequests, setPartnerRequests] = useState<Record<string, any>>({});
+    const [studyPartners, setStudyPartners] = useState<Record<string, boolean>>(() => readCachedJson<Record<string, boolean>>(getMessengerCacheKey(userProfile.uid, 'study_partners'), {}));
+    const [partnerRequests, setPartnerRequests] = useState<Record<string, any>>(() => readCachedJson<Record<string, any>>(getMessengerCacheKey(userProfile.uid, 'partner_requests'), {}));
     const [searchPartnerName, setSearchPartnerName] = useState('');
     const [searchPartnerDept, setSearchPartnerDept] = useState('');
     const [partnerActiveSubTab, setPartnerActiveSubTab] = useState<'find' | 'requests'>('find');
@@ -789,6 +789,21 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       if (!firebaseUser) return;
       writeCachedJson(getMessengerCacheKey(userProfile.uid, 'chats'), chats);
     }, [chats, firebaseUser, userProfile.uid]);
+
+    useEffect(() => {
+      if (!firebaseUser || !allUsers.length) return;
+      writeCachedJson(getMessengerCacheKey(userProfile.uid, 'all_users'), allUsers);
+    }, [allUsers, firebaseUser, userProfile.uid]);
+
+    useEffect(() => {
+      if (!firebaseUser) return;
+      writeCachedJson(getMessengerCacheKey(userProfile.uid, 'study_partners'), studyPartners);
+    }, [studyPartners, firebaseUser, userProfile.uid]);
+
+    useEffect(() => {
+      if (!firebaseUser) return;
+      writeCachedJson(getMessengerCacheKey(userProfile.uid, 'partner_requests'), partnerRequests);
+    }, [partnerRequests, firebaseUser, userProfile.uid]);
 
     const pendingFetches = useRef<Set<string>>(new Set());
 
@@ -1381,7 +1396,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                     <h1 className="text-xl font-bold text-[#212529] mb-4">Messages</h1>
                     <div className="flex gap-2 bg-[#E9ECEF] p-1 rounded-full mb-3">
                         <button onClick={() => setTab('chats')} className={`flex-1 py-1.5 text-sm rounded-full font-medium transition-all ${tab === 'chats' ? 'bg-white text-[#212529] shadow-sm' : 'text-[#6C757D] hover:text-[#212529]'}`}>Chats</button>
-                        <button onClick={() => setTab('people')} className={`flex-1 py-1.5 text-sm rounded-full font-medium transition-all ${tab === 'people' ? 'bg-white text-[#212529] shadow-sm' : 'text-[#6C757D] hover:text-[#212529]'}`}>People</button>
+                        <button onClick={() => setTab('people')} className={`flex-1 py-1.5 text-sm rounded-full font-medium transition-all ${tab === 'people' ? 'bg-white text-[#212529] shadow-sm' : 'text-[#6C757D] hover:text-[#212529]'}`}>Study Mates</button>
                     </div>
 
                     {/* Search Bar */}
@@ -1389,7 +1404,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         <div className="relative">
                             <input 
                                 type="text"
-                                placeholder="Search people..."
+                                placeholder="Search study mates..."
                                 value={peopleSearchQuery}
                                 onChange={(e) => setPeopleSearchQuery(e.target.value)}
                                 className="w-full bg-white text-sm text-[#212529] placeholder-[#80868B] px-4 py-2 rounded-full border border-[#E9ECEF] focus:outline-none focus:ring-2 focus:ring-[#009EE2]/20 focus:border-[#009EE2] transition-all shadow-sm"
@@ -1447,7 +1462,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                 </p>
                             </div>
                         </div>
-                    )) : filteredPeople.map(u => {
+                     )) : filteredPeople.length === 0 ? (
+                        <div className="text-center py-12 px-6 bg-[#F8F9FA]/30 m-4 rounded-2xl border border-dashed border-[#E9ECEF]">
+                            <span className="text-2xl block mb-2 font-black text-[#6C757D]">👥</span>
+                            <p className="text-sm font-bold text-[#212529]">No study mates found</p>
+                            <p className="text-xs text-[#6C757D] mt-1">
+                                {peopleSearchQuery ? "No matches for your search." : "Build your network to collaborate and share chats."}
+                            </p>
+                        </div>
+                    ) : filteredPeople.map(u => {
                         const unreadCount = getUnreadCountForUser(u.uid);
                         return (
                         <div key={u.uid} onClick={() => openChatWithUser(u)} className="flex items-center gap-3 p-4 hover:bg-[#F8F9FA] cursor-pointer border-b border-[#E9ECEF] transition">
@@ -1472,7 +1495,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 {/* FAB: Add Study Partner */}
                 <button
                     onClick={() => setShowPartnerModal(true)}
-                    className="absolute bottom-6 right-6 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#009EE2] to-[#0070B8] text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-white/20 z-40"
+                    className="fixed md:absolute bottom-24 md:bottom-6 right-6 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#009EE2] to-[#0070B8] text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-white/20 z-40"
                     title="Add Study Partner"
                 >
                     <div className="relative">
@@ -1748,7 +1771,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         {/* Header */}
                         <div className="p-6 border-b border-[#E9ECEF] flex items-center justify-between bg-gradient-to-r from-[#009EE2]/5 to-[#0070B8]/5">
                             <div>
-                                <h2 className="text-lg font-bold text-[#212529]">Study Partners</h2>
+                                <h2 className="text-lg font-bold text-[#212529]">Study Partners ({Math.max(0, allUsers.length - 1)} registered)</h2>
                                 <p className="text-xs text-[#6C757D] font-medium mt-0.5">Build your academic network to collaborate and share lessons.</p>
                             </div>
                             <button
@@ -1816,19 +1839,29 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
                                     {/* List */}
                                     <div className="space-y-3">
-                                        {allUsers
-                                            .filter(u => u.uid !== firebaseUser?.uid)
-                                            .filter(u => {
-                                                if (searchPartnerName.trim()) {
-                                                    const q = searchPartnerName.toLowerCase();
-                                                    if (!(u.display_name || '').toLowerCase().includes(q)) return false;
-                                                }
-                                                if (searchPartnerDept) {
-                                                    if (u.department_id !== searchPartnerDept) return false;
-                                                }
-                                                return true;
-                                            })
-                                            .map(u => {
+                                        {(() => {
+                                            const filtered = allUsers
+                                                .filter(u => u.uid !== firebaseUser?.uid)
+                                                .filter(u => {
+                                                    if (searchPartnerName.trim()) {
+                                                        const q = searchPartnerName.toLowerCase();
+                                                        if (!(u.display_name || '').toLowerCase().includes(q)) return false;
+                                                    }
+                                                    if (searchPartnerDept) {
+                                                        if (u.department_id !== searchPartnerDept) return false;
+                                                    }
+                                                    return true;
+                                                });
+                                            if (filtered.length === 0) {
+                                                return (
+                                                    <div className="text-center py-12 bg-neutral-50 rounded-2xl border border-dashed border-[#E9ECEF] p-6">
+                                                        <span className="text-3xl block mb-2">🔍</span>
+                                                        <p className="text-sm font-bold text-[#212529]">No students found</p>
+                                                        <p className="text-xs text-[#6C757D] mt-1">Try checking the spelling or selecting another department filter.</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return filtered.map(u => {
                                                 const isPartner = studyPartners[u.uid] === true;
                                                 const req = partnerRequests[u.uid];
                                                 
@@ -1873,7 +1906,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                                         </div>
                                                     </div>
                                                 );
-                                            })}
+                                            });
+                                        })()}
                                     </div>
                                 </div>
                             ) : (

@@ -1072,10 +1072,9 @@ Student: "${tempInput}"
                             setIsTutorialsOpen(true);
                             void fetchTutorials();
                         }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider transition-colors cursor-pointer select-none"
+                        className="flex items-center px-4 py-2 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider transition-colors cursor-pointer select-none shadow-sm"
                     >
-                        <VideoIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Tutorials</span>
+                        Video Tutorial
                     </button>
                     
                     <div className="relative">
