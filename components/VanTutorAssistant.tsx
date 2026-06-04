@@ -198,6 +198,14 @@ const mapSender = (sender: string | undefined): AssistantSender => {
 };
 
 // Custom SVG Icons
+const MenuIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <line x1="4" y1="6" x2="20" y2="6" />
+    <line x1="4" y1="18" x2="20" y2="18" />
+  </svg>
+);
+
 const PlusIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -647,9 +655,11 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
               parts: [
                 {
                   text: [
-                    'You are VanTutorAssistant, a friendly study companion for university students.',
-                    'Answer clearly, encourage the learner, and keep explanations concise but complete.',
-                    'You have full access to the learner\'s course context and should ground answers in it when relevant.',
+                    'You are VanTutorAssistant, a friendly, personalized study companion for university students.',
+                    'You function as a Retrieval-Augmented Generation (RAG) system, grounded in the student\'s specific academic roadmap/syllabus (provided under COURSE CONTEXT). Use this context directly to personalize explanations and relate concepts back to their coursework, level, and semester.',
+                    'You can also answer abstract, general, or non-course related questions. When the student asks general or abstract topics, answer them thoroughly but tie them back to their academic context or field of study when relevant.',
+                    'Answer simple, direct, and straightforward questions instantly and clearly, without unnecessary elaboration.',
+                    'If the student asks disturbing questions, feels stressed, confused, or expresses study anxiety, act as a reassuring, supportive, and empathetic guiding assistant. Help break down concepts step-by-step, suggest actionable study plans, and offer clear guidance.',
                     'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
                     'If the question needs calculations, show the steps and final formula neatly.',
                     courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
@@ -851,6 +861,9 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
 
         const systemInstructionText = [
           'You are VanTutorAssistant running in an immediate full-duplex live voice conversation runtime.',
+          'You function as a Retrieval-Augmented Generation (RAG) system grounded in the student\'s specific courses and syllabus.',
+          'Answer simple, direct, and straightforward questions instantly and clearly.',
+          'If the student asks disturbing questions, feels stressed, or wants general guidance, act as an empathetic, reassuring guiding assistant. Help break down concepts gently.',
           'Respond naturally, dynamically, and extremely concisely using pure conversation speech pattern structures.',
           'Keep structural explanations down to a maximum of 1 or 2 verbal sentences per turn to ensure conversational fluidity.',
           'Never vocalize or explain markdown syntax characters, bullet points, or complex LaTeX layouts verbally.',
@@ -1150,7 +1163,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                 className="rounded-2xl border border-neutral-800 bg-[#0d1122] p-2 text-slate-300 md:hidden"
                 aria-label="Open assistant history"
               >
-                <ChatIcon className="h-5 w-5" />
+                <MenuIcon className="h-5 w-5" />
               </button>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">VanTutorAssistant</p>
