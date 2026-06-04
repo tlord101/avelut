@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title || 'VANTUTOR';
   const notificationOptions = {
     body: payload.notification.body,
-    icon: payload.notification.icon || '/logo.svg',
-    badge: payload.notification.badge || '/logo.svg',
+    icon: payload.notification.icon || 'https://ai.vaultsglofin.com/logo.svg',
+    badge: payload.notification.badge || 'https://ai.vaultsglofin.com/logo.svg',
     data: payload.data || {}
   };
 

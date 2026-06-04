@@ -30,10 +30,19 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
                 type: notification.type || 'study_update',
                 timestamp: String(notification.timestamp || Date.now())
             },
+            android: {
+                notification: {
+                    color: '#002D62',
+                    sound: 'default',
+                }
+            },
             webpush: {
                 notification: {
-                    icon: '/logo.svg',
-                    badge: '/logo.svg',
+                    icon: 'https://ai.vaultsglofin.com/logo.svg',
+                    badge: 'https://ai.vaultsglofin.com/logo.svg',
+                    vibrate: [200, 100, 200],
+                    tag: 'vantutor-alert',
+                    renotify: true
                 }
             }
         };
@@ -100,10 +109,19 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
                 chatId: chatId,
                 type: 'private_chat'
             },
+            android: {
+                notification: {
+                    color: '#002D62',
+                    sound: 'default',
+                }
+            },
             webpush: {
                 notification: {
-                    icon: senderData.photo_url || '/logo.svg',
-                    badge: '/logo.svg',
+                    icon: senderData.photo_url || 'https://ai.vaultsglofin.com/logo.svg',
+                    badge: 'https://ai.vaultsglofin.com/logo.svg',
+                    vibrate: [200, 100, 200],
+                    tag: `chat-${chatId}`,
+                    renotify: true
                 }
             }
         };
@@ -137,10 +155,19 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
                     title: '📚 Ready to study?',
                     body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on VANTUTOR.`,
                 },
+                android: {
+                    notification: {
+                        color: '#002D62',
+                        sound: 'default',
+                    }
+                },
                 webpush: {
                     notification: {
-                        icon: '/logo.svg',
-                        badge: '/logo.svg',
+                        icon: 'https://ai.vaultsglofin.com/logo.svg',
+                        badge: 'https://ai.vaultsglofin.com/logo.svg',
+                        vibrate: [200, 100, 200],
+                        tag: 'vantutor-reminder',
+                        renotify: true
                     }
                 }
             };
