@@ -93,7 +93,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                         Welcome back, {userProfile.display_name.split(' ')[0] || 'Learner'}.
                     </h1>
                     <p className="mt-2 text-sm font-bold uppercase tracking-[0.22em] text-gray-400">
-                        Track progress, time spent, and mastery signals across your courses.
+                        Track your progress.
                     </p>
                 </div>
                 <div className="rounded-full border border-gray-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-gray-700 shadow-sm">
