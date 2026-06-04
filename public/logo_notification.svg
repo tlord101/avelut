@@ -1,0 +1,22 @@
+<svg width="512" height="512" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="30" cy="30" r="29" fill="#FFFFFF" />
+  <defs>
+    <linearGradient id="brand-gradient-notif" x1="6" y1="6" x2="48" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#B3E5FC" />
+      <stop offset="52%" stop-color="#0088CC" />
+      <stop offset="100%" stop-color="#002D62" />
+    </linearGradient>
+    <linearGradient id="brand-highlight-notif" x1="18" y1="4" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#EAF8FF" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#B3E5FC" stop-opacity="0.45" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(4, 9)">
+    <path d="M4.33331 17.5L26 4.375L47.6666 17.5L26 30.625L4.33331 17.5Z" stroke="url(#brand-gradient-notif)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M41.5 21V29.75C41.5 30.825 40.85 32.55 39.4166 33.25L27.75 39.375C26.6666 39.9 25.3333 39.9 24.25 39.375L12.5833 33.25C11.15 32.55 10.5 30.825 10.5 29.75V21" stroke="url(#brand-gradient-notif)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.95" />
+    <path d="M47.6667 17.5V26.25" stroke="url(#brand-highlight-notif)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="25.5" cy="12" r="3.2" fill="#B3E5FC" fill-opacity="0.9" />
+    <circle cx="19" cy="24" r="2.5" fill="#B3E5FC" fill-opacity="0.55" />
+    <circle cx="33" cy="22" r="2.2" fill="#0088CC" fill-opacity="0.28" />
+  </g>
+</svg>
