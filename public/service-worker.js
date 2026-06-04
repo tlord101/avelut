@@ -38,6 +38,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Only handle http and https requests to prevent chrome-extension and other schemes from failing
+  if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
   // Skip non-GET requests and Firebase Database / Auth / Functions / API requests
   if (
     event.request.method !== 'GET' ||
