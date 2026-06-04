@@ -39,7 +39,7 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
             webpush: {
                 notification: {
                     icon: 'https://ai.vaultsglofin.com/logo.svg',
-                    badge: 'https://ai.vaultsglofin.com/logo.svg',
+                    badge: 'https://ai.vaultsglofin.com/logo_white.svg',
                     vibrate: [200, 100, 200],
                     tag: 'vantutor-alert',
                     renotify: true
@@ -118,7 +118,7 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
             webpush: {
                 notification: {
                     icon: senderData.photo_url || 'https://ai.vaultsglofin.com/logo.svg',
-                    badge: 'https://ai.vaultsglofin.com/logo.svg',
+                    badge: 'https://ai.vaultsglofin.com/logo_white.svg',
                     vibrate: [200, 100, 200],
                     tag: `chat-${chatId}`,
                     renotify: true
@@ -164,7 +164,7 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
                 webpush: {
                     notification: {
                         icon: 'https://ai.vaultsglofin.com/logo.svg',
-                        badge: 'https://ai.vaultsglofin.com/logo.svg',
+                        badge: 'https://ai.vaultsglofin.com/logo_white.svg',
                         vibrate: [200, 100, 200],
                         tag: 'vantutor-reminder',
                         renotify: true

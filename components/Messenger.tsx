@@ -465,6 +465,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const [messageActionPosition, setMessageActionPosition] = useState<{ x: number; y: number } | null>(null);
     
     const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
+    const [fetchedUserProfiles, setFetchedUserProfiles] = useState<Record<string, UserProfile>>({});
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -738,12 +739,45 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [chats, firebaseUser, userProfile.uid]);
 
     useEffect(() => {
-      if (!chats.length || !userMap.size) return;
+        if (!chats.length) return;
+        chats.forEach(async (chat) => {
+            const otherUserId = chat.otherUserId || chat.otherUser?.uid;
+            if (!otherUserId) return;
+            const resolvedUser = userMap.get(otherUserId) || fetchedUserProfiles[otherUserId];
+            if (!resolvedUser) {
+                try {
+                    const snapshot = await get(dbRef(db, `users/${otherUserId}`));
+                    if (snapshot.exists()) {
+                        const u = snapshot.val();
+                        const profile: UserProfile = {
+                            uid: otherUserId,
+                            display_name: u.displayName || u.display_name || 'Unknown User',
+                            photo_url: u.photoURL || u.photo_url || '',
+                            is_online: !!u.is_online,
+                            last_seen: u.last_seen || 0,
+                            department_id: u.department_id || '',
+                            level: u.level || '',
+                            current_streak: u.current_streak || 0,
+                            last_activity_date: u.last_activity_date || Date.now(),
+                            notifications_enabled: !!u.notifications_enabled,
+                        };
+                        setFetchedUserProfiles(prev => ({ ...prev, [otherUserId]: profile }));
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch profile for user:", otherUserId, err);
+                }
+            }
+        });
+    }, [chats, userMap, fetchedUserProfiles]);
+
+    useEffect(() => {
+      if (!chats.length) return;
       setChats(prevChats => prevChats.map(chat => {
-        const resolvedUser = userMap.get(chat.otherUser?.uid);
+        const otherUserId = chat.otherUserId || chat.otherUser?.uid;
+        const resolvedUser = otherUserId ? (userMap.get(otherUserId) || fetchedUserProfiles[otherUserId]) : undefined;
         return resolvedUser ? { ...chat, otherUser: resolvedUser } : chat;
       }));
-    }, [userMap]);
+    }, [userMap, fetchedUserProfiles]);
 
     useEffect(() => {
       if (!initialChatId || !chats.length) return;

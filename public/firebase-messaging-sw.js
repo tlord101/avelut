@@ -21,7 +21,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationOptions = {
     body: payload.notification.body,
     icon: payload.notification.icon || 'https://ai.vaultsglofin.com/logo.svg',
-    badge: payload.notification.badge || 'https://ai.vaultsglofin.com/logo.svg',
+    badge: payload.notification.badge || 'https://ai.vaultsglofin.com/logo_white.svg',
     data: payload.data || {}
   };
 
