@@ -232,6 +232,40 @@ interface LearningInterfaceProps {
     usageStats: any;
 }
 
+const INVIDIOUS_INSTANCES = [
+    'https://invidious.flokinet.to',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.tiekoetter.com',
+    'https://yewtu.be',
+    'https://inv.tux.im'
+];
+
+const fetchRealYoutubeVideo = async (searchQuery: string): Promise<{ videoId: string; thumbnailUrl: string } | null> => {
+    for (const instance of INVIDIOUS_INSTANCES) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const response = await fetch(`${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (response.ok) {
+                const results = await response.json();
+                const firstVideo = results?.find((r: any) => r.type === 'video');
+                if (firstVideo && firstVideo.videoId) {
+                    return {
+                        videoId: firstVideo.videoId,
+                        thumbnailUrl: `https://img.youtube.com/vi/${firstVideo.videoId}/mqdefault.jpg`
+                    };
+                }
+            }
+        } catch (err) {
+            console.warn(`Failed to fetch from Invidious instance ${instance}:`, err);
+        }
+    }
+    return null;
+};
+
 const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
@@ -240,9 +274,9 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [fileData, setFileData] = useState<string | null>(null);
     const [showLimitModal, setShowLimitModal] = useState(false);
     const [isTutorialsOpen, setIsTutorialsOpen] = useState(false);
-    const [tutorials, setTutorials] = useState<Array<{ title: string; description: string; searchQuery: string }>>([]);
+    const [tutorials, setTutorials] = useState<Array<{ title: string; description: string; searchQuery: string; videoId?: string; thumbnailUrl?: string }>>([]);
     const [isTutorialsLoading, setIsTutorialsLoading] = useState(false);
-    const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string } | null>(null);
+    const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string } | null>(null);
     const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
     const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5, courseId: '' });
     const [isLoading, setIsLoading] = useState(false);
@@ -420,8 +454,8 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
         try {
             const prompt = `
 Identify 5 to 10 sub-topics or specific tutorial search terms for the university topic: '${topic.topic_name}' in the course: '${topic.courseName}'.
-For each sub-topic, provide a clear, educational title, a brief description, and a specific search query that will find the best, highly-rated educational tutorial on YouTube.
-Return valid JSON as a list of objects with keys: title, description, and searchQuery. Do not add any backticks, explanation, or HTML markdown outside of the JSON array.
+For each sub-topic, provide a clear, educational title, a brief description, a specific search query that will find the best, highly-rated educational tutorial on YouTube, and a predicted highly popular YouTube video ID for that tutorial (e.g. from channels like CrashCourse, Khan Academy, MIT OpenCourseWare, 3Blue1Brown, FreeCodeCamp, or similar).
+Return valid JSON as a list of objects with keys: title, description, searchQuery, and videoId. Do not add any backticks, explanation, or HTML markdown outside of the JSON array.
 `;
             const result = await attemptApiCall(async () => {
                 if (!ai) throw new Error('AI client is not initialized.');
@@ -437,30 +471,75 @@ Return valid JSON as a list of objects with keys: title, description, and search
             });
 
             if (result.success && Array.isArray(result.data)) {
-                setTutorials(result.data);
+                const initialItems = result.data.map((item: any) => {
+                    const vId = item.videoId || '';
+                    return {
+                        title: item.title || '',
+                        description: item.description || '',
+                        searchQuery: item.searchQuery || '',
+                        videoId: vId,
+                        thumbnailUrl: vId ? `https://img.youtube.com/vi/${vId}/mqdefault.jpg` : ''
+                    };
+                });
+                setTutorials(initialItems);
+
+                // Fetch real videos asynchronously in parallel
+                void (async () => {
+                    const resolved = await Promise.all(initialItems.map(async (item) => {
+                        const real = await fetchRealYoutubeVideo(item.searchQuery);
+                        if (real) {
+                            return {
+                                ...item,
+                                videoId: real.videoId,
+                                thumbnailUrl: real.thumbnailUrl
+                            };
+                        }
+                        // Fallback if search resolution failed:
+                        // If Gemini didn't supply a videoId, pick one based on title hash
+                        if (!item.videoId) {
+                            const fallbacks = ['dF6-H8m4XvY', 'L1573QM8P84', 'y72-T5jHn2k', '1A_CAkYt3GY', 'z71h9z3s8Xo'];
+                            const hash = item.title.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+                            const selectedId = fallbacks[Math.abs(hash) % fallbacks.length];
+                            return {
+                                ...item,
+                                videoId: selectedId,
+                                thumbnailUrl: `https://img.youtube.com/vi/${selectedId}/mqdefault.jpg`
+                            };
+                        }
+                        return item;
+                    }));
+                    setTutorials(resolved);
+                })();
             } else {
                 throw new Error(result.message || 'Failed to parse JSON');
             }
         } catch (err) {
             console.error('Failed to load video tutorials:', err);
             addToast('Could not load video tutorials. Showing standard recommendations.', 'error');
-            setTutorials([
+            const placeholderItems = [
                 {
                     title: `Introduction to ${topic.topic_name}`,
                     description: `A comprehensive overview of ${topic.topic_name} fundamentals.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} introduction tutorial`
+                    searchQuery: `${topic.courseName} ${topic.topic_name} introduction tutorial`,
+                    videoId: 'dF6-H8m4XvY',
+                    thumbnailUrl: 'https://img.youtube.com/vi/dF6-H8m4XvY/mqdefault.jpg'
                 },
                 {
                     title: `${topic.topic_name} Explained with Examples`,
                     description: `Practical walkthroughs and step-by-step examples.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} examples solved`
+                    searchQuery: `${topic.courseName} ${topic.topic_name} examples solved`,
+                    videoId: 'L1573QM8P84',
+                    thumbnailUrl: 'https://img.youtube.com/vi/L1573QM8P84/mqdefault.jpg'
                 },
                 {
                     title: `Advanced ${topic.topic_name}`,
                     description: `Deep dive into advanced concepts and applications.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} advanced topics`
+                    searchQuery: `${topic.courseName} ${topic.topic_name} advanced topics`,
+                    videoId: 'y72-T5jHn2k',
+                    thumbnailUrl: 'https://img.youtube.com/vi/y72-T5jHn2k/mqdefault.jpg'
                 }
-            ]);
+            ];
+            setTutorials(placeholderItems);
         } finally {
             setIsTutorialsLoading(false);
         }
@@ -1323,11 +1402,16 @@ Student: "${tempInput}"
                                     onClick={() => setActiveVideo(video)}
                                     className="flex items-start gap-4 p-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50/20 rounded-2xl transition-all text-left group w-full"
                                 >
-                                    {/* Video Thumbnail Placeholder */}
-                                    <div className="w-28 h-18 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
-                                        <div className="absolute inset-0 bg-black/10"></div>
-                                        <span className="text-[10px] font-black tracking-widest uppercase bg-white/20 px-2 py-0.5 rounded-full z-10">PLAY</span>
-                                        <svg className="w-6 h-6 z-10 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                    {/* Video Thumbnail */}
+                                    <div className="w-28 h-18 bg-gray-100 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
+                                        {video.thumbnailUrl ? (
+                                            <img src={video.thumbnailUrl} alt={video.title} className="absolute inset-0 w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600" />
+                                        )}
+                                        <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-white drop-shadow-md z-10" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                        </div>
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-extrabold text-sm text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">{video.title}</h4>
@@ -2068,7 +2152,7 @@ const FullscreenEnterIcon: React.FC<{ className?: string }> = ({ className = 'w-
 );
 
 interface CustomVideoPlayerProps {
-    video: { title: string; searchQuery: string };
+    video: { title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string };
     onClose: () => void;
 }
 
@@ -2120,12 +2204,10 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose })
             return;
         }
 
-        playerRef.current = new (window as any).YT.Player(playerId, {
+        const playerConfig: any = {
             height: '100%',
             width: '100%',
             playerVars: {
-                listType: 'search',
-                list: video.searchQuery,
                 controls: 0,
                 disablekb: 1,
                 fs: 0,
@@ -2158,7 +2240,16 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose })
                     }
                 }
             }
-        });
+        };
+
+        if (video.videoId) {
+            playerConfig.videoId = video.videoId;
+        } else {
+            playerConfig.playerVars.listType = 'search';
+            playerConfig.playerVars.list = video.searchQuery;
+        }
+
+        playerRef.current = new (window as any).YT.Player(playerId, playerConfig);
     };
 
     useEffect(() => {

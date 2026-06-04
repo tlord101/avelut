@@ -214,7 +214,7 @@ export const checkStudyGuideCourseRequestsLimit = (
   appSettings: AppSettings
 ) => {
   if (isExempt(userProfile)) {
-    return { allowed: true, used: 0, limit: Infinity, price: 0, count: Infinity, secondsLeft: 0 };
+    return { allowed: true, used: 0, limit: Infinity, price: 0, count: Infinity, secondsLeft: 0, windowStart: Date.now() };
   }
 
   const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
@@ -279,16 +279,18 @@ export const incrementExamsGenerated = async (userId: string) => {
 };
 
 // Update course AI requests counter
-export const incrementCourseRequestsUsed = async (userId: string, courseId: string, windowStart: number) => {
+export const incrementCourseRequestsUsed = async (userId: string, courseId: string, windowStart?: number) => {
   try {
     const usageStatsRef = dbRef(db, `users/${userId}/usage_stats`);
     const currentSnap = await get(usageStatsRef);
     const currentVal = currentSnap.val() || {};
     const coursesRequests = currentVal.courses_requests || {};
-    const courseData = coursesRequests[courseId] || { requests_used: 0, window_start_time: windowStart, additional_requests_purchased: 0 };
+    
+    // Fallback if windowStart is missing or invalid
+    const courseData = coursesRequests[courseId] || { requests_used: 0, window_start_time: windowStart || Date.now(), additional_requests_purchased: 0 };
     
     courseData.requests_used = (courseData.requests_used || 0) + 1;
-    courseData.window_start_time = windowStart; // preserve window start
+    courseData.window_start_time = windowStart || courseData.window_start_time || Date.now(); // preserve window start or fallback
 
     coursesRequests[courseId] = courseData;
     await update(usageStatsRef, { courses_requests: coursesRequests });
