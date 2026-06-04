@@ -466,7 +466,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const [messageActionPosition, setMessageActionPosition] = useState<{ x: number; y: number } | null>(null);
     
     const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
-    const [fetchedUserProfiles, setFetchedUserProfiles] = useState<Record<string, UserProfile>>({});
+    const [fetchedUserProfiles, setFetchedUserProfiles] = useState<Record<string, UserProfile>>(() => 
+        readCachedJson<Record<string, UserProfile>>(`vantutor_resolved_profiles_${userProfile.uid}`, {})
+    );
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -626,8 +628,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, []);
 
     useEffect(() => {
+        if (tab !== 'people') return;
         const usersRef = dbRef(db, 'users');
-        onValue(usersRef, (snap) => {
+        const unsubscribe = onValue(usersRef, (snap) => {
             const data = snap.val() || {};
             setAllUsers(Object.entries(data).map(([uid, u]: any) => ({
                 uid,
@@ -643,7 +646,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 notifications_enabled: u.notifications_enabled || false,
             })));
         });
-    }, []);
+        return () => off(usersRef, 'value', unsubscribe);
+    }, [tab]);
 
     useEffect(() => {
       const handleVisibilityChange = () => setIsAppActive(document.visibilityState === 'visible');
@@ -745,13 +749,16 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       writeCachedJson(getMessengerCacheKey(userProfile.uid, 'chats'), chats);
     }, [chats, firebaseUser, userProfile.uid]);
 
+    const pendingFetches = useRef<Set<string>>(new Set());
+
     useEffect(() => {
         if (!chats.length) return;
         chats.forEach(async (chat) => {
             const otherUserId = chat.otherUserId || chat.otherUser?.uid;
             if (!otherUserId) return;
             const resolvedUser = userMap.get(otherUserId) || fetchedUserProfiles[otherUserId];
-            if (!resolvedUser) {
+            if (!resolvedUser && !pendingFetches.current.has(otherUserId)) {
+                pendingFetches.current.add(otherUserId);
                 try {
                     const snapshot = await get(dbRef(db, `users/${otherUserId}`));
                     if (snapshot.exists()) {
@@ -769,14 +776,20 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                             notifications_enabled: !!u.notifications_enabled,
                             subscription_status: u.subscription_status || 'free',
                         };
-                        setFetchedUserProfiles(prev => ({ ...prev, [otherUserId]: profile }));
+                        setFetchedUserProfiles(prev => {
+                            const next = { ...prev, [otherUserId]: profile };
+                            writeCachedJson(`vantutor_resolved_profiles_${userProfile.uid}`, next);
+                            return next;
+                        });
                     }
                 } catch (err) {
                     console.error("Failed to fetch profile for user:", otherUserId, err);
+                } finally {
+                    pendingFetches.current.delete(otherUserId);
                 }
             }
         });
-    }, [chats, userMap, fetchedUserProfiles]);
+    }, [chats, userMap]);
 
     useEffect(() => {
       if (!chats.length) return;

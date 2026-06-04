@@ -253,6 +253,8 @@ const App: React.FC = () => {
     const [userProgress, setUserProgress] = useState<UserProgress>({});
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
+    const [examHistory, setExamHistory] = useState<ExamHistoryItem[]>([]);
+    const [departmentData, setDepartmentData] = useState<any>(null);
 
     
     const [isLoading, setIsLoading] = useState(true);
@@ -555,6 +557,7 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!userProfile) {
             setUnreadMessagesCount(0);
+            setNotifications([]);
             return;
         }
 
@@ -567,88 +570,6 @@ const App: React.FC = () => {
         const cacheKeyNotif = `vantutor_notifications_${userProfile.uid}`;
         const cachedNotif = readCachedJson<NotificationType[]>(cacheKeyNotif, []);
         setNotifications(cachedNotif);
-        
-        const setupDashboardData = async () => {
-            try {
-                const deptCacheKey = `vantutor_dept_data_${userProfile.department_id}`;
-                let departmentData = readCachedJson<any>(deptCacheKey, null);
-                if (!departmentData) {
-                    const departmentSnapshot = await get(dbRef(db, `departments_data/${userProfile.department_id}`));
-                    departmentData = departmentSnapshot.val();
-                    if (departmentData) {
-                        writeCachedJson(deptCacheKey, departmentData);
-                    }
-                }
-                if (!departmentData) return;
-
-                const normalizedUserLevel = normalizeLevelValue(userProfile.level);
-                const coursesForLevel = (departmentData.course_list || []).filter((course: Course) => (
-                    normalizeLevelValue(course.level) === normalizedUserLevel
-                ));
-                
-                const totalTopics = coursesForLevel.reduce((acc: number, course: Course) => acc + (course.topics?.length || 0), 0) || 0;
-                const topicIdsForLevel = new Set<string>();
-            
-                coursesForLevel.forEach(course => {
-                    course.topics?.forEach(topic => { topicIdsForLevel.add(topic.topic_id); });
-                });
-
-                const completedTopicsCount = Object.keys(userProgress)
-                    .filter(topicId => userProgress[topicId].is_complete && topicIdsForLevel.has(topicId))
-                    .length;
-                const topicDurations = Object.entries(userProgress)
-                    .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof progress.study_duration_seconds === 'number' && progress.study_duration_seconds > 0)
-                    .map(([, progress]) => progress.study_duration_seconds || 0);
-                const totalStudySeconds = topicDurations.reduce((acc: number, seconds: number) => acc + seconds, 0);
-                const averageTopicStudySeconds = topicDurations.length > 0 ? Math.round(totalStudySeconds / topicDurations.length) : 0;
-
-                const completedCoursesCount = coursesForLevel.filter((course: Course) => {
-                    const topicIds = course.topics?.map(topic => topic.topic_id) || [];
-                    return topicIds.length > 0 && topicIds.every(topicId => userProgress[topicId]?.is_complete);
-                }).length;
-                const courseDurations = coursesForLevel
-                    .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + (userProgress[topic.topic_id]?.study_duration_seconds || 0), 0))
-                    .filter((seconds: number) => seconds > 0);
-                const averageCourseStudySeconds = courseDurations.length > 0 ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length) : 0;
-
-                const examHistoryRef = dbRef(db, `exam_history/${userProfile.uid}`);
-                const examSnapshot = await get(examHistoryRef);
-                const examData = examSnapshot.val() || {};
-                const examHistory = Object.values(examData).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
-                const examAverageScore = examHistory.length > 0 ? examHistory.reduce((acc, exam) => acc + ((exam.score / exam.total_questions) * 100), 0) / examHistory.length : 0;
-
-                const progressPercent = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
-                const understandingScore = Math.max(0, Math.min(100, Math.round((progressPercent * 0.55) + (examAverageScore * 0.45))));
-                const understandingLabel = understandingScore >= 85 ? 'Excellent' : understandingScore >= 70 ? 'Strong' : understandingScore >= 50 ? 'Growing' : 'Needs focus';
-
-                const nextDashboardData = { 
-                    totalTopics, 
-                    completedTopicsCount, 
-                    completedCoursesCount,
-                    totalStudySeconds,
-                    averageTopicStudySeconds,
-                    averageCourseStudySeconds,
-                    examAverageScore: Math.round(examAverageScore),
-                    understandingScore,
-                    understandingLabel,
-                    backedFacts: [
-                        `Completed topics: ${completedTopicsCount} of ${totalTopics}`,
-                        `Completed courses: ${completedCoursesCount}`,
-                        `Total study time: ${formatDurationForPrompt(totalStudySeconds)}`,
-                        `Average topic time: ${formatDurationForPrompt(averageTopicStudySeconds)}`,
-                        `Average course time: ${formatDurationForPrompt(averageCourseStudySeconds)}`,
-                        `Average exam score: ${Math.round(examAverageScore)}%`,
-                    ],
-                    examHistory: examHistory
-                };
-                setDashboardData(nextDashboardData);
-                writeCachedJson(cacheKeyDashboard, nextDashboardData);
-            } catch (error) {
-                console.error("Error setting up dashboard data:", (error as Error).message || error);
-            }
-        };
-
-        setupDashboardData();
         
         const notificationsRef = dbRef(db, `notifications/${userProfile.uid}`);
         const unsubscribeNotifications = onValue(notificationsRef, (snapshot) => {
@@ -669,23 +590,117 @@ const App: React.FC = () => {
             setUnreadMessagesCount(totalUnread);
         });
 
-        const examHistoryRef = dbRef(db, `exam_history/${userProfile.uid}`);
-        const unsubscribeExamHistory = onValue(examHistoryRef, (snapshot) => {
-            const data = snapshot.val() || {};
-            const examHistory = Object.values(data).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
-            setDashboardData(prev => {
-                const next = prev ? { ...prev, examHistory } : null;
-                if (next) writeCachedJson(cacheKeyDashboard, next);
-                return next;
-            });
-        });
-
         return () => {
             off(notificationsRef, 'value', unsubscribeNotifications);
             off(userChatsRef, 'value', unsubscribeUnreadCount);
+        };
+    }, [userProfile?.uid]);
+
+    useEffect(() => {
+        if (!userProfile) {
+            setExamHistory([]);
+            return;
+        }
+
+        const examHistoryRef = dbRef(db, `exam_history/${userProfile.uid}`);
+        const unsubscribeExamHistory = onValue(examHistoryRef, (snapshot) => {
+            const data = snapshot.val() || {};
+            const sorted = Object.values(data).sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5) as ExamHistoryItem[];
+            setExamHistory(sorted);
+        });
+
+        return () => {
             off(examHistoryRef, 'value', unsubscribeExamHistory);
         };
-    }, [userProfile, userProgress]);
+    }, [userProfile?.uid]);
+
+    useEffect(() => {
+        if (!userProfile?.department_id) {
+            setDepartmentData(null);
+            return;
+        }
+
+        const deptCacheKey = `vantutor_dept_data_${userProfile.department_id}`;
+        const cached = readCachedJson<any>(deptCacheKey, null);
+        if (cached) {
+            setDepartmentData(cached);
+        }
+
+        const deptRef = dbRef(db, `departments_data/${userProfile.department_id}`);
+        get(deptRef).then((snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                writeCachedJson(deptCacheKey, val);
+                setDepartmentData(val);
+            }
+        }).catch(err => {
+            console.error("Error fetching department details:", err);
+        });
+    }, [userProfile?.department_id]);
+
+    useEffect(() => {
+        if (!userProfile || !departmentData) return;
+
+        const normalizedUserLevel = normalizeLevelValue(userProfile.level);
+        const coursesForLevel = (departmentData.course_list || []).filter((course: Course) => (
+            normalizeLevelValue(course.level) === normalizedUserLevel
+        ));
+        
+        const totalTopics = coursesForLevel.reduce((acc: number, course: Course) => acc + (course.topics?.length || 0), 0) || 0;
+        const topicIdsForLevel = new Set<string>();
+    
+        coursesForLevel.forEach(course => {
+            course.topics?.forEach(topic => { topicIdsForLevel.add(topic.topic_id); });
+        });
+
+        const completedTopicsCount = Object.keys(userProgress)
+            .filter(topicId => userProgress[topicId]?.is_complete && topicIdsForLevel.has(topicId))
+            .length;
+        const topicDurations = Object.entries(userProgress)
+            .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof progress.study_duration_seconds === 'number' && progress.study_duration_seconds > 0)
+            .map(([, progress]) => progress.study_duration_seconds || 0);
+        const totalStudySeconds = topicDurations.reduce((acc: number, seconds: number) => acc + seconds, 0);
+        const averageTopicStudySeconds = topicDurations.length > 0 ? Math.round(totalStudySeconds / topicDurations.length) : 0;
+
+        const completedCoursesCount = coursesForLevel.filter((course: Course) => {
+            const topicIds = course.topics?.map(topic => topic.topic_id) || [];
+            return topicIds.length > 0 && topicIds.every(topicId => userProgress[topicId]?.is_complete);
+        }).length;
+        const courseDurations = coursesForLevel
+            .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + (userProgress[topic.topic_id]?.study_duration_seconds || 0), 0))
+            .filter((seconds: number) => seconds > 0);
+        const averageCourseStudySeconds = courseDurations.length > 0 ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length) : 0;
+
+        const examAverageScore = examHistory.length > 0 ? examHistory.reduce((acc, exam) => acc + ((exam.score / exam.total_questions) * 100), 0) / examHistory.length : 0;
+
+        const progressPercent = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
+        const understandingScore = Math.max(0, Math.min(100, Math.round((progressPercent * 0.55) + (examAverageScore * 0.45))));
+        const understandingLabel = understandingScore >= 85 ? 'Excellent' : understandingScore >= 70 ? 'Strong' : understandingScore >= 50 ? 'Growing' : 'Needs focus';
+
+        const nextDashboardData = { 
+            totalTopics, 
+            completedTopicsCount, 
+            completedCoursesCount,
+            totalStudySeconds,
+            averageTopicStudySeconds,
+            averageCourseStudySeconds,
+            examAverageScore: Math.round(examAverageScore),
+            understandingScore,
+            understandingLabel,
+            backedFacts: [
+                `Completed topics: ${completedTopicsCount} of ${totalTopics}`,
+                `Completed courses: ${completedCoursesCount}`,
+                `Total study time: ${formatDurationForPrompt(totalStudySeconds)}`,
+                `Average topic time: ${formatDurationForPrompt(averageTopicStudySeconds)}`,
+                `Average course time: ${formatDurationForPrompt(averageCourseStudySeconds)}`,
+                `Average exam score: ${Math.round(examAverageScore)}%`,
+            ],
+            examHistory
+        };
+        setDashboardData(nextDashboardData);
+        const cacheKeyDashboard = `vantutor_dashboard_${userProfile.uid}`;
+        writeCachedJson(cacheKeyDashboard, nextDashboardData);
+    }, [userProfile, userProgress, examHistory, departmentData]);
 
 
 

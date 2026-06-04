@@ -1340,13 +1340,19 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
 
   useEffect(() => {
     const fetchCourses = async () => {
-      setIsLoading(true);
+      const cached = readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
+      if (cached && cached.length > 0) {
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
       try {
         const normalizedUserDepartment = normalizeDepartmentValue(userProfile.department_id);
         const normalizedUserLevel = normalizeLevelValue(userProfile.level);
 
         if (!normalizedUserDepartment) {
             setCourses([]);
+            setIsLoading(false);
             return;
         }
 
@@ -1363,6 +1369,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             const departmentsData = snapshot.val();
             if (!departmentsData) {
                 setCourses([]);
+                setIsLoading(false);
                 return;
             }
 
@@ -1418,7 +1425,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
       }
     };
     fetchCourses();
-  }, [userProfile.department_id, userProfile.level, addToast]);
+  }, [userProfile.department_id, userProfile.level, addToast, userProfile.uid]);
   
   const toggleCourse = async (courseId: string) => {
     if (expandedCourses.has(courseId)) {
