@@ -7,7 +7,7 @@ import { Avatar } from './Avatar';
 import { VerificationBadge } from './VerificationBadge';
 import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp, query, limitToLast } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp, query, limitToLast, increment } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const REACTION_EMOJIS = ['🔥', '😂', '😍', '👏', '😮', '😭', '👍', '❤️'];
@@ -1022,6 +1022,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, file);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
+                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
                 if (file.type.startsWith('image/')) {
                     await sendMsg(`![${file.name}](${fileDownloadUrl})`, 'image');
                 } else {
@@ -1058,6 +1059,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, img);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
+                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
                 await sendMsg(`![Captured Image](${fileDownloadUrl})`, 'image');
             } catch (err) {
               addToast('Failed to upload visual layout media.', 'error');
@@ -1104,6 +1106,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         try {
                             const path = `voice_notes/${activeChat?.chatId}/${localTimestamp}.webm`;
                             const url = await getDownloadURL(await uploadBytes(storageRef(storage, path), blob).then(s => s.ref));
+                            setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
                             await sendMsg(`[Voice Note](${url})`, 'voice');
                         } catch (uploadError) {
                             console.error("Voice Note storage syncing failure:", uploadError);
@@ -1162,8 +1165,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           else if (type === 'image') summaryText = '📷 Image file';
           else if (type === 'file') summaryText = '📄 Document file';
           const metaTimestamp = firebaseServerTimestamp();
-          const unreadSnapshot = await get(dbRef(db, `user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`));
-          const unreadCount = Number(unreadSnapshot.val() || 0);
+          
           const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
 
           participantIds.forEach((participantId) => {
@@ -1181,7 +1183,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
           updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`] = 0;
           if (activeChat.otherUser.uid !== firebaseUser.uid) {
-            updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = unreadCount + 1;
+            updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = increment(1);
           }
           await update(dbRef(db), updates);
         } catch (error: any) {
