@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vantutor-assets-v1';
+const CACHE_NAME = 'vantutor-assets-v2';
 
 // Assets to cache immediately on install
 const PRECACHE_ASSETS = [
