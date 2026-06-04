@@ -4,7 +4,7 @@ import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createVanTutorAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
-import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp, increment } from 'firebase/database';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import type { UserProfile, Message, Course, Topic, UserProgress, AppSettings } from '../types';
 import { SendIcon } from './icons/SendIcon';
@@ -266,6 +266,153 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
     const isInitialChatLoading = isLoading && messages.length === 0;
+
+    // Sharing and forwarding states
+    const [showShareDropdown, setShowShareDropdown] = useState(false);
+    const [shareModalUrl, setShareModalUrl] = useState<string | null>(null);
+    const [studyPartners, setStudyPartners] = useState<Record<string, boolean>>({});
+    const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+    const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+    const [forwardTargetContent, setForwardTargetContent] = useState('');
+    const [forwardTargetType, setForwardTargetType] = useState('text');
+    const [forwardSearchQuery, setForwardSearchQuery] = useState('');
+    const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+
+    // Message actions context menu states
+    const [messageActionTarget, setMessageActionTarget] = useState<any>(null);
+    const [messageActionPosition, setMessageActionPosition] = useState<{ x: number; y: number } | null>(null);
+    const messageActionMenuRef = useRef<HTMLDivElement>(null);
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (!userProfile) return;
+        const partnersRef = dbRef(db, `study_partners/${userProfile.uid}`);
+        const unsubscribePartners = onValue(partnersRef, (snap) => {
+            setStudyPartners(snap.val() || {});
+        });
+
+        const usersRef = dbRef(db, 'users');
+        const unsubscribeUsers = onValue(usersRef, (snap) => {
+            const data = snap.val() || {};
+            const list: UserProfile[] = Object.entries(data).map(([uid, u]: any) => ({
+                uid,
+                display_name: u.displayName || u.display_name || 'Learner',
+                photo_url: u.photoURL || u.photo_url || '',
+                subscription_status: u.subscription_status || 'free',
+                department_id: u.department_id || '',
+                level: u.level || '',
+                is_online: u.is_online || false,
+                last_seen: u.last_seen || 0,
+                current_streak: u.current_streak || 0,
+                last_activity_date: u.last_activity_date || 0,
+                notifications_enabled: u.notifications_enabled || false,
+            } as UserProfile));
+            setAllUsers(list);
+        });
+
+        return () => {
+            off(partnersRef, 'value', unsubscribePartners);
+            off(usersRef, 'value', unsubscribeUsers);
+        };
+    }, [userProfile]);
+
+    useEffect(() => {
+        const onPointerDown = (event: MouseEvent | TouchEvent) => {
+            if (!messageActionTarget) return;
+            if (!messageActionMenuRef.current) return;
+            if (event.target instanceof Node && !messageActionMenuRef.current.contains(event.target)) {
+                setMessageActionTarget(null);
+                setMessageActionPosition(null);
+            }
+        };
+
+        const onEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setMessageActionTarget(null);
+                setMessageActionPosition(null);
+            }
+        };
+
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('touchstart', onPointerDown);
+        document.addEventListener('keydown', onEscape);
+        return () => {
+            document.removeEventListener('mousedown', onPointerDown);
+            document.removeEventListener('touchstart', onPointerDown);
+            document.removeEventListener('keydown', onEscape);
+        };
+    }, [messageActionTarget]);
+
+    const handleShareTopicChat = async () => {
+        if (!topic || !userProfile) return;
+        try {
+            const shareId = push(dbRef(db, 'shared_chats')).key;
+            if (!shareId) return;
+
+            // Save details to DB
+            const chatRef = dbRef(db, `shared_chats/${shareId}`);
+            await set(chatRef, {
+                courseName: topic.courseName,
+                courseId: topic.courseId || topic.course_id || 'unspecified',
+                topicName: topic.topic_name,
+                topicId: topic.topic_id,
+                messages: messages,
+                ownerId: userProfile.uid,
+                ownerName: userProfile.display_name || 'Learner',
+                timestamp: Date.now()
+            });
+
+            const shareUrl = `${window.location.origin}/shared-chat/${shareId}`;
+            setShareModalUrl(shareUrl);
+            await navigator.clipboard.writeText(shareUrl);
+            addToast('Share link generated and copied to clipboard!', 'success');
+        } catch (err: any) {
+            console.error('Failed to share chat:', err);
+            addToast('Failed to share chat: ' + err.message, 'error');
+        }
+    };
+
+    const handleForwardMessage = async (recipientIds: string[], text: string, type: string) => {
+        if (!userProfile) return;
+        try {
+            for (const recipientId of recipientIds) {
+                const chatId = [userProfile.uid, recipientId].sort().join('_');
+                const msgRef = push(dbRef(db, `messages/${chatId}`));
+                const data = { senderId: userProfile.uid, text, type, timestamp: Date.now() };
+                await set(msgRef, data);
+
+                const updates: any = {};
+                let summaryText = text;
+                if (type === 'voice') summaryText = '🎵 Voice message';
+                else if (type === 'image') summaryText = '📷 Image file';
+                else if (type === 'file') summaryText = '📄 Document file';
+                
+                const participantIds = Array.from(new Set([userProfile.uid, recipientId]));
+                participantIds.forEach((participantId) => {
+                    updates[`user_chats/${participantId}/${chatId}/last_message`] = {
+                        text: summaryText,
+                        senderId: userProfile.uid,
+                        timestamp: Date.now(),
+                        type,
+                    };
+                    updates[`user_chats/${participantId}/${chatId}/timestamp`] = Date.now();
+                    updates[`user_chats/${participantId}/${chatId}/otherUserId`] = participantId === userProfile.uid
+                        ? recipientId
+                        : userProfile.uid;
+                });
+
+                updates[`user_chats/${userProfile.uid}/${chatId}/unreadCount`] = 0;
+                if (recipientId !== userProfile.uid) {
+                    updates[`user_chats/${recipientId}/${chatId}/unreadCount`] = increment(1);
+                }
+                await update(dbRef(db), updates);
+            }
+            addToast('Message forwarded successfully!', 'success');
+        } catch (err: any) {
+            console.error('Failed to forward message:', err);
+            addToast('Forwarding failed: ' + err.message, 'error');
+        }
+    };
 
     const fetchTutorials = async () => {
         if (tutorials.length > 0 || isTutorialsLoading) return;
@@ -840,16 +987,45 @@ Student: "${tempInput}"
             <header className="flex-shrink-0 flex items-center justify-between p-4 bg-white/80 backdrop-blur-lg border-b border-gray-200 z-10">
                 <button onClick={onClose} className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-full"><ArrowLeftIcon /></button>
                 <h2 className="text-lg font-bold text-gray-800 truncate mx-4 flex-1 text-center">{topic.topic_name}</h2>
-                <button 
-                    onClick={() => {
-                        setIsTutorialsOpen(true);
-                        void fetchTutorials();
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider transition-colors cursor-pointer select-none"
-                >
-                    <VideoIcon className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Tutorials</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => {
+                            setIsTutorialsOpen(true);
+                            void fetchTutorials();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider transition-colors cursor-pointer select-none"
+                    >
+                        <VideoIcon className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Tutorials</span>
+                    </button>
+                    
+                    <div className="relative">
+                        <button 
+                            onClick={() => setShowShareDropdown(!showShareDropdown)}
+                            className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition cursor-pointer select-none"
+                            title="Share Options"
+                        >
+                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="1.5"/>
+                                <circle cx="12" cy="5" r="1.5"/>
+                                <circle cx="12" cy="19" r="1.5"/>
+                            </svg>
+                        </button>
+                        {showShareDropdown && (
+                            <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl z-50 animate-fade-in">
+                                <button
+                                    onClick={() => {
+                                        setShowShareDropdown(false);
+                                        void handleShareTopicChat();
+                                    }}
+                                    className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
+                                >
+                                    <span>🔗</span> Share Chat Session
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </header>
 
             {/* Scrollable Message Area */}
@@ -877,7 +1053,35 @@ Student: "${tempInput}"
                             }
                             
                             <div className="flex flex-col max-w-[85%] sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl" style={{ alignItems: message.sender === 'user' ? 'flex-end' : 'flex-start' }}>
-                                <div className={`p-3 px-4 rounded-2xl break-words ${message.sender === 'user' ? 'bg-lime-500 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'}`}>
+                                <div 
+                                    className={`p-3 px-4 rounded-2xl break-words ${message.sender === 'user' ? 'bg-lime-500 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border border-gray-200 cursor-pointer select-text'}`}
+                                    onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        setMessageActionTarget(message);
+                                        setMessageActionPosition({ x: e.clientX, y: e.clientY });
+                                    }}
+                                    onTouchStart={(e) => {
+                                        if (!e.touches[0]) return;
+                                        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                                        const touch = e.touches[0];
+                                        longPressTimerRef.current = setTimeout(() => {
+                                            setMessageActionTarget(message);
+                                            setMessageActionPosition({ x: touch.clientX, y: touch.clientY });
+                                        }, 450);
+                                    }}
+                                    onTouchEnd={() => {
+                                        if (longPressTimerRef.current) {
+                                            clearTimeout(longPressTimerRef.current);
+                                            longPressTimerRef.current = null;
+                                        }
+                                    }}
+                                    onTouchMove={() => {
+                                        if (longPressTimerRef.current) {
+                                            clearTimeout(longPressTimerRef.current);
+                                            longPressTimerRef.current = null;
+                                        }
+                                    }}
+                                >
                                     {message.image_url && (
                                         <div className="mb-2">
                                             <img src={message.image_url} alt="Generated illustration" className="rounded-lg w-full" />
@@ -1150,6 +1354,161 @@ Student: "${tempInput}"
                     video={activeVideo} 
                     onClose={() => setActiveVideo(null)} 
                 />
+            )}
+
+            {/* Message Action Context Menu */}
+            {messageActionTarget && messageActionPosition && (
+                <div 
+                    className="fixed inset-0 z-50 bg-black/10"
+                    onClick={() => { setMessageActionTarget(null); setMessageActionPosition(null); }}
+                >
+                    <div
+                        ref={messageActionMenuRef}
+                        onClick={e => e.stopPropagation()}
+                        className="absolute w-[min(92vw,280px)] rounded-2xl border border-gray-200 bg-white p-3 shadow-2xl"
+                        style={{
+                            left: `${Math.max(12, Math.min((messageActionPosition.x) - 140, window.innerWidth - 292))}px`,
+                            top: `${Math.max(12, Math.min((messageActionPosition.y) - 60, window.innerHeight - 180))}px`
+                        }}
+                    >
+                        <p className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Message Actions</p>
+                        <div className="space-y-1.5">
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    if (messageActionTarget.text) {
+                                        await navigator.clipboard.writeText(messageActionTarget.text);
+                                        addToast('Copied!', 'success');
+                                    }
+                                    setMessageActionTarget(null);
+                                    setMessageActionPosition(null);
+                                }}
+                                className="w-full rounded-xl border border-gray-100 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
+                            >
+                                📋 Copy message
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setForwardTargetContent(messageActionTarget.text || '');
+                                    setForwardTargetType('text');
+                                    setIsForwardModalOpen(true);
+                                    setMessageActionTarget(null);
+                                    setMessageActionPosition(null);
+                                }}
+                                className="w-full rounded-xl border border-gray-100 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
+                            >
+                                ➤ Forward to Study Partner
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Forward Message Modal (inline for StudyGuide) */}
+            {isForwardModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-gray-200 flex flex-col max-h-[75vh]">
+                        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-base font-bold text-gray-900">Forward Message</h2>
+                                <p className="text-[11px] text-gray-500 mt-0.5">Select study partners to forward to.</p>
+                            </div>
+                            <button
+                                onClick={() => { setIsForwardModalOpen(false); setForwardTargetContent(''); setSelectedRecipients([]); setForwardSearchQuery(''); }}
+                                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-xs font-bold transition"
+                            >✕</button>
+                        </div>
+                        <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500">
+                            <span className="font-bold uppercase tracking-wider block text-[10px] mb-1">Preview</span>
+                            <p className="truncate italic text-gray-600">{forwardTargetContent}</p>
+                        </div>
+                        <div className="p-4 border-b border-gray-100">
+                            <input
+                                type="text"
+                                placeholder="Search partners..."
+                                value={forwardSearchQuery}
+                                onChange={e => setForwardSearchQuery(e.target.value)}
+                                className="w-full bg-gray-50 text-sm px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-lime-400/30 focus:border-lime-400 transition"
+                            />
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+                            {allUsers.filter(u => studyPartners[u.uid] === true && u.uid !== userProfile.uid)
+                                .filter(u => !forwardSearchQuery.trim() || (u.display_name || '').toLowerCase().includes(forwardSearchQuery.toLowerCase()))
+                                .map(u => {
+                                    const isChecked = selectedRecipients.includes(u.uid);
+                                    return (
+                                        <div
+                                            key={u.uid}
+                                            onClick={() => setSelectedRecipients(prev => isChecked ? prev.filter(id => id !== u.uid) : [...prev, u.uid])}
+                                            className={`flex items-center gap-3 p-3 rounded-2xl border transition cursor-pointer select-none ${isChecked ? 'bg-lime-50 border-lime-400' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
+                                        >
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                                                {(u.display_name || 'L')[0].toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-semibold text-sm text-gray-900 truncate">{u.display_name}</p>
+                                                <p className="text-[10px] text-gray-500 truncate">{u.department_id || 'No Department'}</p>
+                                            </div>
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${isChecked ? 'border-lime-500 bg-lime-500' : 'border-gray-300'}`}>
+                                                {isChecked && <svg viewBox="0 0 24 24" className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            {allUsers.filter(u => studyPartners[u.uid] === true && u.uid !== userProfile.uid).length === 0 && (
+                                <p className="text-center text-xs text-gray-400 italic py-8">No study partners yet. Add partners in Messenger.</p>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3 shrink-0">
+                            <button
+                                onClick={() => { setIsForwardModalOpen(false); setForwardTargetContent(''); setSelectedRecipients([]); setForwardSearchQuery(''); }}
+                                className="flex-1 bg-white hover:bg-gray-100 border border-gray-200 text-gray-600 font-bold text-xs uppercase tracking-wider py-3 rounded-xl transition cursor-pointer"
+                            >Cancel</button>
+                            <button
+                                disabled={selectedRecipients.length === 0}
+                                onClick={async () => {
+                                    await handleForwardMessage(selectedRecipients, forwardTargetContent, forwardTargetType);
+                                    setIsForwardModalOpen(false);
+                                    setForwardTargetContent('');
+                                    setSelectedRecipients([]);
+                                    setForwardSearchQuery('');
+                                }}
+                                className="flex-1 bg-lime-500 hover:bg-lime-600 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl transition cursor-pointer disabled:opacity-40 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                                Send ({selectedRecipients.length})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Share URL Modal */}
+            {shareModalUrl && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-gray-200">
+                        <h2 className="text-base font-bold text-gray-900 mb-1">Chat Shared! 🎉</h2>
+                        <p className="text-xs text-gray-500 mb-4">Anyone with this link can view the shared chat session.</p>
+                        <div className="flex gap-2">
+                            <input
+                                readOnly
+                                value={shareModalUrl}
+                                className="flex-1 min-w-0 bg-gray-50 border border-gray-200 text-xs text-gray-700 px-3 py-2.5 rounded-xl font-mono truncate"
+                            />
+                            <button
+                                onClick={async () => {
+                                    await navigator.clipboard.writeText(shareModalUrl);
+                                    addToast('Copied!', 'success');
+                                }}
+                                className="shrink-0 bg-lime-500 hover:bg-lime-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition"
+                            >Copy</button>
+                        </div>
+                        <button
+                            onClick={() => setShareModalUrl(null)}
+                            className="w-full mt-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs uppercase tracking-wider py-3 rounded-xl transition"
+                        >Done</button>
+                    </div>
+                </div>
             )}
         </div>
     );

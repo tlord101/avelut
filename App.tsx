@@ -29,6 +29,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { MenuIcon } from './components/icons/MenuIcon';
 import { ComingSoonScreen } from './components/ComingSoonScreen';
+import { SharedChatView } from './components/SharedChatView';
 
 declare var __app_id: string;
 
@@ -272,9 +273,9 @@ const App: React.FC = () => {
     });
 
     const syncItemFromPath = useCallback((pathname: string) => {
-            if (pathname.startsWith('/upload-center')) {
-                return;
-            }
+        if (pathname.startsWith('/upload-center') || pathname.startsWith('/shared-chat')) {
+            return;
+        }
         const item = resolveActiveItemFromPath(pathname);
         setActiveItemState(item === 'admin' ? 'admin' : item);
         if (item === 'admin') {
@@ -823,6 +824,18 @@ const App: React.FC = () => {
 
     if (isLoading || isProfileLoading) {
         return <AppLoader />;
+    }
+
+    const currentPath = getWindowPathname();
+    const isSharedChatRoute = currentPath.startsWith('/shared-chat/');
+    const shareId = isSharedChatRoute ? currentPath.substring('/shared-chat/'.length).split('/')[0] : '';
+
+    if (isSharedChatRoute && shareId) {
+        return (
+            <ErrorBoundary>
+                <SharedChatView shareId={shareId} user={user} />
+            </ErrorBoundary>
+        );
     }
 
     if (activeItem === 'admin') {

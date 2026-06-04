@@ -478,6 +478,20 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const messageActionMenuRef = useRef<HTMLDivElement>(null);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastTapRef = useRef<{ id: string | null; time: number }>({ id: null, time: 0 });
+    
+    // Study Partners contact system states
+    const [showPartnerModal, setShowPartnerModal] = useState(false);
+    const [studyPartners, setStudyPartners] = useState<Record<string, boolean>>({});
+    const [partnerRequests, setPartnerRequests] = useState<Record<string, any>>({});
+    const [searchPartnerName, setSearchPartnerName] = useState('');
+    const [searchPartnerDept, setSearchPartnerDept] = useState('');
+    const [partnerActiveSubTab, setPartnerActiveSubTab] = useState<'find' | 'requests'>('find');
+
+    // Forwarding states
+    const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+    const [forwardTargetContent, setForwardTargetContent] = useState('');
+    const [forwardTargetType, setForwardTargetType] = useState('text');
+
     const chatRowLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suppressNextChatOpenRef = useRef(false);
     const unreadCountsRef = useRef<Record<string, number>>({});
@@ -550,13 +564,22 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [messageActionTarget]);
 
     const filteredPeople = useMemo(() => {
-        if (!peopleSearchQuery.trim()) return allUsers;
+        const partnersOnly = allUsers.filter(u => studyPartners[u.uid] === true);
+        if (!peopleSearchQuery.trim()) return partnersOnly;
         const normalizedQuery = peopleSearchQuery.toLowerCase();
-        return allUsers.filter(u => {
+        return partnersOnly.filter(u => {
             const name = (u.display_name || "").toLowerCase();
-            return normalizedQuery.split("").every(letter => name.includes(letter));
+            const dept = (u.department_id || "").toLowerCase();
+            return name.includes(normalizedQuery) || dept.includes(normalizedQuery);
         });
-    }, [allUsers, peopleSearchQuery]);
+    }, [allUsers, studyPartners, peopleSearchQuery]);
+
+    const activeChats = useMemo(() => {
+        return chats.filter(c => {
+            const partnerId = c.otherUserId || c.otherUser?.uid;
+            return studyPartners[partnerId] === true;
+        });
+    }, [chats, studyPartners]);
 
     const userMap = useMemo(() => new Map(allUsers.map(user => [user.uid, user])), [allUsers]);
 
@@ -628,7 +651,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, []);
 
     useEffect(() => {
-        if (tab !== 'people') return;
+        if (!firebaseUser) return;
         const usersRef = dbRef(db, 'users');
         const unsubscribe = onValue(usersRef, (snap) => {
             const data = snap.val() || {};
@@ -647,7 +670,25 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             })));
         });
         return () => off(usersRef, 'value', unsubscribe);
-    }, [tab]);
+    }, [firebaseUser]);
+
+    useEffect(() => {
+        if (!firebaseUser) return;
+        const partnersRef = dbRef(db, `study_partners/${firebaseUser.uid}`);
+        const unsubscribePartners = onValue(partnersRef, (snap) => {
+            setStudyPartners(snap.val() || {});
+        });
+
+        const requestsRef = dbRef(db, `partner_requests/${firebaseUser.uid}`);
+        const unsubscribeRequests = onValue(requestsRef, (snap) => {
+            setPartnerRequests(snap.val() || {});
+        });
+
+        return () => {
+            off(partnersRef, 'value', unsubscribePartners);
+            off(requestsRef, 'value', unsubscribeRequests);
+        };
+    }, [firebaseUser]);
 
     useEffect(() => {
       const handleVisibilityChange = () => setIsAppActive(document.visibilityState === 'visible');
@@ -1193,10 +1234,149 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         }
     };
 
+    const sendPartnerRequest = async (targetUser: UserProfile) => {
+        if (!firebaseUser || !userProfile) return;
+        try {
+            const myRequestRef = dbRef(db, `partner_requests/${firebaseUser.uid}/${targetUser.uid}`);
+            const theirRequestRef = dbRef(db, `partner_requests/${targetUser.uid}/${firebaseUser.uid}`);
+            
+            const now = Date.now();
+            await set(myRequestRef, {
+                status: 'sent',
+                senderName: userProfile.display_name || 'Learner',
+                senderId: firebaseUser.uid,
+                receiverId: targetUser.uid,
+                timestamp: now
+            });
+            await set(theirRequestRef, {
+                status: 'received',
+                senderName: userProfile.display_name || 'Learner',
+                senderId: firebaseUser.uid,
+                receiverId: targetUser.uid,
+                timestamp: now
+            });
+
+            // Push notification to targetUser
+            const notifRef = push(dbRef(db, `notifications/${targetUser.uid}`));
+            await set(notifRef, {
+                id: notifRef.key,
+                title: 'New Study Partner Request',
+                message: `${userProfile.display_name || 'A user'} sent you a study partner request!`,
+                type: 'study_partner_request',
+                is_read: false,
+                timestamp: now
+            });
+
+            addToast(`Study partner request sent to ${targetUser.display_name}!`, 'success');
+        } catch (err: any) {
+            console.error('Failed to send partner request:', err);
+            addToast('Failed to send request: ' + err.message, 'error');
+        }
+    };
+
+    const acceptPartnerRequest = async (targetUser: UserProfile) => {
+        if (!firebaseUser || !userProfile) return;
+        try {
+            const myRequestRef = dbRef(db, `partner_requests/${firebaseUser.uid}/${targetUser.uid}`);
+            const theirRequestRef = dbRef(db, `partner_requests/${targetUser.uid}/${firebaseUser.uid}`);
+            await remove(myRequestRef);
+            await remove(theirRequestRef);
+
+            const myPartnerRef = dbRef(db, `study_partners/${firebaseUser.uid}/${targetUser.uid}`);
+            const theirPartnerRef = dbRef(db, `study_partners/${targetUser.uid}/${firebaseUser.uid}`);
+            await set(myPartnerRef, true);
+            await set(theirPartnerRef, true);
+
+            // Notify acceptor
+            const notifRef = push(dbRef(db, `notifications/${targetUser.uid}`));
+            await set(notifRef, {
+                id: notifRef.key,
+                title: 'Study Partner Request Accepted',
+                message: `${userProfile.display_name || 'A user'} accepted your study partner request!`,
+                type: 'study_partner_accepted',
+                is_read: false,
+                timestamp: Date.now()
+            });
+
+            addToast(`You are now study partners with ${targetUser.display_name}!`, 'success');
+        } catch (err: any) {
+            console.error('Failed to accept request:', err);
+            addToast('Failed to accept request: ' + err.message, 'error');
+        }
+    };
+
+    const declinePartnerRequest = async (targetUser: UserProfile) => {
+        if (!firebaseUser) return;
+        try {
+            const myRequestRef = dbRef(db, `partner_requests/${firebaseUser.uid}/${targetUser.uid}`);
+            const theirRequestRef = dbRef(db, `partner_requests/${targetUser.uid}/${firebaseUser.uid}`);
+            await remove(myRequestRef);
+            await remove(theirRequestRef);
+            addToast(`Declined request from ${targetUser.display_name}`, 'info');
+        } catch (err: any) {
+            console.error('Failed to decline request:', err);
+        }
+    };
+
+    const cancelPartnerRequest = async (targetUser: UserProfile) => {
+        if (!firebaseUser) return;
+        try {
+            const myRequestRef = dbRef(db, `partner_requests/${firebaseUser.uid}/${targetUser.uid}`);
+            const theirRequestRef = dbRef(db, `partner_requests/${targetUser.uid}/${firebaseUser.uid}`);
+            await remove(myRequestRef);
+            await remove(theirRequestRef);
+            addToast(`Cancelled request to ${targetUser.display_name}`, 'info');
+        } catch (err: any) {
+            console.error('Failed to cancel request:', err);
+        }
+    };
+
+    const forwardMessageToUsers = async (text: string, type = 'text', recipientUserIds: string[]) => {
+        if (!firebaseUser) return;
+        try {
+            for (const recipientId of recipientUserIds) {
+                const chatId = [firebaseUser.uid, recipientId].sort().join('_');
+                const msgRef = push(dbRef(db, `messages/${chatId}`));
+                const data = { senderId: firebaseUser.uid, text, type, timestamp: Date.now() };
+                await set(msgRef, data);
+
+                const updates: any = {};
+                let summaryText = text;
+                if (type === 'voice') summaryText = '🎵 Voice message';
+                else if (type === 'image') summaryText = '📷 Image file';
+                else if (type === 'file') summaryText = '📄 Document file';
+                
+                const participantIds = Array.from(new Set([firebaseUser.uid, recipientId]));
+                participantIds.forEach((participantId) => {
+                    updates[`user_chats/${participantId}/${chatId}/last_message`] = {
+                        text: summaryText,
+                        senderId: firebaseUser.uid,
+                        timestamp: Date.now(),
+                        type,
+                    };
+                    updates[`user_chats/${participantId}/${chatId}/timestamp`] = Date.now();
+                    updates[`user_chats/${participantId}/${chatId}/otherUserId`] = participantId === firebaseUser.uid
+                        ? recipientId
+                        : firebaseUser.uid;
+                });
+
+                updates[`user_chats/${firebaseUser.uid}/${chatId}/unreadCount`] = 0;
+                if (recipientId !== firebaseUser.uid) {
+                    updates[`user_chats/${recipientId}/${chatId}/unreadCount`] = increment(1);
+                }
+                await update(dbRef(db), updates);
+            }
+            addToast('Message forwarded successfully!', 'success');
+        } catch (err: any) {
+            console.error('Failed to forward:', err);
+            addToast('Failed to forward message: ' + err.message, 'error');
+        }
+    };
+
     return (
         <div className="flex h-screen w-full overflow-hidden bg-[#F8F9FA] font-sans antialiased text-[#212529]">
             {/* Sidebar Pane */}
-            <div className={`w-full lg:w-[380px] border-r border-[#E9ECEF] flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'} h-full bg-white`}>
+            <div className={`w-full lg:w-[380px] border-r border-[#E9ECEF] flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'} h-full bg-white relative`}>
                 <div className="p-4 bg-[#F8F9FA] border-b border-[#E9ECEF] shrink-0">
                     <h1 className="text-xl font-bold text-[#212529] mb-4">Messages</h1>
                     <div className="flex gap-2 bg-[#E9ECEF] p-1 rounded-full mb-3">
@@ -1222,7 +1402,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 </div>
 
                 <div className="flex-1 overflow-y-auto bg-white">
-                    {tab === 'chats' ? chats.map(c => (
+                    {tab === 'chats' ? activeChats.map(c => (
                       <div
                         key={c.id}
                         onClick={() => {
@@ -1288,6 +1468,22 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         );
                     })}
                 </div>
+                
+                {/* FAB: Add Study Partner */}
+                <button
+                    onClick={() => setShowPartnerModal(true)}
+                    className="absolute bottom-6 right-6 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#009EE2] to-[#0070B8] text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-white/20 z-40"
+                    title="Add Study Partner"
+                >
+                    <div className="relative">
+                        <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        <span className="absolute -top-1.5 -right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-black text-white border-2 border-white leading-none">
+                            +
+                        </span>
+                    </div>
+                </button>
             </div>
 
             {/* Main Chat Viewport */}
@@ -1457,19 +1653,25 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         </div>
 
                         {/* 3. FIXED Bottom Control Anchor Panel Bar */}
-                        <div className="bg-[#F8F9FA] py-4 border-t border-[#E9ECEF] shrink-0 z-30">
-                            <VanTutorMessageInput 
-                              onSend={(text) => sendMsg(text, 'text')}
-                              startRecording={startRecording}
-                              handleMove={handleMove}
-                              stopRecording={stopRecording}
-                              isRecording={isRecording}
-                              isLocked={isLocked}
-                              setIsLocked={setIsLocked}
-                              recordDuration={recordDuration}
-                              onFileSelect={handleFileSelection}
-                              onImageSelect={handleImageSelection}
-                            />
+                        <div className="bg-[#F8F9FA] py-4 border-t border-[#E9ECEF] shrink-0 z-30 px-4">
+                            {studyPartners[selectedChatUser.uid] === true || selectedChatUser.uid === firebaseUser?.uid ? (
+                                <VanTutorMessageInput 
+                                  onSend={(text) => sendMsg(text, 'text')}
+                                  startRecording={startRecording}
+                                  handleMove={handleMove}
+                                  stopRecording={stopRecording}
+                                  isRecording={isRecording}
+                                  isLocked={isLocked}
+                                  setIsLocked={setIsLocked}
+                                  recordDuration={recordDuration}
+                                  onFileSelect={handleFileSelection}
+                                  onImageSelect={handleImageSelection}
+                                />
+                            ) : (
+                                <div className="w-full max-w-[800px] mx-auto px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-center text-sm font-semibold text-[#856404] shadow-sm animate-pulse">
+                                    🔒 You can only message active Study Partners. Add them as a contact to start chatting.
+                                </div>
+                            )}
                         </div>
 
                         {messageActionTarget && (
@@ -1506,6 +1708,18 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                 </button>
                                 <button
                                   type="button"
+                                  onClick={() => {
+                                    setForwardTargetContent(messageActionTarget.text || '');
+                                    setForwardTargetType(messageActionTarget.type || 'text');
+                                    setIsForwardModalOpen(true);
+                                    closeMessageActions();
+                                  }}
+                                  className="w-full rounded-xl border border-[#E9ECEF] bg-white px-3 py-2 text-left text-sm font-semibold text-[#212529] transition hover:bg-[#F8F9FA]"
+                                >
+                                  Forward message
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => void deleteSelectedMessage()}
                                   disabled={messageActionTarget.senderId !== firebaseUser?.uid}
                                   className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1527,6 +1741,376 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                     <p className="mt-2 text-sm leading-6 text-[#6C757D]">Pick a person to start a new chat and connect with them.</p>
                     </div>
                 )}
+            {/* Study Partners network management modal */}
+            {showPartnerModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#E9ECEF] flex flex-col max-h-[85vh] animate-scale-in">
+                        {/* Header */}
+                        <div className="p-6 border-b border-[#E9ECEF] flex items-center justify-between bg-gradient-to-r from-[#009EE2]/5 to-[#0070B8]/5">
+                            <div>
+                                <h2 className="text-lg font-bold text-[#212529]">Study Partners</h2>
+                                <p className="text-xs text-[#6C757D] font-medium mt-0.5">Build your academic network to collaborate and share lessons.</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowPartnerModal(false);
+                                    setSearchPartnerName('');
+                                    setSearchPartnerDept('');
+                                }}
+                                className="w-8 h-8 rounded-full bg-white hover:bg-neutral-100 flex items-center justify-center text-[#6C757D] hover:text-[#212529] transition border border-[#E9ECEF] shadow-sm font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-[#E9ECEF] bg-[#F8F9FA] px-4 py-2 shrink-0 gap-2">
+                            <button
+                                onClick={() => setPartnerActiveSubTab('find')}
+                                className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition ${partnerActiveSubTab === 'find' ? 'bg-[#009EE2] text-white' : 'text-[#6C757D] hover:text-[#212529] hover:bg-white/50'}`}
+                            >
+                                Find Partners
+                            </button>
+                            <button
+                                onClick={() => setPartnerActiveSubTab('requests')}
+                                className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition flex items-center gap-1.5 ${partnerActiveSubTab === 'requests' ? 'bg-[#009EE2] text-white' : 'text-[#6C757D] hover:text-[#212529] hover:bg-white/50'}`}
+                            >
+                                Requests
+                                {Object.values(partnerRequests).filter(req => req.status === 'received').length > 0 && (
+                                    <span className="bg-red-500 text-white rounded-full text-[10px] font-black h-4.5 w-4.5 flex items-center justify-center animate-pulse">
+                                        {Object.values(partnerRequests).filter(req => req.status === 'received').length}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Tab Content */}
+                        <div className="flex-1 overflow-y-auto p-6 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                            {partnerActiveSubTab === 'find' ? (
+                                <div className="space-y-4">
+                                    {/* Filters */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search by name..."
+                                                value={searchPartnerName}
+                                                onChange={(e) => setSearchPartnerName(e.target.value)}
+                                                className="w-full bg-white text-sm text-[#212529] px-4 py-2 rounded-xl border border-[#E9ECEF] focus:outline-none focus:ring-2 focus:ring-[#009EE2]/20 focus:border-[#009EE2] transition shadow-sm"
+                                            />
+                                            {searchPartnerName && (
+                                                <button onClick={() => setSearchPartnerName("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#6C757D]">✕</button>
+                                            )}
+                                        </div>
+                                        <select
+                                            value={searchPartnerDept}
+                                            onChange={(e) => setSearchPartnerDept(e.target.value)}
+                                            className="w-full bg-white text-sm text-[#212529] px-4 py-2 rounded-xl border border-[#E9ECEF] focus:outline-none focus:ring-2 focus:ring-[#009EE2]/20 focus:border-[#009EE2] transition shadow-sm cursor-pointer"
+                                        >
+                                            <option value="">All Departments</option>
+                                            {Array.from(new Set(allUsers.map(u => u.department_id).filter(Boolean))).map(dept => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* List */}
+                                    <div className="space-y-3">
+                                        {allUsers
+                                            .filter(u => u.uid !== firebaseUser?.uid)
+                                            .filter(u => {
+                                                if (searchPartnerName.trim()) {
+                                                    const q = searchPartnerName.toLowerCase();
+                                                    if (!(u.display_name || '').toLowerCase().includes(q)) return false;
+                                                }
+                                                if (searchPartnerDept) {
+                                                    if (u.department_id !== searchPartnerDept) return false;
+                                                }
+                                                return true;
+                                            })
+                                            .map(u => {
+                                                const isPartner = studyPartners[u.uid] === true;
+                                                const req = partnerRequests[u.uid];
+                                                
+                                                return (
+                                                    <div key={u.uid} className="flex items-center gap-3 p-3.5 bg-neutral-50 hover:bg-neutral-100/70 border border-[#E9ECEF] rounded-2xl transition">
+                                                        <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover border border-[#E9ECEF]" photo_url={u.photo_url} display_name={u.display_name || 'Learner'} />
+                                                        <div className="min-w-0 flex-1">
+                                                            <h4 className="font-semibold text-sm text-[#212529] truncate flex items-center gap-1.5">
+                                                                <span>{u.display_name}</span>
+                                                                <VerificationBadge status={u.subscription_status} />
+                                                            </h4>
+                                                            <p className="text-[11px] text-[#6C757D] font-medium truncate mt-0.5">{u.department_id || 'No Department'} • {u.level ? `${u.level} Lvl` : 'Lvl N/A'}</p>
+                                                        </div>
+                                                        <div className="shrink-0">
+                                                            {isPartner ? (
+                                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full flex items-center gap-1">✓ Connected</span>
+                                                            ) : req?.status === 'sent' ? (
+                                                                <button
+                                                                    onClick={() => cancelPartnerRequest(u)}
+                                                                    className="text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-100 px-3 py-1.5 rounded-xl transition cursor-pointer select-none"
+                                                                    title="Cancel Request"
+                                                                >
+                                                                    Pending
+                                                                </button>
+                                                            ) : req?.status === 'received' ? (
+                                                                <div className="flex gap-1.5">
+                                                                    <button
+                                                                        onClick={() => acceptPartnerRequest(u)}
+                                                                        className="text-xs font-black uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-xl transition cursor-pointer select-none"
+                                                                    >
+                                                                        Accept
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => sendPartnerRequest(u)}
+                                                                    className="text-xs font-black uppercase tracking-wider text-white bg-[#009EE2] hover:bg-[#0070B8] px-3.5 py-1.5 rounded-xl transition cursor-pointer select-none"
+                                                                >
+                                                                    Connect
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Received */}
+                                    <div>
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#6C757D] mb-3">Received Partner Requests</h3>
+                                        <div className="space-y-3">
+                                            {Object.values(partnerRequests).filter(req => req.status === 'received').length === 0 ? (
+                                                <p className="text-xs font-medium text-[#6C757D] italic p-4 bg-neutral-50 rounded-2xl text-center border border-dashed border-neutral-200">No incoming requests</p>
+                                            ) : (
+                                                Object.values(partnerRequests).filter(req => req.status === 'received').map(req => {
+                                                    const sender = allUsers.find(x => x.uid === req.senderId) || { display_name: req.senderName, photo_url: '', department_id: '', level: '', uid: req.senderId } as any;
+                                                    return (
+                                                        <div key={req.senderId} className="flex items-center gap-3 p-3.5 bg-neutral-50 border border-[#E9ECEF] rounded-2xl">
+                                                            <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover" photo_url={sender.photo_url} display_name={sender.display_name || 'Learner'} />
+                                                            <div className="min-w-0 flex-1">
+                                                                <h4 className="font-semibold text-sm text-[#212529] truncate">{sender.display_name}</h4>
+                                                                <p className="text-[11px] text-[#6C757D] font-medium truncate mt-0.5">{sender.department_id || 'No Department'}</p>
+                                                            </div>
+                                                            <div className="flex gap-1.5 shrink-0">
+                                                                <button
+                                                                    onClick={() => acceptPartnerRequest(sender)}
+                                                                    className="text-xs font-black uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-xl transition cursor-pointer select-none"
+                                                                >
+                                                                    Accept
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => declinePartnerRequest(sender)}
+                                                                    className="text-xs font-black uppercase tracking-wider text-[#6C757D] hover:text-red-600 bg-white hover:bg-red-50 border border-[#E9ECEF] hover:border-red-200 px-3 py-1.5 rounded-xl transition cursor-pointer select-none"
+                                                                >
+                                                                    Decline
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Sent */}
+                                    <div>
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#6C757D] mb-3">Pending Sent Requests</h3>
+                                        <div className="space-y-3">
+                                            {Object.values(partnerRequests).filter(req => req.status === 'sent').length === 0 ? (
+                                                <p className="text-xs font-medium text-[#6C757D] italic p-4 bg-neutral-50 rounded-2xl text-center border border-dashed border-neutral-200">No pending sent requests</p>
+                                            ) : (
+                                                Object.values(partnerRequests).filter(req => req.status === 'sent').map(req => {
+                                                    const receiver = allUsers.find(x => x.uid === req.receiverId) || { display_name: 'Learner', photo_url: '', department_id: '', level: '', uid: req.receiverId } as any;
+                                                    return (
+                                                        <div key={req.receiverId} className="flex items-center gap-3 p-3.5 bg-neutral-50 border border-[#E9ECEF] rounded-2xl">
+                                                            <Avatar className="w-10 h-10 rounded-full shrink-0 object-cover" photo_url={receiver.photo_url} display_name={receiver.display_name || 'Learner'} />
+                                                            <div className="min-w-0 flex-1">
+                                                                <h4 className="font-semibold text-sm text-[#212529] truncate">{receiver.display_name}</h4>
+                                                                <p className="text-[11px] text-[#6C757D] font-medium truncate mt-0.5">{receiver.department_id || 'No Department'}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => cancelPartnerRequest(receiver)}
+                                                                className="text-xs font-black uppercase tracking-wider text-red-600 hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl transition cursor-pointer select-none shrink-0"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Forward Message Modal */}
+            {isForwardModalOpen && (
+                <ForwardModal
+                    isOpen={isForwardModalOpen}
+                    onClose={() => {
+                        setIsForwardModalOpen(false);
+                        setForwardTargetContent('');
+                    }}
+                    messageText={forwardTargetContent}
+                    messageType={forwardTargetType}
+                    studyPartners={studyPartners}
+                    allUsers={allUsers}
+                    onForward={async (recipientIds) => {
+                        await forwardMessageToUsers(forwardTargetContent, forwardTargetType, recipientIds);
+                        setIsForwardModalOpen(false);
+                        setForwardTargetContent('');
+                    }}
+                />
+            )}
+
+        </div>
+    );
+};
+
+// Standalone Forward Modal component for reuse and clean scope
+interface ForwardModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    messageText: string;
+    messageType: string;
+    studyPartners: Record<string, boolean>;
+    allUsers: UserProfile[];
+    onForward: (recipientIds: string[]) => Promise<void>;
+}
+
+const ForwardModal: React.FC<ForwardModalProps> = ({
+    isOpen,
+    onClose,
+    messageText,
+    messageType,
+    studyPartners,
+    allUsers,
+    onForward
+}) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [submitting, setSubmitting] = useState(false);
+
+    const partnersList = useMemo(() => {
+        const list = allUsers.filter(u => studyPartners[u.uid] === true);
+        if (!searchQuery.trim()) return list;
+        const q = searchQuery.toLowerCase();
+        return list.filter(u => (u.display_name || '').toLowerCase().includes(q) || (u.department_id || '').toLowerCase().includes(q));
+    }, [allUsers, studyPartners, searchQuery]);
+
+    const handleToggleSelect = (uid: string) => {
+        setSelectedIds(prev =>
+            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+        );
+    };
+
+    const handleForwardAction = async () => {
+        if (selectedIds.length === 0) return;
+        setSubmitting(true);
+        try {
+            await onForward(selectedIds);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-[#E9ECEF] flex flex-col max-h-[75vh] animate-scale-in">
+                {/* Header */}
+                <div className="p-5 border-b border-[#E9ECEF] flex items-center justify-between">
+                    <div>
+                        <h2 className="text-base font-bold text-[#212529]">Forward Message</h2>
+                        <p className="text-[11px] text-[#6C757D] font-medium mt-0.5">Select one or more study partners to send this message to.</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        disabled={submitting}
+                        className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-[#6C757D] text-xs font-bold transition"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                {/* Content preview */}
+                <div className="px-5 py-3.5 bg-neutral-50 border-b border-[#E9ECEF] text-xs font-medium text-[#6C757D]">
+                    <span className="font-bold uppercase tracking-wider block text-[10px] text-[#6C757D] mb-1">Message Preview</span>
+                    <p className="truncate max-w-full italic text-neutral-600">
+                        {messageType === 'voice' ? '🎵 Voice message' : messageType === 'image' ? '📷 Image file' : messageText}
+                    </p>
+                </div>
+
+                {/* Search */}
+                <div className="p-4 border-b border-[#E9ECEF]">
+                    <input
+                        type="text"
+                        placeholder="Search partners..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#F8F9FA] text-sm text-[#212529] px-4 py-2 rounded-xl border border-[#E9ECEF] focus:outline-none focus:ring-2 focus:ring-[#009EE2]/20 focus:border-[#009EE2] transition shadow-inner"
+                    />
+                </div>
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {partnersList.length === 0 ? (
+                        <p className="text-center text-xs font-medium text-[#6C757D] py-8 italic">No study partners found</p>
+                    ) : (
+                        partnersList.map(u => {
+                            const isChecked = selectedIds.includes(u.uid);
+                            return (
+                                <div
+                                    key={u.uid}
+                                    onClick={() => handleToggleSelect(u.uid)}
+                                    className={`flex items-center justify-between p-3 rounded-2xl border transition cursor-pointer select-none ${isChecked ? 'bg-[#009EE2]/5 border-[#009EE2]' : 'bg-white border-[#E9ECEF] hover:bg-neutral-50'}`}
+                                >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <Avatar className="w-9 h-9 rounded-full shrink-0 object-cover" photo_url={u.photo_url} display_name={u.display_name || 'Learner'} />
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="font-semibold text-sm text-[#212529] truncate">{u.display_name}</h4>
+                                            <p className="text-[10px] text-[#6C757D] font-medium truncate mt-0.5">{u.department_id || 'No Department'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full border-2 transition ml-3" style={{
+                                        borderColor: isChecked ? '#009EE2' : '#CED4DA',
+                                        backgroundColor: isChecked ? '#009EE2' : 'transparent'
+                                    }}>
+                                        {isChecked && (
+                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-4 border-t border-[#E9ECEF] bg-[#F8F9FA] flex gap-3 shrink-0">
+                    <button
+                        onClick={onClose}
+                        disabled={submitting}
+                        className="flex-1 bg-white hover:bg-neutral-100 border border-[#E9ECEF] text-[#6C757D] font-bold text-xs uppercase tracking-wider py-3.5 rounded-xl transition cursor-pointer select-none disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleForwardAction}
+                        disabled={selectedIds.length === 0 || submitting}
+                        className="flex-1 bg-[#009EE2] hover:bg-[#0070B8] text-white font-black text-xs uppercase tracking-wider py-3.5 rounded-xl transition cursor-pointer select-none disabled:opacity-50 disabled:bg-neutral-300"
+                    >
+                        {submitting ? 'Forwarding...' : `Send (${selectedIds.length})`}
+                    </button>
+                </div>
             </div>
         </div>
     );
