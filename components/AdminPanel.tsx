@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db, storage, auth } from '../firebase';
-import { ref as dbRef, set, push, update, get, remove } from 'firebase/database';
+import { ref as dbRef, set, push, update, get, remove, query, limitToLast } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
@@ -438,14 +438,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
     const fetchUsageLogs = async () => {
-        setIsLogsLoading(true);
+        if (aiRequestLogs.length === 0) {
+            setIsLogsLoading(true);
+        }
         try {
             const [aiSnap, paySnap, refundSnap, complaintSnap, codesSnap] = await Promise.all([
-                get(dbRef(db, 'usage_logs/ai_requests')),
-                get(dbRef(db, 'usage_logs/payments')),
-                get(dbRef(db, 'usage_logs/refunds')),
-                get(dbRef(db, 'usage_logs/complaints')),
-                get(dbRef(db, 'activation_codes'))
+                get(query(dbRef(db, 'usage_logs/ai_requests'), limitToLast(1000))),
+                get(query(dbRef(db, 'usage_logs/payments'), limitToLast(500))),
+                get(query(dbRef(db, 'usage_logs/refunds'), limitToLast(200))),
+                get(query(dbRef(db, 'usage_logs/complaints'), limitToLast(200))),
+                get(query(dbRef(db, 'activation_codes'), limitToLast(500)))
             ]);
 
             if (aiSnap.exists()) {
@@ -682,7 +684,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // Fetch Users helper
     const fetchUsers = async () => {
-        setIsUsersLoading(true);
+        if (allUsersList.length === 0) {
+            setIsUsersLoading(true);
+        }
         try {
             const usersRef = dbRef(db, 'users');
             const snapshot = await get(usersRef);
@@ -710,9 +714,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const fetchSentNotifications = async () => {
-        setIsSentNotificationsLoading(true);
+        if (sentNotifications.length === 0) {
+            setIsSentNotificationsLoading(true);
+        }
         try {
-            const snap = await get(dbRef(db, 'sent_notifications'));
+            const snap = await get(query(dbRef(db, 'sent_notifications'), limitToLast(500)));
             if (snap.exists()) {
                 const logs = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({
                     id,
@@ -730,9 +736,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const fetchSentEmails = async () => {
-        setIsSentEmailsLoading(true);
+        if (sentEmails.length === 0) {
+            setIsSentEmailsLoading(true);
+        }
         try {
-            const snap = await get(dbRef(db, 'sent_emails'));
+            const snap = await get(query(dbRef(db, 'sent_emails'), limitToLast(500)));
             if (snap.exists()) {
                 const logs = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({
                     id,
@@ -750,7 +758,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const fetchEmailConfig = async () => {
-        setIsEmailConfigLoading(true);
+        if (!emailConfig.host) {
+            setIsEmailConfigLoading(true);
+        }
         try {
             const snap = await get(dbRef(db, 'app_settings/email_config'));
             if (snap.exists()) {
