@@ -37,6 +37,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       return null;
   }
 
+  const isStudentNav = navItems.length === 5;
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up bottom-nav">
       <div className="relative w-full max-w-md h-16 bg-white/80 backdrop-blur-xl rounded-full shadow-2xl border border-white/30">
@@ -57,24 +59,48 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
         
         {/* The static, clickable placeholders */}
         <div className="flex items-center h-full">
-          {navItems.map((item, index) => (
-            <button
-              key={item.id}
-              onClick={() => onItemClick(item.id)}
-              data-tour-id={`bottomnav-${item.id}`}
-              className="flex-1 flex flex-col items-center justify-center h-full text-gray-500 transition-colors"
-              aria-label={item.label}
-            >
-              {/* This icon is hidden when its tab is active */}
-              <div className={`transition-opacity duration-300 ${activeIndex === index ? 'opacity-0' : 'opacity-100'}`}>
-                {React.cloneElement(item.icon, { className: 'w-7 h-7' })}
-              </div>
-              {/* This label is hidden when its tab is active */}
-              <span className={`text-[10px] sm:text-xs mt-1 transition-all duration-300 ${activeIndex === index ? 'opacity-0 scale-50' : 'opacity-100 scale-100'}`}>
-                {item.label}
-              </span>
-            </button>
-          ))}
+          {navItems.map((item, index) => {
+            const isMiddle = isStudentNav && index === 2;
+
+            if (isMiddle) {
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onItemClick(item.id)}
+                  data-tour-id={`bottomnav-${item.id}`}
+                  className="flex-1 flex flex-col items-center justify-center h-full text-gray-500 transition-colors relative"
+                  aria-label={item.label}
+                >
+                  {/* Floating larger button container for middle Solver button when inactive */}
+                  <div className={`transition-all duration-300 ${activeIndex === index ? 'opacity-0 scale-50' : 'opacity-100 scale-100'} absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full bg-white shadow-[0_8px_24px_rgba(0,136,204,0.22)] border-2 border-[#0088CC]/20 flex items-center justify-center z-10 active:scale-95`}>
+                    {React.cloneElement(item.icon, { className: 'w-7 h-7 text-[#002D62]' })}
+                  </div>
+                  <span className={`text-[10px] sm:text-xs mt-1 transition-all duration-300 ${activeIndex === index ? 'opacity-0 scale-50' : 'opacity-100 scale-100'} absolute bottom-1 font-bold text-[#002D62]/70`}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            }
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => onItemClick(item.id)}
+                data-tour-id={`bottomnav-${item.id}`}
+                className="flex-1 flex flex-col items-center justify-center h-full text-gray-500 transition-colors"
+                aria-label={item.label}
+              >
+                {/* This icon is hidden when its tab is active */}
+                <div className={`transition-opacity duration-300 ${activeIndex === index ? 'opacity-0' : 'opacity-100'}`}>
+                  {React.cloneElement(item.icon, { className: 'w-7 h-7' })}
+                </div>
+                {/* This label is hidden when its tab is active */}
+                <span className={`text-[10px] sm:text-xs mt-1 transition-all duration-300 ${activeIndex === index ? 'opacity-0 scale-50' : 'opacity-100 scale-100'}`}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </nav>
