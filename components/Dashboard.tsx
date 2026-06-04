@@ -71,8 +71,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
     const averageTopicStudySeconds = dashboardData?.averageTopicStudySeconds ?? 0;
     const averageCourseStudySeconds = dashboardData?.averageCourseStudySeconds ?? 0;
         const examAverageScore = dashboardData?.examAverageScore ?? 0;
-    const understandingScore = dashboardData?.understandingScore ?? 0;
-    const understandingLabel = dashboardData?.understandingLabel || 'Needs focus';
   const progressPercent = totalTopics > 0 ? Math.round((completedTopicsCount / totalTopics) * 100) : 0;
   
     const formatDuration = (seconds: number) => {
@@ -143,7 +141,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <StatCard
                     title="Avg Topic Time"
                     value={formatDuration(averageTopicStudySeconds)}
@@ -158,98 +156,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                     icon={<StreakIcon className="h-6 w-6" />}
                     color="amber"
                 />
-                <StatCard
-                    title="AI Understanding"
-                    value={`${understandingScore}%`}
-                    description={understandingLabel}
-                    icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9a3.75 3.75 0 117.5 0c0 1.5-.6 2.25-1.5 3.15-.75.75-1.5 1.35-1.5 3.15m0 3.75h.008v.008H15.75v-.008zm-4.5-3.75h.008v.008H11.25v-.008zM12 22a9 9 0 100-18 9 9 0 000 18z" /></svg>}
-                    color="rose"
-                />
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <div className="rounded-3xl border border-gray-200 bg-white p-8">
-                    <h3 className="mb-6 text-[10px] font-black uppercase tracking-[0.28em] text-gray-500">Recent Performance</h3>
-                    {dashboardData && dashboardData.examHistory.length > 0 ? (
-                        <div className="max-h-[420px] space-y-2 overflow-y-auto pr-2">
-                            {dashboardData.examHistory
-                                .slice()
-                                .sort((a, b) => b.timestamp - a.timestamp)
-                                .map(exam => <RecentActivityItem key={exam.id} exam={exam} />)}
-                        </div>
-                    ) : (
-                        <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
-                            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-gray-200 shadow-sm">
-                                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            </div>
-                            <p className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">No activity yet</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <div className="rounded-3xl border border-gray-200 bg-white p-8">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-gray-400">Backed Information</h3>
-                    <p className="mt-2 text-sm font-bold uppercase tracking-[0.18em] text-gray-500">Directly pulled from your progress and exam records</p>
-                    <div className="mt-6 space-y-3">
-                        {(dashboardData?.backedFacts || []).map((fact) => (
-                            <div key={fact} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
-                                {fact}
-                            </div>
-                        ))}
+            <div className="rounded-3xl border border-gray-200 bg-white p-8">
+                <h3 className="mb-6 text-[10px] font-black uppercase tracking-[0.28em] text-gray-500">Recent Performance</h3>
+                {dashboardData && dashboardData.examHistory.length > 0 ? (
+                    <div className="max-h-[420px] space-y-2 overflow-y-auto pr-2">
+                        {dashboardData.examHistory
+                            .slice()
+                            .sort((a, b) => b.timestamp - a.timestamp)
+                            .map(exam => <RecentActivityItem key={exam.id} exam={exam} />)}
                     </div>
-                </div>
-
-                <div className="rounded-3xl border border-gray-200 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 p-8 text-white shadow-xl shadow-emerald-900/10">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70">Gemini Assessment</p>
-                            <h3 className="mt-2 text-2xl font-black tracking-tight">Real AI feedback</h3>
+                ) : (
+                    <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-gray-200 shadow-sm">
+                            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </div>
-                        <div className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                            Confidence {dashboardData?.geminiAssessment ? `${dashboardData.geminiAssessment.confidence}%` : '...'}
-                        </div>
+                        <p className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">No activity yet</p>
                     </div>
-
-                    <div className="mt-6 rounded-2xl bg-white/10 p-5 backdrop-blur-sm">
-                        <p className="text-sm leading-7 text-white/95">
-                            {dashboardData?.geminiAssessment?.summary || 'Generating assessment from your backend data...'}
-                        </p>
-                    </div>
-
-                    <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                        <div className="rounded-2xl bg-white/10 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Strengths</p>
-                            <ul className="mt-3 space-y-2 text-sm text-white/95">
-                                {(dashboardData?.geminiAssessment?.strengths || []).slice(0, 3).map((item) => (
-                                    <li key={item}>• {item}</li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="rounded-2xl bg-white/10 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Focus Areas</p>
-                            <ul className="mt-3 space-y-2 text-sm text-white/95">
-                                {(dashboardData?.geminiAssessment?.concerns || []).slice(0, 3).map((item) => (
-                                    <li key={item}>• {item}</li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="rounded-2xl bg-white/10 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/60">Next Steps</p>
-                            <ul className="mt-3 space-y-2 text-sm text-white/95">
-                                {(dashboardData?.geminiAssessment?.next_steps || []).slice(0, 3).map((item) => (
-                                    <li key={item}>• {item}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 rounded-2xl bg-white/10 p-4 text-xs text-white/80">
-                        <span className="font-black uppercase tracking-[0.25em] text-white/60">Evidence: </span>
-                        {(dashboardData?.geminiAssessment?.evidence || dashboardData?.backedFacts || []).join(' · ')}
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );

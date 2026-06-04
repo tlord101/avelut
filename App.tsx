@@ -324,7 +324,6 @@ const App: React.FC = () => {
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
-    const dashboardAssessmentKeyRef = useRef('');
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
         createVanTutorAI(appSettings, userProfile)
@@ -671,109 +670,7 @@ const App: React.FC = () => {
         };
     }, [userProfile, userProgress]);
 
-    useEffect(() => {
-        if (!userProfile || !dashboardData) return;
 
-        const assessmentKey = [
-            dashboardData.totalTopics,
-            dashboardData.completedTopicsCount,
-            dashboardData.completedCoursesCount,
-            dashboardData.totalStudySeconds,
-            dashboardData.averageTopicStudySeconds,
-            dashboardData.averageCourseStudySeconds,
-            dashboardData.examAverageScore,
-            dashboardData.understandingScore,
-            dashboardData.examHistory.length,
-        ].join('|');
-
-        if (dashboardAssessmentKeyRef.current === assessmentKey) return;
-        dashboardAssessmentKeyRef.current = assessmentKey;
-
-        const generateAssessment = async () => {
-            const prompt = `You are assessing a university student's learning progress using only backend-backed facts.
-Student: ${userProfile.display_name}
-Department: ${userProfile.department_id}
-Level: ${userProfile.level}
-
-Facts:
-${dashboardData.backedFacts.join('\n')}
-
-Recent exam performance: ${dashboardData.examHistory.length > 0 ? dashboardData.examHistory.map((exam) => `${Math.round((exam.score / exam.total_questions) * 100)}%`).join(', ') : 'No exam history yet'}
-
-Write a concise but specific assessment based only on the facts above. Do not invent details. Return valid JSON with keys: summary, strengths, concerns, next_steps, confidence, evidence. Keep summary to 2 sentences max.`;
-
-            if (!ai) {
-                const fallbackAssessment: DashboardAssessment = {
-                    summary: `AI is unavailable right now, but the dashboard shows ${dashboardData.completedTopicsCount}/${dashboardData.totalTopics} topics completed and ${dashboardData.examAverageScore}% average exam performance.`,
-                    strengths: [
-                        `Completed ${dashboardData.completedTopicsCount} topics`,
-                        `Tracked ${formatDurationForPrompt(dashboardData.totalStudySeconds)} of study time`,
-                    ],
-                    concerns: ['Ask an admin to configure the Gemini API key in App Controls to generate assessments.'],
-                    next_steps: ['Continue completing topics in the Study Guide.', 'Use exams to improve weak areas.'],
-                    confidence: 0,
-                    evidence: dashboardData.backedFacts,
-                    generated_at: Date.now(),
-                };
-                setDashboardData(prev => {
-                    const next = prev ? { ...prev, geminiAssessment: fallbackAssessment } : prev;
-                    if (next) writeCachedJson(`vantutor_dashboard_${userProfile.uid}`, next);
-                    return next;
-                });
-                return;
-            }
-
-            try {
-                const result = await attemptApiCall(async () => {
-                    const response = await ai.models.generateContent({
-                        model: appSettings.primary_gemini_model,
-                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        config: {
-                            responseMimeType: 'application/json',
-                            responseSchema: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    summary: { type: Type.STRING },
-                                    strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                    concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                    next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                    confidence: { type: Type.NUMBER },
-                                    evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                },
-                                required: ['summary', 'strengths', 'concerns', 'next_steps', 'confidence', 'evidence'],
-                            },
-                        },
-                    });
-                    if (!response.text) throw new Error('Gemini returned an empty assessment.');
-
-                    const parsed = JSON.parse(response.text);
-                    return {
-                        summary: (parsed.summary || '').toString().trim(),
-                        strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map((item: any) => String(item)) : [],
-                        concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map((item: any) => String(item)) : [],
-                        next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.map((item: any) => String(item)) : [],
-                        confidence: Math.max(0, Math.min(100, Number(parsed.confidence || 0))),
-                        evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item: any) => String(item)) : dashboardData.backedFacts,
-                        generated_at: Date.now(),
-                    } as DashboardAssessment;
-                });
-
-                if (!result.success || !result.data) {
-                    throw new Error(result.message || 'Failed to generate dashboard assessment.');
-                }
-
-                setDashboardData(prev => {
-                    const next = prev ? { ...prev, geminiAssessment: result.data as DashboardAssessment } : prev;
-                    if (next) writeCachedJson(`vantutor_dashboard_${userProfile.uid}`, next);
-                    return next;
-                });
-            } catch (error) {
-                console.error('Failed to generate dashboard assessment:', error);
-            }
-        };
-
-        void generateAssessment();
-    }, [userProfile, dashboardData, ai, appSettings.primary_gemini_model]);
 
     const handleLogout = async () => {
         try {

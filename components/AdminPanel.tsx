@@ -670,9 +670,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
-    useEffect(() => {
-        fetchDepartments();
-    }, []);
 
     const handleAddDepartment = async () => {
         if (!newDeptName) return;
@@ -856,6 +853,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             setIsEmailConfigSaving(false);
         }
     };
+
+    useEffect(() => {
+        void fetchDepartments();
+        void fetchUsageLogs();
+        void fetchUsers();
+        void fetchSentNotifications();
+        void fetchSentEmails();
+        void fetchEmailConfig();
+    }, []);
 
     useEffect(() => {
         if (activeTab === 'users' || activeTab === 'dashboard') {

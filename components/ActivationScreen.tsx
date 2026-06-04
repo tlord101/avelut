@@ -116,37 +116,43 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
         email: email,
         amount: amount,
         currency: 'NGN',
-        callback: async (response: any) => {
-          if (paymentLogRef) {
-            try {
-              await update(paymentLogRef, {
-                status: 'success',
-                reference: response?.reference || 'ref_missing'
-              });
-            } catch (e) {}
-          }
+        callback: (response: any) => {
+          const runAsyncCallback = async () => {
+            if (paymentLogRef) {
+              try {
+                await update(paymentLogRef, {
+                  status: 'success',
+                  reference: response?.reference || 'ref_missing'
+                });
+              } catch (e) {}
+            }
 
-          const result = await handleProfileUpdate({
-            is_activated: true,
-            subscription_status: 'premium',
-            use_personal_token: false,
-            paystack_reference: response?.reference || 'ref_missing',
-          });
-          if (result.success) {
-            addToast('VanTutor Premium AI successfully activated!', 'success');
-          } else {
-            addToast('Payment received but failed to activate. Contact support.', 'error');
-          }
-          setIsActivating(false);
+            const result = await handleProfileUpdate({
+              is_activated: true,
+              subscription_status: 'premium',
+              use_personal_token: false,
+              paystack_reference: response?.reference || 'ref_missing',
+            });
+            if (result.success) {
+              addToast('VanTutor Premium AI successfully activated!', 'success');
+            } else {
+              addToast('Payment received but failed to activate. Contact support.', 'error');
+            }
+            setIsActivating(false);
+          };
+          void runAsyncCallback();
         },
-        onClose: async () => {
-          if (paymentLogRef) {
-            try {
-              await update(paymentLogRef, { status: 'cancelled' });
-            } catch (e) {}
-          }
-          addToast('Payment cancelled.', 'info');
-          setIsActivating(false);
+        onClose: () => {
+          const runAsyncClose = async () => {
+            if (paymentLogRef) {
+              try {
+                await update(paymentLogRef, { status: 'cancelled' });
+              } catch (e) {}
+            }
+            addToast('Payment cancelled.', 'info');
+            setIsActivating(false);
+          };
+          void runAsyncClose();
         },
       });
       handler.openIframe();
