@@ -1970,6 +1970,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 />
             )}
 
+            </div>
         </div>
     );
 };
