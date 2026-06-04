@@ -187,7 +187,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, onLogout,
                 let fcmToken = '';
                 if (messaging) {
                     try {
-                        fcmToken = await getToken(messaging, { vapidKey: 'BDW-aRndY4U24Dk7o_5gHl2S3jYk3H7nK_aR0p8oOqKz6bL8i4sU_7_YV1uQ' });
+                        fcmToken = await getToken(messaging, { vapidKey: 'BEiN-U94hIduCfay4jHxUSgVp1BEhWphsoD-1IrnZAZ2B8Zi0vJuM0Xc8-6ZrGEOibE2mXW874bT-uxoBGxQ5nY' });
                     } catch (tokenErr) {
                         console.warn("Could not retrieve FCM token:", tokenErr);
                     }
