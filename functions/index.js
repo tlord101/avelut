@@ -81,9 +81,29 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
         const recipientId = userChatData.otherUserId;
 
         // Read sender's display name
-        const senderSnap = await admin.database().ref(`/users/${senderId}`).once('value');
-        const senderData = senderSnap.val();
-        const senderName = (senderData && senderData.display_name) ? senderData.display_name : 'Someone';
+        let senderName = 'Someone';
+        try {
+            const senderSnap = await admin.database().ref(`/users/${senderId}`).once('value');
+            const senderData = senderSnap.val();
+            if (senderData && senderData.display_name) {
+                senderName = senderData.display_name;
+            }
+        } catch (err) {
+            console.error('Error reading sender display_name from database:', err);
+        }
+
+        if (senderName === 'Someone' || !senderName) {
+            try {
+                const userRecord = await admin.auth().getUser(senderId);
+                if (userRecord && userRecord.displayName) {
+                    senderName = userRecord.displayName;
+                } else if (userRecord && userRecord.email) {
+                    senderName = userRecord.email.split('@')[0];
+                }
+            } catch (err) {
+                console.error('Error reading sender from auth:', err);
+            }
+        }
 
         // Read recipient's FCM token and check if they enabled notifications
         const recipientSnap = await admin.database().ref(`/users/${recipientId}`).once('value');

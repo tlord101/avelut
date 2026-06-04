@@ -676,8 +676,18 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
       };
       await push(messagesRef, storedUserMessage);
 
+      const assistantMsgId = createMessageId();
+      const initialAssistantMessage: AssistantMessage = {
+        id: assistantMsgId,
+        sender: 'assistant',
+        text: '',
+        timestamp: Date.now(),
+      };
+      setMessages([...nextMessages, initialAssistantMessage]);
+
+      let responseText = '';
       const aiResult = await attemptApiCall(async () => {
-        const result = await ai.models.generateContent({
+        const responseStream = await ai.models.generateContentStream({
           model: geminiModel,
           contents: [
             {
@@ -703,39 +713,33 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             },
           ],
         });
-        if (!result.text) {
+
+        for await (const chunk of responseStream) {
+          const chunkText = chunk.text || '';
+          responseText += chunkText;
+          setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: responseText } : m));
+        }
+
+        if (!responseText) {
           throw new Error('Gemini returned an empty response.');
         }
-        return result.text.trim();
+        return responseText.trim();
       });
 
       if (!aiResult.success) {
         console.error('Gemini assistant error:', aiResult.message);
-        setMessages([
-          ...messages,
-          {
-            id: createMessageId(),
-            sender: 'assistant',
-            text: 'Sorry, I ran into a problem generating that reply. Please try again.',
-          },
-        ]);
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: 'Sorry, I ran into a problem generating that reply. Please try again.' } : m));
         setStatusText('Unable to respond right now.');
         return;
       }
 
-      const responseText = aiResult.data || 'I could not generate a response right now. Please try again.';
+      const finalResponseText = aiResult.data || 'I could not generate a response right now. Please try again.';
       
       // Increment message usage counter
       await incrementVisualMessagesUsed(userProfile.uid);
 
-      const assistantMessage: AssistantMessage = {
-        id: createMessageId(),
-        sender: 'assistant',
-        text: responseText,
-        timestamp: Date.now(),
-      };
       await push(messagesRef, {
-        text: responseText,
+        text: finalResponseText,
         sender: 'assistant',
         timestamp: serverTimestamp(),
       });
@@ -744,13 +748,12 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         last_updated_at: 0,
       };
       if (shouldGenerateTitle) {
-        updates.title = await generateChatTitle(userText, responseText);
+        updates.title = await generateChatTitle(userText, finalResponseText);
       }
 
       updates.last_updated_at = Date.now();
       await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
 
-      setMessages([...messages, { ...userMessage, attachments: storedAttachments }, assistantMessage]);
       setStatusText('Response ready.');
       clearAttachment();
     } catch (error) {

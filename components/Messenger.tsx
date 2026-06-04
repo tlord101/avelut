@@ -7,7 +7,7 @@ import { Avatar } from './Avatar';
 import { VerificationBadge } from './VerificationBadge';
 import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
-import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp } from 'firebase/database';
+import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp, query, limitToLast } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const REACTION_EMOJIS = ['🔥', '😂', '😍', '👏', '😮', '😭', '👍', '❤️'];
@@ -804,7 +804,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       setMessages(readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, `messages_${activeChat.chatId}`), []));
         setOptimisticMessages([]);
         const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
-        onValue(messagesRef, (snap) => {
+        const messagesQuery = query(messagesRef, limitToLast(50));
+        onValue(messagesQuery, (snap) => {
             const cloudMsgs = Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp);
             setMessages(cloudMsgs);
             

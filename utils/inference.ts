@@ -180,53 +180,62 @@ export const createVanTutorAI = (
 
   globalRateLimiter.setLimitRpm(limitRpm);
 
+  const prepareParams = async (params: any) => {
+    let processedParams = { ...params };
+
+    if (usePersonalToken) {
+      // 1. Context Compaction Adapter
+      const mathOrCodeRequested = isMathOrCodeRequested(processedParams.contents);
+      
+      const compact = (obj: any): any => {
+        if (typeof obj === 'string') {
+          return compactContext(obj, mathOrCodeRequested);
+        } else if (Array.isArray(obj)) {
+          return obj.map(item => compact(item));
+        } else if (obj && typeof obj === 'object') {
+          const res: any = {};
+          for (const key in obj) {
+            res[key] = compact(obj[key]);
+          }
+          return res;
+        }
+        return obj;
+      };
+      
+      processedParams = compact(processedParams);
+
+      // 2. Context Compression Pass
+      processedParams = compressContext(processedParams, limitTpm);
+
+      // 3. RPM Rate-Limiting Queue
+      await globalRateLimiter.acquireToken();
+    }
+
+    // Log AI request asynchronously for real-time analytics
+    try {
+      void push(dbRef(db, 'usage_logs/ai_requests'), {
+        timestamp: Date.now(),
+        user_id: userProfile?.uid || 'anonymous',
+        model: appSettings.primary_gemini_model || 'gemini-2.5-flash-lite',
+        use_personal_token: usePersonalToken
+      });
+    } catch (err) {
+      console.error('Failed to log AI request:', err);
+    }
+
+    return processedParams;
+  };
+
   // Return a wrapped client matching standard GoogleGenAI signature
   return {
     models: {
       generateContent: async (params: any) => {
-        let processedParams = { ...params };
-
-        if (usePersonalToken) {
-          // 1. Context Compaction Adapter
-          const mathOrCodeRequested = isMathOrCodeRequested(processedParams.contents);
-          
-          const compact = (obj: any): any => {
-            if (typeof obj === 'string') {
-              return compactContext(obj, mathOrCodeRequested);
-            } else if (Array.isArray(obj)) {
-              return obj.map(item => compact(item));
-            } else if (obj && typeof obj === 'object') {
-              const res: any = {};
-              for (const key in obj) {
-                res[key] = compact(obj[key]);
-              }
-              return res;
-            }
-            return obj;
-          };
-          
-          processedParams = compact(processedParams);
-
-          // 2. Context Compression Pass
-          processedParams = compressContext(processedParams, limitTpm);
-
-          // 3. RPM Rate-Limiting Queue
-          await globalRateLimiter.acquireToken();
-        }
-
-        // Log AI request asynchronously for real-time analytics
-        try {
-          void push(dbRef(db, 'usage_logs/ai_requests'), {
-            timestamp: Date.now(),
-            user_id: userProfile?.uid || 'anonymous',
-            model: appSettings.primary_gemini_model || 'gemini-2.5-flash-lite',
-            use_personal_token: usePersonalToken
-          });
-        } catch (err) {
-          console.error('Failed to log AI request:', err);
-        }
-
-        return rawClient.models.generateContent(processedParams);
+        const processed = await prepareParams(params);
+        return rawClient.models.generateContent(processed);
+      },
+      generateContentStream: async (params: any) => {
+        const processed = await prepareParams(params);
+        return rawClient.models.generateContentStream(processed);
       }
     }
   };

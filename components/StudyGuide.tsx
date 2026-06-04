@@ -234,6 +234,7 @@ interface LearningInterfaceProps {
 
 const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
     const [messages, setMessages] = useState<Message[]>([]);
+    const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
     const [input, setInput] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const [fileData, setFileData] = useState<string | null>(null);
@@ -435,13 +436,26 @@ ${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 Task:
 Please start teaching me about "${topic.topic_name}". Give me a simple and clear introduction to the topic.
 `;
+        setStreamingBotText('');
         const result = await attemptApiCall(async () => {
-            const response = await ai.models.generateContent({
+            let responseText = '';
+            const responseStream = await ai.models.generateContentStream({
                 model: geminiModel,
                 config: { systemInstruction },
                 contents: [{ role: 'user', parts: [{ text: prompt }] }]
             });
-            const botResponseText = response.text || '';
+
+            for await (const chunk of responseStream) {
+                const chunkText = chunk.text || '';
+                responseText += chunkText;
+                setStreamingBotText(responseText);
+            }
+
+            if (!responseText) {
+                throw new Error('Gemini returned an empty response.');
+            }
+            
+            const botResponseText = responseText.trim();
 
             const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
             const newMsgRef = push(messagesRef);
@@ -461,13 +475,14 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setMessages([botMessage]);
             await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
         });
+        setStreamingBotText(null);
 
         if (!result.success) {
             addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
             setIsLoading(false);
             onClose();
         }
-    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, usageStats, topic.courseId, topic.course_id]);
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, usageStats, topic.courseId, topic.course_id, setStreamingBotText]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -633,6 +648,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 image_url: imageUrl,
             }];
 
+            setStreamingBotText('');
             const result = await attemptApiCall(async () => {
                 const history = updatedMessages.map(m => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text || ''}`).join('\n');
                 
@@ -659,12 +675,24 @@ Student: "${tempInput}"
                     }
                 }
 
-                const response = await ai.models.generateContent({
+                let responseText = '';
+                const responseStream = await ai.models.generateContentStream({
                     model: geminiModel,
                     config: { systemInstruction },
                     contents: [{ role: 'user', parts }]
                 });
-                const botResponseText = response.text || '';
+
+                for await (const chunk of responseStream) {
+                    const chunkText = chunk.text || '';
+                    responseText += chunkText;
+                    setStreamingBotText(responseText);
+                }
+
+                if (!responseText) {
+                    throw new Error('Gemini returned an empty response.');
+                }
+
+                const botResponseText = responseText.trim();
                 
                 const newBotMsgRef = push(messagesRef);
                 const botMessageData = {
@@ -674,8 +702,8 @@ Student: "${tempInput}"
                 };
                 await set(newBotMsgRef, botMessageData);
                 await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
-
             });
+            setStreamingBotText(null);
 
             if (!result.success) {
                 addToast(result.message, 'error');
@@ -858,6 +886,49 @@ Student: "${tempInput}"
                         </div>
                     )
                 })}
+                {streamingBotText !== null && (
+                    <div className="flex items-start gap-3 w-full animate-fade-in-up justify-start">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0 self-start">
+                           <GraduationCapIcon className="w-full h-full p-1.5 text-white" />
+                        </div>
+                        <div className="flex flex-col max-w-[85%] sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl" style={{ alignItems: 'flex-start' }}>
+                            <div className="p-3 px-4 rounded-2xl break-words bg-white text-gray-800 rounded-bl-none border border-gray-200">
+                                <div className="text-sm sm:text-base prose prose-sm max-w-none">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm, remarkMath]}
+                                        rehypePlugins={[rehypeKatex]}
+                                        components={{
+                                            h1: ({node, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3 mt-2" {...props} />,
+                                            h2: ({node, ...props}) => <h2 className="text-lg font-bold text-gray-900 mb-2 mt-3" {...props} />,
+                                            h3: ({node, ...props}) => <h3 className="text-base font-semibold text-gray-800 mb-2 mt-2" {...props} />,
+                                            p: ({node, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800" {...props} />,
+                                            strong: ({node, ...props}) => <strong className="font-bold text-gray-900 bg-yellow-100 px-1 py-0.5 rounded" {...props} />,
+                                            em: ({node, ...props}) => <em className="italic text-lime-700 font-medium" {...props} />,
+                                            ul: ({node, ...props}) => <ul className="list-disc list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                            ol: ({node, ...props}) => <ol className="list-decimal list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                            li: ({node, ...props}) => <li className="text-gray-700 leading-relaxed pl-1" {...props} />,
+                                            a: ({node, ...props}) => <a className="text-lime-600 hover:text-lime-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />,
+                                            code: ({node, inline, ...props}: any) => 
+                                                inline ? (
+                                                    <code className="bg-lime-50 text-lime-800 px-1.5 py-0.5 rounded text-xs font-mono border border-lime-200" {...props} />
+                                                ) : (
+                                                    <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-3 text-xs font-mono" {...props} />
+                                                ),
+                                            pre: ({node, ...props}) => <pre className="bg-gray-900 rounded-lg overflow-hidden my-3" {...props} />,
+                                            blockquote: ({node, ...props}) => <blockquote className="border-l-3 border-lime-500 bg-lime-50 pl-4 pr-3 py-2 my-3 rounded-r italic" {...props} />,
+                                            table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-gray-200 border border-gray-200 text-xs" {...props} /></div>,
+                                            th: ({node, ...props}) => <th className="px-3 py-2 bg-lime-100 text-left font-semibold text-gray-900" {...props} />,
+                                            td: ({node, ...props}) => <td className="px-3 py-2 border-t border-gray-200" {...props} />,
+                                            hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
+                                        }}
+                                    >
+                                        {streamingBotText}
+                                    </ReactMarkdown>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {isLoading && 
                     <div className="flex items-start gap-3 animate-fade-in-up">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0">
