@@ -239,6 +239,10 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [file, setFile] = useState<File | null>(null);
     const [fileData, setFileData] = useState<string | null>(null);
     const [showLimitModal, setShowLimitModal] = useState(false);
+    const [isTutorialsOpen, setIsTutorialsOpen] = useState(false);
+    const [tutorials, setTutorials] = useState<Array<{ title: string; description: string; searchQuery: string }>>([]);
+    const [isTutorialsLoading, setIsTutorialsLoading] = useState(false);
+    const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string } | null>(null);
     const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
     const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5, courseId: '' });
     const [isLoading, setIsLoading] = useState(false);
@@ -262,6 +266,58 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
     const isInitialChatLoading = isLoading && messages.length === 0;
+
+    const fetchTutorials = async () => {
+        if (tutorials.length > 0 || isTutorialsLoading) return;
+        setIsTutorialsLoading(true);
+        try {
+            const prompt = `
+Identify 5 to 10 sub-topics or specific tutorial search terms for the university topic: '${topic.topic_name}' in the course: '${topic.courseName}'.
+For each sub-topic, provide a clear, educational title, a brief description, and a specific search query that will find the best, highly-rated educational tutorial on YouTube.
+Return valid JSON as a list of objects with keys: title, description, and searchQuery. Do not add any backticks, explanation, or HTML markdown outside of the JSON array.
+`;
+            const result = await attemptApiCall(async () => {
+                if (!ai) throw new Error('AI client is not initialized.');
+                const response = await ai.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        responseMimeType: 'application/json',
+                    }
+                });
+                const text = response.text || '[]';
+                return JSON.parse(text);
+            });
+
+            if (result.success && Array.isArray(result.data)) {
+                setTutorials(result.data);
+            } else {
+                throw new Error(result.message || 'Failed to parse JSON');
+            }
+        } catch (err) {
+            console.error('Failed to load video tutorials:', err);
+            addToast('Could not load video tutorials. Showing standard recommendations.', 'error');
+            setTutorials([
+                {
+                    title: `Introduction to ${topic.topic_name}`,
+                    description: `A comprehensive overview of ${topic.topic_name} fundamentals.`,
+                    searchQuery: `${topic.courseName} ${topic.topic_name} introduction tutorial`
+                },
+                {
+                    title: `${topic.topic_name} Explained with Examples`,
+                    description: `Practical walkthroughs and step-by-step examples.`,
+                    searchQuery: `${topic.courseName} ${topic.topic_name} examples solved`
+                },
+                {
+                    title: `Advanced ${topic.topic_name}`,
+                    description: `Deep dive into advanced concepts and applications.`,
+                    searchQuery: `${topic.courseName} ${topic.topic_name} advanced topics`
+                }
+            ]);
+        } finally {
+            setIsTutorialsLoading(false);
+        }
+    };
 
     useEffect(() => {
         profileSnapshotRef.current = {
@@ -784,7 +840,16 @@ Student: "${tempInput}"
             <header className="flex-shrink-0 flex items-center justify-between p-4 bg-white/80 backdrop-blur-lg border-b border-gray-200 z-10">
                 <button onClick={onClose} className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-full"><ArrowLeftIcon /></button>
                 <h2 className="text-lg font-bold text-gray-800 truncate mx-4 flex-1 text-center">{topic.topic_name}</h2>
-                <div className="w-8 h-8"></div> {/* Spacer for balance */}
+                <button 
+                    onClick={() => {
+                        setIsTutorialsOpen(true);
+                        void fetchTutorials();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider transition-colors cursor-pointer select-none"
+                >
+                    <VideoIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Tutorials</span>
+                </button>
             </header>
 
             {/* Scrollable Message Area */}
@@ -1016,6 +1081,76 @@ Student: "${tempInput}"
                 onSuccessPurchase={() => {}}
                 courseId={limitModalData.courseId}
             />
+
+            {/* Video Tutorials bottom drawer */}
+            <div className={`fixed inset-x-0 bottom-0 z-40 transform transition-transform duration-500 ease-in-out bg-white rounded-t-[2.5rem] shadow-2xl border-t border-gray-100 flex flex-col max-h-[80vh] min-h-[40vh] ${isTutorialsOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+                {/* Drag Handle & Close */}
+                <div className="flex flex-col items-center py-3 border-b border-gray-100 shrink-0 relative">
+                    <div className="w-12 h-1 bg-gray-200 rounded-full mb-2"></div>
+                    <h3 className="text-base font-black uppercase tracking-widest text-slate-700">Video Tutorials</h3>
+                    <button 
+                        onClick={() => setIsTutorialsOpen(false)}
+                        className="absolute right-6 top-3 text-gray-400 hover:text-gray-600 p-1 rounded-full bg-gray-50 border border-gray-100 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                {/* Drawer Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {isTutorialsLoading ? (
+                        <div className="space-y-4 py-8">
+                            {[1, 2, 3].map(n => (
+                                <div key={n} className="flex gap-4 p-4 border border-gray-100 rounded-2xl animate-pulse">
+                                    <div className="w-24 h-16 bg-gray-100 rounded-xl shrink-0"></div>
+                                    <div className="flex-1 space-y-2 py-1">
+                                        <div className="h-4 bg-gray-100 rounded w-2/3"></div>
+                                        <div className="h-3 bg-gray-100 rounded w-full"></div>
+                                        <div className="h-3 bg-gray-100 rounded w-5/6"></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {tutorials.map((video, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setActiveVideo(video)}
+                                    className="flex items-start gap-4 p-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50/20 rounded-2xl transition-all text-left group w-full"
+                                >
+                                    {/* Video Thumbnail Placeholder */}
+                                    <div className="w-28 h-18 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
+                                        <div className="absolute inset-0 bg-black/10"></div>
+                                        <span className="text-[10px] font-black tracking-widest uppercase bg-white/20 px-2 py-0.5 rounded-full z-10">PLAY</span>
+                                        <svg className="w-6 h-6 z-10 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-extrabold text-sm text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">{video.title}</h4>
+                                        <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">{video.description}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Backdrop for Drawer */}
+            {isTutorialsOpen && (
+                <div 
+                    onClick={() => setIsTutorialsOpen(false)}
+                    className="fixed inset-0 bg-black/20 z-30 backdrop-blur-xs transition-opacity"
+                />
+            )}
+
+            {/* Custom Video Player Overlay */}
+            {activeVideo && (
+                <CustomVideoPlayer 
+                    video={activeVideo} 
+                    onClose={() => setActiveVideo(null)} 
+                />
+            )}
         </div>
     );
 };
@@ -1521,3 +1656,309 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     </div>
   );
 };
+
+// --- VIDEO TUTORIALS ICONS & CUSTOM PLAYER ---
+const VideoIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+    </svg>
+);
+
+const PlayIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z" />
+    </svg>
+);
+
+const PauseIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+    </svg>
+);
+
+const MuteIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+    </svg>
+);
+
+const VolumeHighIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18.75V5.25L7.75 9.5H4.5v5h3.25L12 18.75z" />
+    </svg>
+);
+
+const FullscreenExitIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 14h6v6m0-6L4 20M20 10h-6V4m0 6l6-6" />
+    </svg>
+);
+
+const FullscreenEnterIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4h4M4 4l6 6M20 8V4h-4m4 4l-6 6M4 16v4h4m-4 0l6-6M20 16v4h-4m4 0l-6-6" />
+    </svg>
+);
+
+interface CustomVideoPlayerProps {
+    video: { title: string; searchQuery: string };
+    onClose: () => void;
+}
+
+const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(50);
+    const [isReady, setIsReady] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    
+    const playerRef = useRef<any>(null);
+    const playerContainerRef = useRef<HTMLDivElement>(null);
+    const playerId = useMemo(() => `yt-player-${Math.random().toString(36).substr(2, 9)}`, []);
+
+    useEffect(() => {
+        // Load YouTube API
+        if (!(window as any).YT) {
+            const tag = document.createElement('script');
+            tag.src = 'https://www.youtube.com/iframe_api';
+            const firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+            
+            (window as any).onYouTubeIframeAPIReady = () => {
+                initializePlayer();
+            };
+        } else {
+            initializePlayer();
+        }
+
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            if (playerRef.current && typeof playerRef.current.destroy === 'function') {
+                playerRef.current.destroy();
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const initializePlayer = () => {
+        if (!(window as any).YT || !(window as any).YT.Player) {
+            setTimeout(initializePlayer, 100);
+            return;
+        }
+
+        playerRef.current = new (window as any).YT.Player(playerId, {
+            height: '100%',
+            width: '100%',
+            playerVars: {
+                listType: 'search',
+                list: video.searchQuery,
+                controls: 0,
+                disablekb: 1,
+                fs: 0,
+                modestbranding: 1,
+                rel: 0,
+                enablejsapi: 1,
+                origin: window.location.origin,
+                autoplay: 1
+            },
+            events: {
+                onReady: (event: any) => {
+                    setDuration(event.target.getDuration() || 0);
+                    setVolume(event.target.getVolume() || 50);
+                    setIsMuted(event.target.isMuted() || false);
+                    setIsReady(true);
+                    event.target.playVideo();
+                    setIsPlaying(true);
+                },
+                onStateChange: (event: any) => {
+                    const state = event.data;
+                    if (state === 1) { // playing
+                        setIsPlaying(true);
+                    } else if (state === 2) { // paused
+                        setIsPlaying(false);
+                    } else if (state === 0) { // ended
+                        setIsPlaying(false);
+                    }
+                    if (event.target.getDuration) {
+                        setDuration(event.target.getDuration() || 0);
+                    }
+                }
+            }
+        });
+    };
+
+    useEffect(() => {
+        let interval: any;
+        if (isPlaying && playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+            interval = setInterval(() => {
+                if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                    setCurrentTime(playerRef.current.getCurrentTime() || 0);
+                }
+            }, 250);
+        }
+        return () => clearInterval(interval);
+    }, [isPlaying]);
+
+    const formatTime = (seconds: number) => {
+        if (isNaN(seconds) || seconds === undefined) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const togglePlay = () => {
+        if (!playerRef.current) return;
+        if (isPlaying) {
+            playerRef.current.pauseVideo();
+            setIsPlaying(false);
+        } else {
+            playerRef.current.playVideo();
+            setIsPlaying(true);
+        }
+    };
+
+    const toggleMute = () => {
+        if (!playerRef.current) return;
+        if (isMuted) {
+            playerRef.current.unmute();
+            setIsMuted(false);
+        } else {
+            playerRef.current.mute();
+            setIsMuted(true);
+        }
+    };
+
+    const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newTime = parseFloat(e.target.value);
+        setCurrentTime(newTime);
+        if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+            playerRef.current.seekTo(newTime, true);
+        }
+    };
+
+    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newVol = parseInt(e.target.value, 10);
+        setVolume(newVol);
+        if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
+            playerRef.current.setVolume(newVol);
+            if (newVol > 0 && isMuted) {
+                playerRef.current.unmute();
+                setIsMuted(false);
+            }
+        }
+    };
+
+    const toggleFullscreen = () => {
+        if (!playerContainerRef.current) return;
+        if (!document.fullscreenElement) {
+            playerContainerRef.current.requestFullscreen().catch(err => {
+                console.error("Error entering fullscreen:", err);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4 md:p-8 animate-fade-in">
+            <div 
+                ref={playerContainerRef} 
+                className="relative w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col group/player aspect-video"
+            >
+                {/* Header Overlay */}
+                <div className="flex justify-between items-center p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 inset-x-0 z-20 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
+                    <span className="text-white text-sm font-black tracking-wide truncate pr-4">{video.title}</span>
+                    <button 
+                        onClick={onClose}
+                        className="text-white/80 hover:text-white bg-black/40 hover:bg-black/60 p-2 rounded-full backdrop-blur-sm transition-all"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Video Frame Area */}
+                <div className="w-full h-full bg-black flex items-center justify-center relative select-none">
+                    <div id={playerId} className="w-full h-full pointer-events-none absolute inset-0 z-0"></div>
+                    
+                    {/* Cover div to completely block iframe interaction */}
+                    <div className="absolute inset-0 bg-transparent z-10 pointer-events-auto" onClick={togglePlay} />
+
+                    {/* Buffer/Loading Spinner */}
+                    {!isReady && (
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/80 gap-3">
+                            <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                            <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Loading Tutorial...</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Custom Controls Panel */}
+                <div className="absolute bottom-0 inset-x-0 p-4 md:p-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-3 z-20 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300 select-none">
+                    {/* Time Progress Line & Seek Slider */}
+                    <div className="flex items-center gap-3 w-full">
+                        <span className="text-xs font-mono text-slate-300">{formatTime(currentTime)}</span>
+                        <input 
+                            type="range"
+                            min={0}
+                            max={duration || 100}
+                            value={currentTime}
+                            onChange={handleSeekChange}
+                            className="flex-1 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 focus:outline-none"
+                        />
+                        <span className="text-xs font-mono text-slate-300">{formatTime(duration)}</span>
+                    </div>
+
+                    {/* Action buttons bar */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            {/* Play/Pause */}
+                            <button 
+                                onClick={togglePlay}
+                                className="text-white hover:text-blue-400 transition-colors p-1"
+                            >
+                                {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+                            </button>
+
+                            {/* Volume & Mute */}
+                            <div className="flex items-center gap-2 group/volume">
+                                <button 
+                                    onClick={toggleMute}
+                                    className="text-white hover:text-blue-400 transition-colors p-1"
+                                >
+                                    {isMuted || volume === 0 ? <MuteIcon className="w-5 h-5" /> : <VolumeHighIcon className="w-5 h-5" />}
+                                </button>
+                                <input 
+                                    type="range"
+                                    min={0}
+                                    max={100}
+                                    value={isMuted ? 0 : volume}
+                                    onChange={handleVolumeChange}
+                                    className="w-16 md:w-24 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-white hover:accent-blue-400 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Fullscreen */}
+                        <button 
+                            onClick={toggleFullscreen}
+                            className="text-white hover:text-blue-400 transition-colors p-1"
+                        >
+                            {isFullscreen ? <FullscreenExitIcon className="w-5 h-5" /> : <FullscreenEnterIcon className="w-5 h-5" />}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
