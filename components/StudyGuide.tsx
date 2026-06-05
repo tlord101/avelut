@@ -512,13 +512,12 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
 
             if (result.success && Array.isArray(result.data)) {
                 const initialItems = result.data.map((item: any) => {
-                    const vId = item.videoId || '';
                     return {
                         title: item.title || '',
                         description: item.description || '',
                         searchQuery: item.searchQuery || '',
-                        videoId: vId,
-                        thumbnailUrl: vId ? `https://img.youtube.com/vi/${vId}/mqdefault.jpg` : ''
+                        videoId: '',
+                        thumbnailUrl: ''
                     };
                 });
                 setTutorials(initialItems);
