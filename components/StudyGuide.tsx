@@ -277,6 +277,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [tutorials, setTutorials] = useState<Array<{ title: string; description: string; searchQuery: string; videoId?: string; thumbnailUrl?: string }>>([]);
     const [isTutorialsLoading, setIsTutorialsLoading] = useState(false);
     const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string } | null>(null);
+    const [brokenThumbnails, setBrokenThumbnails] = useState<Record<string, boolean>>({});
     const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
     const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5, courseId: '' });
     const [isLoading, setIsLoading] = useState(false);
@@ -1416,10 +1417,19 @@ Student: "${tempInput}"
                                 >
                                     {/* Video Thumbnail */}
                                     <div className="w-28 h-18 bg-gray-100 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
-                                        {video.thumbnailUrl ? (
-                                            <img src={video.thumbnailUrl} alt={video.title} className="absolute inset-0 w-full h-full object-cover" />
+                                        {video.thumbnailUrl && !brokenThumbnails[video.thumbnailUrl] ? (
+                                            <img 
+                                                src={video.thumbnailUrl} 
+                                                alt={video.title} 
+                                                className="absolute inset-0 w-full h-full object-cover" 
+                                                onError={() => {
+                                                    if (video.thumbnailUrl) {
+                                                        setBrokenThumbnails(prev => ({ ...prev, [video.thumbnailUrl!]: true }));
+                                                    }
+                                                }}
+                                            />
                                         ) : (
-                                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600" />
+                                            <div className="absolute inset-0 bg-gradient-to-br from-[#009EE2] to-[#0070B8]" />
                                         )}
                                         <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
                                             <svg className="w-6 h-6 text-white drop-shadow-md z-10" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
