@@ -509,9 +509,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
             <span className="text-[10px] uppercase font-black tracking-widest text-slate-400">Current Status</span>
             <div className="flex items-center gap-2 mt-1">
               <h4 className="font-extrabold text-slate-900 text-sm">
-                {userProfile.subscription_status === 'pro' && 'Pro Plan'}
-                {userProfile.subscription_status === 'basic' && 'Basic Plan'}
-                {(userProfile.subscription_status === 'free' || !userProfile.subscription_status) && 'Free Plan'}
+                {userProfile.subscription_status === 'pro' && (usageSettings.plans.pro.name || 'Pro Plan')}
+                {userProfile.subscription_status === 'basic' && (usageSettings.plans.basic.name || 'Basic Plan')}
+                {(userProfile.subscription_status === 'free' || !userProfile.subscription_status) && (usageSettings.plans.free.name || 'Free Plan')}
                 {userProfile.subscription_status === 'personal_token' && 'Personal Google Token'}
                 {userProfile.subscription_status === 'premium' && 'Premium Plan'}
               </h4>
@@ -570,12 +570,16 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
                 </svg>
               </div>
-              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Forever Free</h4>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">
+                {usageSettings.plans.free.name || 'Forever Free'}
+              </h4>
               <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
-                Perfect if you're just getting started with your podcast promotion.
+                {usageSettings.plans.free.description || "Perfect if you're just getting started with your study promotion."}
               </p>
               <div className="flex items-baseline gap-1.5 mt-5 mb-5">
-                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">$0</span>
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                  ₦{usageSettings.plans.free.price}
+                </span>
                 <span className="text-slate-500 font-bold text-sm">Free</span>
               </div>
               
@@ -597,35 +601,35 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>6 Videos per month</span>
+                  <span>{usageSettings.plans.free.limits.courses} Courses limit</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>2 Transcription</span>
+                  <span>{usageSettings.plans.free.limits.ai_requests_per_course} AI requests per course</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>2 Customize design</span>
+                  <span>{usageSettings.plans.free.limits.exams} Exam generations</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>2 HD export</span>
+                  <span>{usageSettings.plans.free.limits.visual_messages} OCR Solver scans</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>With watermarks</span>
+                  <span>Standard AI Tutoring</span>
                 </li>
               </ul>
             </div>
@@ -648,13 +652,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
                 </svg>
               </div>
-              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Professional</h4>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">
+                {usageSettings.plans.basic.name || 'Professional'}
+              </h4>
               <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
-                Take your podcast promotion to the next level with more features.
+                {usageSettings.plans.basic.description || "Take your study promotion to the next level with more features."}
               </p>
               <div className="flex items-baseline gap-1.5 mt-5 mb-5">
                 <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {billingInterval === 'monthly' ? '$7.99' : '$5.99'}
+                  ₦{billingInterval === 'monthly' ? usageSettings.plans.basic.price : Math.round(usageSettings.plans.basic.price * 0.75)}
                 </span>
                 <span className="text-slate-500 font-bold text-sm">/month</span>
               </div>
@@ -677,35 +683,35 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>12 Videos per month</span>
+                  <span>{usageSettings.plans.basic.limits.courses} Courses limit</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>8 Transcription</span>
+                  <span>{usageSettings.plans.basic.limits.ai_requests_per_course} AI requests per course</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>12 Customize design</span>
+                  <span>{usageSettings.plans.basic.limits.exams} Exam generations</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>12 HD export</span>
+                  <span>{usageSettings.plans.basic.limits.visual_messages} OCR Solver scans</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Without watermarks</span>
+                  <span>Blue Verification Badge</span>
                 </li>
               </ul>
             </div>
@@ -725,13 +731,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   <path d="M2 9h20" />
                 </svg>
               </div>
-              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Advanced</h4>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">
+                {usageSettings.plans.pro.name || 'Advanced'}
+              </h4>
               <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
-                Completely automate the promotion of any podcast.
+                {usageSettings.plans.pro.description || "Completely automate your learning progress with maximum options."}
               </p>
               <div className="flex items-baseline gap-1.5 mt-5 mb-5">
                 <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {billingInterval === 'monthly' ? '$19.99' : '$14.99'}
+                  ₦{billingInterval === 'monthly' ? usageSettings.plans.pro.price : Math.round(usageSettings.plans.pro.price * 0.75)}
                 </span>
                 <span className="text-slate-500 font-bold text-sm">/month</span>
               </div>
@@ -754,35 +762,35 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Unlimited videos</span>
+                  <span>{usageSettings.plans.pro.limits.courses} Courses limit</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Unlimited transcription</span>
+                  <span>{usageSettings.plans.pro.limits.ai_requests_per_course} AI requests per course</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Unlimited Customize design</span>
+                  <span>{usageSettings.plans.pro.limits.exams} Exam generations</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Unlimited HD export</span>
+                  <span>{usageSettings.plans.pro.limits.visual_messages} OCR Solver scans</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>Without watermarks</span>
+                  <span>Purple Verification Badge</span>
                 </li>
               </ul>
             </div>
@@ -844,9 +852,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   <button
                     onClick={() => setUsePersonalToken(true)}
                     disabled={isVerifyingKey}
-                    className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all active:scale-[0.98] shadow-sm"
+                    className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all active:scale-[0.98] shadow-sm mb-6"
                   >
-                    Configure Key
+                    Configure Personal Token
                   </button>
                 )}
               </div>
