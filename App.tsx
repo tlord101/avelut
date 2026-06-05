@@ -1045,7 +1045,11 @@ const App: React.FC = () => {
                     unreadMessagesCount={unreadMessagesCount}
                     userProfile={userProfile}
                 />
-                <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav">
+                <div className={
+                    activeItem === 'chat' || activeItem === 'messenger'
+                    ? "flex-1 min-h-0 overflow-hidden flex flex-col"
+                    : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
+                }>
                     {userProfile && (
                         <MainContent
                             key={activeItem}

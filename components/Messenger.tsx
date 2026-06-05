@@ -1413,7 +1413,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     };
 
     return (
-        <div className="flex h-screen w-full overflow-hidden bg-[#F8F9FA] font-sans antialiased text-[#212529]">
+        <div className="flex h-full w-full overflow-hidden bg-[#F8F9FA] font-sans antialiased text-[#212529]">
             {/* Sidebar Pane */}
             <div className={`w-full lg:w-[380px] border-r border-[#E9ECEF] flex flex-col ${activeChat ? 'hidden lg:flex' : 'flex'} h-full bg-white relative`}>
                 <div className="p-4 bg-[#F8F9FA] border-b border-[#E9ECEF] shrink-0">
