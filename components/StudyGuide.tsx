@@ -240,56 +240,65 @@ const INVIDIOUS_INSTANCES = [
     'https://inv.tux.im'
 ];
 
-const fetchRealYoutubeVideo = async (searchQuery: string, apiKey?: string): Promise<{ videoId: string; thumbnailUrl: string } | null> => {
-    if (apiKey) {
+const fetchRealYoutubeVideo = async (searchQuery: string, predictedVideoId: string, apiKey?: string): Promise<{ videoId: string; thumbnailUrl: string }> => {
+    if (!apiKey) {
+        throw new Error("YouTube Search API key is not configured in Admin settings.");
+    }
+
+    // 1. Try to fetch video details directly by predicted ID using /v3/videos with part=snippet
+    if (predictedVideoId) {
         try {
-            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&type=video&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`;
+            const url = `https://www.googleapis.com/youtube/v3/videos?id=${predictedVideoId}&key=${apiKey}&part=snippet`;
             const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 const firstVideo = data.items?.[0];
-                if (firstVideo && firstVideo.id?.videoId) {
+                if (firstVideo && firstVideo.id) {
+                    const thumb = firstVideo.snippet?.thumbnails?.medium?.url || 
+                                  firstVideo.snippet?.thumbnails?.default?.url || 
+                                  `https://img.youtube.com/vi/${predictedVideoId}/mqdefault.jpg`;
                     return {
-                        videoId: firstVideo.id.videoId,
-                        thumbnailUrl: firstVideo.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${firstVideo.id.videoId}/mqdefault.jpg`
+                        videoId: predictedVideoId,
+                        thumbnailUrl: thumb
                     };
                 }
             } else {
-                console.warn(`YouTube API returned status ${response.status} when searching for: ${searchQuery}`);
+                const errData = await response.json().catch(() => ({}));
+                const errMsg = errData?.error?.message || `HTTP error ${response.status}`;
+                console.warn(`YouTube videos API returned error for predicted ID: ${errMsg}`);
             }
         } catch (err) {
-            console.warn(`Failed to fetch from YouTube API for ${searchQuery}, falling back to Invidious:`, err);
+            console.warn(`Failed to fetch video details for predicted ID ${predictedVideoId}:`, err);
         }
     }
 
-    for (const instance of INVIDIOUS_INSTANCES) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
-            // Route through a public CORS proxy to bypass browser Same-Origin Policy blocks
-            const targetUrl = `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video`;
-            const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-            
-            const response = await fetch(proxiedUrl, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (response.ok) {
-                const results = await response.json();
-                const firstVideo = results?.find((r: any) => r.type === 'video');
-                if (firstVideo && firstVideo.videoId) {
-                    return {
-                        videoId: firstVideo.videoId,
-                        thumbnailUrl: `https://img.youtube.com/vi/${firstVideo.videoId}/mqdefault.jpg`
-                    };
-                }
+    // 2. Fall back to search query using /v3/search
+    try {
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&type=video&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`;
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            const firstVideo = data.items?.[0];
+            if (firstVideo && firstVideo.id?.videoId) {
+                const thumb = firstVideo.snippet?.thumbnails?.medium?.url || 
+                              firstVideo.snippet?.thumbnails?.default?.url || 
+                              `https://img.youtube.com/vi/${firstVideo.id.videoId}/mqdefault.jpg`;
+                return {
+                    videoId: firstVideo.id.videoId,
+                    thumbnailUrl: thumb
+                };
+            } else {
+                throw new Error(`No search results found on YouTube for: "${searchQuery}"`);
             }
-        } catch (err) {
-            console.warn(`Failed to fetch from Invidious instance ${instance}:`, err);
+        } else {
+            const errData = await response.json().catch(() => ({}));
+            const errMsg = errData?.error?.message || `HTTP error ${response.status}`;
+            throw new Error(`YouTube API Error: ${errMsg}`);
         }
+    } catch (err: any) {
+        console.error(`Failed to fetch from YouTube API for query "${searchQuery}":`, err);
+        throw err;
     }
-    return null;
 };
 
 const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
@@ -302,6 +311,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [isTutorialsOpen, setIsTutorialsOpen] = useState(false);
     const [tutorials, setTutorials] = useState<Array<{ title: string; description: string; searchQuery: string; videoId?: string; thumbnailUrl?: string }>>([]);
     const [isTutorialsLoading, setIsTutorialsLoading] = useState(false);
+    const [tutorialsError, setTutorialsError] = useState<string | null>(null);
     const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string } | null>(null);
     const [brokenThumbnails, setBrokenThumbnails] = useState<Record<string, boolean>>({});
     const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
@@ -478,6 +488,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const fetchTutorials = async () => {
         if (tutorials.length > 0 || isTutorialsLoading) return;
         setIsTutorialsLoading(true);
+        setTutorialsError(null);
         try {
             const prompt = `
 Identify 5 to 10 sub-topics or specific tutorial search terms for the university topic: '${topic.topic_name}' in the course: '${topic.courseName}'.
@@ -516,6 +527,7 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                         title: item.title || '',
                         description: item.description || '',
                         searchQuery: item.searchQuery || '',
+                        predictedVideoId: item.videoId || '',
                         videoId: '',
                         thumbnailUrl: ''
                     };
@@ -524,59 +536,29 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
 
                 // Fetch real videos asynchronously in parallel
                 void (async () => {
-                    const resolved = await Promise.all(initialItems.map(async (item) => {
-                        const real = await fetchRealYoutubeVideo(item.searchQuery, appSettings?.youtube_api_key);
-                        if (real) {
+                    try {
+                        const resolved = await Promise.all(initialItems.map(async (item) => {
+                            const real = await fetchRealYoutubeVideo(item.searchQuery, item.predictedVideoId, appSettings?.youtube_api_key);
                             return {
                                 ...item,
                                 videoId: real.videoId,
                                 thumbnailUrl: real.thumbnailUrl
                             };
-                        }
-                        
-                        // Fallback if search resolution failed:
-                        // Pick a verified working YouTube video based on title hash (to avoid fake videoIds)
-                        const fallbacks = ['dF6-H8m4XvY', 'L1573QM8P84', 'y72-T5jHn2k', '1A_CAkYt3GY', 'z71h9z3s8Xo'];
-                        const hash = item.title.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
-                        const selectedId = fallbacks[Math.abs(hash) % fallbacks.length];
-                        return {
-                            ...item,
-                            videoId: selectedId,
-                            thumbnailUrl: `https://img.youtube.com/vi/${selectedId}/mqdefault.jpg`
-                        };
-                    }));
-                    setTutorials(resolved);
+                        }));
+                        setTutorials(resolved);
+                    } catch (err: any) {
+                        console.error('Failed to load video details from YouTube API:', err);
+                        setTutorials([]);
+                        setTutorialsError(err.message || 'Failed to fetch YouTube tutorials.');
+                    }
                 })();
             } else {
-                throw new Error(result.message || 'Failed to parse JSON');
+                throw new Error(result.message || 'Failed to parse JSON response');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to load video tutorials:', err);
-            addToast('Could not load video tutorials. Showing standard recommendations.', 'error');
-            const placeholderItems = [
-                {
-                    title: `Introduction to ${topic.topic_name}`,
-                    description: `A comprehensive overview of ${topic.topic_name} fundamentals.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} introduction tutorial`,
-                    videoId: 'dF6-H8m4XvY',
-                    thumbnailUrl: 'https://img.youtube.com/vi/dF6-H8m4XvY/mqdefault.jpg'
-                },
-                {
-                    title: `${topic.topic_name} Explained with Examples`,
-                    description: `Practical walkthroughs and step-by-step examples.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} examples solved`,
-                    videoId: 'L1573QM8P84',
-                    thumbnailUrl: 'https://img.youtube.com/vi/L1573QM8P84/mqdefault.jpg'
-                },
-                {
-                    title: `Advanced ${topic.topic_name}`,
-                    description: `Deep dive into advanced concepts and applications.`,
-                    searchQuery: `${topic.courseName} ${topic.topic_name} advanced topics`,
-                    videoId: 'y72-T5jHn2k',
-                    thumbnailUrl: 'https://img.youtube.com/vi/y72-T5jHn2k/mqdefault.jpg'
-                }
-            ];
-            setTutorials(placeholderItems);
+            setTutorials([]);
+            setTutorialsError(err.message || 'Failed to generate tutorial search terms.');
         } finally {
             setIsTutorialsLoading(false);
         }
@@ -1417,7 +1399,13 @@ Student: "${tempInput}"
 
                 {/* Drawer Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {isTutorialsLoading ? (
+                    {tutorialsError ? (
+                        <div className="flex flex-col items-center justify-center text-center py-8 px-4 bg-red-50 border border-red-100 rounded-2xl">
+                            <span className="text-3xl mb-2">⚠️</span>
+                            <h4 className="font-extrabold text-sm text-red-700">Failed to Load Video Tutorials</h4>
+                            <p className="text-xs text-red-500 mt-1 font-semibold max-w-sm">{tutorialsError}</p>
+                        </div>
+                    ) : isTutorialsLoading ? (
                         <div className="space-y-4 py-8">
                             {[1, 2, 3].map(n => (
                                 <div key={n} className="flex gap-4 p-4 border border-gray-100 rounded-2xl animate-pulse">

@@ -601,28 +601,28 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.free.limits.courses} Courses limit</span>
+                  <span>{usageSettings.plans.free.limits.courses === -1 ? 'Unlimited Courses' : `${usageSettings.plans.free.limits.courses} Courses limit`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.free.limits.ai_requests_per_course} AI requests per course</span>
+                  <span>{usageSettings.plans.free.limits.ai_requests_per_course === -1 ? 'Unlimited AI requests' : `${usageSettings.plans.free.limits.ai_requests_per_course} AI requests per course`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.free.limits.exams} Exam generations</span>
+                  <span>{usageSettings.plans.free.limits.exams === -1 ? 'Unlimited Exam generations' : `${usageSettings.plans.free.limits.exams} Exam generations`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.free.limits.visual_messages} OCR Solver scans</span>
+                  <span>{usageSettings.plans.free.limits.visual_messages === -1 ? 'Unlimited OCR Solver scans' : `${usageSettings.plans.free.limits.visual_messages} OCR Solver scans`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -683,28 +683,28 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.basic.limits.courses} Courses limit</span>
+                  <span>{usageSettings.plans.basic.limits.courses === -1 ? 'Unlimited Courses' : `${usageSettings.plans.basic.limits.courses} Courses limit`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.basic.limits.ai_requests_per_course} AI requests per course</span>
+                  <span>{usageSettings.plans.basic.limits.ai_requests_per_course === -1 ? 'Unlimited AI requests' : `${usageSettings.plans.basic.limits.ai_requests_per_course} AI requests per course`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.basic.limits.exams} Exam generations</span>
+                  <span>{usageSettings.plans.basic.limits.exams === -1 ? 'Unlimited Exam generations' : `${usageSettings.plans.basic.limits.exams} Exam generations`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.basic.limits.visual_messages} OCR Solver scans</span>
+                  <span>{usageSettings.plans.basic.limits.visual_messages === -1 ? 'Unlimited OCR Solver scans' : `${usageSettings.plans.basic.limits.visual_messages} OCR Solver scans`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -762,28 +762,28 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.pro.limits.courses} Courses limit</span>
+                  <span>{usageSettings.plans.pro.limits.courses === -1 ? 'Unlimited Courses' : `${usageSettings.plans.pro.limits.courses} Courses limit`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.pro.limits.ai_requests_per_course} AI requests per course</span>
+                  <span>{usageSettings.plans.pro.limits.ai_requests_per_course === -1 ? 'Unlimited AI requests' : `${usageSettings.plans.pro.limits.ai_requests_per_course} AI requests per course`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.pro.limits.exams} Exam generations</span>
+                  <span>{usageSettings.plans.pro.limits.exams === -1 ? 'Unlimited Exam generations' : `${usageSettings.plans.pro.limits.exams} Exam generations`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="8 12 11 15 16 9" />
                   </svg>
-                  <span>{usageSettings.plans.pro.limits.visual_messages} OCR Solver scans</span>
+                  <span>{usageSettings.plans.pro.limits.visual_messages === -1 ? 'Unlimited OCR Solver scans' : `${usageSettings.plans.pro.limits.visual_messages} OCR Solver scans`}</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

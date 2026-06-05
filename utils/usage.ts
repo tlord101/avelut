@@ -152,11 +152,12 @@ export const checkVisualMessagesLimit = (
   const additionalPurchased = usageStats?.additional_visual_messages_purchased || 0;
   const used = usageStats?.visual_messages_used || 0;
   
-  const allowed = used < (planLimit + additionalPurchased);
+  const isUnlimited = planLimit === -1;
+  const allowed = isUnlimited || used < (planLimit + additionalPurchased);
   const price = usageSettings.additional_prices?.visual_messages_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.visual_messages_price;
   const count = usageSettings.additional_prices?.visual_messages_count ?? DEFAULT_USAGE_SETTINGS.additional_prices.visual_messages_count;
 
-  return { allowed, used, limit: planLimit + additionalPurchased, price, count };
+  return { allowed, used, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count };
 };
 
 // 2. Exams limit
@@ -176,11 +177,12 @@ export const checkExamsLimit = (
   const additionalPurchased = usageStats?.additional_exams_purchased || 0;
   const used = usageStats?.exams_generated || 0;
 
-  const allowed = used < (planLimit + additionalPurchased);
+  const isUnlimited = planLimit === -1;
+  const allowed = isUnlimited || used < (planLimit + additionalPurchased);
   const price = 200; // default NGN
   const count = 5; // default 5 additional exams
 
-  return { allowed, used, limit: planLimit + additionalPurchased, price, count };
+  return { allowed, used, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count };
 };
 
 // 3. Study guide courses limit
@@ -200,10 +202,11 @@ export const checkStudyGuideCoursesLimit = (
   const additionalPurchased = usageStats?.additional_courses_purchased || 0;
   const unlockedCount = Object.keys(usageStats?.unlocked_courses || {}).length;
 
-  const allowed = unlockedCount < (planLimit + additionalPurchased);
+  const isUnlimited = planLimit === -1;
+  const allowed = isUnlimited || unlockedCount < (planLimit + additionalPurchased);
   const price = usageSettings.additional_prices?.studyguide_course_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.studyguide_course_price;
 
-  return { allowed, used: unlockedCount, limit: planLimit + additionalPurchased, price };
+  return { allowed, used: unlockedCount, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price };
 };
 
 // 4. Study guide requests limit per course (resets every 2 hours)
@@ -237,13 +240,14 @@ export const checkStudyGuideCourseRequestsLimit = (
   }
 
   const additionalPurchased = courseData.additional_requests_purchased || 0;
-  const allowed = requestsUsed < (planLimit + additionalPurchased);
+  const isUnlimited = planLimit === -1;
+  const allowed = isUnlimited || requestsUsed < (planLimit + additionalPurchased);
   const price = usageSettings.additional_prices?.studyguide_request_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.studyguide_request_price;
   const count = 5; // 5 additional requests per purchase
 
   const secondsLeft = Math.max(0, Math.ceil((windowDuration - timeElapsed) / 1000));
 
-  return { allowed, used: requestsUsed, limit: planLimit + additionalPurchased, price, count, secondsLeft, windowStart };
+  return { allowed, used: requestsUsed, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count, secondsLeft, windowStart };
 };
 
 // Update message usage counter
