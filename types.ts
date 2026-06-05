@@ -195,7 +195,7 @@ export interface AppSettings {
 // Type for the new Notification System
 export interface Notification {
   id: string;
-  type: 'study_update' | 'exam_reminder' | 'welcome';
+  type: 'study_update' | 'exam_reminder' | 'welcome' | 'study_reminder';
   title: string;
   message: string;
   timestamp: number;

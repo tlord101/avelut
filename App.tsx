@@ -246,6 +246,41 @@ const formatDurationForPrompt = (seconds: number): string => {
     return remMinutes ? `${hours} hours ${remMinutes} minutes` : `${hours} hours`;
 };
 
+const playAlarmSound = () => {
+    try {
+        const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+        if (!AudioContextClass) return;
+        const ctx = new AudioContextClass();
+        
+        const playBeep = (time: number, freq: number, duration: number) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            
+            gain.gain.setValueAtTime(0, time);
+            gain.gain.linearRampToValueAtTime(0.3, time + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+            
+            osc.start(time);
+            osc.stop(time + duration);
+        };
+        
+        const now = ctx.currentTime;
+        // Two-tone bell chime played twice
+        playBeep(now, 880, 0.4);
+        playBeep(now + 0.1, 1109.73, 0.5);
+        
+        playBeep(now + 0.6, 880, 0.4);
+        playBeep(now + 0.7, 1109.73, 0.5);
+    } catch (e) {
+        console.error("Failed to play alarm chime:", e);
+    }
+};
+
 // ==========================================
 // CORE APP CONTEXT ENGINE INITIALIZATION
 // ==========================================
@@ -258,7 +293,22 @@ const App: React.FC = () => {
     const [examHistory, setExamHistory] = useState<ExamHistoryItem[]>([]);
     const [departmentData, setDepartmentData] = useState<any>(null);
 
-    
+    const { addToast } = useToast();
+    const lastNotifiedRef = useRef<Record<string, boolean>>({});
+
+    useEffect(() => {
+        if (!notifications || notifications.length === 0) return;
+        const latest = notifications[0];
+        const isRecent = Date.now() - latest.timestamp < 15000;
+        if (isRecent && !lastNotifiedRef.current[latest.id]) {
+            lastNotifiedRef.current[latest.id] = true;
+            if (latest.type === 'study_reminder') {
+                playAlarmSound();
+            }
+            addToast(`⏰ ${latest.title}: ${latest.message}`, 'info');
+        }
+    }, [notifications, addToast]);
+
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(true);
     const [isOnboarding, setIsOnboarding] = useState(false);
@@ -384,7 +434,6 @@ const App: React.FC = () => {
                 return () => navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
         }, [applyMessengerTarget]);
 
-    const { addToast } = useToast();
     const { attemptApiCall } = useApiLimiter();
     const tourStatusRef = useRef<'unknown' | 'checked' | 'shown'>('unknown');
 
@@ -515,11 +564,17 @@ const App: React.FC = () => {
                 const userRef = dbRef(db, `users/${user.uid}`);
                 const snapshot = await get(userRef);
                 const existingProfile = snapshot.val() || {};
+                
+                const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                const clientTimezoneOffset = new Date().getTimezoneOffset();
+
                 const nextProfile = {
                     uid: user.uid,
                     display_name: user.displayName || existingProfile.display_name || 'Learner',
                     email: user.email || existingProfile.email || '',
                     photo_url: user.photoURL || existingProfile.photo_url || '',
+                    timezone: clientTimezone,
+                    timezone_offset: clientTimezoneOffset,
                 };
                 const hasProfileUpdates = Object.entries(nextProfile).some(([key, value]) => existingProfile[key] !== value && value);
                 if (hasProfileUpdates) {

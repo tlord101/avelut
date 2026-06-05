@@ -269,3 +269,148 @@ exports.processEmailQueue = functions.database.ref('/email_queue/{queueId}')
             });
         }
     });
+
+// 5. Scheduled function to check study timetables every minute and send reminders
+exports.checkTimetableReminders = functions.pubsub.schedule('* * * * *').onRun(async (context) => {
+    const usersSnap = await admin.database().ref('/users').once('value');
+    if (!usersSnap.exists()) return null;
+
+    const users = usersSnap.val();
+    const nowServer = new Date();
+    const promises = [];
+
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    for (const userId in users) {
+        const userData = users[userId];
+        if (!userData || !userData.timetable) continue;
+
+        // Determine user's local day, hour, and minute
+        const userTimezone = userData.timezone || 'UTC';
+        let userLocalDate;
+        try {
+            const localDateStr = nowServer.toLocaleString('en-US', { timeZone: userTimezone });
+            userLocalDate = new Date(localDateStr);
+        } catch (err) {
+            console.error(`Invalid timezone "${userTimezone}" for user ${userId}, falling back to UTC.`);
+            userLocalDate = nowServer;
+        }
+
+        const userDay = days[userLocalDate.getDay()];
+        const userHour = userLocalDate.getHours();
+        const userMinute = userLocalDate.getMinutes();
+        const userCurrentMinutes = userHour * 60 + userMinute;
+        
+        const year = userLocalDate.getFullYear();
+        const month = String(userLocalDate.getMonth() + 1).padStart(2, '0');
+        const dateDay = String(userLocalDate.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${dateDay}`;
+
+        const timetable = Array.isArray(userData.timetable) 
+            ? userData.timetable 
+            : Object.values(userData.timetable);
+
+        for (const session of timetable) {
+            if (!session || !session.day || !session.time || !session.subject) continue;
+            // Check if it's the correct day of the week
+            if (session.day.toLowerCase() !== userDay.toLowerCase()) continue;
+
+            // Extract start time from range e.g. "09:00 AM - 11:00 AM"
+            const parts = session.time.split('-');
+            const startStr = parts[0].trim();
+
+            // Try 12-hour AM/PM format
+            let match = startStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            let hour, minute;
+            if (match) {
+                hour = parseInt(match[1], 10);
+                minute = parseInt(match[2], 10);
+                const ampm = match[3].toUpperCase();
+                if (ampm === 'PM' && hour < 12) {
+                    hour += 12;
+                } else if (ampm === 'AM' && hour === 12) {
+                    hour = 0;
+                }
+            } else {
+                // Try 24-hour format
+                match = startStr.match(/(\d+):(\d+)/);
+                if (match) {
+                    hour = parseInt(match[1], 10);
+                    minute = parseInt(match[2], 10);
+                }
+            }
+
+            if (hour === undefined || minute === undefined) continue;
+
+            const sessionStartMinutes = hour * 60 + minute;
+            const diffMinutes = sessionStartMinutes - userCurrentMinutes;
+
+            let reminderType = null;
+            let title = '';
+            let message = '';
+            
+            // Check windows:
+            // 10 minutes warning (8 to 12 minutes before)
+            // Exact time start (-2 to 2 minutes)
+            if (diffMinutes >= 8 && diffMinutes <= 12) {
+                reminderType = 'warning';
+                title = '📚 Upcoming Study Session';
+                message = `Your study session on "${session.subject}" starts in 10 minutes (at ${startStr})! Topic: ${session.topic || 'Review'}.`;
+            } else if (diffMinutes >= -2 && diffMinutes <= 2) {
+                reminderType = 'start';
+                title = '⏰ Time to Study!';
+                message = `Your study session on "${session.subject}" starts now! Topic: ${session.topic || 'Review'}. Activity: ${session.activity || 'Read and practice'}.`;
+            }
+
+            if (!reminderType) continue;
+
+            const reminderKey = `${session.id}_${reminderType}_${dateString}`;
+            const sentLogRef = admin.database().ref(`/users/${userId}/sent_reminders/${reminderKey}`);
+            
+            const runTransaction = async () => {
+                const logSnap = await sentLogRef.once('value');
+                if (logSnap.exists()) {
+                    return;
+                }
+
+                // Log immediately to prevent duplication in simultaneous triggers
+                await sentLogRef.set(true);
+
+                console.log(`Sending timetable reminder (${reminderType}) to user ${userId} for session ${session.id}`);
+
+                // Write push notification to /notifications/{userId}
+                const notifRef = admin.database().ref(`/notifications/${userId}`).push();
+                const pushPromise = notifRef.set({
+                    type: 'study_reminder',
+                    title: title,
+                    message: message,
+                    is_read: false,
+                    timestamp: Date.now()
+                });
+
+                // Write email to /email_queue
+                let emailPromise = Promise.resolve();
+                if (userData.email) {
+                    const emailRef = admin.database().ref('/email_queue').push();
+                    emailPromise = emailRef.set({
+                        recipients: userData.email,
+                        subject: `${title}: ${session.subject}`,
+                        body: `Hi ${userData.display_name || 'Learner'},\n\n${message}\n\nHappy learning,\nThe VANTUTOR Team`,
+                        created_at: Date.now(),
+                        status: 'pending'
+                    });
+                }
+
+                await Promise.all([pushPromise, emailPromise]);
+            };
+
+            promises.push(runTransaction().catch(err => {
+                console.error(`Error sending reminder to user ${userId} for session ${session.id}:`, err);
+            }));
+        }
+    }
+
+    await Promise.all(promises);
+    return null;
+});
+

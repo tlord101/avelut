@@ -59,10 +59,9 @@ if (isConfigured) {
 }
 
 if ('serviceWorker' in navigator && typeof window !== 'undefined') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
-      .catch((err) => console.warn('Service Worker registration failed:', err));
-  });
+  // Register service worker immediately to speed up PWA installation readiness
+  navigator.serviceWorker.register('/service-worker.js')
+    .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+    .catch((err) => console.warn('Service Worker registration failed:', err));
 }
 

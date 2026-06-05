@@ -3,6 +3,7 @@ import React from 'react';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
 import { MenuIcon } from './icons/MenuIcon';
 import { MessengerIcon } from './icons/MessengerIcon';
+import { LogoIcon } from './icons/LogoIcon';
 
 import type { UserProfile } from '../types';
 
@@ -31,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
     const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
     const [isStandalone, setIsStandalone] = React.useState(false);
+    const [isInstalling, setIsInstalling] = React.useState(false);
 
     React.useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -47,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
         const handleAppInstalled = () => {
             setDeferredPrompt(null);
             setIsStandalone(true);
+            setIsInstalling(false);
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -57,6 +60,18 @@ export const Header: React.FC<HeaderProps> = ({
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
     }, []);
+
+    React.useEffect(() => {
+        let timeoutId: any;
+        if (isInstalling) {
+            timeoutId = setTimeout(() => {
+                setIsInstalling(false);
+            }, 20000); // 20s safety timeout
+        }
+        return () => {
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [isInstalling]);
 
     const handleInstallClick = async () => {
         if (!deferredPrompt) {
@@ -74,8 +89,8 @@ export const Header: React.FC<HeaderProps> = ({
             const { outcome } = await deferredPrompt.userChoice;
             console.log(`User response to install prompt: ${outcome}`);
             if (outcome === 'accepted') {
+                setIsInstalling(true);
                 setDeferredPrompt(null);
-                setIsStandalone(true);
             }
         } catch (err) {
             console.error('Error during installation choice:', err);
@@ -163,6 +178,29 @@ export const Header: React.FC<HeaderProps> = ({
                     </>
                 )}
             </div>
+
+            {isInstalling && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[9999] animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 shadow-2xl rounded-3xl p-8 max-w-sm w-full mx-4 border border-gray-100 dark:border-slate-800 text-center flex flex-col items-center gap-6 animate-fade-in-up">
+                        <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-[#EAF6FD] dark:bg-[#00467A]/50">
+                            <div className="absolute inset-0 rounded-full border-4 border-t-transparent border-[#0088CC] animate-spin" />
+                            <LogoIcon className="w-12 h-12 loader-logo relative z-10" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-charcoal dark:text-white">Installing VANTUTOR...</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                Adding VANTUTOR to your device. This will only take a moment.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setIsInstalling(false)}
+                            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline transition mt-2 cursor-pointer"
+                        >
+                            Dismiss Overlay
+                        </button>
+                    </div>
+                </div>
+            )}
         </header>
     );
 };
