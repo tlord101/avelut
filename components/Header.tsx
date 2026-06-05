@@ -30,8 +30,15 @@ export const Header: React.FC<HeaderProps> = ({
     userProfile
 }) => {
     const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+    const [isStandalone, setIsStandalone] = React.useState(false);
 
     React.useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches 
+                || (window.navigator as any).standalone === true;
+            setIsStandalone(isAppStandalone);
+        }
+
         const handleBeforeInstallPrompt = (e: Event) => {
             e.preventDefault();
             setDeferredPrompt(e);
@@ -39,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         const handleAppInstalled = () => {
             setDeferredPrompt(null);
+            setIsStandalone(true);
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -51,15 +59,27 @@ export const Header: React.FC<HeaderProps> = ({
     }, []);
 
     const handleInstallClick = async () => {
-        if (!deferredPrompt) return;
+        if (!deferredPrompt) {
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            const isIOS = /iphone|ipad|ipod/.test(userAgent);
+            if (isIOS) {
+                alert("To install VANTUTOR on iOS:\n\n1. Tap the Share button in Safari (at the bottom or top of your screen).\n2. Scroll down and tap 'Add to Home Screen'.");
+            } else {
+                alert("To install VANTUTOR:\n\n1. Tap the browser menu button (three vertical dots in Chrome).\n2. Select 'Install app' or 'Add to Home Screen'.");
+            }
+            return;
+        }
         deferredPrompt.prompt();
         try {
             const { outcome } = await deferredPrompt.userChoice;
             console.log(`User response to install prompt: ${outcome}`);
+            if (outcome === 'accepted') {
+                setDeferredPrompt(null);
+                setIsStandalone(true);
+            }
         } catch (err) {
             console.error('Error during installation choice:', err);
         }
-        setDeferredPrompt(null);
     };
 
     return (
@@ -91,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
                     onClick={handleInstallClick}
                     className="items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-lime-500 to-lime-600 hover:from-lime-600 hover:to-lime-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all duration-200 active:scale-95 border border-lime-400/50 mr-1"
                     title="Install App"
-                    style={{ display: deferredPrompt ? 'inline-flex' : 'none' }}
+                    style={{ display: isStandalone ? 'none' : 'inline-flex' }}
                 >
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

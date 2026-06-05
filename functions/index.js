@@ -15,8 +15,8 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
         const userSnap = await admin.database().ref(`/users/${userId}`).once('value');
         const userData = userSnap.val();
 
-        if (!userData || !userData.fcm_token || !userData.notifications_enabled) {
-            console.log(`Skipping notification for user ${userId}. FCM Token: ${userData ? userData.fcm_token : 'none'}, Notifications Enabled: ${userData ? userData.notifications_enabled : 'false'}`);
+        if (!userData || !userData.fcm_token) {
+            console.log(`Skipping notification for user ${userId}. No FCM Token registered.`);
             return null;
         }
 
@@ -109,8 +109,8 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
         const recipientSnap = await admin.database().ref(`/users/${recipientId}`).once('value');
         const recipientData = recipientSnap.val();
 
-        if (!recipientData || !recipientData.fcm_token || !recipientData.notifications_enabled) {
-            console.log(`Skipping message push for user ${recipientId}. No token or notifications disabled.`);
+        if (!recipientData || !recipientData.fcm_token) {
+            console.log(`Skipping message push for user ${recipientId}. No token registered.`);
             return null;
         }
 
