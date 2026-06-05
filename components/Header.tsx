@@ -29,6 +29,39 @@ export const Header: React.FC<HeaderProps> = ({
     rightActions,
     userProfile
 }) => {
+    const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        const handleBeforeInstallPrompt = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+
+        const handleAppInstalled = () => {
+            setDeferredPrompt(null);
+        };
+
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.addEventListener('appinstalled', handleAppInstalled);
+
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+            window.removeEventListener('appinstalled', handleAppInstalled);
+        };
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        try {
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response to install prompt: ${outcome}`);
+        } catch (err) {
+            console.error('Error during installation choice:', err);
+        }
+        setDeferredPrompt(null);
+    };
+
     return (
         <header className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 md:pt-8 pb-6 bg-transparent">
             <div className="flex items-center">
@@ -54,6 +87,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+                <button
+                    onClick={handleInstallClick}
+                    className="items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-lime-500 to-lime-600 hover:from-lime-600 hover:to-lime-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all duration-200 active:scale-95 border border-lime-400/50 mr-1"
+                    title="Install App"
+                    style={{ display: deferredPrompt ? 'inline-flex' : 'none' }}
+                >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span className="hidden sm:inline">Install App</span>
+                </button>
                 {rightActions ? rightActions : (
                     <>
                         <button 
