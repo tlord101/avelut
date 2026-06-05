@@ -173,7 +173,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
         {/* Center Raised Camera Button */}
         <button
           onClick={() => onItemClick(navItems[2].id)}
-          className="absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-20 cursor-pointer"
+          className="absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer"
         >
           <CameraIcon className="w-8 h-8 text-[#002D62]" />
         </button>
