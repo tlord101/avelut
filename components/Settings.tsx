@@ -55,6 +55,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
   const [personalApiKey, setPersonalApiKey] = useState(userProfile.personal_api_key || '');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isVerifyingKey, setIsVerifyingKey] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annually'>('monthly');
 
   useEffect(() => {
     setUsePersonalToken(userProfile.use_personal_token || false);
@@ -522,148 +523,368 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
           </span>
         </div>
 
+        {/* Toggle Billing Period */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-gray-100 p-1 rounded-full inline-flex border border-gray-200">
+            <button
+              type="button"
+              onClick={() => setBillingInterval('monthly')}
+              className={`px-6 py-1.5 rounded-full text-xs font-black transition-all ${
+                billingInterval === 'monthly'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingInterval('annually')}
+              className={`px-6 py-1.5 rounded-full text-xs font-black transition-all ${
+                billingInterval === 'annually'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Annually
+            </button>
+          </div>
+        </div>
+
         {/* Plan Upgrade Grid Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-          {/* Free Card */}
-          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'free' || !userProfile.subscription_status ? 'border-blue-600 bg-blue-50/10' : 'border-gray-200'}`}>
-            <div>
-              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.free.name || 'Free Plan'}</h4>
-              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.free.description}</p>
-              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
-                <li>• {usageSettings.plans.free.limits.courses} Courses</li>
-                <li>• {usageSettings.plans.free.limits.ai_requests_per_course} Requests/course (2h)</li>
-                <li>• {usageSettings.plans.free.limits.exams} Practice exams</li>
-                <li>• {usageSettings.plans.free.limits.visual_messages} Messages limit</li>
-              </ul>
-            </div>
-            <div className="mt-4 pt-3 border-t border-gray-150">
+        <div className="flex overflow-x-auto snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-6 mb-6 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-x-visible md:pb-0 scroll-smooth">
+          
+          {/* Card 1: Forever Free */}
+          <div className={`w-[85vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink rounded-[24px] border p-6 flex flex-col justify-between transition-all relative ${
+            userProfile.subscription_status === 'free' || !userProfile.subscription_status 
+              ? 'border-blue-500 bg-white shadow-lg' 
+              : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex flex-col flex-grow">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5BBFFF] to-[#0070B8] flex items-center justify-center text-white mb-6 shadow-sm">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 12 20 22 4 22 4 12" />
+                  <rect x="2" y="7" width="20" height="5" rx="1" />
+                  <line x1="12" y1="22" x2="12" y2="7" />
+                  <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+                  <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                </svg>
+              </div>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Forever Free</h4>
+              <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
+                Perfect if you're just getting started with your podcast promotion.
+              </p>
+              <div className="flex items-baseline gap-1.5 mt-5 mb-5">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">$0</span>
+                <span className="text-slate-500 font-bold text-sm">Free</span>
+              </div>
+              
               {userProfile.subscription_status === 'free' || !userProfile.subscription_status ? (
-                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+                <span className="w-full text-center py-3 bg-slate-50 text-slate-400 text-sm font-bold rounded-xl block border border-slate-200 mb-6">Current Plan</span>
               ) : (
                 <button
                   onClick={handleSwitchToFreePlan}
                   disabled={isVerifyingKey}
-                  className="w-full py-2 bg-gray-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                  className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all shadow-sm active:scale-[0.98] mb-6"
                 >
-                  Switch Free
+                  Start for Free
                 </button>
               )}
+              
+              <ul className="text-xs text-slate-600 space-y-3 font-semibold text-left">
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>6 Videos per month</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>2 Transcription</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>2 Customize design</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>2 HD export</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>With watermarks</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          {/* Basic Card */}
-          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'basic' ? 'border-blue-600 bg-blue-50/10' : 'border-gray-200'}`}>
-            <div>
-              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.basic.name || 'Basic Plan'}</h4>
-              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.basic.description}</p>
-              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
-                <li>• {usageSettings.plans.basic.limits.courses} Courses</li>
-                <li>• {usageSettings.plans.basic.limits.ai_requests_per_course} Requests/course (2h)</li>
-                <li>• {usageSettings.plans.basic.limits.exams} Practice exams</li>
-                <li>• {usageSettings.plans.basic.limits.visual_messages} Messages limit</li>
-                <li className="text-blue-650 font-bold">★ Twitter Blue Badge</li>
-              </ul>
+          {/* Card 2: Professional (Basic Plan) */}
+          <div className={`w-[85vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink rounded-[24px] border-2 flex flex-col justify-between transition-all relative overflow-hidden p-6 pt-12 ${
+            userProfile.subscription_status === 'basic' 
+              ? 'border-blue-650 bg-white shadow-xl' 
+              : 'border-blue-600 bg-white'
+          }`}>
+            <div className="absolute top-0 left-0 right-0 bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest text-center py-2">
+              Most Popular
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-150">
+            
+            <div className="flex flex-col flex-grow">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FF4E98] to-[#FF8E53] flex items-center justify-center text-white mb-6 shadow-sm">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="7" />
+                  <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
+                </svg>
+              </div>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Professional</h4>
+              <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
+                Take your podcast promotion to the next level with more features.
+              </p>
+              <div className="flex items-baseline gap-1.5 mt-5 mb-5">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                  {billingInterval === 'monthly' ? '$7.99' : '$5.99'}
+                </span>
+                <span className="text-slate-500 font-bold text-sm">/month</span>
+              </div>
+              
               {userProfile.subscription_status === 'basic' ? (
-                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+                <span className="w-full text-center py-3 bg-blue-50 text-blue-600 text-sm font-bold rounded-xl block border border-blue-200 mb-6">Current Plan</span>
               ) : (
                 <button
                   onClick={() => handleUpgradePlan('basic')}
                   disabled={isVerifyingKey}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/25 active:scale-[0.98] mb-6"
                 >
-                  Buy ₦{(usageSettings.plans.basic.price || 1000).toLocaleString()}
+                  Start for Free
                 </button>
               )}
+              
+              <ul className="text-xs text-slate-600 space-y-3 font-semibold text-left">
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>12 Videos per month</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>8 Transcription</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>12 Customize design</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>12 HD export</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Without watermarks</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          {/* Pro Card */}
-          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'pro' ? 'border-purple-600 bg-purple-50/10' : 'border-gray-200'}`}>
-            <div>
-              <h4 className="font-extrabold text-sm text-gray-900">{usageSettings.plans.pro.name || 'Pro Plan'}</h4>
-              <p className="text-[10px] text-gray-500 mt-1 font-semibold">{usageSettings.plans.pro.description}</p>
-              <ul className="text-[10px] text-gray-600 mt-3 space-y-1 font-semibold">
-                <li>• {usageSettings.plans.pro.limits.courses} Courses</li>
-                <li>• {usageSettings.plans.pro.limits.ai_requests_per_course} Requests/course (2h)</li>
-                <li>• {usageSettings.plans.pro.limits.exams} Practice exams</li>
-                <li>• {usageSettings.plans.pro.limits.visual_messages} Messages limit</li>
-                <li className="text-purple-650 font-bold">★ Purple check badge</li>
-              </ul>
-            </div>
-            <div className="mt-4 pt-3 border-t border-gray-150">
+          {/* Card 3: Advanced (Pro Plan) */}
+          <div className={`w-[85vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink rounded-[24px] border p-6 flex flex-col justify-between transition-all relative ${
+            userProfile.subscription_status === 'pro' 
+              ? 'border-blue-500 bg-white shadow-lg' 
+              : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex flex-col flex-grow">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FFB000] to-[#FF6B00] flex items-center justify-center text-white mb-6 shadow-sm">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 3h12l4 6-10 13L2 9z" />
+                  <path d="M11 3 8 9l4 13 4-13-3-6" />
+                  <path d="M2 9h20" />
+                </svg>
+              </div>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Advanced</h4>
+              <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
+                Completely automate the promotion of any podcast.
+              </p>
+              <div className="flex items-baseline gap-1.5 mt-5 mb-5">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                  {billingInterval === 'monthly' ? '$19.99' : '$14.99'}
+                </span>
+                <span className="text-slate-500 font-bold text-sm">/month</span>
+              </div>
+              
               {userProfile.subscription_status === 'pro' ? (
-                <span className="text-xs text-gray-400 font-bold block">Current Plan</span>
+                <span className="w-full text-center py-3 bg-slate-50 text-slate-400 text-sm font-bold rounded-xl block border border-slate-200 mb-6">Current Plan</span>
               ) : (
                 <button
                   onClick={() => handleUpgradePlan('pro')}
                   disabled={isVerifyingKey}
-                  className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                  className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all shadow-sm active:scale-[0.98] mb-6"
                 >
-                  Buy ₦{(usageSettings.plans.pro.price || 2500).toLocaleString()}
+                  Talk to Sales
                 </button>
               )}
+              
+              <ul className="text-xs text-slate-600 space-y-3 font-semibold text-left">
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited videos</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited transcription</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited Customize design</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited HD export</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Without watermarks</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          {/* Token Card */}
-          <div className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${userProfile.subscription_status === 'personal_token' ? 'border-emerald-600 bg-emerald-50/10' : 'border-gray-200'}`}>
-            <div>
-              <h4 className="font-extrabold text-sm text-gray-900">Developer Key</h4>
-              <p className="text-[10px] text-gray-500 mt-1 font-semibold">Use your personal Google Gemini API key to activate and bypass all limits.</p>
-              <ul className="text-[10px] text-emerald-700 mt-3 space-y-1 font-semibold mb-3">
-                <li>• Unlimited Courses</li>
-                <li>• Unlimited Requests</li>
-                <li>• Unlimited Solves</li>
-                <li>• Custom Dev Badge</li>
+          {/* Card 4: Developer Key */}
+          <div className={`w-[85vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink rounded-[24px] border p-6 flex flex-col justify-between transition-all relative ${
+            userProfile.subscription_status === 'personal_token' 
+              ? 'border-emerald-600 bg-white shadow-lg' 
+              : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex flex-col flex-grow">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#10B981] to-[#059669] flex items-center justify-center text-white mb-6 shadow-sm">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 18 22 12 16 6" />
+                  <polyline points="8 6 2 12 8 18" />
+                </svg>
+              </div>
+              <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Developer Key</h4>
+              <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
+                Use your personal Google Gemini API key to activate and bypass all limits.
+              </p>
+              <div className="flex items-baseline gap-1.5 mt-5 mb-5">
+                <span className="text-4xl font-extrabold text-emerald-600 tracking-tight">Dev</span>
+                <span className="text-slate-500 font-bold text-sm">Token</span>
+              </div>
+              
+              <div className="mb-6">
+                {(usePersonalToken || userProfile.subscription_status === 'personal_token') ? (
+                  <div className="space-y-2 text-left">
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        placeholder="Paste Gemini API key"
+                        value={personalApiKey}
+                        onChange={(e) => setPersonalApiKey(e.target.value)}
+                        className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg py-2 px-3 pr-10 text-slate-800 font-medium focus:outline-none transition-all font-mono text-[11px] shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 text-xs font-bold"
+                      >
+                        {showApiKey ? 'HIDE' : 'SHOW'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleSaveConnectionSettings}
+                      disabled={isVerifyingKey || !personalApiKey.trim()}
+                      className="w-full py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                    >
+                      {isVerifyingKey ? 'Saving...' : 'Save Token'}
+                    </button>
+                    {userProfile.subscription_status === 'personal_token' && (
+                      <span className="text-[11px] text-emerald-650 font-bold block text-center mt-1">✓ Active Token</span>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setUsePersonalToken(true)}
+                    disabled={isVerifyingKey}
+                    className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all active:scale-[0.98] shadow-sm"
+                  >
+                    Configure Key
+                  </button>
+                )}
+              </div>
+              
+              <ul className="text-xs text-slate-600 space-y-3 font-semibold text-left">
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited Courses</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited Requests</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Unlimited Solves</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="8 12 11 15 16 9" />
+                  </svg>
+                  <span>Custom Dev Badge</span>
+                </li>
               </ul>
             </div>
-            <div className="pt-3 border-t border-gray-150">
-              {(usePersonalToken || userProfile.subscription_status === 'personal_token') ? (
-                <div className="space-y-2 text-left">
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder="Paste Gemini API key"
-                      value={personalApiKey}
-                      onChange={(e) => setPersonalApiKey(e.target.value)}
-                      className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg py-1.5 px-2.5 pr-8 text-gray-900 font-medium focus:outline-none transition-all font-mono text-[10px] shadow-sm animate-in fade-in duration-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-[9px] font-black"
-                    >
-                      {showApiKey ? 'HIDE' : 'SHOW'}
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleSaveConnectionSettings}
-                    disabled={isVerifyingKey || !personalApiKey.trim()}
-                    className="w-full py-1.5 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                  >
-                    {isVerifyingKey ? 'Saving...' : 'Save Token'}
-                  </button>
-                  {userProfile.subscription_status === 'personal_token' && (
-                    <span className="text-[10px] text-emerald-600 font-bold block text-center mt-1">✓ Active Token</span>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    setUsePersonalToken(true);
-                  }}
-                  disabled={isVerifyingKey}
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
-                >
-                  Configure Key
-                </button>
-              )}
-            </div>
           </div>
-        </div>
-      </div>
+
+        </div>  </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Account Actions</h3>
