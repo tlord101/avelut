@@ -31,7 +31,11 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => {
+      return self.clients.claim().catch((err) => {
+        console.warn('Failed to claim clients during activation:', err);
+      });
+    })
   );
 });
 
