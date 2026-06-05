@@ -7,6 +7,19 @@
     <meta name="theme-color" content="#002D62" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/logo.svg" />
+    <script>
+      // Capture PWA install prompt globally to prevent React lifecycle race conditions
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-prompt-available'));
+      });
+      window.addEventListener('appinstalled', () => {
+        window.deferredPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
+      });
+    </script>
 
     <!-- Favicon and Social Media Preview Tags -->
     <link rel="icon" href="/logo.svg" type="image/svg+xml">

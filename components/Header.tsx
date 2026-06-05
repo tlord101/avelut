@@ -30,7 +30,12 @@ export const Header: React.FC<HeaderProps> = ({
     rightActions,
     userProfile
 }) => {
-    const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+    const [deferredPrompt, setDeferredPrompt] = React.useState<any>(() => {
+        if (typeof window !== 'undefined') {
+            return (window as any).deferredPrompt || null;
+        }
+        return null;
+    });
     const [isStandalone, setIsStandalone] = React.useState(false);
     const [isInstalling, setIsInstalling] = React.useState(false);
 
@@ -44,20 +49,39 @@ export const Header: React.FC<HeaderProps> = ({
         const handleBeforeInstallPrompt = (e: Event) => {
             e.preventDefault();
             setDeferredPrompt(e);
+            (window as any).deferredPrompt = e;
+        };
+
+        const handlePromptAvailable = () => {
+            if (typeof window !== 'undefined') {
+                setDeferredPrompt((window as any).deferredPrompt || null);
+            }
         };
 
         const handleAppInstalled = () => {
             setDeferredPrompt(null);
+            if (typeof window !== 'undefined') {
+                (window as any).deferredPrompt = null;
+            }
             setIsStandalone(true);
             setIsInstalling(false);
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         window.addEventListener('appinstalled', handleAppInstalled);
+        window.addEventListener('pwa-prompt-available', handlePromptAvailable);
+        window.addEventListener('pwa-installed', handleAppInstalled);
+
+        // Check if already captured in window
+        if (typeof window !== 'undefined' && (window as any).deferredPrompt) {
+            setDeferredPrompt((window as any).deferredPrompt);
+        }
 
         return () => {
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
+            window.removeEventListener('pwa-prompt-available', handlePromptAvailable);
+            window.removeEventListener('pwa-installed', handleAppInstalled);
         };
     }, []);
 
@@ -74,7 +98,8 @@ export const Header: React.FC<HeaderProps> = ({
     }, [isInstalling]);
 
     const handleInstallClick = async () => {
-        if (!deferredPrompt) {
+        const activePrompt = deferredPrompt || (typeof window !== 'undefined' ? (window as any).deferredPrompt : null);
+        if (!activePrompt) {
             const userAgent = window.navigator.userAgent.toLowerCase();
             const isIOS = /iphone|ipad|ipod/.test(userAgent);
             if (isIOS) {
@@ -84,13 +109,16 @@ export const Header: React.FC<HeaderProps> = ({
             }
             return;
         }
-        deferredPrompt.prompt();
+        activePrompt.prompt();
         try {
-            const { outcome } = await deferredPrompt.userChoice;
+            const { outcome } = await activePrompt.userChoice;
             console.log(`User response to install prompt: ${outcome}`);
             if (outcome === 'accepted') {
                 setIsInstalling(true);
                 setDeferredPrompt(null);
+                if (typeof window !== 'undefined') {
+                    (window as any).deferredPrompt = null;
+                }
             }
         } catch (err) {
             console.error('Error during installation choice:', err);
