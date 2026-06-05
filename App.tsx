@@ -899,7 +899,7 @@ const App: React.FC = () => {
     ];
 
     if (isLoading || isProfileLoading) {
-        return <AppLoader />;
+        return <div key="app-loader-state"><AppLoader /></div>;
     }
 
     const currentPath = getWindowPathname();
@@ -916,7 +916,7 @@ const App: React.FC = () => {
 
     if (activeItem === 'admin') {
         if (!isAdminAuthenticated) {
-            return <AdminLogin onLogin={() => setIsAdminAuthenticated(true)} />;
+            return <div key="admin-login-state"><AdminLogin onLogin={() => setIsAdminAuthenticated(true)} /></div>;
         }
         
         const mockAdminProfile: UserProfile = {
@@ -948,22 +948,28 @@ const App: React.FC = () => {
     }
     
     if (!user) {
-        return authView === 'login' 
-            ? <Login onSwitchToSignUp={() => setAuthView('signup')} /> 
-            : <SignUp onSwitchToLogin={() => setAuthView('login')} />;
+        return (
+            <div key="auth-state" className="min-h-screen">
+                {authView === 'login' 
+                    ? <Login onSwitchToSignUp={() => setAuthView('signup')} /> 
+                    : <SignUp onSwitchToLogin={() => setAuthView('login')} />}
+            </div>
+        );
     }
 
     if (isAppSettingsLoading) {
-        return <AppLoader />;
+        return <div key="settings-loader-state"><AppLoader /></div>;
     }
 
     if (appSettings.coming_soon_enabled && !isAdminRoute) {
         return (
-            <ComingSoonScreen
-                title="VANTUTOR is coming soon"
-                subtitle="We are polishing the full learning experience right now. Admins can reopen the app anytime."
-                supportText="If you are an admin, open the admin panel to manage launch settings."
-            />
+            <div key="coming-soon-state" className="min-h-screen">
+                <ComingSoonScreen
+                    title="VANTUTOR is coming soon"
+                    subtitle="We are polishing the full learning experience right now. Admins can reopen the app anytime."
+                    supportText="If you are an admin, open the admin panel to manage launch settings."
+                />
+            </div>
         );
     }
 
@@ -985,12 +991,12 @@ const App: React.FC = () => {
     }
 
     if (isOnboarding) {
-        return <Onboarding user={user} onOnboardingComplete={handleOnboardingComplete} />;
+        return <div key="onboarding-state" className="min-h-screen"><Onboarding user={user} onOnboardingComplete={handleOnboardingComplete} /></div>;
     }
     
     if (!userProfile) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100">
+            <div key="no-profile-state" className="flex items-center justify-center min-h-screen bg-gray-100">
                 <p>An error occurred loading your profile. Please refresh.</p>
             </div>
         );
@@ -998,14 +1004,16 @@ const App: React.FC = () => {
 
     if (userProfile && !userProfile.is_activated && !userProfile.is_admin && !isAdminRoute) {
         return (
-            <ActivationScreen
-                user={user}
-                userProfile={userProfile}
-                appSettings={appSettings}
-                handleProfileUpdate={handleProfileUpdate}
-                handleLogout={handleLogout}
-                addToast={addToast}
-            />
+            <div key="activation-state" className="min-h-screen">
+                <ActivationScreen
+                    user={user}
+                    userProfile={userProfile}
+                    appSettings={appSettings}
+                    handleProfileUpdate={handleProfileUpdate}
+                    handleLogout={handleLogout}
+                    addToast={addToast}
+                />
+            </div>
         );
     }
 
