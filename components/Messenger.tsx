@@ -1522,14 +1522,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                     className="fixed md:absolute bottom-24 md:bottom-6 right-6 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#009EE2] to-[#0070B8] text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-white/20 z-40"
                     title="Add Study Partner"
                 >
-                    <div className="relative">
-                        <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <span className="absolute -top-1.5 -right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-black text-white border-2 border-white leading-none">
-                            +
-                        </span>
-                    </div>
+                    <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
                 </button>
             </div>
 
@@ -1828,6 +1824,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                     <p className="mt-2 text-sm leading-6 text-[#6C757D]">Pick a person to start a new chat and connect with them.</p>
                     </div>
                 )}
+            </div>
             {/* Study Partners network management modal */}
             {showPartnerModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
@@ -2068,7 +2065,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 />
             )}
 
-            </div>
         </div>
     );
 };

@@ -16,6 +16,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { MainContent } from './MainContent';
+import { CalendarModal } from './components/CalendarModal';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { BottomNavBar } from './components/BottomNavBar';
 import { useToast } from './hooks/useToast';
@@ -328,6 +329,7 @@ const App: React.FC = () => {
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
         createVanTutorAI(appSettings, userProfile)
@@ -957,6 +959,7 @@ const App: React.FC = () => {
                     onNotificationsClick={() => setIsNotificationsPanelOpen(true)}
                     onMenuClick={() => setIsMobileSidebarOpen(true)}
                     onMessengerClick={() => setActiveItem('messenger')}
+                    onCalendarClick={() => setIsCalendarOpen(true)}
                     unreadMessagesCount={unreadMessagesCount}
                     userProfile={userProfile}
                 />
@@ -987,6 +990,13 @@ const App: React.FC = () => {
                 onMarkAsRead={handleMarkNotificationRead}
                 onMarkAllAsRead={handleMarkAllNotificationsRead}
             />
+            {userProfile && (
+                <CalendarModal
+                    isOpen={isCalendarOpen}
+                    onClose={() => setIsCalendarOpen(false)}
+                    userProfile={userProfile}
+                />
+            )}
             <BottomNavBar
               activeItem={activeItem}
               onItemClick={setActiveItem}
