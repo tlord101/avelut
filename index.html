@@ -8,6 +8,30 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/logo.svg" />
     <script>
+      // Monkeypatch Node.prototype.removeChild and insertBefore to prevent browser extensions 
+      // (like Google Translate, password managers, MetaMask) from crashing React.
+      (function() {
+        if (typeof Node !== 'undefined' && Node.prototype) {
+          const originalRemoveChild = Node.prototype.removeChild;
+          Node.prototype.removeChild = function(child) {
+            if (child.parentNode !== this) {
+              console.warn('removeChild: node is not a child of this parent.', child, this);
+              return child;
+            }
+            return originalRemoveChild.call(this, child);
+          };
+
+          const originalInsertBefore = Node.prototype.insertBefore;
+          Node.prototype.insertBefore = function(newNode, referenceNode) {
+            if (referenceNode && referenceNode.parentNode !== this) {
+              console.warn('insertBefore: referenceNode is not a child of this parent.', referenceNode, this);
+              return originalInsertBefore.call(this, newNode, null);
+            }
+            return originalInsertBefore.call(this, newNode, referenceNode);
+          };
+        }
+      })();
+
       // Capture PWA install prompt globally to prevent React lifecycle race conditions
       window.deferredPrompt = null;
       window.addEventListener('beforeinstallprompt', (e) => {
