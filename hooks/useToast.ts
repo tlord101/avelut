@@ -40,7 +40,8 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const addToast = useCallback((message: string, type: ToastType = 'info') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts((prevToasts) => [...prevToasts, { id, message, type }]);
+    // Replace the active toast list entirely with the new toast to prevent screen crowding
+    setToasts([{ id, message, type }]);
     triggerHapticFeedback(type);
   }, []);
 
