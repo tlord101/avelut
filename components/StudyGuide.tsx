@@ -1433,7 +1433,7 @@ Student: "${tempInput}"
                                     className="flex items-start gap-4 p-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50/20 rounded-2xl transition-all text-left group w-full"
                                 >
                                     {/* Video Thumbnail */}
-                                    <div className="w-28 h-18 bg-gray-100 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
+                                    <div className="w-28 h-16 bg-gray-100 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
                                         {video.thumbnailUrl && !brokenThumbnails[video.thumbnailUrl] ? (
                                             <img 
                                                 src={video.thumbnailUrl} 
