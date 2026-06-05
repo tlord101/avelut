@@ -240,7 +240,28 @@ const INVIDIOUS_INSTANCES = [
     'https://inv.tux.im'
 ];
 
-const fetchRealYoutubeVideo = async (searchQuery: string): Promise<{ videoId: string; thumbnailUrl: string } | null> => {
+const fetchRealYoutubeVideo = async (searchQuery: string, apiKey?: string): Promise<{ videoId: string; thumbnailUrl: string } | null> => {
+    if (apiKey) {
+        try {
+            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&type=video&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`;
+            const response = await fetch(url);
+            if (response.ok) {
+                const data = await response.json();
+                const firstVideo = data.items?.[0];
+                if (firstVideo && firstVideo.id?.videoId) {
+                    return {
+                        videoId: firstVideo.id.videoId,
+                        thumbnailUrl: firstVideo.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${firstVideo.id.videoId}/mqdefault.jpg`
+                    };
+                }
+            } else {
+                console.warn(`YouTube API returned status ${response.status} when searching for: ${searchQuery}`);
+            }
+        } catch (err) {
+            console.warn(`Failed to fetch from YouTube API for ${searchQuery}, falling back to Invidious:`, err);
+        }
+    }
+
     for (const instance of INVIDIOUS_INSTANCES) {
         try {
             const controller = new AbortController();
@@ -505,7 +526,7 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                 // Fetch real videos asynchronously in parallel
                 void (async () => {
                     const resolved = await Promise.all(initialItems.map(async (item) => {
-                        const real = await fetchRealYoutubeVideo(item.searchQuery);
+                        const real = await fetchRealYoutubeVideo(item.searchQuery, appSettings?.youtube_api_key);
                         if (real) {
                             return {
                                 ...item,

@@ -189,6 +189,7 @@ export interface AppSettings {
   custom_user_limit_rpm: number;
   custom_user_limit_tpm: number;
   usage_settings?: UsageSettings;
+  youtube_api_key?: string;
 }
 
 // Type for the new Notification System

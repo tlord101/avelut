@@ -155,6 +155,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
       setIsVerifyingKey(false);
     }
   };
+
   const [departmentName, setDepartmentName] = useState<string>('');
   const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
   const [levels, setLevels] = useState<string[]>([]);
@@ -611,16 +612,43 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
             <div>
               <h4 className="font-extrabold text-sm text-gray-900">Developer Key</h4>
               <p className="text-[10px] text-gray-500 mt-1 font-semibold">Use your personal Google Gemini API key to activate and bypass all limits.</p>
-              <ul className="text-[10px] text-emerald-700 mt-3 space-y-1 font-semibold">
+              <ul className="text-[10px] text-emerald-700 mt-3 space-y-1 font-semibold mb-3">
                 <li>• Unlimited Courses</li>
                 <li>• Unlimited Requests</li>
                 <li>• Unlimited Solves</li>
                 <li>• Custom Dev Badge</li>
               </ul>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-150">
-              {userProfile.subscription_status === 'personal_token' ? (
-                <span className="text-xs text-emerald-700 font-black block">Active Token</span>
+            <div className="pt-3 border-t border-gray-150">
+              {(usePersonalToken || userProfile.subscription_status === 'personal_token') ? (
+                <div className="space-y-2 text-left">
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="Paste Gemini API key"
+                      value={personalApiKey}
+                      onChange={(e) => setPersonalApiKey(e.target.value)}
+                      className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg py-1.5 px-2.5 pr-8 text-gray-900 font-medium focus:outline-none transition-all font-mono text-[10px] shadow-sm animate-in fade-in duration-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-[9px] font-black"
+                    >
+                      {showApiKey ? 'HIDE' : 'SHOW'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSaveConnectionSettings}
+                    disabled={isVerifyingKey || !personalApiKey.trim()}
+                    className="w-full py-1.5 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    {isVerifyingKey ? 'Saving...' : 'Save Token'}
+                  </button>
+                  {userProfile.subscription_status === 'personal_token' && (
+                    <span className="text-[10px] text-emerald-600 font-bold block text-center mt-1">✓ Active Token</span>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={() => {
@@ -635,39 +663,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
             </div>
           </div>
         </div>
-
-        {/* Developer API Key Fields (always visible or expanded if mode chosen) */}
-        {(usePersonalToken || userProfile.subscription_status === 'personal_token') && (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 mt-4 animate-in fade-in duration-300">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Configure Google API Token</h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
-              Visit the <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Google AI Studio</a> console to copy your free API token, then paste it below.
-            </p>
-            <div className="relative">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                placeholder="Paste Gemini API key here"
-                value={personalApiKey}
-                onChange={(e) => setPersonalApiKey(e.target.value)}
-                className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg py-2 px-3 pr-10 text-gray-900 font-medium focus:outline-none transition-all font-mono text-xs shadow-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-[10px] font-black"
-              >
-                {showApiKey ? 'HIDE' : 'SHOW'}
-              </button>
-            </div>
-            <button
-              onClick={handleSaveConnectionSettings}
-              disabled={isVerifyingKey || !personalApiKey.trim()}
-              className="w-full py-2 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
-            >
-              {isVerifyingKey ? 'Verifying Key...' : 'Validate & Save Developer Token'}
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">

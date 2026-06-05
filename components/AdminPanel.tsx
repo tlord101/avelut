@@ -346,6 +346,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [internalPathname, setInternalPathname] = useState(() => getWindowPathname());
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const geminiApiKey = appSettings.gemini_api_key.trim();
@@ -1088,6 +1089,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             custom_user_limit_rpm: appSettingsDraft.custom_user_limit_rpm ?? 10,
             custom_user_limit_tpm: appSettingsDraft.custom_user_limit_tpm ?? 250000,
             usage_settings: appSettingsDraft.usage_settings || DEFAULT_USAGE_SETTINGS,
+            youtube_api_key: (appSettingsDraft.youtube_api_key || '').trim(),
         };
 
         setIsSavingAppSettings(true);
@@ -2161,6 +2163,7 @@ FORMAT:
     );
 
     const handleCourseTabNavigate = useCallback((path: string) => {
+        setIsMobileSidebarOpen(false);
         if (onNavigate) {
             // Let parent know, but also keep internal pathname in sync
             try { onNavigate(path); } catch (err) { /* ignore parent handler errors */ }
@@ -2214,18 +2217,40 @@ FORMAT:
 
     return (
         <div className="min-h-screen bg-[#f4f6f9] flex text-slate-800 w-full overflow-hidden font-sans select-none vantutor-admin">
-            {/* Sidebar - Desktop */}
-            <aside className="w-64 bg-white/60 backdrop-blur-lg text-slate-700 flex-shrink-0 flex flex-col justify-between border-r border-white/40 sticky top-0 h-screen z-40 hidden md:flex">
+            {/* Mobile Sidebar Backdrop */}
+            {isMobileSidebarOpen && (
+                <div 
+                    className="md:hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 transition-opacity duration-300 animate-in fade-in"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar - Desktop & Mobile */}
+            <aside className={`
+                w-64 bg-white md:bg-white/60 md:backdrop-blur-lg text-slate-700 flex-shrink-0 flex flex-col justify-between border-r border-slate-200 md:border-white/40 h-screen
+                fixed md:sticky top-0 left-0 transition-transform duration-300 ease-in-out md:translate-x-0 z-40
+                ${isMobileSidebarOpen ? 'translate-x-0 shadow-2xl z-50' : '-translate-x-full md:translate-x-0'}
+            `}>
                 <div className="flex flex-col gap-4">
                     {/* Header Brand */}
-                    <div className="flex items-center gap-3 border-b border-slate-200 pb-4 px-6 pt-5">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 border border-blue-500 flex items-center justify-center text-white text-sm font-black shadow-md shadow-blue-500/10">
-                            A
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-4 px-6 pt-5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-600 border border-blue-500 flex items-center justify-center text-white text-sm font-black shadow-md shadow-blue-500/10">
+                                A
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-black text-slate-800 tracking-wide leading-tight">AdminLTE 4</h2>
+                                <p className="text-[9px] uppercase font-bold text-blue-600 tracking-widest -mt-0.5">VanTutor Admin</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-sm font-black text-slate-800 tracking-wide leading-tight">AdminLTE 4</h2>
-                            <p className="text-[9px] uppercase font-bold text-blue-600 tracking-widest -mt-0.5">VanTutor Admin</p>
-                        </div>
+                        {/* Close button for mobile */}
+                        <button 
+                            onClick={() => setIsMobileSidebarOpen(false)}
+                            className="md:hidden p-1 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                            aria-label="Close sidebar"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
                     </div>
 
                     {/* Sidebar Search */}
@@ -2455,7 +2480,11 @@ FORMAT:
                 {/* Top Header Bar */}
                 <header className="h-14 bg-white/60 backdrop-blur-lg border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm flex-shrink-0 text-slate-650">
                     <div className="flex items-center gap-4">
-                        <button className="text-slate-500 hover:text-blue-600 transition">
+                        <button 
+                            onClick={() => setIsMobileSidebarOpen(true)}
+                            className="text-slate-500 hover:text-blue-600 transition md:hidden"
+                            aria-label="Open sidebar"
+                        >
                             <MenuIcon className="w-5 h-5" />
                         </button>
 
@@ -2529,24 +2558,6 @@ FORMAT:
                         )}
                     </div>
                 </header>
-
-                {/* Mobile Navigation bar */}
-                <div className="flex md:hidden bg-white/60 backdrop-blur-lg text-slate-500 px-4 py-2 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-slate-200 sticky top-14 z-20">
-                    {activeNavItems.map((item) => {
-                        const isActive = activeTab === item.id;
-                        return (
-                            <button
-                                key={item.id}
-                                onClick={() => handleCourseTabNavigate(item.path)}
-                                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider whitespace-nowrap transition ${
-                                    isActive ? 'bg-blue-600 text-white shadow-sm font-black' : 'hover:bg-white/40 text-slate-600'
-                                }`}
-                            >
-                                {item.label}
-                            </button>
-                        );
-                    })}
-                </div>
 
                 {/* Workspace Views */}
                 <main className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6 flex-1 bg-[#f4f6f9] text-slate-800">
@@ -3523,7 +3534,7 @@ FORMAT:
                                     <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>
                                 </label>
 
-                                <label className="block">
+                                 <label className="block">
                                     <span className="mb-2 block text-sm font-semibold text-gray-700">Gemini API key</span>
                                     <input
                                         type="password"
@@ -3534,6 +3545,19 @@ FORMAT:
                                         autoComplete="off"
                                     />
                                     <p className="mt-2 text-xs text-gray-500">This key is saved in Firebase app settings and used across all Gemini-powered features.</p>
+                                </label>
+
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-semibold text-gray-700">YouTube Search API key (v3)</span>
+                                    <input
+                                        type="password"
+                                        value={appSettingsDraft.youtube_api_key || ''}
+                                        onChange={e => setAppSettingsDraft(prev => ({ ...prev, youtube_api_key: e.target.value }))}
+                                        placeholder="Enter global YouTube API key..."
+                                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        autoComplete="off"
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500">This key is used globally to fetch tutorial search results directly from YouTube, bypassing proxy scrapers.</p>
                                 </label>
 
                                 <hr className="border-gray-100 my-4" />
