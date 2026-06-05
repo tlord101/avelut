@@ -1602,7 +1602,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                         const touch = event.touches[0];
                                         longPressTimerRef.current = setTimeout(() => {
                                           openMessageActions(msg, touch.clientX, touch.clientY);
-                                        }, 450);
+                                        }, 800);
                                       }}
                                       onTouchEnd={() => {
                                         if (longPressTimerRef.current) {
@@ -1623,6 +1623,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                         lastTapRef.current = { id: msg.id, time: now };
                                       }}
                                       onTouchMove={() => {
+                                        if (longPressTimerRef.current) {
+                                          clearTimeout(longPressTimerRef.current);
+                                          longPressTimerRef.current = null;
+                                        }
+                                      }}
+                                      onTouchCancel={() => {
                                         if (longPressTimerRef.current) {
                                           clearTimeout(longPressTimerRef.current);
                                           longPressTimerRef.current = null;

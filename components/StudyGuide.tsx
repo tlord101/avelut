@@ -1164,7 +1164,7 @@ Student: "${tempInput}"
                                         longPressTimerRef.current = setTimeout(() => {
                                             setMessageActionTarget(message);
                                             setMessageActionPosition({ x: touch.clientX, y: touch.clientY });
-                                        }, 450);
+                                        }, 800);
                                     }}
                                     onTouchEnd={() => {
                                         if (longPressTimerRef.current) {
@@ -1173,6 +1173,12 @@ Student: "${tempInput}"
                                         }
                                     }}
                                     onTouchMove={() => {
+                                        if (longPressTimerRef.current) {
+                                            clearTimeout(longPressTimerRef.current);
+                                            longPressTimerRef.current = null;
+                                        }
+                                    }}
+                                    onTouchCancel={() => {
                                         if (longPressTimerRef.current) {
                                             clearTimeout(longPressTimerRef.current);
                                             longPressTimerRef.current = null;
