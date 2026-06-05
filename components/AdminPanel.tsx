@@ -1543,7 +1543,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     }
                 ],
                 config: {
-                    responseMimeType: "application/json"
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            questions: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        question: { type: Type.STRING },
+                                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                        correctAnswer: { type: Type.STRING },
+                                        explanation: { type: Type.STRING }
+                                    },
+                                    required: ['question', 'options', 'correctAnswer', 'explanation']
+                                }
+                            }
+                        },
+                        required: ['questions']
+                    }
                 }
             });
 
@@ -1658,7 +1677,29 @@ FORMAT:
                         }
                     ],
                     config: {
-                        responseMimeType: "application/json"
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                academic_session: { type: Type.STRING },
+                                level: { type: Type.STRING },
+                                courses: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            code: { type: Type.STRING },
+                                            title: { type: Type.STRING },
+                                            semester: { type: Type.STRING },
+                                            unit: { type: Type.INTEGER },
+                                            status: { type: Type.STRING }
+                                        },
+                                        required: ['code', 'title', 'semester']
+                                    }
+                                }
+                            },
+                            required: ['academic_session', 'level', 'courses']
+                        }
                     }
                 });
 
@@ -1854,7 +1895,27 @@ FORMAT:
                         }
                     ],
                     config: {
-                        responseMimeType: "application/json"
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                syllabus: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            topic_name: { type: Type.STRING },
+                                            topic_id: { type: Type.STRING },
+                                            topic_context: { type: Type.STRING },
+                                            start_point: { type: Type.STRING },
+                                            end_point: { type: Type.STRING }
+                                        },
+                                        required: ['topic_name', 'topic_id', 'topic_context', 'start_point', 'end_point']
+                                    }
+                                }
+                            },
+                            required: ['syllabus']
+                        }
                     }
                 });
 

@@ -567,12 +567,14 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         const partnersOnly = allUsers.filter(u => studyPartners[u.uid] === true);
         if (!peopleSearchQuery.trim()) return partnersOnly;
         const normalizedQuery = peopleSearchQuery.toLowerCase();
-        return partnersOnly.filter(u => {
-            const name = (u.display_name || "").toLowerCase();
-            const dept = (u.department_id || "").toLowerCase();
-            return name.includes(normalizedQuery) || dept.includes(normalizedQuery);
-        });
-    }, [allUsers, studyPartners, peopleSearchQuery]);
+        return allUsers
+            .filter(u => u.uid !== firebaseUser?.uid)
+            .filter(u => {
+                const name = (u.display_name || "").toLowerCase();
+                const dept = (u.department_id || "").toLowerCase();
+                return name.includes(normalizedQuery) || dept.includes(normalizedQuery);
+            });
+    }, [allUsers, studyPartners, peopleSearchQuery, firebaseUser]);
 
     const activeChats = useMemo(() => {
         return chats.filter(c => {
@@ -582,6 +584,17 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }, [chats, studyPartners]);
 
     const userMap = useMemo(() => new Map(allUsers.map(user => [user.uid, user])), [allUsers]);
+
+    const userMapRef = useRef(userMap);
+    const fetchedUserProfilesRef = useRef(fetchedUserProfiles);
+
+    useEffect(() => {
+        userMapRef.current = userMap;
+    }, [userMap]);
+
+    useEffect(() => {
+        fetchedUserProfilesRef.current = fetchedUserProfiles;
+    }, [fetchedUserProfiles]);
 
     const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
 
@@ -750,37 +763,48 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         if (!firebaseUser) return;
         const userChatsRef = dbRef(db, `user_chats/${firebaseUser.uid}`);
         onValue(userChatsRef, (snap) => {
-            const chatList = Object.entries(snap.val() || {}).map(([chatId, details]: any) => ({
-          id: chatId,
-          ...details,
-          otherUser: createFallbackChatUser(details.otherUserId || chatId)
-            }));
+            const rawVal = snap.val() || {};
+            setChats(prevChats => {
+                const chatList = Object.entries(rawVal).map(([chatId, details]: any) => {
+                    const otherUserId = details.otherUserId || chatId;
+                    const existingChat = prevChats.find(c => c.id === chatId);
+                    let otherUser = existingChat?.otherUser;
+                    if (!otherUser || otherUser.display_name === 'Unknown user') {
+                        otherUser = userMapRef.current.get(otherUserId) || fetchedUserProfilesRef.current[otherUserId] || createFallbackChatUser(otherUserId);
+                    }
+                    return {
+                        id: chatId,
+                        ...details,
+                        otherUser
+                    };
+                });
 
-            const nextUnreadCounts: Record<string, number> = {};
-            chatList.forEach((chat) => {
-              const unreadCount = getUnreadCount(chat);
-              nextUnreadCounts[chat.id] = unreadCount;
+                const nextUnreadCounts: Record<string, number> = {};
+                chatList.forEach((chat) => {
+                    const unreadCount = getUnreadCount(chat);
+                    nextUnreadCounts[chat.id] = unreadCount;
 
-              const previousUnread = unreadCountsRef.current[chat.id] || 0;
-              const lastMessageTimestamp = Number(chat?.last_message?.timestamp || chat?.timestamp || 0);
-              const lastNotifiedTimestamp = lastNotificationTimestampRef.current[chat.id] || 0;
-              const lastSenderId = getLastMessageSenderId(chat);
-              const hasIncomingUnread = unreadCount > previousUnread && unreadCount > 0;
+                    const previousUnread = unreadCountsRef.current[chat.id] || 0;
+                    const lastMessageTimestamp = Number(chat?.last_message?.timestamp || chat?.timestamp || 0);
+                    const lastNotifiedTimestamp = lastNotificationTimestampRef.current[chat.id] || 0;
+                    const lastSenderId = getLastMessageSenderId(chat);
+                    const hasIncomingUnread = unreadCount > previousUnread && unreadCount > 0;
 
-              if (
-                hasIncomingUnread &&
-                lastSenderId &&
-                lastSenderId !== firebaseUser.uid &&
-                lastMessageTimestamp > 0 &&
-                lastMessageTimestamp !== lastNotifiedTimestamp
-              ) {
-                lastNotificationTimestampRef.current[chat.id] = lastMessageTimestamp;
-                void showIncomingMessageNotification(chat, getLastMessagePreview(chat));
-              }
+                    if (
+                        hasIncomingUnread &&
+                        lastSenderId &&
+                        lastSenderId !== firebaseUser.uid &&
+                        lastMessageTimestamp > 0 &&
+                        lastMessageTimestamp !== lastNotifiedTimestamp
+                    ) {
+                        lastNotificationTimestampRef.current[chat.id] = lastMessageTimestamp;
+                        void showIncomingMessageNotification(chat, getLastMessagePreview(chat));
+                    }
+                });
+
+                unreadCountsRef.current = nextUnreadCounts;
+                return chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             });
-
-            unreadCountsRef.current = nextUnreadCounts;
-            setChats(chatList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
             setIsLoading(false);
         });
     }, [firebaseUser]);
@@ -1691,8 +1715,48 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                   onImageSelect={handleImageSelection}
                                 />
                             ) : (
-                                <div className="w-full max-w-[800px] mx-auto px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-center text-sm font-semibold text-[#856404] shadow-sm animate-pulse">
-                                    🔒 You can only message active Study Partners. Add them as a contact to start chatting.
+                                <div className="w-full max-w-[800px] mx-auto px-6 py-5 bg-amber-50 border border-amber-200 rounded-2xl text-center flex flex-col items-center justify-center gap-3.5 shadow-sm">
+                                    <div className="flex items-center gap-2 text-sm font-bold text-[#856404]">
+                                        <span>🔒</span>
+                                        <span>You can only message active Study Mates.</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {partnerRequests[selectedChatUser.uid]?.status === 'sent' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => cancelPartnerRequest(selectedChatUser)}
+                                                className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl border border-amber-200 transition-all select-none shadow-sm cursor-pointer"
+                                                title="Cancel Request"
+                                            >
+                                                Pending Approval (Cancel)
+                                            </button>
+                                        ) : partnerRequests[selectedChatUser.uid]?.status === 'received' ? (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => acceptPartnerRequest(selectedChatUser)}
+                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                >
+                                                    Accept Request
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => declinePartnerRequest(selectedChatUser)}
+                                                    className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                >
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => sendPartnerRequest(selectedChatUser)}
+                                                className="px-5 py-2.5 bg-[#009EE2] hover:bg-[#0070B8] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                            >
+                                                Add Study Mate
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

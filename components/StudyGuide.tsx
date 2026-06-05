@@ -462,8 +462,21 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                 const response = await ai.models.generateContent({
                     model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    generationConfig: {
+                    config: {
                         responseMimeType: 'application/json',
+                        responseSchema: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    description: { type: Type.STRING },
+                                    searchQuery: { type: Type.STRING },
+                                    videoId: { type: Type.STRING }
+                                },
+                                required: ['title', 'description', 'searchQuery', 'videoId']
+                            }
+                        }
                     }
                 });
                 const text = response.text || '[]';

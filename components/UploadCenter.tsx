@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createVanTutorAI } from '../utils/inference';
+import { Type } from '@google/genai';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as firebaseAuth, firebaseSignOut, onAuthStateChanged, db, storage } from '../firebase';
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
 import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
@@ -566,6 +567,26 @@ FORMAT:
             ],
             config: {
               responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  syllabus: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        topic_name: { type: Type.STRING },
+                        topic_id: { type: Type.STRING },
+                        topic_context: { type: Type.STRING },
+                        start_point: { type: Type.STRING },
+                        end_point: { type: Type.STRING }
+                      },
+                      required: ['topic_name', 'topic_id', 'topic_context', 'start_point', 'end_point']
+                    }
+                  }
+                },
+                required: ['syllabus']
+              }
             },
           });
 
