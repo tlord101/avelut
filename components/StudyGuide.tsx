@@ -2203,8 +2203,15 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose })
 
         return () => {
             document.removeEventListener('fullscreenchange', handleFullscreenChange);
-            if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-                playerRef.current.destroy();
+            if (playerRef.current) {
+                try {
+                    if (typeof playerRef.current.destroy === 'function') {
+                        playerRef.current.destroy();
+                    }
+                } catch (e) {
+                    console.warn("Failed to destroy YouTube player during unmount:", e);
+                }
+                playerRef.current = null;
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2336,6 +2343,20 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose })
         }
     };
 
+    const handleClose = () => {
+        if (playerRef.current) {
+            try {
+                if (typeof playerRef.current.destroy === 'function') {
+                    playerRef.current.destroy();
+                }
+            } catch (e) {
+                console.warn("Failed to destroy YouTube player on user close:", e);
+            }
+            playerRef.current = null;
+        }
+        onClose();
+    };
+
     return (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4 md:p-8 animate-fade-in">
             <div 
@@ -2346,7 +2367,7 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onClose })
                 <div className="flex justify-between items-center p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 inset-x-0 z-20 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
                     <span className="text-white text-sm font-black tracking-wide truncate pr-4">{video.title}</span>
                     <button 
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="text-white/80 hover:text-white bg-black/40 hover:bg-black/60 p-2 rounded-full backdrop-blur-sm transition-all"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

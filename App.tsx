@@ -314,6 +314,25 @@ const App: React.FC = () => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, [syncItemFromPath]);
 
+    useEffect(() => {
+        const handleGlobalError = (event: ErrorEvent) => {
+            const msg = event.message || '';
+            const err = event.error;
+            const stack = err?.stack || '';
+            if (
+                msg.includes("reading 'body'") && 
+                (stack.includes("youtube") || stack.includes("widget") || stack.includes("Pb.close") || stack.includes("shutdown_") || stack.includes("onClosed_"))
+            ) {
+                console.warn("Caught and silenced YouTube Player API unmount exception:", err);
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+
+        window.addEventListener('error', handleGlobalError);
+        return () => window.removeEventListener('error', handleGlobalError);
+    }, []);
+
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
         if (typeof window === 'undefined') return false;
         return window.localStorage.getItem('vantutor_admin_authenticated') === 'true';
