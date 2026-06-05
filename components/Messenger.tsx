@@ -1534,8 +1534,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 {activeChat ? (
                     <div className="flex flex-col h-full w-full relative overflow-hidden">
                         
-                        {/* 1. FIXED Header Bar */}
-                        <div className="h-16 bg-white flex items-center px-6 gap-3 z-30 shadow-sm shrink-0 border-b border-[#E9ECEF]">
+                        {/* 1. STICKY FLOATING Header Bar */}
+                        <div className="absolute top-3 left-3 right-3 h-16 bg-white/90 backdrop-blur-md flex items-center px-4 md:px-6 gap-3 z-30 shadow-sm rounded-2xl border border-[#E9ECEF]/60">
                             <button onClick={() => setActiveChat(null)} className="lg:hidden text-[#6C757D] mr-1 text-lg">←</button>
                              <Avatar className="w-9 h-9 rounded-full object-cover border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} display_name={selectedChatUser.display_name || 'Learner'} />
                             <div className="flex-1 min-w-0">
@@ -1554,8 +1554,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                             </div>
                         </div>
 
-                        {/* 2. SCROLLABLE Message Stream Box Container */}
-                        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 max-w-3xl mx-auto w-full">
+                        {/* 2. FULL HEIGHT Message Stream Box Container */}
+                        <div className="w-full h-full absolute inset-0 overflow-y-auto px-4 pt-24 pb-44 md:pb-28 md:px-8 space-y-6 max-w-3xl mx-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth">
                             {combinedMessageStream.length === 0 ? (
                               <div className="flex min-h-[48vh] flex-col items-center justify-center text-center">
                                 <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-sm border border-[#E9ECEF]">
@@ -1695,66 +1695,68 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                             <div ref={messagesEndRef} />
                         </div>
 
-                        {/* 3. FIXED Bottom Control Anchor Panel Bar */}
-                        <div className="bg-[#F8F9FA] py-4 border-t border-[#E9ECEF] shrink-0 z-30 px-4">
-                            {studyPartners[selectedChatUser.uid] === true || selectedChatUser.uid === firebaseUser?.uid ? (
-                                <VanTutorMessageInput 
-                                  onSend={(text) => sendMsg(text, 'text')}
-                                  startRecording={startRecording}
-                                  handleMove={handleMove}
-                                  stopRecording={stopRecording}
-                                  isRecording={isRecording}
-                                  isLocked={isLocked}
-                                  setIsLocked={setIsLocked}
-                                  recordDuration={recordDuration}
-                                  onFileSelect={handleFileSelection}
-                                  onImageSelect={handleImageSelection}
-                                />
-                            ) : (
-                                <div className="w-full max-w-[800px] mx-auto px-6 py-5 bg-amber-50 border border-amber-200 rounded-2xl text-center flex flex-col items-center justify-center gap-3.5 shadow-sm">
-                                    <div className="flex items-center gap-2 text-sm font-bold text-[#856404]">
-                                        <span>🔒</span>
-                                        <span>You can only message active Study Mates.</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2 justify-center">
-                                        {partnerRequests[selectedChatUser.uid]?.status === 'sent' ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => cancelPartnerRequest(selectedChatUser)}
-                                                className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl border border-amber-200 transition-all select-none shadow-sm cursor-pointer"
-                                                title="Cancel Request"
-                                            >
-                                                Pending Approval (Cancel)
-                                            </button>
-                                        ) : partnerRequests[selectedChatUser.uid]?.status === 'received' ? (
-                                            <div className="flex gap-2">
+                        {/* 3. FLOATING Bottom Control Anchor Panel Bar */}
+                        <div className="absolute bottom-20 md:bottom-6 left-0 right-0 z-30 w-full pointer-events-none px-4 md:px-0">
+                            <div className="pointer-events-auto">
+                                {studyPartners[selectedChatUser.uid] === true || selectedChatUser.uid === firebaseUser?.uid ? (
+                                    <VanTutorMessageInput 
+                                      onSend={(text) => sendMsg(text, 'text')}
+                                      startRecording={startRecording}
+                                      handleMove={handleMove}
+                                      stopRecording={stopRecording}
+                                      isRecording={isRecording}
+                                      isLocked={isLocked}
+                                      setIsLocked={setIsLocked}
+                                      recordDuration={recordDuration}
+                                      onFileSelect={handleFileSelection}
+                                      onImageSelect={handleImageSelection}
+                                    />
+                                ) : (
+                                    <div className="w-full max-w-[760px] mx-auto px-6 py-4 bg-amber-50/95 backdrop-blur-md border border-amber-200 rounded-2xl text-center flex flex-col items-center justify-center gap-3 shadow-lg">
+                                        <div className="flex items-center gap-2 text-sm font-bold text-[#856404]">
+                                            <span>🔒</span>
+                                            <span>You can only message active Study Mates.</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 justify-center">
+                                            {partnerRequests[selectedChatUser.uid]?.status === 'sent' ? (
                                                 <button
                                                     type="button"
-                                                    onClick={() => acceptPartnerRequest(selectedChatUser)}
-                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                    onClick={() => cancelPartnerRequest(selectedChatUser)}
+                                                    className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl border border-amber-200 transition-all select-none shadow-sm cursor-pointer"
+                                                    title="Cancel Request"
                                                 >
-                                                    Accept Request
+                                                    Pending Approval (Cancel)
                                                 </button>
+                                            ) : partnerRequests[selectedChatUser.uid]?.status === 'received' ? (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => acceptPartnerRequest(selectedChatUser)}
+                                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                    >
+                                                        Accept Request
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => declinePartnerRequest(selectedChatUser)}
+                                                        className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                    >
+                                                        Decline
+                                                    </button>
+                                                </div>
+                                            ) : (
                                                 <button
                                                     type="button"
-                                                    onClick={() => declinePartnerRequest(selectedChatUser)}
-                                                    className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                                                    onClick={() => sendPartnerRequest(selectedChatUser)}
+                                                    className="px-5 py-2.5 bg-[#009EE2] hover:bg-[#0070B8] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
                                                 >
-                                                    Decline
+                                                    Add Study Mate
                                                 </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => sendPartnerRequest(selectedChatUser)}
-                                                className="px-5 py-2.5 bg-[#009EE2] hover:bg-[#0070B8] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all select-none shadow-sm cursor-pointer"
-                                            >
-                                                Add Study Mate
-                                            </button>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
 
                         {messageActionTarget && (
