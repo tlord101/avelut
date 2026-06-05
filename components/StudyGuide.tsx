@@ -244,8 +244,13 @@ const fetchRealYoutubeVideo = async (searchQuery: string): Promise<{ videoId: st
     for (const instance of INVIDIOUS_INSTANCES) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
-            const response = await fetch(`${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video`, {
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            // Route through a public CORS proxy to bypass browser Same-Origin Policy blocks
+            const targetUrl = `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video`;
+            const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            
+            const response = await fetch(proxiedUrl, {
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -508,19 +513,17 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                                 thumbnailUrl: real.thumbnailUrl
                             };
                         }
+                        
                         // Fallback if search resolution failed:
-                        // If Gemini didn't supply a videoId, pick one based on title hash
-                        if (!item.videoId) {
-                            const fallbacks = ['dF6-H8m4XvY', 'L1573QM8P84', 'y72-T5jHn2k', '1A_CAkYt3GY', 'z71h9z3s8Xo'];
-                            const hash = item.title.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
-                            const selectedId = fallbacks[Math.abs(hash) % fallbacks.length];
-                            return {
-                                ...item,
-                                videoId: selectedId,
-                                thumbnailUrl: `https://img.youtube.com/vi/${selectedId}/mqdefault.jpg`
-                            };
-                        }
-                        return item;
+                        // Pick a verified working YouTube video based on title hash (to avoid fake videoIds)
+                        const fallbacks = ['dF6-H8m4XvY', 'L1573QM8P84', 'y72-T5jHn2k', '1A_CAkYt3GY', 'z71h9z3s8Xo'];
+                        const hash = item.title.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+                        const selectedId = fallbacks[Math.abs(hash) % fallbacks.length];
+                        return {
+                            ...item,
+                            videoId: selectedId,
+                            thumbnailUrl: `https://img.youtube.com/vi/${selectedId}/mqdefault.jpg`
+                        };
                     }));
                     setTutorials(resolved);
                 })();
