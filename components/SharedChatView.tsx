@@ -136,7 +136,7 @@ export const SharedChatView: React.FC<SharedChatViewProps> = ({ shareId, user })
                 <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-2xl mb-4">⚠️</div>
                 <h2 className="text-xl font-bold mb-2">{error || 'An error occurred'}</h2>
                 <p className="text-slate-400 text-sm max-w-md mb-6">Check the share link or make sure the chat was shared publicly.</p>
-                <a href="/" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase tracking-wider rounded-xl transition">Go to Vantutor</a>
+                <a href="/" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase tracking-wider rounded-xl transition">Go to AVELUT</a>
             </div>
         );
     }
@@ -146,7 +146,9 @@ export const SharedChatView: React.FC<SharedChatViewProps> = ({ shareId, user })
             {/* Header */}
             <header className="flex-shrink-0 flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800 z-10">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm">VT</div>
+                    <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1 flex-shrink-0">
+                        <img src="/logo_icon.png" alt="AVELUT" className="w-full h-full object-contain" />
+                    </div>
                     <div>
                         <h2 className="text-sm font-black text-white">{sharedData.topicName}</h2>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{sharedData.courseName}</p>
@@ -178,7 +180,7 @@ export const SharedChatView: React.FC<SharedChatViewProps> = ({ shareId, user })
                 <div className="max-w-3xl mx-auto space-y-6">
                     <div className="text-center py-4 bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 mb-8">
                         <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full">Shared Study Guide Chat</span>
-                        <p className="text-xs text-slate-400 mt-2 leading-relaxed font-semibold">Shared by <strong>{sharedData.ownerName}</strong>. Log in to your Vantutor account to import these chat messages into your curriculum roadmaps.</p>
+                        <p className="text-xs text-slate-400 mt-2 leading-relaxed font-semibold">Shared by <strong>{sharedData.ownerName}</strong>. Log in to your AVELUT account to import these chat messages into your curriculum roadmaps.</p>
                     </div>
 
                     {sharedData.messages.map((message) => (

@@ -1,12 +1,12 @@
 {
-  "short_name": "VANTUTOR",
-  "name": "VANTUTOR: AI Tutoring Platform",
-  "description": "VANTUTOR is an AI-powered tutor with a navy, azure, and ice-blue learning interface.",
+  "short_name": "AVELUT",
+  "name": "AVELUT: AI Tutoring Platform",
+  "description": "AVELUT is an AI-powered tutor with a navy, azure, and ice-blue learning interface.",
   "icons": [
     {
-      "src": "/logo.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
+      "src": "/logo_icon.png",
+      "type": "image/png",
+      "sizes": "512x512",
       "purpose": "any maskable"
     }
   ],

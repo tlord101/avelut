@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title || 'AVELUT';
   const notificationOptions = {
     body: payload.notification.body,
-    icon: payload.notification.icon || 'https://ai.vaultsglofin.com/logo_notification.svg',
-    badge: payload.notification.badge || 'https://ai.vaultsglofin.com/logo_notification.svg',
+    icon: payload.notification.icon || 'https://ai.vaultsglofin.com/logo_notification.png',
+    badge: payload.notification.badge || 'https://ai.vaultsglofin.com/logo_notification.png',
     data: payload.data || {}
   };
 

@@ -316,7 +316,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   // Custom Input Bar States: 1 (Default), 2 (Typing), 3 (Listening), 4 (Ambient/Live Voice)
   const [inputState, setInputState] = useState<number>(1);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const inputElementRef = useRef<HTMLInputElement>(null);
   const liveSessionRef = useRef<WebSocket | null>(null);
@@ -421,7 +421,9 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (sectionRef.current) {
+      sectionRef.current.scrollTop = sectionRef.current.scrollHeight;
+    }
   }, [messages, isSending]);
 
   useEffect(() => {
@@ -583,7 +585,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
   const handleSend = async () => {
     const prompt = inputValue.trim();
-    if ((!prompt && attachments.length === 0) || isSending) return;
+    const filesToSend = [...attachments];
+    if ((!prompt && filesToSend.length === 0) || isSending) return;
 
     // Check message limits
     const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
@@ -598,13 +601,24 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       return;
     }
 
-    const primaryAttachment = attachments[0] || null;
+    const primaryAttachment = filesToSend[0] || null;
     const userText = prompt || getHistoryFallbackTitle(prompt, primaryAttachment);
+
+    // Create local optimistic attachments to render in the user's bubble immediately
+    const optimisticAttachments = filesToSend.map((file, index) => ({
+      id: `optimistic-${Date.now()}-${index}`,
+      name: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      url: URL.createObjectURL(file),
+      isImage: isImageMimeType(file.type, file.name),
+    }));
+
     const userMessage: AssistantMessage = {
       id: createMessageId(),
       sender: 'user',
       text: userText,
       timestamp: Date.now(),
+      attachments: optimisticAttachments,
     };
     const nextMessages = [...messages, userMessage];
     const isNewConversation = !activeHistoryId;
@@ -613,6 +627,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
     setMessages(nextMessages);
     setInputValue('');
+    clearAttachment(); // Clear immediately from the composer input bar!
     setIsSending(true);
     setStatusText('Thinking...');
     setInputState(1);
@@ -654,8 +669,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       const storedAttachments: AssistantAttachment[] = [];
       const attachmentParts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
 
-      for (let index = 0; index < attachments.length; index += 1) {
-        const file = attachments[index];
+      for (let index = 0; index < filesToSend.length; index += 1) {
+        const file = filesToSend[index];
         const storedAttachment = await uploadChatAttachment(userProfile.uid, conversationId, file, index);
         storedAttachments.push(storedAttachment);
 
@@ -755,7 +770,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
 
       setStatusText('Response ready.');
-      clearAttachment();
     } catch (error) {
       console.error('Gemini assistant error:', error);
       setMessages([
@@ -1213,7 +1227,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           </header>
 
           {/* Messages List Container */}
-          <section className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-32 sm:px-6">
+          <section ref={sectionRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-4 sm:px-6">
             {messages.length === 0 ? (
               <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-6 py-16 text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-lg">
@@ -1296,13 +1310,13 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     </div>
                   </div>
                 )}
-                <div ref={messagesEndRef} />
+                {/* Scroll anchor handled by container ref */}
               </div>
             )}
           </section>
 
           {/* Integrated AVELUT Input Layout Panel */}
-          <footer className="absolute bottom-[69px] md:bottom-[9px] left-0 right-0 z-30 px-4">
+          <footer className="w-full bg-[#060814] pb-[84px] md:pb-4 px-4 z-30 shrink-0">
             <div className="w-full max-w-xl mx-auto transition-all duration-300">
               
               {/* Attachment Preview */}

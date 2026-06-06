@@ -2763,7 +2763,7 @@ FORMAT:
                                     </div>
 
                                     <div className="text-[10px] font-black text-blue-100 uppercase tracking-widest text-center pt-2 select-none">
-                                        Vantutor Active Hubs (Global)
+                                        AVELUT Active Hubs (Global)
                                     </div>
                                 </div>
                             </div>
@@ -5067,7 +5067,7 @@ FORMAT:
                                             </div>
                                             <div>
                                                 <h5 className="font-bold text-slate-800 text-xs">Premium AI Queries</h5>
-                                                <p className="text-[10px] text-slate-450 font-medium">Processed using Vantutor's enterprise key</p>
+                                                <p className="text-[10px] text-slate-450 font-medium">Processed using AVELUT's enterprise key</p>
                                             </div>
                                         </div>
                                         <div className="text-right">

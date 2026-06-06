@@ -374,7 +374,7 @@ const TextChat: React.FC<{
                                             </div>
                                             <div className={`mt-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
                                                 <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
-                                                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{msg.sender === 'user' ? 'You' : 'Vantutor'}</span>
+                                                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{msg.sender === 'user' ? 'You' : 'AVELUT'}</span>
                                                     <span className="text-[10px] text-gray-400">{timeAgo(msg.timestamp)}</span>
                                                 </div>
                                                 <div className={`rounded-2xl px-5 py-3 text-[15px] leading-relaxed shadow-sm ${
@@ -391,7 +391,9 @@ const TextChat: React.FC<{
                                 {isLoading && (
                                     <div className="flex justify-start animate-pulse">
                                         <div className="flex gap-4">
-                                            <div className="w-8 h-8 rounded-full bg-off-white border border-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-400">VT</div>
+                                            <div className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center p-1">
+                                                <img src="/logo_icon.png" alt="AVELUT" className="w-full h-full object-contain" />
+                                            </div>
                                             <div className="mt-4 flex gap-1.5">
                                                 <div className="w-1.5 h-1.5 bg-emerald/40 rounded-full animate-bounce"></div>
                                                 <div className="w-1.5 h-1.5 bg-emerald/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>

@@ -514,8 +514,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
       const options: any = {
         body: summaryText,
-        icon: '/logo.svg',
-        badge: '/logo.svg',
+        icon: '/logo_icon.png',
+        badge: '/logo_icon.png',
         tag: `messenger-${chat?.id || 'chat'}`,
         renotify: true,
         data: {

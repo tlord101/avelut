@@ -17,7 +17,7 @@ export const ComingSoonScreen: React.FC<ComingSoonScreenProps> = ({ title, subti
             <div>
               <div className="inline-flex items-center gap-3 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em] text-lime-200">
                 <LogoIcon className="h-5 w-5 loader-logo" />
-                Vantutor
+                AVELUT
               </div>
               <h1 className="mt-6 max-w-xl text-4xl font-black tracking-tight sm:text-5xl">{title}</h1>
               <p className="mt-4 max-w-xl text-base leading-7 text-white/72 sm:text-lg">{subtitle}</p>

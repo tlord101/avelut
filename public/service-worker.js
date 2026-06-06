@@ -4,7 +4,7 @@ const CACHE_NAME = 'avelut-assets-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/logo.svg',
+  '/logo_icon.png',
   '/manifest.json'
 ];
 
