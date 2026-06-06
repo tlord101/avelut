@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -43,7 +43,7 @@ interface HistoryItem {
   lastUpdatedAt: number;
 }
 
-interface VanTutorAssistantProps {
+interface AvelutAIProps {
   userProfile: UserProfile;
 }
 
@@ -267,7 +267,7 @@ const CloseXIcon = () => (
   </svg>
 );
 
-export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProps) {
+export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -302,7 +302,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
   const geminiApiKey = usePersonalToken
     ? userProfile!.personal_api_key!.trim()
     : appSettings.gemini_api_key?.trim() || '';
-  const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
+  const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
   const liveWebSocketUrl = useMemo(() => {
     if (LIVE_ACCESS_TOKEN) {
       return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(LIVE_ACCESS_TOKEN)}`;
@@ -695,7 +695,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
               parts: [
                 {
                   text: [
-                    'You are VanTutorAssistant, a friendly, personalized study companion for university students.',
+                    'You are AVELUT AI, a friendly, personalized study companion for university students.',
                     'You function as a Retrieval-Augmented Generation (RAG) system, grounded in the student\'s specific academic roadmap/syllabus (provided under COURSE CONTEXT). Use this context directly to personalize explanations and relate concepts back to their coursework, level, and semester.',
                     'You can also answer abstract, general, or non-course related questions. When the student asks general or abstract topics, answer them thoroughly but tie them back to their academic context or field of study when relevant.',
                     'Answer simple, direct, and straightforward questions instantly and clearly, without unnecessary elaboration.',
@@ -897,7 +897,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         isLiveSessionStartingRef.current = false;
 
         const systemInstructionText = [
-          'You are VanTutorAssistant running in an immediate full-duplex live voice conversation runtime.',
+          'You are AVELUT AI running in an immediate full-duplex live voice conversation runtime.',
           'You function as a Retrieval-Augmented Generation (RAG) system grounded in the student\'s specific courses and syllabus.',
           'Answer simple, direct, and straightforward questions instantly and clearly.',
           'If the student asks disturbing questions, feels stressed, or wants general guidance, act as an empathetic, reassuring guiding assistant. Help break down concepts gently.',
@@ -1106,7 +1106,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
         <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-neutral-800/40 bg-[#0d1122] p-5 shadow-2xl transition-transform duration-300 md:static md:z-auto md:w-80 md:translate-x-0 md:shadow-none`}>
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">VanTutor</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">AVELUT</p>
               <h2 className="mt-1 text-xl font-bold text-slate-100">Assistant history</h2>
             </div>
             <button
@@ -1203,7 +1203,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                 <MenuIcon className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">VanTutorAssistant</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">AVELUT AI</p>
                 <h1 className="text-lg font-bold text-slate-100 sm:text-2xl truncate max-w-[200px] sm:max-w-md">{conversationSummary}</h1>
               </div>
             </div>
@@ -1220,7 +1220,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                   <ChatIcon className="h-10 w-10" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-100">Ask VanTutor anything</h2>
+                  <h2 className="text-2xl font-bold text-slate-100">Ask AVELUT anything</h2>
                   <p className="mt-2 max-w-xl text-slate-400">
                     Get step-by-step answers with clean LaTeX for equations, formulas, and proofs.
                   </p>
@@ -1301,7 +1301,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
             )}
           </section>
 
-          {/* Integrated VanTutor Input Layout Panel */}
+          {/* Integrated AVELUT Input Layout Panel */}
           <footer className="absolute bottom-[69px] md:bottom-[9px] left-0 right-0 z-30 px-4">
             <div className="w-full max-w-xl mx-auto transition-all duration-300">
               
@@ -1345,7 +1345,7 @@ export default function VanTutorAssistant({ userProfile }: VanTutorAssistantProp
                         value={inputValue}
                         onChange={handleTextChange}
                         disabled={isSending}
-                        placeholder="Ask VanTutor"
+                        placeholder="Ask AVELUT"
                         className="w-full h-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {

@@ -48,15 +48,15 @@ interface LeaderboardProps {
 export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
   const [activeTab, setActiveTab] = useState<'overall' | 'weekly'>('overall');
   const [overallData, setOverallData] = useState<LeaderboardEntry[]>(() => {
-    return readCachedJson<LeaderboardEntry[]>(`vantutor_leaderboard_overall_${userProfile.department_id}`, []);
+    return readCachedJson<LeaderboardEntry[]>(`avelut_leaderboard_overall_${userProfile.department_id}`, []);
   });
   const [weeklyData, setWeeklyData] = useState<LeaderboardEntry[]>(() => {
     const weekId = getWeekId(new Date());
-    return readCachedJson<LeaderboardEntry[]>(`vantutor_leaderboard_weekly_${weekId}_${userProfile.department_id}`, []);
+    return readCachedJson<LeaderboardEntry[]>(`avelut_leaderboard_weekly_${weekId}_${userProfile.department_id}`, []);
   });
   const [isLoading, setIsLoading] = useState(() => {
     const cached = readCachedJson<LeaderboardEntry[]>(
-      `vantutor_leaderboard_${activeTab}_${userProfile.department_id}`,
+      `avelut_leaderboard_${activeTab}_${userProfile.department_id}`,
       []
     );
     return cached.length === 0;
@@ -69,8 +69,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
         ? `leaderboard_overall/${userProfile.department_id}` 
         : `leaderboard_weekly/${weekId}/${userProfile.department_id}`;
     const cacheKey = activeTab === 'overall'
-        ? `vantutor_leaderboard_overall_${userProfile.department_id}`
-        : `vantutor_leaderboard_weekly_${weekId}_${userProfile.department_id}`;
+        ? `avelut_leaderboard_overall_${userProfile.department_id}`
+        : `avelut_leaderboard_weekly_${weekId}_${userProfile.department_id}`;
 
     const cached = readCachedJson<LeaderboardEntry[]>(cacheKey, []);
     if (cached.length === 0) {

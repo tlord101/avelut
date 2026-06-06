@@ -158,7 +158,7 @@ const globalRateLimiter = new RpmRateLimiter(10);
  * Centralized client factory that instantiates or wraps the GoogleGenAI client.
  * Injects RPM rate limiting, context compaction, and context compression when a personal key is used.
  */
-export const createVanTutorAI = (
+export const createAvelutAI = (
   appSettings: AppSettings,
   userProfile: UserProfile | null
 ): any => {

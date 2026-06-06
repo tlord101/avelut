@@ -14,7 +14,7 @@ const SetupRequired: React.FC = () => (
         <LogoIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
         <h1 className="text-3xl font-bold text-red-600">Configuration Required</h1>
         <p className="mt-4 text-lg text-gray-700">
-          Welcome to VANTUTOR! To get started, you need to connect the application to your Firebase project.
+          Welcome to AVELUT! To get started, you need to connect the application to your Firebase project.
         </p>
         <div className="mt-6 text-left bg-gray-50 p-6 rounded-lg border border-gray-200">
           <p className="font-semibold text-gray-800">Please follow these steps:</p>

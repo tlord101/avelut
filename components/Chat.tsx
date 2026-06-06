@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GoogleGenAI } from '@google/genai';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
@@ -126,7 +126,7 @@ const TextChat: React.FC<{
     const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
     const [courseContext, setCourseContext] = useState<string>('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const portalRoot = usePortalRoot('vantutor-chat-composer-root');
+    const portalRoot = usePortalRoot('avelut-chat-composer-root');
 
     useEffect(() => {
         const fetchCourseContext = async () => {
@@ -370,7 +370,7 @@ const TextChat: React.FC<{
                                     <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
                                         <div className={`max-w-[85%] flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                                             <div className="flex-shrink-0">
-                                                <Avatar display_name={msg.sender === 'user' ? userProfile.display_name : 'VanTutor'} photo_url={msg.sender === 'user' ? userProfile.photo_url : null} className="w-8 h-8" />
+                                                <Avatar display_name={msg.sender === 'user' ? userProfile.display_name : 'AVELUT'} photo_url={msg.sender === 'user' ? userProfile.photo_url : null} className="w-8 h-8" />
                                             </div>
                                             <div className={`mt-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
                                                 <div className="flex items-center gap-2 mb-1.5 px-1 justify-inherit">
@@ -469,7 +469,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
+    const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
 
     useEffect(() => {
         setIsHistoryLoading(true);

@@ -98,7 +98,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ steps, isOpen, onClose, onBefor
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const portalRoot = usePortalRoot('vantutor-guided-tour-root');
+  const portalRoot = usePortalRoot('avelut-guided-tour-root');
 
   const updateTargetRect = useCallback(() => {
     const step = steps[currentStepIndex];

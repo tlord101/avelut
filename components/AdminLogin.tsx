@@ -12,7 +12,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (email === 'admin@vantutor.com' && password === 'zFhnR7N8xXtUjiN') {
+        if (email === 'admin@avelut.com' && password === 'zFhnR7N8xXtUjiN') {
             onLogin();
         } else {
             setError('Invalid admin credentials.');

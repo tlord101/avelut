@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
@@ -44,16 +44,16 @@ const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
 
 const ExamHistory: React.FC<{ userProfile: UserProfile, onReview: (exam: ExamHistoryItem) => void }> = ({ userProfile, onReview }) => {
     const [history, setHistory] = useState<ExamHistoryItem[]>(() => {
-        return readCachedJson<ExamHistoryItem[]>(`vantutor_exam_history_${userProfile.uid}`, []);
+        return readCachedJson<ExamHistoryItem[]>(`avelut_exam_history_${userProfile.uid}`, []);
     });
     const [isLoading, setIsLoading] = useState(() => {
-        const cached = readCachedJson<ExamHistoryItem[]>(`vantutor_exam_history_${userProfile.uid}`, []);
+        const cached = readCachedJson<ExamHistoryItem[]>(`avelut_exam_history_${userProfile.uid}`, []);
         return cached.length === 0;
     });
 
     useEffect(() => {
         const historyRef = dbRef(db, `exam_history/${userProfile.uid}`);
-        const cacheKey = `vantutor_exam_history_${userProfile.uid}`;
+        const cacheKey = `avelut_exam_history_${userProfile.uid}`;
         const cached = readCachedJson<ExamHistoryItem[]>(cacheKey, []);
         if (cached.length === 0) {
             setIsLoading(true);
@@ -138,14 +138,14 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const [score, setScore] = useState(0);
   const [reviewExam, setReviewExam] = useState<ExamHistoryItem | null>(null);
   const [completedTopicNames, setCompletedTopicNames] = useState<string[]>(() => {
-    return readCachedJson<string[]>(`vantutor_completed_topics_${userProfile.uid}`, []);
+    return readCachedJson<string[]>(`avelut_completed_topics_${userProfile.uid}`, []);
   });
   const [availablePQSubjects, setAvailablePQSubjects] = useState<string[]>(() => {
-    return readCachedJson<string[]>(`vantutor_pq_subjects_${userProfile.department_id}_${userProfile.level}`, []);
+    return readCachedJson<string[]>(`avelut_pq_subjects_${userProfile.department_id}_${userProfile.level}`, []);
   });
   const [selectedPQSubject, setSelectedPQSubject] = useState<string>('');
   const [isTopicDataLoading, setIsTopicDataLoading] = useState(() => {
-    const cached = readCachedJson<string[]>(`vantutor_completed_topics_${userProfile.uid}`, []);
+    const cached = readCachedJson<string[]>(`avelut_completed_topics_${userProfile.uid}`, []);
     return cached.length === 0;
   });
   const [timeLeft, setTimeLeft] = useState(0);
@@ -165,11 +165,11 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
     return () => unsubscribe();
   }, [userProfile.uid]);
   const geminiModel = appSettings.primary_gemini_model;
-  const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
+  const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
   const isGeminiConfigured = Boolean(ai);
 
   useEffect(() => {
-    const cacheKey = `vantutor_pq_subjects_${userProfile.department_id}_${userProfile.level}`;
+    const cacheKey = `avelut_pq_subjects_${userProfile.department_id}_${userProfile.level}`;
     const pqRef = dbRef(db, `past_questions/${userProfile.department_id}/${userProfile.level}`);
     get(pqRef).then(snap => {
         if(snap.exists()) {
@@ -199,7 +199,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
         if (completedTopicIds.length === 0) {
             setCompletedTopicNames([]);
-            writeCachedJson(`vantutor_completed_topics_${userProfile.uid}`, []);
+            writeCachedJson(`avelut_completed_topics_${userProfile.uid}`, []);
             setIsTopicDataLoading(false);
             return;
         }
@@ -219,7 +219,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                     });
                 });
                 setCompletedTopicNames(topicNames);
-                writeCachedJson(`vantutor_completed_topics_${userProfile.uid}`, topicNames);
+                writeCachedJson(`avelut_completed_topics_${userProfile.uid}`, topicNames);
             }
         } catch (error) {
             console.error("Error fetching department data for exam generation:", error);

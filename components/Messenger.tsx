@@ -101,7 +101,7 @@ const createFallbackChatUser = (uid = ''): UserProfile => ({
 
 const MESSENGER_CACHE_VERSION = 'v1';
 
-const getMessengerCacheKey = (uid: string, suffix: string) => `vantutor_messenger_${MESSENGER_CACHE_VERSION}_${uid}_${suffix}`;
+const getMessengerCacheKey = (uid: string, suffix: string) => `avelut_messenger_${MESSENGER_CACHE_VERSION}_${uid}_${suffix}`;
 
 
 
@@ -236,7 +236,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean; isUploading?: bool
 // FLOATING ZOLA THEME INPUT COMPONENT
 // =======================================================
 
-interface VanTutorInputProps {
+interface AvelutInputProps {
   onSend: (text: string) => void;
   startRecording: (e: any) => Promise<void>;
   handleMove: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -249,7 +249,7 @@ interface VanTutorInputProps {
   onImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-const VanTutorMessageInput: React.FC<VanTutorInputProps> = ({
+const AvelutMessageInput: React.FC<AvelutInputProps> = ({
   onSend,
   startRecording,
   handleMove,
@@ -467,7 +467,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     
     const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
     const [fetchedUserProfiles, setFetchedUserProfiles] = useState<Record<string, UserProfile>>(() => 
-        readCachedJson<Record<string, UserProfile>>(`vantutor_resolved_profiles_${userProfile.uid}`, {})
+        readCachedJson<Record<string, UserProfile>>(`avelut_resolved_profiles_${userProfile.uid}`, {})
     );
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -858,7 +858,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         };
                         setFetchedUserProfiles(prev => {
                             const next = { ...prev, [otherUserId]: profile };
-                            writeCachedJson(`vantutor_resolved_profiles_${userProfile.uid}`, next);
+                            writeCachedJson(`avelut_resolved_profiles_${userProfile.uid}`, next);
                             return next;
                         });
                     }
@@ -1705,7 +1705,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         <div className="absolute bottom-20 md:bottom-6 left-0 right-0 z-30 w-full pointer-events-none px-4 md:px-0">
                             <div className="pointer-events-auto">
                                 {studyPartners[selectedChatUser.uid] === true || selectedChatUser.uid === firebaseUser?.uid ? (
-                                    <VanTutorMessageInput 
+                                    <AvelutMessageInput
                                       onSend={(text) => sendMsg(text, 'text')}
                                       startRecording={startRecording}
                                       handleMove={handleMove}
@@ -1828,7 +1828,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                     <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[30px] bg-white shadow-sm border border-[#E9ECEF]">
                       <LogoIcon className="w-14 h-14 text-[#6C757D]" />
                     </div>
-                    <h2 className="mt-5 text-2xl font-black tracking-wide text-[#212529]">VANTUTOR</h2>
+                    <h2 className="mt-5 text-2xl font-black tracking-wide text-[#212529]">AVELUT</h2>
                     <p className="mt-2 text-sm leading-6 text-[#6C757D]">Pick a person to start a new chat and connect with them.</p>
                     </div>
                 )}

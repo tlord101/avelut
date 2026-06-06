@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as firebaseAuth, firebaseSignOut, onAuthStateChanged, db, storage } from '../firebase';
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
@@ -213,7 +213,7 @@ export const UploadCenter: React.FC = () => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const geminiModel = appSettings.primary_gemini_model;
-  const ai = useMemo(() => createVanTutorAI(appSettings, null), [appSettings]);
+  const ai = useMemo(() => createAvelutAI(appSettings, null), [appSettings]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [user, setUser] = useState(firebaseAuth.currentUser);

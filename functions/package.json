@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Cloud Functions for VANTUTOR Push Notifications",
+  "description": "Cloud Functions for AVELUT Push Notifications",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

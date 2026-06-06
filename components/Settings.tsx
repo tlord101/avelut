@@ -87,7 +87,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
     const activePlan = usageSettings.plans[planKey];
     const amount = activePlan.price;
     const publicKey = appSettings.paystack_public_key?.trim();
-    const email = user?.email || `${userProfile.uid}@vantutor.com`;
+    const email = user?.email || `${userProfile.uid}@avelut.com`;
 
     setIsVerifyingKey(true);
 
@@ -107,7 +107,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
           paystack_reference: reference,
         });
         if (result.success) {
-          addToast(`VanTutor ${activePlan.name} activated successfully!`, 'success');
+          addToast(`AVELUT ${activePlan.name} activated successfully!`, 'success');
         } else {
           addToast('Payment received but upgrade failed. Contact support.', 'error');
         }
@@ -247,7 +247,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                 addToast('Push notifications enabled!', 'success');
                 
                 const registration = await navigator.serviceWorker.ready;
-                registration.showNotification('VANTUTOR', {
+                registration.showNotification('AVELUT', {
                     body: 'You will now receive important updates on your device.',
                     icon: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20viewBox%3D%220%200%2052%2042%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M4.33331%2017.5L26%204.375L47.6666%2017.5L26%2030.625L4.33331%2017.5Z%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M41.5%2021V29.75C41.5%2030.825%2040.85%2032.55%2039.4166%2033.25L27.75%2039.375C26.6666%2039.9%2025.3333%2039.9%2024.25%2039.375L12.5833%2033.25C11.15%2032.55%2010.5%2030.825%2010.5%2029.75V21%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M47.6667%2017.5V26.25%22%20stroke%3D%22%2523A3E635%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E',
                     badge: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20viewBox%3D%220%200%2052%2042%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M4.33331%2017.5L26%204.375L47.6666%2017.5L26%2030.625L4.33331%2017.5Z%22%20fill%3D%22%2523FFFFFF%22%2F%3E%3C%2Fsvg%3E'
@@ -263,7 +263,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
         try {
             await onProfileUpdate({ notifications_enabled: false, fcm_token: null });
             setIsNotificationSwitchOn(false);
-            addToast('Push notifications disabled from VANTUTOR.', 'info');
+            addToast('Push notifications disabled from AVELUT.', 'info');
         } catch (err) {
              addToast('Failed to save notification preference.', 'error');
         }
@@ -492,7 +492,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
         </div>
         {browserPermission === 'denied' && (
             <p className="text-xs text-yellow-700 mt-3 p-2 bg-yellow-50 rounded-md border border-yellow-200">
-                Notifications are blocked by your browser. You'll need to go into your browser's site settings for VANTUTOR to re-enable them.
+                Notifications are blocked by your browser. You'll need to go into your browser's site settings for AVELUT to re-enable them.
             </p>
         )}
       </div>

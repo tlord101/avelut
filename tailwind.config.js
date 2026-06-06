@@ -9,8 +9,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Lora', 'Georgia', 'ui-serif', 'serif'],
-        serif: ['Lora', 'Georgia', 'ui-serif', 'serif'],
+        sans: ['Nunito', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
         brand: {

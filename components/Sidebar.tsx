@@ -81,7 +81,7 @@ const SidebarContent: React.FC<{
       <div className="flex items-center mb-10 flex-shrink-0 px-2 pt-2">
         <LogoIcon className="w-10 h-10 text-blue-600 flex-shrink-0" />
         <h1 className={`text-2xl font-black text-slate-800 tracking-tighter ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
-          VANTUTOR
+          AVELUT
         </h1>
       </div>
       

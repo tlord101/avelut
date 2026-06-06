@@ -43,7 +43,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
           use_personal_token: false,
         });
         if (result.success) {
-          addToast('VanTutor Free AI activated successfully!', 'success');
+          addToast('AVELUT Free AI activated successfully!', 'success');
         } else {
           addToast('Activation failed. Please try again.', 'error');
         }
@@ -97,7 +97,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
     const activePlan = plans[selectedPlan];
     const amount = activePlan.price;
     const publicKey = appSettings.paystack_public_key?.trim();
-    const email = user.email || `${user.uid}@vantutor.com`;
+    const email = user.email || `${user.uid}@avelut.com`;
 
     setIsActivating(true);
 
@@ -117,7 +117,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
           paystack_reference: reference,
         });
         if (result.success) {
-          addToast(`VanTutor ${activePlan.name} activated successfully!`, 'success');
+          addToast(`AVELUT ${activePlan.name} activated successfully!`, 'success');
         } else {
           addToast('Payment received but activation failed. Contact support.', 'error');
         }

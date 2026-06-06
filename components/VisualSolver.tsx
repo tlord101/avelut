@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue } from 'firebase/database';
 import { checkVisualMessagesLimit, incrementVisualMessagesUsed } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -207,7 +207,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const aiClient = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
+    const aiClient = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
     const { addToast } = useToast();
 
     const cleanupCamera = useCallback(() => {
@@ -396,7 +396,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const basePrompt = `You are VANTUTOR, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.`;
+            const basePrompt = `You are AVELUT, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.`;
             const customInstruction = customPrompt ? `\n\n**ADDITIONAL INSTRUCTIONS FROM USER:**\n${customPrompt}\n` : '';
             const promptText = `${basePrompt}${customInstruction}
 
