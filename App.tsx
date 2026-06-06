@@ -946,11 +946,11 @@ const App: React.FC = () => {
     }
 
     if (activeItem === 'admin') {
-        if (!isAdminAuthenticated) {
+        if (!userProfile?.is_admin && !isAdminAuthenticated) {
             return <div key="admin-login-state"><AdminLogin onLogin={() => setIsAdminAuthenticated(true)} /></div>;
         }
         
-        const mockAdminProfile: UserProfile = {
+        const adminProfileToUse = userProfile?.is_admin ? userProfile : {
             uid: 'admin-hardcoded',
             display_name: 'Admin User',
             department_id: 'admin',
