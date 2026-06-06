@@ -16,13 +16,13 @@
       "purpose": "maskable"
     },
     {
-      "src": "/logo_icon.png",
+      "src": "/logo_icon2.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "/logo_icon.png",
+      "src": "/logo_icon2.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
