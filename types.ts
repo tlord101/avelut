@@ -15,6 +15,7 @@ export interface UserProfile {
   department_id: string;
   level: string;
   current_streak: number;
+  last_streak_date?: string; // ISO date string 'YYYY-MM-DD' of the last day a streak was awarded
   last_activity_date: number; // Store as timestamp
   notifications_enabled: boolean;
   is_admin?: boolean; // New property for admin access

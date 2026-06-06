@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createAvelutAI } from '../utils/inference';
+import { awardDailyStreak } from '../utils/streaks';
 import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp, increment } from 'firebase/database';
@@ -758,6 +759,84 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             stopInterval();
         };
     }, [userProfile.uid, userProfile.department_id]);
+
+    // =====================================================
+    // TOPIC PRESENCE TRACKER: streak + study_duration_seconds
+    // =====================================================
+    useEffect(() => {
+        const topicId = topic.topic_id;
+        const uid = userProfile.uid;
+        const STREAK_THRESHOLD_MS = 10_000; // 10 seconds
+        const SAVE_INTERVAL_MS = 30_000;    // save duration every 30s
+
+        // Track active seconds only while tab is visible
+        let activeSeconds = 0;
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+        let streakAwardedThisSession = false;
+
+        const saveStudyDuration = async () => {
+            if (activeSeconds <= 0) return;
+            try {
+                const progressRef = dbRef(db, `user_progress/${uid}/${topicId}`);
+                const snap = await get(progressRef);
+                const current = snap.val() || {};
+                const prev = typeof current.study_duration_seconds === 'number' ? current.study_duration_seconds : 0;
+                await update(progressRef, {
+                    study_duration_seconds: prev + activeSeconds,
+                });
+                activeSeconds = 0; // Reset after saving
+            } catch (e) {
+                console.error('[StudyGuide] Failed to save study duration:', e);
+            }
+        };
+
+        const startTracking = () => {
+            if (intervalId !== null) return;
+            intervalId = setInterval(async () => {
+                activeSeconds += 1;
+
+                // Award streak once after 10 seconds
+                if (!streakAwardedThisSession && activeSeconds >= STREAK_THRESHOLD_MS / 1000) {
+                    streakAwardedThisSession = true;
+                    void awardDailyStreak(uid);
+                }
+
+                // Persist to DB every 30 seconds
+                if (activeSeconds > 0 && activeSeconds % (SAVE_INTERVAL_MS / 1000) === 0) {
+                    await saveStudyDuration();
+                }
+            }, 1000);
+        };
+
+        const stopTracking = () => {
+            if (intervalId !== null) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                startTracking();
+            } else {
+                stopTracking();
+                void saveStudyDuration();
+            }
+        };
+
+        // Start immediately if visible
+        if (document.visibilityState === 'visible') {
+            startTracking();
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            stopTracking();
+            void saveStudyDuration();
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [topic.topic_id, userProfile.uid]);
 
     const initiateAutoTeach = useCallback(async () => {
         if (isAppSettingsLoading) {

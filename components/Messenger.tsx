@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { VerificationBadge } from './VerificationBadge';
+import { StreakBadge } from './StreakBadge';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp, query, limitToLast, increment } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -677,6 +678,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 department_id: u.department_id || '',
                 level: u.level || '',
                 current_streak: u.current_streak || 0,
+                last_streak_date: u.last_streak_date || '',
                 last_activity_date: u.last_activity_date || 0,
                 notifications_enabled: u.notifications_enabled || false,
             })));
@@ -1466,6 +1468,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                     <h3 className={`text-[15px] truncate flex items-center gap-1.5 ${getUnreadCount(c) > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>
                                       <span>{c.otherUser?.display_name}</span>
                                       <VerificationBadge status={c.otherUser?.subscription_status} />
+                                      {c.otherUser && <StreakBadge userProfile={c.otherUser} size="sm" />}
                                     </h3>
                                     <span className="text-[12px] text-[#6C757D]">10:16 AM</span>
                                 </div>
@@ -1502,6 +1505,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                               <h3 className={`text-[15px] truncate flex items-center gap-1.5 ${unreadCount > 0 ? 'font-bold text-[#212529]' : 'font-medium text-[#212529]'}`}>
                                 <span>{u.display_name}</span>
                                 <VerificationBadge status={u.subscription_status} />
+                                <StreakBadge userProfile={u} size="sm" />
                               </h3>
                               <p className="text-[11px] text-[#6C757D] font-normal">{u.is_online ? <span className="text-[#28A745]">online</span> : formatLastSeen(u.last_seen)}</p>
                             </div>
@@ -1541,6 +1545,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                               <h2 className="font-semibold text-[#212529] text-[16px] leading-tight truncate flex items-center gap-1.5">
                                 <span>{selectedChatUser.display_name}</span>
                                 <VerificationBadge status={selectedChatUser.subscription_status} />
+                                <StreakBadge userProfile={selectedChatUser} size="md" />
                               </h2>
                                 <p className="text-[12px] text-[#6C757D] font-normal mt-0.5 flex items-center">
                                 {selectedChatUser.is_online ? (

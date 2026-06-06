@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createAvelutAI } from '../utils/inference';
+import { awardDailyStreak } from '../utils/streaks';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -763,6 +764,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           last_updated_at: now,
         });
         setActiveHistoryId(conversationId);
+        // Award streak for starting a new AI chat
+        void awardDailyStreak(userProfile.uid);
       }
 
       const messagesRef = dbRef(db, `chat_messages/${conversationId}`);

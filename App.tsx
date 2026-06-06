@@ -5,6 +5,7 @@ import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updatePr
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, serverTimestamp, get } from 'firebase/database';
 import { DEFAULT_USAGE_SETTINGS } from './utils/appSettings';
 import type { UserProfile, UserProgress, DashboardData, Notification as NotificationType, ExamHistoryItem, Course, DashboardAssessment } from './types';
+import { awardDailyStreak } from './utils/streaks';
 import { Login } from './components/Login';
 import { SignUp } from './components/SignUp'; 
 import { AdminLogin } from './components/AdminLogin';
@@ -554,6 +555,19 @@ const App: React.FC = () => {
         
         return () => { off(userRef, 'value', unsubscribeProfile); };
     }, [user, addToast, startTour]);
+
+    // =====================================================
+    // SESSION STREAK: award after 10 seconds in the app
+    // =====================================================
+    useEffect(() => {
+        if (!userProfile) return;
+        const SESSION_STREAK_THRESHOLD_MS = 10_000; // 10 seconds
+        const timer = window.setTimeout(async () => {
+            await awardDailyStreak(userProfile.uid);
+        }, SESSION_STREAK_THRESHOLD_MS);
+        return () => window.clearTimeout(timer);
+    }, [userProfile?.uid]); // Only re-run if user changes (not on every profile update)
+
 
     useEffect(() => {
         if (!user) return;
