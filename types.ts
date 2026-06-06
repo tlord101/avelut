@@ -32,6 +32,7 @@ export interface UserProfile {
   paystack_reference?: string;
   selected_free_course_id?: string;
   fcm_token?: string;
+  default_semester_tab?: string;
 }
 
 export interface Message {

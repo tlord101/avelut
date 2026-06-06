@@ -46,7 +46,8 @@ const root = ReactDOM.createRoot(rootElement);
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const isConfigured = 
-  typeof __firebase_config !== 'undefined' && __firebase_config.apiKey && __firebase_config.apiKey !== 'YOUR_FIREBASE_API_KEY';
+  (import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== 'YOUR_FIREBASE_API_KEY') ||
+  (typeof __firebase_config !== 'undefined' && __firebase_config.apiKey && __firebase_config.apiKey !== 'YOUR_FIREBASE_API_KEY');
 
 if (isConfigured) {
   root.render(

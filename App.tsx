@@ -38,11 +38,8 @@ declare var __app_id: string;
 
 const AppLoader: React.FC = () => {
   return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-off-white text-charcoal" role="status" aria-label="Loading AVELUT application">
-      <div className="animate-bounce">
-                <LogoIcon className="w-28 h-28 loader-logo" />
-      </div>
-            <h2 className="text-sm font-bold tracking-widest text-charcoal/60 mt-4 uppercase animate-pulse">AVELUT Loading</h2>
+    <div className="flex items-center justify-center min-h-screen" role="status" aria-label="Loading AVELUT application">
+      <img src="/logo_icon.png" alt="Loading AVELUT..." className="w-28 h-28 object-contain animate-pulse" />
     </div>
   );
 };

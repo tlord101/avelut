@@ -444,6 +444,31 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                 </select>
             )}
           </div>
+          <div className="flex justify-between items-center border-t border-gray-200 pt-4">
+            <span className="text-gray-600">Default Study Guide Semester</span>
+            <select
+                value={userProfile.default_semester_tab || 'all'}
+                onChange={async (e) => {
+                  const newDefaultTab = e.target.value;
+                  setIsSaving(true);
+                  const result = await onProfileUpdate({ default_semester_tab: newDefaultTab });
+                  if (result.success) {
+                    addToast('Default semester preference saved!', 'success');
+                  } else {
+                    addToast(result.error || 'Failed to save preference.', 'error');
+                    e.target.value = userProfile.default_semester_tab || 'all';
+                  }
+                  setIsSaving(false);
+                }}
+                disabled={isSaving}
+                className="bg-gray-50 border border-gray-300 rounded-md py-1 px-2 text-gray-900 font-medium focus:ring-1 focus:ring-lime-500 focus:outline-none disabled:opacity-50"
+                aria-label="Change default study guide semester"
+            >
+              <option value="all">All / Both Semesters</option>
+              <option value="first">1st Semester</option>
+              <option value="second">2nd Semester</option>
+            </select>
+          </div>
         </div>
       </div>
 

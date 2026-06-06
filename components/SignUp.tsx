@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { auth, db, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from '../firebase';
 import { ref as dbRef, set } from 'firebase/database';
-import { LogoIcon } from './icons/LogoIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { useToast } from '../hooks/useToast';
 
@@ -77,11 +76,8 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
       <div className="w-full max-w-md">
         <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 shadow-2xl">
-          <div className="flex justify-center items-center mb-6">
-              <LogoIcon className="w-12 h-12 text-lime-500" />
-              <h1 className="text-3xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider ml-3">
-                  AVELUT
-              </h1>
+          <div className="flex justify-center mb-6">
+              <img src="/logo_full.png" alt="AVELUT Logo" className="h-16 object-contain" />
           </div>
 
           <div className="text-center mb-8">

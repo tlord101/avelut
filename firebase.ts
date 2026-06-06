@@ -17,11 +17,20 @@ import {
   signOut as firebaseSignOut
 } from "firebase/auth";
 
-// This variable is expected to be injected into the global scope by index.html.
-declare var __firebase_config: any;
+// Initialize Firebase configuration reading from environment variables (Vite)
+// with a safe fallback to the window-injected __firebase_config global.
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || (typeof __firebase_config !== 'undefined' ? __firebase_config.apiKey : ''),
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (typeof __firebase_config !== 'undefined' ? __firebase_config.authDomain : ''),
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || (typeof __firebase_config !== 'undefined' ? __firebase_config.databaseURL : ''),
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || (typeof __firebase_config !== 'undefined' ? __firebase_config.projectId : ''),
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (typeof __firebase_config !== 'undefined' ? __firebase_config.storageBucket : ''),
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (typeof __firebase_config !== 'undefined' ? __firebase_config.messagingSenderId : ''),
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || (typeof __firebase_config !== 'undefined' ? __firebase_config.appId : ''),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || (typeof __firebase_config !== 'undefined' ? __firebase_config.measurementId : ''),
+};
 
-// Initialize Firebase
-const app = initializeApp(__firebase_config);
+const app = initializeApp(firebaseConfig);
 
 // Initialize Realtime Database and get a reference to the service
 const db = getDatabase(app);

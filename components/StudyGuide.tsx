@@ -1800,7 +1800,10 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string; courseId?: string; course_id?: string }) | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
-  const [filter, setFilter] = useState({ searchTerm: '', semester: 'all' as 'all' | 'first' | 'second' });
+  const [filter, setFilter] = useState(() => ({
+    searchTerm: '',
+    semester: (userProfile.default_semester_tab || 'all') as 'all' | 'first' | 'second'
+  }));
   const { addToast } = useToast();
 
   const [usageStats, setUsageStats] = useState<any>(null);
