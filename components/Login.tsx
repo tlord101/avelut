@@ -159,6 +159,12 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignUp }) => {
               </button>
             </p>
 
+            <div className="mt-6 text-center text-xs text-gray-500 space-x-2">
+              <a href="/t&c" className="underline hover:text-gray-700">Terms & Conditions</a>
+              <span>&middot;</span>
+              <a href="/policy" className="underline hover:text-gray-700">Privacy Policy</a>
+            </div>
+
           </div>
         </div>
       </div>

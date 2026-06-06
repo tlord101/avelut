@@ -31,6 +31,8 @@ import { LogoIcon } from './components/icons/LogoIcon';
 import { MenuIcon } from './components/icons/MenuIcon';
 import { ComingSoonScreen } from './components/ComingSoonScreen';
 import { SharedChatView } from './components/SharedChatView';
+import TermsAndConditions from './components/TermsAndConditions';
+import PrivacyPolicy from './components/PrivacyPolicy';
 
 declare var __app_id: string;
 
@@ -910,6 +912,25 @@ const App: React.FC = () => {
         return (
             <ErrorBoundary>
                 <SharedChatView shareId={shareId} user={user} />
+            </ErrorBoundary>
+        );
+    }
+
+    const isTermsRoute = currentPath === '/t&c' || currentPath === '/tc' || currentPath === '/terms-and-conditions' || currentPath === '/terms';
+    const isPolicyRoute = currentPath === '/policy' || currentPath === '/privacy-policy' || currentPath === '/privacy';
+
+    if (isTermsRoute) {
+        return (
+            <ErrorBoundary>
+                <TermsAndConditions />
+            </ErrorBoundary>
+        );
+    }
+
+    if (isPolicyRoute) {
+        return (
+            <ErrorBoundary>
+                <PrivacyPolicy />
             </ErrorBoundary>
         );
     }
