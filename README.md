@@ -5,7 +5,7 @@
     <path d="M47.6667 17.5V26.25" stroke="#A3E635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
   
-  # VanTutor: Your Personal AI University Companion
+  # AVELUT: Your Personal AI University Companion
   
   [![Vercel Deployment](https://img.shields.io/badge/Deployed-Vercel-black?logo=vercel)](https://vercel.com)
   [![AI Engine](https://img.shields.io/badge/AI-Gemini_3.5_Flash-blue?logo=google-gemini)](https://deepmind.google/technologies/gemini/)
@@ -16,11 +16,11 @@
 
 ---
 
-## 🌟 What is VanTutor?
+## 🌟 What is AVELUT?
 
-VanTutor is your advanced AI-powered academic companion, built to ensure you never feel lost in your studies again. Unlike generic AI, VanTutor is **tailored to your curriculum**. It understands your department, your level, and your specific local university requirements, providing a learning experience that actually matters for your grades.
+AVELUT is your advanced AI-powered academic companion, built to ensure you never feel lost in your studies again. Unlike generic AI, AVELUT is **tailored to your curriculum**. It understands your department, your level, and your specific local university requirements, providing a learning experience that actually matters for your grades.
 
-### Why Students Love VanTutor:
+### Why Students Love AVELUT:
 *   **Context-Aware Learning**: No more generic answers. Get help based on the actual textbooks and syllabus used in your department.
 *   **Precision Prep**: Practice with real past questions that are automatically extracted and organized for your level.
 *   **Confidence Building**: Master complex topics through interactive, bite-sized lessons that adapt to your pace.
@@ -31,7 +31,7 @@ VanTutor is your advanced AI-powered academic companion, built to ensure you nev
 
 ### 🧠 Gemini 3.5 Flash Tutoring
 Experience a tutor that never sleeps and knows everything about your course. 
-*   **Deep Understanding**: Powered by Gemini 3.5 Flash, VanTutor can digest thousands of pages of textbooks to answer your most specific questions.
+*   **Deep Understanding**: Powered by Gemini 3.5 Flash, AVELUT can digest thousands of pages of textbooks to answer your most specific questions.
 *   **Bite-sized Lessons**: Complex chapters are broken down into easy-to-digest modules with interactive quizzes.
 *   **Visual Solver**: Simply snap a photo of a math problem or diagram, and get an instant, step-by-step walkthrough.
 
@@ -70,7 +70,7 @@ We are constantly evolving to provide the most futuristic learning experience po
 ---
 
 ##  Privacy & Security
-VanTutor respects your data. All academic progress is private, and collaboration tools are strictly isolated within your department to ensure a safe learning environment.
+AVELUT respects your data. All academic progress is private, and collaboration tools are strictly isolated within your department to ensure a safe learning environment.
 
 ---
 

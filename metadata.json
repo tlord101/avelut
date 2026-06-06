@@ -1,6 +1,6 @@
 {
-  "name": "VANTUTOR: AI Tutoring Platform",
-  "description": "A foundational web application for an AI-powered tutor named VANTUTOR. Features a clean, mobile-first dark glass UI, Firebase authentication, and a responsive layout with sidebar navigation.",
+  "name": "AVELUT: AI Tutoring Platform",
+  "description": "A foundational web application for an AI-powered tutor named AVELUT. Features a clean, mobile-first dark glass UI, Firebase authentication, and a responsive layout with sidebar navigation.",
   "requestFramePermissions": [
     "camera",
     "microphone",

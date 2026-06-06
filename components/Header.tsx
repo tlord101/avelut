@@ -103,9 +103,9 @@ export const Header: React.FC<HeaderProps> = ({
             const userAgent = window.navigator.userAgent.toLowerCase();
             const isIOS = /iphone|ipad|ipod/.test(userAgent);
             if (isIOS) {
-                alert("To install VANTUTOR on iOS:\n\n1. Tap the Share button in Safari (at the bottom or top of your screen).\n2. Scroll down and tap 'Add to Home Screen'.");
+                alert("To install AVELUT on iOS:\n\n1. Tap the Share button in Safari (at the bottom or top of your screen).\n2. Scroll down and tap 'Add to Home Screen'.");
             } else {
-                alert("To install VANTUTOR:\n\n1. Tap the browser menu button (three vertical dots in Chrome).\n2. Select 'Install app' or 'Add to Home Screen'.");
+                alert("To install AVELUT:\n\n1. Tap the browser menu button (three vertical dots in Chrome).\n2. Select 'Install app' or 'Add to Home Screen'.");
             }
             return;
         }
@@ -215,9 +215,9 @@ export const Header: React.FC<HeaderProps> = ({
                             <LogoIcon className="w-12 h-12 loader-logo relative z-10" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-charcoal dark:text-white">Installing VANTUTOR...</h3>
+                            <h3 className="text-xl font-bold text-charcoal dark:text-white">Installing AVELUT...</h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                Adding VANTUTOR to your device. This will only take a moment.
+                                Adding AVELUT to your device. This will only take a moment.
                             </p>
                         </div>
                         <button

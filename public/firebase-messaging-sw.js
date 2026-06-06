@@ -17,7 +17,7 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title || 'VANTUTOR';
+  const notificationTitle = payload.notification.title || 'AVELUT';
   const notificationOptions = {
     body: payload.notification.body,
     icon: payload.notification.icon || 'https://ai.vaultsglofin.com/logo_notification.svg',

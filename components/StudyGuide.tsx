@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as dbRef, onValue, off, set, update, get, push, runTransaction, serverTimestamp, increment } from 'firebase/database';
@@ -326,7 +326,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
     const ai = useMemo(
-        () => createVanTutorAI(appSettings, userProfile),
+        () => createAvelutAI(appSettings, userProfile),
         [appSettings, userProfile]
     );
     const profileSnapshotRef = useRef({
@@ -605,7 +605,7 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
         fetchTextbook();
     }, [userProfile.department_id, userProfile.level, topic.courseName, topic.topic_id, topic.topic_name, topic.topic_context, topic.start_point, topic.end_point]);
 
-    const systemInstruction = `You are VANTUTOR, an expert AI educator. Your primary goal is to provide a comprehensive and complete understanding of the given topic for a student at their specified level.
+    const systemInstruction = `You are AVELUT, an expert AI educator. Your primary goal is to provide a comprehensive and complete understanding of the given topic for a student at their specified level.
 
 Your Method:
 1. First, mentally outline all key concepts needed to fully master the topic.
@@ -1794,7 +1794,7 @@ interface StudyGuideProps {
 }
 export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgress }) => {
   const [courses, setCourses] = useState<Course[]>(() => {
-    return readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
+    return readCachedJson<Course[]>(`avelut_courses_${userProfile.uid}`, []);
   });
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
   const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string; courseId?: string; course_id?: string }) | null>(null);
@@ -1822,7 +1822,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
 
   useEffect(() => {
     const fetchCourses = async () => {
-      const cached = readCachedJson<Course[]>(`vantutor_courses_${userProfile.uid}`, []);
+      const cached = readCachedJson<Course[]>(`avelut_courses_${userProfile.uid}`, []);
       if (cached && cached.length > 0) {
         setIsLoading(false);
       } else {
@@ -1898,7 +1898,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         );
 
         setCourses(enrichedCourses);
-        writeCachedJson(`vantutor_courses_${userProfile.uid}`, enrichedCourses);
+        writeCachedJson(`avelut_courses_${userProfile.uid}`, enrichedCourses);
       } catch (err) {
         console.error("Error fetching courses:", err);
         addToast("Could not load study materials.", 'error');

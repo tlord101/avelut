@@ -48,7 +48,7 @@ export const LimitExceededModal: React.FC<LimitExceededModalProps> = ({
       case 'exams':
         return 'Mock Practice Exam Generations';
       default:
-        return 'VanTutor Premium Features';
+        return 'AVELUT Premium Features';
     }
   };
 
@@ -70,7 +70,7 @@ export const LimitExceededModal: React.FC<LimitExceededModalProps> = ({
   const handlePurchase = async () => {
     setIsProcessing(true);
     const publicKey = appSettings.paystack_public_key?.trim();
-    const email = userProfile.email || `${userProfile.uid}@vantutor.com`;
+    const email = userProfile.email || `${userProfile.uid}@avelut.com`;
 
     await triggerPaystackPurchase({
       publicKey,

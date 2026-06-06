@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, get, set } from 'firebase/database';
-import { createVanTutorAI } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -31,7 +31,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, u
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const geminiModel = appSettings.primary_gemini_model;
-    const ai = useMemo(() => createVanTutorAI(appSettings, userProfile), [appSettings, userProfile]);
+    const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
 
     const [timetable, setTimetable] = useState<StudySession[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -125,7 +125,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, u
                 };
             }
 
-            const prompt = `You are VANTUTOR AI Study Scheduler.
+            const prompt = `You are AVELUT AI Study Scheduler.
 Analyze the user's study goals, text context, and/or uploaded syllabus/timetable file to generate a highly efficient, balanced weekly study timetable.
 Generate exactly 5 to 10 study sessions distributed across the week.
 For each session, provide:

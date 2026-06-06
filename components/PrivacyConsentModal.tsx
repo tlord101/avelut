@@ -21,7 +21,7 @@ export const PrivacyConsentModal: React.FC<PrivacyConsentModalProps> = ({ onAllo
             </div>
             <h2 id="privacy-title" className="text-2xl font-bold text-gray-900">Your Privacy Matters</h2>
             <p className="text-gray-600 mt-4">
-                To enhance security and personalize your experience, VANTUTOR collects data about your site activity. This helps us protect your account and improve our services.
+                To enhance security and personalize your experience, AVELUT collects data about your site activity. This helps us protect your account and improve our services.
             </p>
             <p className="text-gray-600 mt-2">
                 Do you consent to this data collection? You can change this in your browser settings at any time.

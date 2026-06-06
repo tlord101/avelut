@@ -177,7 +177,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
           <div className="flex justify-center items-center mb-6">
               <LogoIcon className="w-12 h-12 text-lime-500" />
               <h1 className="text-3xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider ml-3">
-                  VANTUTOR
+                  AVELUT
               </h1>
           </div>
           <div className="text-center mb-8">

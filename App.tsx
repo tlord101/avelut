@@ -11,7 +11,7 @@ import { AdminLogin } from './components/AdminLogin';
 import { UploadCenter } from './components/UploadCenter';
 import { Onboarding } from './components/Onboarding';
 import { ActivationScreen } from './components/ActivationScreen';
-import { createVanTutorAI } from './utils/inference';
+import { createAvelutAI } from './utils/inference';
 import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -95,7 +95,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
     if (isStandalone || dismissed) return null;
 
     return (
-        <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install VANTUTOR">
+        <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install AVELUT">
             <div className="relative p-4">
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ice-blue via-brand-500 to-brand-900" />
 
@@ -106,7 +106,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                             <h2 className="text-base font-black tracking-tight text-charcoal">
-                                {canTriggerNativeInstall ? 'Install VANTUTOR' : isIOS ? 'Add VANTUTOR to iPhone' : 'Install VANTUTOR'}
+                                {canTriggerNativeInstall ? 'Install AVELUT' : isIOS ? 'Add AVELUT to iPhone' : 'Install AVELUT'}
                             </h2>
                             <span className="rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900">
                                 {isIOS ? 'iOS' : 'Android'}
@@ -114,7 +114,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         </div>
                         <p className="mt-1 text-sm leading-relaxed text-charcoal/65">
                             {canTriggerNativeInstall
-                                ? 'Install VANTUTOR from your browser for quick access any time.'
+                                ? 'Install AVELUT from your browser for quick access any time.'
                                 : isIOS
                                     ? 'Open Safari’s share menu, then choose Add to Home Screen.'
                                     : 'Open the browser menu and choose Install app.'}
@@ -174,7 +174,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                         </div>
                         <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
                             {canTriggerNativeInstall
-                                ? 'The browser will add VANTUTOR to your device.'
+                                ? 'The browser will add AVELUT to your device.'
                                 : 'Choose Add to Home Screen to finish setup.'}
                         </p>
                     </div>
@@ -385,7 +385,7 @@ const App: React.FC = () => {
 
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
         if (typeof window === 'undefined') return false;
-        return window.localStorage.getItem('vantutor_admin_authenticated') === 'true';
+        return window.localStorage.getItem('avelut_admin_authenticated') === 'true';
     });
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [pendingMessengerChatId, setPendingMessengerChatId] = useState<string | null>(null);
@@ -401,7 +401,7 @@ const App: React.FC = () => {
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
-        createVanTutorAI(appSettings, userProfile)
+        createAvelutAI(appSettings, userProfile)
     ), [appSettings, userProfile]);
     const isUploadCenterRoute = getWindowPathname().startsWith('/upload-center');
     const isAdminRoute = getWindowPathname().startsWith('/admin');
@@ -472,7 +472,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        window.localStorage.setItem('vantutor_admin_authenticated', isAdminAuthenticated ? 'true' : 'false');
+        window.localStorage.setItem('avelut_admin_authenticated', isAdminAuthenticated ? 'true' : 'false');
     }, [isAdminAuthenticated]);
 
     const handleProfileUpdate = useCallback(async (updatedData: Partial<UserProfile>): Promise<{ success: boolean; error?: string }> => {
@@ -508,7 +508,7 @@ const App: React.FC = () => {
             setIsProfileLoading(false);
             return;
         }
-        const cacheKey = `vantutor_profile_${user.uid}`;
+        const cacheKey = `avelut_profile_${user.uid}`;
         const cachedProfile = readCachedJson<UserProfile | null>(cacheKey, null);
         if (cachedProfile) {
             setUserProfile(cachedProfile);
@@ -618,7 +618,7 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (!userProfile) return;
-        const cacheKey = `vantutor_progress_${userProfile.uid}`;
+        const cacheKey = `avelut_progress_${userProfile.uid}`;
         const cachedProgress = readCachedJson<UserProgress>(cacheKey, {});
         setUserProgress(cachedProgress);
 
@@ -638,13 +638,13 @@ const App: React.FC = () => {
             return;
         }
 
-        const cacheKeyDashboard = `vantutor_dashboard_${userProfile.uid}`;
+        const cacheKeyDashboard = `avelut_dashboard_${userProfile.uid}`;
         const cachedDashboard = readCachedJson<DashboardData | null>(cacheKeyDashboard, null);
         if (cachedDashboard) {
             setDashboardData(cachedDashboard);
         }
 
-        const cacheKeyNotif = `vantutor_notifications_${userProfile.uid}`;
+        const cacheKeyNotif = `avelut_notifications_${userProfile.uid}`;
         const cachedNotif = readCachedJson<NotificationType[]>(cacheKeyNotif, []);
         setNotifications(cachedNotif);
         
@@ -697,7 +697,7 @@ const App: React.FC = () => {
             return;
         }
 
-        const deptCacheKey = `vantutor_dept_data_${userProfile.department_id}`;
+        const deptCacheKey = `avelut_dept_data_${userProfile.department_id}`;
         const cached = readCachedJson<any>(deptCacheKey, null);
         if (cached) {
             setDepartmentData(cached);
@@ -775,7 +775,7 @@ const App: React.FC = () => {
             examHistory
         };
         setDashboardData(nextDashboardData);
-        const cacheKeyDashboard = `vantutor_dashboard_${userProfile.uid}`;
+        const cacheKeyDashboard = `avelut_dashboard_${userProfile.uid}`;
         writeCachedJson(cacheKeyDashboard, nextDashboardData);
     }, [userProfile, userProgress, examHistory, departmentData]);
 
@@ -816,7 +816,7 @@ const App: React.FC = () => {
             const newNotifRef = push(notificationRef);
             await set(newNotifRef, {
                 type: 'welcome',
-                title: 'Welcome to VANTUTOR!',
+                title: 'Welcome to AVELUT!',
                 message: 'Your learning journey starts now. Explore the study guide to begin.',
                 is_read: false,
                 timestamp: serverTimestamp()
@@ -889,7 +889,7 @@ const App: React.FC = () => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     const tourSteps: TourStep[] = [
-      { target: 'body', title: '👋 Welcome to VANTUTOR!', content: "Let's take a quick tour of your new learning dashboard.", placement: 'center' },
+      { target: 'body', title: '👋 Welcome to AVELUT!', content: "Let's take a quick tour of your new learning dashboard.", placement: 'center' },
       { target: '[data-tour-id="dashboard-content"]', title: '📊 Your Dashboard', content: 'View your progress, streaks, and personalized lessons.', placement: 'bottom' },
       { target: isMobile ? '[data-tour-id="bottomnav-study_guide"]' : '[data-tour-id="sidebar-study_guide"]', title: '📚 Study Guide', content: 'Explore tutorials and start new lessons anytime.', placement: isMobile ? 'top' : 'right' },
       { target: isMobile ? '[data-tour-id="bottomnav-visual_solver"]' : '[data-tour-id="sidebar-visual_solver"]', title: '📸 Visual Solver', content: 'Scan any problem and get instant or detailed tutorials.', placement: isMobile ? 'top' : 'right' },
@@ -965,7 +965,7 @@ const App: React.FC = () => {
         return (
             <div key="coming-soon-state" className="min-h-screen">
                 <ComingSoonScreen
-                    title="VANTUTOR is coming soon"
+                    title="AVELUT is coming soon"
                     subtitle="We are polishing the full learning experience right now. Admins can reopen the app anytime."
                     supportText="If you are an admin, open the admin panel to manage launch settings."
                 />

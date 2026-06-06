@@ -80,13 +80,13 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
           <div className="flex justify-center items-center mb-6">
               <LogoIcon className="w-12 h-12 text-lime-500" />
               <h1 className="text-3xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider ml-3">
-                  VANTUTOR
+                  AVELUT
               </h1>
           </div>
 
           <div className="text-center mb-8">
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-wider">Create Account</h2>
-            <p className="text-gray-600 mt-2">Join VANTUTOR to start learning.</p>
+            <p className="text-gray-600 mt-2">Join AVELUT to start learning.</p>
           </div>
 
           <form onSubmit={handleSubmit}>

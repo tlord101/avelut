@@ -9,7 +9,7 @@ import { Leaderboard } from './components/Leaderboard';
 import { Settings } from './components/Settings';
 import Help from './components/Help';
 import { Messenger } from './components/Messenger';
-import VanTutorAssistant from './components/VanTutorAssistant';
+import AvelutAI from './components/AvelutAI';
 import { AdminPanel } from './components/AdminPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -70,7 +70,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'chat':
             return (
                 <ErrorBoundary>
-                    <VanTutorAssistant userProfile={userProfile} />
+                    <AvelutAI userProfile={userProfile} />
                 </ErrorBoundary>
             );
                 case 'admin':

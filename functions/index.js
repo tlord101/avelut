@@ -23,7 +23,7 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
         const message = {
             token: userData.fcm_token,
             notification: {
-                title: notification.title || 'VANTUTOR',
+                title: notification.title || 'AVELUT',
                 body: notification.message || '',
             },
             data: {
@@ -41,7 +41,7 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
                     icon: 'https://ai.vaultsglofin.com/logo_notification.svg',
                     badge: 'https://ai.vaultsglofin.com/logo_notification.svg',
                     vibrate: [200, 100, 200],
-                    tag: 'vantutor-alert',
+                    tag: 'avelut-alert',
                     renotify: true
                 }
             }
@@ -173,7 +173,7 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
                 token: user.fcm_token,
                 notification: {
                     title: '📚 Ready to study?',
-                    body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on VANTUTOR.`,
+                    body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on AVELUT.`,
                 },
                 android: {
                     notification: {
@@ -186,7 +186,7 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
                         icon: 'https://ai.vaultsglofin.com/logo_notification.svg',
                         badge: 'https://ai.vaultsglofin.com/logo_notification.svg',
                         vibrate: [200, 100, 200],
-                        tag: 'vantutor-reminder',
+                        tag: 'avelut-reminder',
                         renotify: true
                     }
                 }
@@ -241,7 +241,7 @@ exports.processEmailQueue = functions.database.ref('/email_queue/{queueId}')
                 }
             });
 
-            const fromName = config.from_name || 'VanTutor';
+            const fromName = config.from_name || 'AVELUT';
             const fromEmail = config.from_email || config.user;
 
             const mailOptions = {
@@ -395,7 +395,7 @@ exports.checkTimetableReminders = functions.pubsub.schedule('* * * * *').onRun(a
                     emailPromise = emailRef.set({
                         recipients: userData.email,
                         subject: `${title}: ${session.subject}`,
-                        body: `Hi ${userData.display_name || 'Learner'},\n\n${message}\n\nHappy learning,\nThe VANTUTOR Team`,
+                        body: `Hi ${userData.display_name || 'Learner'},\n\n${message}\n\nHappy learning,\nThe AVELUT Team`,
                         created_at: Date.now(),
                         status: 'pending'
                     });

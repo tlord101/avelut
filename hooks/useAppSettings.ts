@@ -5,7 +5,7 @@ import type { AppSettings } from '../types';
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../utils/appSettings';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 
-const CACHE_KEY = 'vantutor_app_settings';
+const CACHE_KEY = 'avelut_app_settings';
 
 export const useAppSettings = () => {
   const [settings, setSettings] = useState<AppSettings>(() => {

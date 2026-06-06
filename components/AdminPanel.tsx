@@ -555,7 +555,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             await set(ref, {
                 id: ref.key,
                 user_id: mockUser.uid,
-                email: mockUser.email || 'student@vantutor.com',
+                email: mockUser.email || 'student@avelut.com',
                 reason: 'Requested course change / accidental subscription',
                 status: 'pending',
                 timestamp: Date.now()
@@ -578,7 +578,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             await set(ref, {
                 id: ref.key,
                 user_id: mockUser.uid,
-                email: mockUser.email || 'student@vantutor.com',
+                email: mockUser.email || 'student@avelut.com',
                 message: 'Paystack payment went through but the activation screen did not disappear immediately.',
                 status: 'pending',
                 timestamp: Date.now()
@@ -841,7 +841,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }
 
             await set(dbRef(db, `email_queue/${testJobId}`), {
-                subject: "⚡ VANTUTOR SMTP Connection Test",
+                subject: "⚡ AVELUT SMTP Connection Test",
                 body: `Hello! If you are reading this email, your SMTP settings for Host: ${nextConfig.host} are configured correctly and fully functional.`,
                 recipients: [adminEmail],
                 status: 'pending',
@@ -2216,7 +2216,7 @@ FORMAT:
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
 
     return (
-        <div className="min-h-screen bg-[#f4f6f9] flex text-slate-800 w-full overflow-hidden font-sans select-none vantutor-admin">
+        <div className="min-h-screen bg-[#f4f6f9] flex text-slate-800 w-full overflow-hidden font-sans select-none avelut-admin">
             {/* Mobile Sidebar Backdrop */}
             {isMobileSidebarOpen && (
                 <div 
@@ -2240,7 +2240,7 @@ FORMAT:
                             </div>
                             <div>
                                 <h2 className="text-sm font-black text-slate-800 tracking-wide leading-tight">AdminLTE 4</h2>
-                                <p className="text-[9px] uppercase font-bold text-blue-600 tracking-widest -mt-0.5">VanTutor Admin</p>
+                                <p className="text-[9px] uppercase font-bold text-blue-600 tracking-widest -mt-0.5">AVELUT Admin</p>
                             </div>
                         </div>
                         {/* Close button for mobile */}
@@ -4856,7 +4856,7 @@ FORMAT:
                                             type="text"
                                             value={emailConfigDraft.from_name}
                                             onChange={(e) => setEmailConfigDraft({ ...emailConfigDraft, from_name: e.target.value })}
-                                            placeholder="VanTutor"
+                                            placeholder="AVELUT"
                                             className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition text-slate-805"
                                         />
                                     </div>
