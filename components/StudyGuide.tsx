@@ -529,9 +529,26 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
         setIsTutorialsLoading(true);
         setTutorialsError(null);
         try {
+            const contextToUse = selectedTopicContext || [
+                topic.topic_context ? `Topic context: ${topic.topic_context}` : '',
+                topic.start_point ? `Start teaching from: ${topic.start_point}` : '',
+                topic.end_point ? `Stop teaching at: ${topic.end_point}` : '',
+            ].filter(Boolean).join('\n');
+
             const prompt = `
-Identify 5 to 10 sub-topics or specific tutorial search terms for the university topic: '${topic.topic_name}' in the course: '${topic.courseName}'.
-For each sub-topic, provide a clear, educational title, a brief description, a specific search query that will find the best, highly-rated educational tutorial on YouTube, and a predicted highly popular YouTube video ID for that tutorial (e.g. from channels like CrashCourse, Khan Academy, MIT OpenCourseWare, 3Blue1Brown, FreeCodeCamp, or similar).
+You are an expert academic advisor. Your task is to identify 5 to 10 highly specific, relevant video tutorials or search terms for the university-level topic: '${topic.topic_name}' under the course: '${topic.courseName}' at level: '${userProfile.level || 'University'}'.
+
+CRITICAL INSTRUCTIONS FOR RELEVANCE AND CONTEXT:
+1. Every tutorial search query and title MUST be directly specific to the course ('${topic.courseName}') and topic ('${topic.topic_name}') at hand. Do NOT provide generic, out-of-context, or mismatched tutorials.
+2. Ground your selections in the following context/summary of what the student is about to learn:
+${contextToUse ? contextToUse : `Topic: ${topic.topic_name}\nCourse: ${topic.courseName}`}
+
+3. For each sub-topic, provide:
+   - "title": A clear, educational title indicating precisely what sub-topic is covered.
+   - "description": A brief, specific summary of what the user is about to learn from this tutorial in the context of this course.
+   - "searchQuery": A highly specific search query (including the course name, topic name, and sub-topic name) that will find the best, highly-rated educational tutorial on YouTube (e.g. from academic channels like CrashCourse, Khan Academy, MIT OpenCourseWare, 3Blue1Brown, FreeCodeCamp, etc.).
+   - "videoId": A predicted highly popular YouTube video ID for that tutorial that matches this query.
+
 Return valid JSON as a list of objects with keys: title, description, searchQuery, and videoId. Do not add any backticks, explanation, or HTML markdown outside of the JSON array.
 `;
             const result = await attemptApiCall(async () => {
