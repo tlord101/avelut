@@ -64,12 +64,17 @@ export const compressContext = (params: any, tpmLimit: number = 250000): any => 
   
   let totalLength = 0;
   const countChars = (item: any) => {
-    if (typeof item === 'string') {
-      totalLength += item.length;
-    } else if (item && typeof item === 'object') {
-      for (const key in item) {
-        countChars(item[key]);
+    if (item && typeof item === 'object') {
+      if ('inlineData' in item) {
+        return;
       }
+      for (const key in item) {
+        if (key !== 'inlineData') {
+          countChars(item[key]);
+        }
+      }
+    } else if (typeof item === 'string') {
+      totalLength += item.length;
     }
   };
   countChars(params);
@@ -86,6 +91,23 @@ export const compressContext = (params: any, tpmLimit: number = 250000): any => 
   while (totalLength > maxChars && threshold > 500) {
     totalLength = 0;
     const truncate = (obj: any): any => {
+      if (obj && typeof obj === 'object') {
+        if ('inlineData' in obj) {
+          return obj;
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(item => truncate(item));
+        }
+        const res: any = {};
+        for (const key in obj) {
+          if (key === 'inlineData') {
+            res[key] = obj[key];
+          } else {
+            res[key] = truncate(obj[key]);
+          }
+        }
+        return res;
+      }
       if (typeof obj === 'string') {
         if (obj.length > threshold) {
           const truncated = obj.substring(0, threshold) + '\n[... Context compressed to stay within limit ...]';
@@ -94,14 +116,6 @@ export const compressContext = (params: any, tpmLimit: number = 250000): any => 
         }
         totalLength += obj.length;
         return obj;
-      } else if (Array.isArray(obj)) {
-        return obj.map(item => truncate(item));
-      } else if (obj && typeof obj === 'object') {
-        const res: any = {};
-        for (const key in obj) {
-          res[key] = truncate(obj[key]);
-        }
-        return res;
       }
       return obj;
     };
@@ -188,16 +202,25 @@ export const createAvelutAI = (
       const mathOrCodeRequested = isMathOrCodeRequested(processedParams.contents);
       
       const compact = (obj: any): any => {
-        if (typeof obj === 'string') {
-          return compactContext(obj, mathOrCodeRequested);
-        } else if (Array.isArray(obj)) {
-          return obj.map(item => compact(item));
-        } else if (obj && typeof obj === 'object') {
+        if (obj && typeof obj === 'object') {
+          if ('inlineData' in obj) {
+            return obj;
+          }
+          if (Array.isArray(obj)) {
+            return obj.map(item => compact(item));
+          }
           const res: any = {};
           for (const key in obj) {
-            res[key] = compact(obj[key]);
+            if (key === 'inlineData') {
+              res[key] = obj[key];
+            } else {
+              res[key] = compact(obj[key]);
+            }
           }
           return res;
+        }
+        if (typeof obj === 'string') {
+          return compactContext(obj, mathOrCodeRequested);
         }
         return obj;
       };

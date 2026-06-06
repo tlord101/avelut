@@ -17,6 +17,8 @@ import {
   signOut as firebaseSignOut
 } from "firebase/auth";
 
+declare const __firebase_config: any;
+
 // Initialize Firebase configuration reading from environment variables (Vite)
 // with a safe fallback to the window-injected __firebase_config global.
 const firebaseConfig = {

@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { get, onValue, push, ref as dbRef, serverTimestamp, set, update, remove } from 'firebase/database';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 // @ts-ignore: Allow importing third-party CSS without type declarations
 import 'katex/dist/katex.min.css';
 import { db, storage } from '../firebase';
@@ -153,23 +153,104 @@ const pcm16ToFloat32 = (pcmBytes: Uint8Array) => {
   return floatData;
 };
 
-const uploadChatAttachment = async (userId: string, conversationId: string, file: File, index: number) => {
-  const attachmentToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-    ? crypto.randomUUID()
-    : `${Date.now()}_${index}`;
-  const safeName = sanitizeFileName(file.name);
-  const path = `assistant_attachments/${userId}/${conversationId}/${attachmentToken}_${safeName}`;
-  const fileRef = storageRef(storage, path);
-  const snapshot = await uploadBytes(fileRef, file);
-  const url = await getDownloadURL(snapshot.ref);
-  return {
-    id: attachmentToken,
-    name: file.name,
-    mimeType: file.type || 'application/octet-stream',
-    url,
-    isImage: isImageMimeType(file.type, file.name),
-  } satisfies AssistantAttachment;
+const uploadChatAttachment = (
+  userId: string,
+  conversationId: string,
+  file: File,
+  index: number,
+  onProgress?: (progress: number) => void
+): Promise<AssistantAttachment> => {
+  return new Promise((resolve, reject) => {
+    const attachmentToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : `${Date.now()}_${index}`;
+    const safeName = sanitizeFileName(file.name);
+    const path = `assistant_attachments/${userId}/${conversationId}/${attachmentToken}_${safeName}`;
+    const fileRef = storageRef(storage, path);
+    const uploadTask = uploadBytesResumable(fileRef, file);
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = snapshot.totalBytes > 0 ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100 : 0;
+        if (onProgress) {
+          onProgress(Math.round(progress));
+        }
+      },
+      (error) => {
+        reject(error);
+      },
+      async () => {
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve({
+            id: attachmentToken,
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            url,
+            isImage: isImageMimeType(file.type, file.name),
+          });
+        } catch (err) {
+          reject(err);
+        }
+      }
+    );
+  });
 };
+
+const getMimeType = (file: File): string => {
+  if (file.type) return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    case 'mp3': return 'audio/mp3';
+    case 'wav': return 'audio/wav';
+    case 'ogg': return 'audio/ogg';
+    case 'mp4': return 'video/mp4';
+    case 'webm': return 'video/webm';
+    case 'txt': return 'text/plain';
+    case 'html': return 'text/html';
+    case 'css': return 'text/css';
+    case 'js': return 'text/javascript';
+    case 'json': return 'application/json';
+    default: return 'application/octet-stream';
+  }
+};
+
+const isSupportedInlineMimeType = (mimeType: string, fileName: string) => {
+  const lowerName = fileName.toLowerCase();
+  if (mimeType.startsWith('image/') || lowerName.match(/\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i)) {
+    return true;
+  }
+  if (mimeType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+    return true;
+  }
+  if (mimeType.startsWith('audio/') || lowerName.match(/\.(mp3|wav|aiff|aac|ogg|flac|m4a)$/i)) {
+    return true;
+  }
+  if (mimeType.startsWith('video/') || lowerName.match(/\.(mp4|mpeg|mov|avi|flv|webm|3gp)$/i)) {
+    return true;
+  }
+  return false;
+};
+
+const isTextFile = (mimeType: string, fileName: string) => {
+  const lowerName = fileName.toLowerCase();
+  const textExtensions = ['.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.h', '.html', '.css', '.json', '.xml', '.csv', '.md', '.yaml', '.yml', '.ini', '.conf'];
+  return mimeType.startsWith('text/') || textExtensions.some(ext => lowerName.endsWith(ext));
+};
+
+const readTextFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+  reader.onerror = () => reject(reader.error);
+  reader.readAsText(file);
+});
 
 const readCourseText = (courses: Course[], userLevel: string) => {
   if (!courses.length) return '';
@@ -272,12 +353,31 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(`avelut_ai_active_chat_id_${userProfile.uid}`) || null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (activeHistoryId) {
+        localStorage.setItem(`avelut_ai_active_chat_id_${userProfile.uid}`, activeHistoryId);
+      } else {
+        localStorage.removeItem(`avelut_ai_active_chat_id_${userProfile.uid}`);
+      }
+    } catch (e) {
+      console.warn('Failed to cache active chat ID:', e);
+    }
+  }, [activeHistoryId, userProfile.uid]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [courseContext, setCourseContext] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -667,21 +767,79 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
       const messagesRef = dbRef(db, `chat_messages/${conversationId}`);
       const storedAttachments: AssistantAttachment[] = [];
-      const attachmentParts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
+      const attachmentParts: any[] = [];
 
       for (let index = 0; index < filesToSend.length; index += 1) {
         const file = filesToSend[index];
-        const storedAttachment = await uploadChatAttachment(userProfile.uid, conversationId, file, index);
+        const mimeType = getMimeType(file);
+        
+        const prefix = filesToSend.length > 1 ? `[File ${index + 1}/${filesToSend.length}] ` : '';
+        setUploadProgress(`Uploading ${prefix}${file.name} (0%)...`);
+        setStatusText(`Uploading ${prefix}${file.name} (0%)...`);
+
+        const storedAttachment = await uploadChatAttachment(
+          userProfile.uid,
+          conversationId,
+          file,
+          index,
+          (percent) => {
+            const msg = `Uploading ${prefix}${file.name} (${percent}%)...`;
+            setUploadProgress(msg);
+            setStatusText(msg);
+          }
+        );
         storedAttachments.push(storedAttachment);
 
-        const data = await fileToBase64(file);
-        attachmentParts.push({
-          inlineData: {
-            data,
-            mimeType: file.type || 'application/octet-stream',
-          },
-        });
+        if (isSupportedInlineMimeType(mimeType, file.name)) {
+          const data = await fileToBase64(file);
+          attachmentParts.push({
+            inlineData: {
+              data,
+              mimeType,
+            },
+          });
+        } else if (isTextFile(mimeType, file.name)) {
+          setUploadProgress(`Reading ${file.name}...`);
+          try {
+            const textContent = await readTextFile(file);
+            attachmentParts.push({
+              text: `[Content of attached file: ${file.name}]\n\n${textContent}`
+            });
+          } catch (readErr) {
+            console.error(`Failed to read text file ${file.name}:`, readErr);
+            const data = await fileToBase64(file);
+            attachmentParts.push({
+              inlineData: { data, mimeType }
+            });
+          }
+        } else if (file.name.toLowerCase().endsWith('.docx')) {
+          setUploadProgress(`Extracting text from ${file.name}...`);
+          try {
+            const mammoth = await import('mammoth');
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            attachmentParts.push({
+              text: `[Content of attached file: ${file.name}]\n\n${result.value}`
+            });
+          } catch (docxErr) {
+            console.error(`Failed to parse docx file ${file.name}:`, docxErr);
+            const data = await fileToBase64(file);
+            attachmentParts.push({
+              inlineData: { data, mimeType }
+            });
+          }
+        } else {
+          const data = await fileToBase64(file);
+          attachmentParts.push({
+            inlineData: {
+              data,
+              mimeType,
+            },
+          });
+        }
       }
+
+      setUploadProgress(null);
 
       const storedUserMessage = {
         text: userText,
@@ -784,6 +942,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       setStatusText('Unable to respond right now.');
     } finally {
       setIsSending(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1307,7 +1466,14 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                 {isSending && (
                   <div className="flex justify-start">
                     <div className="rounded-3xl border border-neutral-800 bg-[#0e1227] px-4 py-3 text-sm text-slate-400 shadow-sm">
-                      Thinking...
+                      {uploadProgress ? (
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                          <span>{uploadProgress}</span>
+                        </div>
+                      ) : (
+                        "Thinking..."
+                      )}
                     </div>
                   </div>
                 )}
@@ -1318,7 +1484,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
           {/* Integrated AVELUT Input Layout Panel */}
           <footer className="w-full bg-[#060814] pb-[84px] md:pb-4 px-4 z-30 shrink-0">
-            <div className="w-full max-w-xl mx-auto transition-all duration-300">
+            <div className="w-full max-w-xl mx-auto transition-all duration-300 mb-2.5">
               
               {/* Attachment Preview */}
               {attachments.length > 0 && (

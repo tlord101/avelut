@@ -21,6 +21,7 @@
     "firebase": "^12.5.0",
     "katex": "^0.16.25",
     "lucide-react": "^1.16.0",
+    "mammoth": "^1.12.0",
     "marked": "^18.0.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
