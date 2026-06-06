@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { LogoIcon } from './icons/LogoIcon';
 
 // WhatsApp Icon component defined directly to keep it self-contained
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
@@ -92,7 +91,7 @@ const Help: React.FC<HelpProps> = ({ onStartTour }) => {
                 <footer className="text-center mt-12 text-gray-500">
                     <p className="text-sm mb-2">Powered By</p>
                     <div className="flex items-center justify-center gap-2">
-                        <LogoIcon className="w-8 h-8 text-lime-500" />
+                        <img src="/logo_icon.png" alt="AVELUT" className="w-8 h-8 object-contain" />
                         <span className="text-2xl font-bold bg-gradient-to-b from-lime-500 to-green-600 text-transparent bg-clip-text tracking-wider">
                             VANT Labs
                         </span>

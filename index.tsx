@@ -3,7 +3,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './hooks/useToast';
-import { LogoIcon } from './components/icons/LogoIcon';
 
 declare var __firebase_config: any;
 
@@ -11,7 +10,7 @@ declare var __firebase_config: any;
 const SetupRequired: React.FC = () => (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
       <div className="w-full max-w-2xl text-center bg-white p-8 rounded-2xl shadow-2xl border border-red-200">
-        <LogoIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <img src="/logo_icon.png" alt="AVELUT" className="w-16 h-16 mx-auto mb-4 object-contain" />
         <h1 className="text-3xl font-bold text-red-600">Configuration Required</h1>
         <p className="mt-4 text-lg text-gray-700">
           Welcome to AVELUT! To get started, you need to connect the application to your Firebase project.

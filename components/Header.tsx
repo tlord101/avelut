@@ -1,9 +1,7 @@
-
 import React from 'react';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
 import { MenuIcon } from './icons/MenuIcon';
 import { MessengerIcon } from './icons/MessengerIcon';
-import { LogoIcon } from './icons/LogoIcon';
 
 import type { UserProfile } from '../types';
 
@@ -212,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="bg-white dark:bg-slate-900 shadow-2xl rounded-3xl p-8 max-w-sm w-full mx-4 border border-gray-100 dark:border-slate-800 text-center flex flex-col items-center gap-6 animate-fade-in-up">
                         <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-[#EAF6FD] dark:bg-[#00467A]/50">
                             <div className="absolute inset-0 rounded-full border-4 border-t-transparent border-[#0088CC] animate-spin" />
-                            <LogoIcon className="w-12 h-12 loader-logo relative z-10" />
+                            <img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 relative z-10 object-contain" />
                         </div>
                         <div>
                             <h3 className="text-xl font-bold text-charcoal dark:text-white">Installing AVELUT...</h3>

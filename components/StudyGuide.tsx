@@ -301,6 +301,45 @@ const fetchRealYoutubeVideo = async (searchQuery: string, predictedVideoId: stri
     }
 };
 
+const parseMessageSuggestions = (text: string): { cleanText: string; suggestions: string[] } => {
+    if (!text) return { cleanText: '', suggestions: [] };
+    
+    // Match suggestions pattern like [Suggestions: Option 1 | Option 2]
+    const regex = /\[Suggestions:\s*(.*?)\]/i;
+    const match = text.match(regex);
+    
+    if (match) {
+        const rawOptions = match[1] || '';
+        const suggestions = rawOptions
+            .split('|')
+            .map(opt => opt.trim())
+            .filter(Boolean);
+            
+        // Remove suggestions from the rendered text
+        const cleanText = text.replace(regex, '').trim();
+        return { cleanText, suggestions };
+    }
+    
+    // For streaming rendering, hide partial suggestions syntax to prevent flashing
+    const lowerText = text.toLowerCase();
+    const partialIndex = lowerText.indexOf('[suggestions:');
+    if (partialIndex !== -1) {
+        const cleanText = text.substring(0, partialIndex).trim();
+        return { cleanText, suggestions: [] };
+    }
+    
+    const lastBracketIndex = text.lastIndexOf('[');
+    if (lastBracketIndex !== -1 && lastBracketIndex > text.length - 15) {
+        const potential = text.substring(lastBracketIndex).toLowerCase();
+        if ('[suggestions:'.startsWith(potential)) {
+            const cleanText = text.substring(0, lastBracketIndex).trim();
+            return { cleanText, suggestions: [] };
+        }
+    }
+    
+    return { cleanText: text, suggestions: [] };
+};
+
 const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
@@ -610,9 +649,12 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
 Your Method:
 1. First, mentally outline all key concepts needed to fully master the topic.
 2. Begin teaching, but do NOT present the entire outline at once.
-3. Break the lesson into very small, bite-sized chunks. Each message you send must be short and focus on a single, simple idea.
+3. Break the lesson into very small, bite-sized chunks. Each message you send must be extremely short, concise, and focused on a single, simple idea. Avoid long lectures or long messages at all costs. Responses should be delivered bit-by-bit (maximum 2-4 sentences per concept).
 4. After explaining a small concept, you MUST end your message with a simple question to check for understanding before proceeding. This is crucial.
 5. NEVER deliver long lectures. Keep it interactive and conversational.
+6. At the very end of your response, you MUST attach exactly 2 to 3 short, context-specific suggestion pills to continue the conversation. Format them on a single line at the very end of the response as:
+[Suggestions: Option 1 | Option 2 | Option 3]
+Keep these options extremely short (1-4 words each) and highly relevant to the concept you just taught (e.g. 'Yes, explain', 'Give an example', 'Next concept').
 
 Use simple language, analogies, and Markdown for clarity. For mathematical formulas and symbols, use LaTeX syntax (e.g., $...$ for inline and $$...$$ for block). Be patient and encouraging.
 
@@ -1138,8 +1180,8 @@ Student: "${tempInput}"
                     </div>
                 ) : (
                 <>
-                {messages.map((message, index) => {
-                    const showIllustrateButton = index === lastBotMessageIndex && !!message.text && !isLoading && !isIllustrating;
+                {messages.map((message) => {
+                    const { cleanText, suggestions } = parseMessageSuggestions(message.text || '');
 
                     return (
                         <div key={message.id} className={`flex items-start gap-3 w-full animate-fade-in-up ${message.sender === 'user' ? 'justify-end items-end' : 'justify-start'}`}>
@@ -1191,9 +1233,9 @@ Student: "${tempInput}"
                                         </div>
                                     )}
                                     {message.sender === 'user' ? (
-                                        <p className="text-sm sm:text-base whitespace-pre-wrap break-words">{message.text}</p>
+                                        <p className="text-sm sm:text-base whitespace-pre-wrap break-words">{cleanText}</p>
                                     ) : (
-                                        message.text &&
+                                        cleanText &&
                                         <div className="text-sm sm:text-base prose prose-sm max-w-none">
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm, remarkMath]}
@@ -1233,20 +1275,24 @@ Student: "${tempInput}"
                                                     hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
                                                 }}
                                             >
-                                                {message.text}
+                                                {cleanText}
                                             </ReactMarkdown>
                                         </div>
                                     )}
                                 </div>
-                                {showIllustrateButton && (
-                                    <button
-                                        onClick={() => handleGenerateIllustration(message.text!)}
-                                        disabled={isLoading || isIllustrating}
-                                        className="mt-2 flex items-center gap-1.5 text-sm text-gray-600 hover:text-lime-700 font-medium transition-colors disabled:opacity-50"
-                                    >
-                                        <SparklesIcon className="w-4 h-4" />
-                                        <span>Visualize</span>
-                                    </button>
+                                {message.sender === 'bot' && suggestions.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2 max-w-full">
+                                        {suggestions.map((suggestion, sIdx) => (
+                                            <button
+                                                key={sIdx}
+                                                onClick={() => handleSend(suggestion)}
+                                                disabled={isLoading || isIllustrating}
+                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer select-none"
+                                            >
+                                                {suggestion}
+                                            </button>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
 
@@ -1258,49 +1304,52 @@ Student: "${tempInput}"
                         </div>
                     )
                 })}
-                {streamingBotText !== null && (
-                    <div className="flex items-start gap-3 w-full animate-fade-in-up justify-start">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0 self-start">
-                           <GraduationCapIcon className="w-full h-full p-1.5 text-white" />
-                        </div>
-                        <div className="flex flex-col max-w-[85%] sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl" style={{ alignItems: 'flex-start' }}>
-                            <div className="p-3 px-4 rounded-2xl break-words bg-white text-gray-800 rounded-bl-none border border-gray-200">
-                                <div className="text-sm sm:text-base prose prose-sm max-w-none">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm, remarkMath]}
-                                        rehypePlugins={[rehypeKatex]}
-                                        components={{
-                                            h1: ({node, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3 mt-2" {...props} />,
-                                            h2: ({node, ...props}) => <h2 className="text-lg font-bold text-gray-900 mb-2 mt-3" {...props} />,
-                                            h3: ({node, ...props}) => <h3 className="text-base font-semibold text-gray-800 mb-2 mt-2" {...props} />,
-                                            p: ({node, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800" {...props} />,
-                                            strong: ({node, ...props}) => <strong className="font-bold text-gray-900 bg-yellow-100 px-1 py-0.5 rounded" {...props} />,
-                                            em: ({node, ...props}) => <em className="italic text-lime-700 font-medium" {...props} />,
-                                            ul: ({node, ...props}) => <ul className="list-disc list-outside space-y-1.5 my-3 pl-5" {...props} />,
-                                            ol: ({node, ...props}) => <ol className="list-decimal list-outside space-y-1.5 my-3 pl-5" {...props} />,
-                                            li: ({node, ...props}) => <li className="text-gray-700 leading-relaxed pl-1" {...props} />,
-                                            a: ({node, ...props}) => <a className="text-lime-600 hover:text-lime-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />,
-                                            code: ({node, inline, ...props}: any) => 
-                                                inline ? (
-                                                    <code className="bg-lime-50 text-lime-800 px-1.5 py-0.5 rounded text-xs font-mono border border-lime-200" {...props} />
-                                                ) : (
-                                                    <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-3 text-xs font-mono" {...props} />
-                                                ),
-                                            pre: ({node, ...props}) => <pre className="bg-gray-900 rounded-lg overflow-hidden my-3" {...props} />,
-                                            blockquote: ({node, ...props}) => <blockquote className="border-l-3 border-lime-500 bg-lime-50 pl-4 pr-3 py-2 my-3 rounded-r italic" {...props} />,
-                                            table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-gray-200 border border-gray-200 text-xs" {...props} /></div>,
-                                            th: ({node, ...props}) => <th className="px-3 py-2 bg-lime-100 text-left font-semibold text-gray-900" {...props} />,
-                                            td: ({node, ...props}) => <td className="px-3 py-2 border-t border-gray-200" {...props} />,
-                                            hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
-                                        }}
-                                    >
-                                        {streamingBotText}
-                                    </ReactMarkdown>
+                {streamingBotText !== null && (() => {
+                    const { cleanText: cleanStreamingText } = parseMessageSuggestions(streamingBotText);
+                    return (
+                        <div className="flex items-start gap-3 w-full animate-fade-in-up justify-start">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0 self-start">
+                               <GraduationCapIcon className="w-full h-full p-1.5 text-white" />
+                            </div>
+                            <div className="flex flex-col max-w-[85%] sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl" style={{ alignItems: 'flex-start' }}>
+                                <div className="p-3 px-4 rounded-2xl break-words bg-white text-gray-800 rounded-bl-none border border-gray-200">
+                                    <div className="text-sm sm:text-base prose prose-sm max-w-none">
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm, remarkMath]}
+                                            rehypePlugins={[rehypeKatex]}
+                                            components={{
+                                                h1: ({node, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3 mt-2" {...props} />,
+                                                h2: ({node, ...props}) => <h2 className="text-lg font-bold text-gray-900 mb-2 mt-3" {...props} />,
+                                                h3: ({node, ...props}) => <h3 className="text-base font-semibold text-gray-800 mb-2 mt-2" {...props} />,
+                                                p: ({node, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800" {...props} />,
+                                                strong: ({node, ...props}) => <strong className="font-bold text-gray-900 bg-yellow-100 px-1 py-0.5 rounded" {...props} />,
+                                                em: ({node, ...props}) => <em className="italic text-lime-700 font-medium" {...props} />,
+                                                ul: ({node, ...props}) => <ul className="list-disc list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                                ol: ({node, ...props}) => <ol className="list-decimal list-outside space-y-1.5 my-3 pl-5" {...props} />,
+                                                li: ({node, ...props}) => <li className="text-gray-700 leading-relaxed pl-1" {...props} />,
+                                                a: ({node, ...props}) => <a className="text-lime-600 hover:text-lime-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />,
+                                                code: ({node, inline, ...props}: any) => 
+                                                    inline ? (
+                                                        <code className="bg-lime-50 text-lime-800 px-1.5 py-0.5 rounded text-xs font-mono border border-lime-200" {...props} />
+                                                    ) : (
+                                                        <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-3 text-xs font-mono" {...props} />
+                                                    ),
+                                                pre: ({node, ...props}) => <pre className="bg-gray-900 rounded-lg overflow-hidden my-3" {...props} />,
+                                                blockquote: ({node, ...props}) => <blockquote className="border-l-3 border-lime-500 bg-lime-50 pl-4 pr-3 py-2 my-3 rounded-r italic" {...props} />,
+                                                table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-gray-200 border border-gray-200 text-xs" {...props} /></div>,
+                                                th: ({node, ...props}) => <th className="px-3 py-2 bg-lime-100 text-left font-semibold text-gray-900" {...props} />,
+                                                td: ({node, ...props}) => <td className="px-3 py-2 border-t border-gray-200" {...props} />,
+                                                hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
+                                            }}
+                                        >
+                                            {cleanStreamingText}
+                                        </ReactMarkdown>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
                 {isLoading && 
                     <div className="flex items-start gap-3 animate-fade-in-up">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0">
@@ -1523,6 +1572,21 @@ Student: "${tempInput}"
                             >
                                 ➤ Forward to Study Partner
                             </button>
+                            {messageActionTarget.sender === 'bot' && messageActionTarget.text && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const textToIllustrate = messageActionTarget.text;
+                                        setMessageActionTarget(null);
+                                        setMessageActionPosition(null);
+                                        void handleGenerateIllustration(textToIllustrate);
+                                    }}
+                                    disabled={isLoading || isIllustrating}
+                                    className="w-full rounded-xl border border-gray-100 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-800 transition hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    🎨 Visualize
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

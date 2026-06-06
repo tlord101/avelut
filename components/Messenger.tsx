@@ -5,7 +5,6 @@ import { useToast } from '../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
 import { Avatar } from './Avatar';
 import { VerificationBadge } from './VerificationBadge';
-import { LogoIcon } from './icons/LogoIcon';
 import { db, storage, auth, onAuthStateChanged, type FirebaseUser } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, update, onDisconnect, get, remove, serverTimestamp as firebaseServerTimestamp, query, limitToLast, increment } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1559,7 +1558,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                             {combinedMessageStream.length === 0 ? (
                               <div className="flex min-h-[48vh] flex-col items-center justify-center text-center">
                                 <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-sm border border-[#E9ECEF]">
-                                  <LogoIcon className="h-11 w-11" />
+                                  <img src="/logo_icon.png" alt="AVELUT" className="h-11 w-11 object-contain" />
                                 </div>
                                 <p className="mt-5 text-xs font-bold uppercase tracking-[0.24em] text-[#6C757D]">New contact</p>
                                 <h2 className="mt-2 text-2xl font-black text-[#212529]">Start a chat to connect</h2>
@@ -1826,7 +1825,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 ) : (
                   <div className="mx-auto max-w-md px-6 text-center select-none">
                     <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[30px] bg-white shadow-sm border border-[#E9ECEF]">
-                      <LogoIcon className="w-14 h-14 text-[#6C757D]" />
+                      <img src="/logo_icon.png" alt="AVELUT" className="w-14 h-14 object-contain" />
                     </div>
                     <h2 className="mt-5 text-2xl font-black tracking-wide text-[#212529]">AVELUT</h2>
                     <p className="mt-2 text-sm leading-6 text-[#6C757D]">Pick a person to start a new chat and connect with them.</p>

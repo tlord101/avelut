@@ -6,7 +6,6 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile, Question, Course, Topic, EmailConfig } from '../types';
-import { LogoIcon } from './icons/LogoIcon';
 import { MenuIcon } from './icons/MenuIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { StackIcon } from './icons/StackIcon';

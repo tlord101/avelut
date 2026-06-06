@@ -15,8 +15,6 @@ import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { XIcon } from './icons/XIcon';
 import { ListIcon } from './icons/ListIcon';
-import { LogoIcon } from './icons/LogoIcon';
-
 declare var __app_id: string;
 
 const TIME_PER_QUESTION_SECONDS = 30;
@@ -36,7 +34,7 @@ const sanitizePromptInput = (value: string): string =>
 
 const LoadingSpinner: React.FC<{ text: string }> = ({ text }) => (
   <div className="flex flex-col items-center justify-center text-center p-8">
-    <LogoIcon className="w-12 h-12 loader-logo" />
+    <img src="/logo_icon.png" alt="Loading..." className="w-12 h-12 object-contain animate-pulse" />
     <p className="mt-4 text-gray-600">{text}</p>
   </div>
 );

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { LogoIcon } from './icons/LogoIcon';
 
 interface AdminLoginProps {
     onLogin: () => void;
@@ -24,7 +23,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
             <div className="w-full max-w-md">
                 <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 shadow-2xl">
                     <div className="flex justify-center items-center mb-6">
-                        <LogoIcon className="w-12 h-12 text-lime-500" />
+                        <img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 object-contain" />
                         <h1 className="text-3xl font-bold text-white tracking-wider ml-3">
                             ADMIN PORTAL
                         </h1>

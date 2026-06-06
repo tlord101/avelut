@@ -2,7 +2,6 @@ import React from 'react';
 import type { Notification } from '../types';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
-import { LogoIcon } from './icons/LogoIcon';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
 
 const timeAgo = (timestamp: number): string => {
@@ -24,7 +23,7 @@ const timeAgo = (timestamp: number): string => {
 const NotificationTypeIcon: React.FC<{ type: Notification['type'], className?: string }> = ({ type, className = "w-6 h-6" }) => {
     switch (type) {
         case 'welcome':
-            return <LogoIcon className={className} />;
+            return <img src="/logo_icon.png" alt="AVELUT" className={`${className} object-contain`} />;
         case 'study_update':
             return <StudyGuideIcon className={className} />;
         case 'exam_reminder':

@@ -4,7 +4,6 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue, off, query, orderByChild, limitToLast } from 'firebase/database';
 import type { UserProfile, LeaderboardEntry } from '../types';
 import { Avatar } from './Avatar';
-import { LogoIcon } from './icons/LogoIcon';
 import { VerificationBadge } from './VerificationBadge';
 
 const getWeekId = (date: Date): string => {
@@ -17,7 +16,7 @@ const getWeekId = (date: Date): string => {
 
 const LoadingSpinner: React.FC = () => (
   <div className="flex justify-center items-center p-8">
-    <LogoIcon className="w-12 h-12 loader-logo" />
+    <img src="/logo_icon.png" alt="Loading..." className="w-12 h-12 object-contain animate-pulse" />
   </div>
 );
 

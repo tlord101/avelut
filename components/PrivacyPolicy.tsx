@@ -1,5 +1,4 @@
 import React from 'react';
-import { LogoIcon } from './icons/LogoIcon';
 
 export default function PrivacyPolicy() {
   const lastUpdated = "June 6, 2026";
@@ -26,7 +25,7 @@ export default function PrivacyPolicy() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1">
-              <LogoIcon className="h-full w-full text-[#002d62]" />
+              <img src="/logo_icon.png" alt="AVELUT" className="h-full w-full object-contain" />
             </div>
             <div>
               <span className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-500">AVELUT</span>

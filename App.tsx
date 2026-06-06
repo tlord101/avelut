@@ -27,7 +27,6 @@ import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import GuidedTour, { TourStep } from './components/GuidedTour';
 import { getWindowPathname } from './utils/pathname';
 import ErrorBoundary from './components/ErrorBoundary';
-import { LogoIcon } from './components/icons/LogoIcon';
 import { MenuIcon } from './components/icons/MenuIcon';
 import { ComingSoonScreen } from './components/ComingSoonScreen';
 import { SharedChatView } from './components/SharedChatView';
@@ -100,7 +99,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
 
                 <div className="flex items-start gap-3">
                     <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
-                        <LogoIcon className="h-11 w-11 loader-logo" />
+                        <img src="/logo_icon.png" alt="AVELUT" className="h-11 w-11 object-contain" />
                     </div>
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -181,7 +180,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
 
                 <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-500 px-4 py-3 text-off-white">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
-                        <LogoIcon className="h-6 w-6 loader-logo" />
+                        <img src="/logo_icon.png" alt="AVELUT" className="h-6 w-6 object-contain" />
                     </div>
                     <div className="min-w-0">
                         <p className="text-sm font-bold leading-tight">Install from Chrome for quick access</p>

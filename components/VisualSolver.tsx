@@ -12,9 +12,6 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useToast } from '../hooks/useToast';
-import { GraduationCapIcon } from './icons/GraduationCapIcon';
-import { LogoIcon } from './icons/LogoIcon';
-
 // --- INLINE ICONS ---
 const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -610,7 +607,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
     const renderContent = () => {
         switch (cameraState) {
             case 'initializing':
-                return <div className="flex flex-col items-center justify-center h-full"><LogoIcon className="w-12 h-12 loader-logo" /><p className="mt-4 text-gray-700">Starting camera...</p></div>;
+                return <div className="flex flex-col items-center justify-center h-full"><img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 object-contain animate-pulse" /><p className="mt-4 text-gray-700">Starting camera...</p></div>;
 
             case 'denied':
                 return <div className="flex flex-col items-center justify-center h-full text-center p-4"><ErrorIcon className="w-12 h-12 text-yellow-500 mb-4" /><h3 className="text-xl font-semibold">Camera Access Denied</h3><p className="text-gray-600 mt-2 max-w-sm">{error}</p><button onClick={initializeCamera} className="mt-6 bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-full hover:bg-gray-300 transition-colors">Retry</button></div>;
@@ -698,7 +695,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                         {scannedImage && <img src={scannedImage} alt="Scanned problem" className="w-full h-full object-contain" />}
                         {cameraState === 'analyzing' && (
                             <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center text-gray-900">
-                                <LogoIcon className="w-12 h-12 loader-logo" />
+                                <img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 object-contain animate-pulse" />
                                 <p className="mt-4 text-lg font-semibold">Analyzing...</p>
                                 <p className="text-gray-600">This may take a moment.</p>
                             </div>

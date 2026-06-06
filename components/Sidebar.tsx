@@ -1,6 +1,5 @@
 import React from 'react';
 import type { NavItem, UserProfile } from '../types';
-import { LogoIcon } from './icons/LogoIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { navigationItems, secondaryNavigationItems, adminNavigationItems } from '../constants';
 import { Avatar } from './Avatar';
@@ -79,10 +78,11 @@ const SidebarContent: React.FC<{
     <div className="h-full p-4 flex flex-col bg-transparent">
       {/* Top Section: Logo */}
       <div className="flex items-center mb-10 flex-shrink-0 px-2 pt-2">
-        <LogoIcon className="w-10 h-10 text-blue-600 flex-shrink-0" />
-        <h1 className={`text-2xl font-black text-slate-800 tracking-tighter ml-3 whitespace-nowrap overflow-hidden transition-opacity duration-300 ease-in-out ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
-          AVELUT
-        </h1>
+        {isExpanded ? (
+          <img src="/logo_full.png" alt="AVELUT Logo" className="h-10 object-contain" />
+        ) : (
+          <img src="/logo_icon.png" alt="AVELUT Logo" className="w-10 h-10 object-contain" />
+        )}
       </div>
       
       {/* Middle Section: Navigation */}

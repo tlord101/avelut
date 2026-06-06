@@ -1,5 +1,4 @@
 import React from 'react';
-import { LogoIcon } from './icons/LogoIcon';
 
 interface ComingSoonScreenProps {
   title: string;
@@ -16,7 +15,7 @@ export const ComingSoonScreen: React.FC<ComingSoonScreenProps> = ({ title, subti
           <div className="flex flex-col justify-between rounded-[28px] bg-[linear-gradient(135deg,_rgba(132,204,22,0.16),_rgba(59,130,246,0.12),_rgba(255,255,255,0.06))] p-6 ring-1 ring-white/10 lg:p-8">
             <div>
               <div className="inline-flex items-center gap-3 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em] text-lime-200">
-                <LogoIcon className="h-5 w-5 loader-logo" />
+                <img src="/logo_icon.png" alt="AVELUT" className="h-5 w-5 object-contain" />
                 AVELUT
               </div>
               <h1 className="mt-6 max-w-xl text-4xl font-black tracking-tight sm:text-5xl">{title}</h1>

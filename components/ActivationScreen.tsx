@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { FirebaseUser } from '../firebase';
 import type { UserProfile, AppSettings } from '../types';
 import { GoogleGenAI } from '@google/genai';
-import { LogoIcon } from './icons/LogoIcon';
 import { triggerPaystackPurchase } from '../utils/usage';
 import { DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
 
@@ -142,7 +141,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
       <div className="w-full max-w-4xl relative z-10 animate-fade-in my-8">
         <div className="flex flex-col items-center text-center mb-8">
           <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-md mb-4 animate-bounce">
-            <LogoIcon className="w-12 h-12 loader-logo text-blue-600" />
+            <img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 object-contain" />
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900 bg-gradient-to-r from-blue-900 via-purple-800 to-indigo-750 bg-clip-text text-transparent">
             Activate Your Study Companion
