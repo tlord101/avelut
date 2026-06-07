@@ -13,6 +13,7 @@ import { VerificationBadge } from './VerificationBadge';
 import { triggerPaystackPurchase } from '../utils/usage';
 import { DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
 import type { AppSettings } from '../types';
+import { isNative } from '../utils/capacitorUtils';
 
 
 declare var __app_id: string;
@@ -209,6 +210,34 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
   
   const handleNotificationToggle = async (enabled: boolean) => {
     setIsNotificationSaving(true);
+    
+    if (isNative()) {
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        if (enabled) {
+          const permResult = await PushNotifications.requestPermissions();
+          if (permResult.receive === 'granted') {
+            await PushNotifications.register();
+            await onProfileUpdate({ notifications_enabled: true });
+            setIsNotificationSwitchOn(true);
+            addToast('Push notifications enabled!', 'success');
+          } else {
+            addToast('Permission denied for push notifications.', 'error');
+          }
+        } else {
+          await onProfileUpdate({ notifications_enabled: false, fcm_token: null });
+          setIsNotificationSwitchOn(false);
+          addToast('Push notifications disabled from AVELUT.', 'info');
+        }
+      } catch (err) {
+        console.error(err);
+        addToast('Failed to update notification settings.', 'error');
+      } finally {
+        setIsNotificationSaving(false);
+      }
+      return;
+    }
+
     const browserPermission = 'Notification' in window ? Notification.permission : 'denied';
 
     if (enabled) {
@@ -375,7 +404,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
       // On success, the App component will handle the user state change and redirect.
     };
 
-  const browserPermission = 'Notification' in window ? Notification.permission : 'denied';
+  const browserPermission = isNative() ? 'granted' : ('Notification' in window ? Notification.permission : 'denied');
 
   return (
     <div className="p-4 sm:p-6 space-y-8">

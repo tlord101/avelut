@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AVELUT Brand Colors for native Android UI -->
+    <!-- Primary brand navy - used for status bar, notification icons -->
+    <color name="colorPrimary">#002D62</color>
+    <!-- Brand azure blue - used for accent and active states -->
+    <color name="colorPrimaryDark">#0052FF</color>
+    <!-- Brand accent - ice blue highlights -->
+    <color name="colorAccent">#B3E5FC</color>
+    <!-- App background -->
+    <color name="colorBackground">#FFFFFF</color>
+    <!-- Splash screen background matches the splash -->
+    <color name="splashBackground">#002D62</color>
+</resources>

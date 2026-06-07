@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { Notification } from '../types';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { ExamIcon } from './icons/ExamIcon';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
+import { clearDeliveredNotifications } from '../utils/nativeNotifications';
 
 const timeAgo = (timestamp: number): string => {
   const now = Date.now();
@@ -42,6 +43,13 @@ interface NotificationsPanelProps {
 }
 
 export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ notifications, isOpen, onClose, onMarkAllAsRead, onMarkAsRead }) => {
+    // Clear native notification tray when panel is opened
+    useEffect(() => {
+        if (isOpen) {
+            clearDeliveredNotifications();
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const unreadCount = notifications.filter(n => !n.is_read).length;

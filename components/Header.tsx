@@ -28,100 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
     rightActions,
     userProfile
 }) => {
-    const [deferredPrompt, setDeferredPrompt] = React.useState<any>(() => {
-        if (typeof window !== 'undefined') {
-            return (window as any).deferredPrompt || null;
-        }
-        return null;
-    });
-    const [isStandalone, setIsStandalone] = React.useState(false);
-    const [isInstalling, setIsInstalling] = React.useState(false);
-
-    React.useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches 
-                || (window.navigator as any).standalone === true;
-            setIsStandalone(isAppStandalone);
-        }
-
-        const handleBeforeInstallPrompt = (e: Event) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
-            (window as any).deferredPrompt = e;
-        };
-
-        const handlePromptAvailable = () => {
-            if (typeof window !== 'undefined') {
-                setDeferredPrompt((window as any).deferredPrompt || null);
-            }
-        };
-
-        const handleAppInstalled = () => {
-            setDeferredPrompt(null);
-            if (typeof window !== 'undefined') {
-                (window as any).deferredPrompt = null;
-            }
-            setIsStandalone(true);
-            setIsInstalling(false);
-        };
-
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        window.addEventListener('appinstalled', handleAppInstalled);
-        window.addEventListener('pwa-prompt-available', handlePromptAvailable);
-        window.addEventListener('pwa-installed', handleAppInstalled);
-
-        // Check if already captured in window
-        if (typeof window !== 'undefined' && (window as any).deferredPrompt) {
-            setDeferredPrompt((window as any).deferredPrompt);
-        }
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-            window.removeEventListener('appinstalled', handleAppInstalled);
-            window.removeEventListener('pwa-prompt-available', handlePromptAvailable);
-            window.removeEventListener('pwa-installed', handleAppInstalled);
-        };
-    }, []);
-
-    React.useEffect(() => {
-        let timeoutId: any;
-        if (isInstalling) {
-            timeoutId = setTimeout(() => {
-                setIsInstalling(false);
-            }, 20000); // 20s safety timeout
-        }
-        return () => {
-            if (timeoutId) clearTimeout(timeoutId);
-        };
-    }, [isInstalling]);
-
-    const handleInstallClick = async () => {
-        const activePrompt = deferredPrompt || (typeof window !== 'undefined' ? (window as any).deferredPrompt : null);
-        if (!activePrompt) {
-            const userAgent = window.navigator.userAgent.toLowerCase();
-            const isIOS = /iphone|ipad|ipod/.test(userAgent);
-            if (isIOS) {
-                alert("To install AVELUT on iOS:\n\n1. Tap the Share button in Safari (at the bottom or top of your screen).\n2. Scroll down and tap 'Add to Home Screen'.");
-            } else {
-                alert("To install AVELUT:\n\n1. Tap the browser menu button (three vertical dots in Chrome).\n2. Select 'Install app' or 'Add to Home Screen'.");
-            }
-            return;
-        }
-        activePrompt.prompt();
-        try {
-            const { outcome } = await activePrompt.userChoice;
-            console.log(`User response to install prompt: ${outcome}`);
-            if (outcome === 'accepted') {
-                setIsInstalling(true);
-                setDeferredPrompt(null);
-                if (typeof window !== 'undefined') {
-                    (window as any).deferredPrompt = null;
-                }
-            }
-        } catch (err) {
-            console.error('Error during installation choice:', err);
-        }
-    };
 
     return (
         <header className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 md:pt-8 pb-6 bg-transparent">
@@ -148,19 +54,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-                <button
-                    onClick={handleInstallClick}
-                    className="items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-lime-500 to-lime-600 hover:from-lime-600 hover:to-lime-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all duration-200 active:scale-95 border border-lime-400/50 mr-1"
-                    title="Install App"
-                    style={{ display: isStandalone ? 'none' : 'inline-flex' }}
-                >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    <span className="hidden sm:inline">Install App</span>
-                </button>
                 {rightActions ? rightActions : (
                     <>
                         <button 
@@ -204,29 +97,6 @@ export const Header: React.FC<HeaderProps> = ({
                     </>
                 )}
             </div>
-
-            {isInstalling && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[9999] animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 shadow-2xl rounded-3xl p-8 max-w-sm w-full mx-4 border border-gray-100 dark:border-slate-800 text-center flex flex-col items-center gap-6 animate-fade-in-up">
-                        <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-[#EAF6FD] dark:bg-[#00467A]/50">
-                            <div className="absolute inset-0 rounded-full border-4 border-t-transparent border-[#0088CC] animate-spin" />
-                            <img src="/logo_icon.png" alt="AVELUT" className="w-12 h-12 relative z-10 object-contain" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-charcoal dark:text-white">Installing AVELUT...</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                Adding AVELUT to your device. This will only take a moment.
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setIsInstalling(false)}
-                            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline transition mt-2 cursor-pointer"
-                        >
-                            Dismiss Overlay
-                        </button>
-                    </div>
-                </div>
-            )}
         </header>
     );
 };

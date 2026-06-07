@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
 import { auth, db, createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from '../firebase';
+import { signInWithCredential } from 'firebase/auth';
 import { ref as dbRef, set } from 'firebase/database';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { useToast } from '../hooks/useToast';
+import { isNative } from '../utils/capacitorUtils';
 
 interface SignUpProps {
     onSwitchToLogin: () => void;
@@ -21,23 +23,47 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
     setIsGoogleSubmitting(true);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      await set(dbRef(db, `users/${user.uid}`), {
-        uid: user.uid,
-        display_name: user.displayName || 'Learner',
-        email: user.email || '',
-        photo_url: user.photoURL || '',
-        created_at: Date.now()
-      });
+      if (isNative()) {
+        // Use @capacitor-firebase/authentication for native Google Sign-In (Capacitor 8 compatible)
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        const accessToken = result.credential?.accessToken;
+        if (!idToken) {
+          throw new Error('No ID token returned from Google Sign-In.');
+        }
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
+        const fbResult = await signInWithCredential(auth, credential);
+        const user = fbResult.user;
+        await set(dbRef(db, `users/${user.uid}`), {
+          uid: user.uid,
+          display_name: user.displayName || 'Learner',
+          email: user.email || '',
+          photo_url: user.photoURL || '',
+          created_at: Date.now()
+        });
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        await set(dbRef(db, `users/${user.uid}`), {
+          uid: user.uid,
+          display_name: user.displayName || 'Learner',
+          email: user.email || '',
+          photo_url: user.photoURL || '',
+          created_at: Date.now()
+        });
+      }
       // On successful sign-in, onAuthStateChanged in App.tsx will trigger.
     } catch (err: any) {
-      addToast(err.message || 'Failed to sign in with Google.', 'error');
+      if (err.message !== 'The user cancelled the sign-in flow.') {
+        addToast(err.message || 'Failed to sign in with Google.', 'error');
+      }
       console.error('Google sign in failed:', err);
     } finally {
       setIsGoogleSubmitting(false);
     }
   };
+
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

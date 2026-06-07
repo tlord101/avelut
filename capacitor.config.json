@@ -1,0 +1,46 @@
+{
+  "appId": "com.avelut.app",
+  "appName": "AVELUT",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#002D62",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#002D62"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com"]
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#FFFFFF"
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#FFFFFF"
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  }
+}

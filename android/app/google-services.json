@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "750743868519",
+    "firebase_url": "https://tlord-1ab38-default-rtdb.firebaseio.com",
+    "project_id": "tlord-1ab38",
+    "storage_bucket": "tlord-1ab38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:750743868519:android:8e53b987abb3b2e16570c2",
+        "android_client_info": {
+          "package_name": "com.avelut.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "750743868519-vm1e3pbjlo1onl2llmtrbsf00ug3d5dt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.avelut.app",
+            "certificate_hash": "1f9d9a47207c11987fe5a040d5bd644eb93214a1"
+          }
+        },
+        {
+          "client_id": "750743868519-fhhpqa43j11uuu61kj5d7oni141vscu8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASHzSZPE0BvDJb6lj_XrdVmAQGGH4pOEM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "750743868519-fhhpqa43j11uuu61kj5d7oni141vscu8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

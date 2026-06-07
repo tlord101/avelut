@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AVELUT</string>
+    <string name="title_activity_main">AVELUT</string>
+    <string name="package_name">com.avelut.app</string>
+    <string name="custom_url_scheme">com.avelut.app</string>
+    <string name="server_client_id">750743868519-fhhpqa43j11uuu61kj5d7oni141vscu8.apps.googleusercontent.com</string>
+</resources>

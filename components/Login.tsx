@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword } from '../firebase';
+import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { useToast } from '../hooks/useToast';
+import { isNative } from '../utils/capacitorUtils';
 
 interface LoginProps {
     onSwitchToSignUp: () => void;
@@ -20,10 +22,25 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignUp }) => {
   const handleGoogleSignIn = async () => {
     setIsGoogleSubmitting(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (isNative()) {
+        // Use @capacitor-firebase/authentication for native Google Sign-In (Capacitor 8 compatible)
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        const accessToken = result.credential?.accessToken;
+        if (!idToken) {
+          throw new Error('No ID token returned from Google Sign-In.');
+        }
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
+        await signInWithCredential(auth, credential);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
       // On successful sign-in, onAuthStateChanged will trigger in App.tsx
     } catch (err: any) {
-      addToast(err.message || 'Failed to sign in with Google.', 'error');
+      if (err.message !== 'The user cancelled the sign-in flow.') {
+        addToast(err.message || 'Failed to sign in with Google.', 'error');
+      }
       console.error('Google sign in failed:', err);
     } finally {
       setIsGoogleSubmitting(false);
@@ -156,7 +173,7 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignUp }) => {
             </p>
 
             <div className="mt-6 text-center text-xs text-gray-500 space-x-2">
-              <a href="/t&c" className="underline hover:text-gray-700">Terms & Conditions</a>
+              <a href="/t&c" className="underline hover:text-gray-700">Terms &amp; Conditions</a>
               <span>&middot;</span>
               <a href="/policy" className="underline hover:text-gray-700">Privacy Policy</a>
             </div>

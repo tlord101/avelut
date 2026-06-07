@@ -5,6 +5,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   CAPACITOR NATIVE: Safe Area & Keyboard CSS Variables
+   These ensure content is not obscured by notches, home bars,
+   or the on-screen keyboard on Android/iOS.
+   ========================================================= */
+:root {
+  --keyboard-height: 0px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+/* Native status bar placeholder — only shown on native */
+.native-status-bar-spacer {
+  height: var(--safe-area-top);
+  background-color: #002D62;
+}
+
+/* Pushes content up when keyboard is visible on native */
+.keyboard-aware-content {
+  padding-bottom: var(--keyboard-height);
+  transition: padding-bottom 0.25s ease;
+}
+
 @layer base {
   html, body, input, select, textarea, button {
     font-family: 'Nunito', ui-sans-serif, system-ui, sans-serif;

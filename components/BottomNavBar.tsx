@@ -6,6 +6,7 @@ import { AIIcon } from './icons/AIIcon';
 import { ChatsIcon } from './icons/ChatsIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import type { UserProfile } from '../types';
+import { triggerHaptic } from '../utils/capacitorUtils';
 
 interface BottomNavBarProps {
   activeItem: string;
@@ -60,7 +61,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     return (
       <button
         key={itemId}
-        onClick={() => onItemClick(itemId)}
+        data-tour-id={`bottomnav-${itemId}`}
+        onClick={() => { triggerHaptic(); onItemClick(itemId); }}
         className="flex flex-col items-center justify-center h-full w-full focus:outline-none group active:scale-95 transition-all duration-200"
         style={{ color }}
       >
