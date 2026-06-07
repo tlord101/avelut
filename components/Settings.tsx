@@ -586,7 +586,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   disabled={isVerifyingKey}
                   className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all shadow-sm active:scale-[0.98] mb-6"
                 >
-                  Start for Free
+                  Subscribe
                 </button>
               )}
               
@@ -668,7 +668,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   disabled={isVerifyingKey}
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/25 active:scale-[0.98] mb-6"
                 >
-                  Start for Free
+                  Subscribe
                 </button>
               )}
               
@@ -747,7 +747,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
                   disabled={isVerifyingKey}
                   className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 text-sm font-bold rounded-xl transition-all shadow-sm active:scale-[0.98] mb-6"
                 >
-                  Talk to Sales
+                  Subscribe
                 </button>
               )}
               

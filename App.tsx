@@ -17,7 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { PullToRefresh } from './components/PullToRefresh';
+import { NativePullToRefresh } from './components/NativePullToRefresh';
 import { MainContent } from './MainContent';
 import { CalendarModal } from './components/CalendarModal';
 import { NotificationsPanel } from './components/NotificationsPanel';
@@ -1057,7 +1057,9 @@ const App: React.FC = () => {
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     return (
-        <div className="h-screen flex flex-col md:flex-row bg-off-white text-charcoal font-sans overflow-hidden relative">
+        <div className="flex h-screen w-full bg-off-white font-sans text-charcoal selection:bg-brand-200 selection:text-brand-900 overflow-hidden">
+            <NativePullToRefresh />
+
             {/* Automatic PWA App Intercept Modal Overlay */}
             <PWAInstallBannerOverlay />
 
@@ -1082,16 +1084,13 @@ const App: React.FC = () => {
                     unreadMessagesCount={unreadMessagesCount}
                     userProfile={userProfile}
                 />
-                <PullToRefresh 
+                <div 
+                    id="main-scroll-container"
                     className={
                         activeItem === 'chat' || activeItem === 'messenger'
                         ? "flex-1 min-h-0 overflow-hidden flex flex-col"
                         : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
                     }
-                    onRefresh={async () => {
-                        await new Promise(r => setTimeout(r, 600));
-                        window.location.reload();
-                    }}
                 >
                     {userProfile && (
                         <MainContent
@@ -1109,7 +1108,7 @@ const App: React.FC = () => {
                             startTour={startTour}
                         />
                     )}
-                </PullToRefresh>
+                </div>
             </main>
             {showPrivacyModal && <PrivacyConsentModal onAllow={() => handleConsent(true)} onDeny={() => handleConsent(false)} />}
             <NotificationsPanel

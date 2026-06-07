@@ -1,6 +1,6 @@
 {
   "name": "AVELUT: AI Tutoring Platform",
-  "description": "AVELUT is an AI-powered tutor with a navy, azure, and ice-blue interface, Firebase authentication, and a responsive learning workspace.",
+  "description": "AVELUT is an AI-powered PERSONAL Tutor.",
   "requestFramePermissions": [
     "camera",
     "microphone",

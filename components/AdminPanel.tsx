@@ -701,7 +701,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setIsUsersLoading(false);
     };
 
-    const handleUpdateUserSubscription = async (uid: string, nextStatus: 'none' | 'premium' | 'personal_token') => {
+    const handleUpdateUserSubscription = async (uid: string, nextStatus: 'none' | 'free' | 'basic' | 'pro' | 'personal_token' | 'premium') => {
         try {
             const userRef = dbRef(db, `users/${uid}`);
             await update(userRef, { subscription_status: nextStatus });
@@ -4478,10 +4478,13 @@ FORMAT:
                                                         <td className="px-6 py-4 text-right">
                                                             <select
                                                                 value={user.subscription_status || 'none'}
-                                                                onChange={(e) => handleUpdateUserSubscription(user.uid, e.target.value as 'none' | 'premium' | 'personal_token')}
+                                                                onChange={(e) => handleUpdateUserSubscription(user.uid, e.target.value as 'none' | 'free' | 'basic' | 'pro' | 'personal_token' | 'premium')}
                                                                 className="bg-white border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 font-semibold text-slate-700 shadow-sm transition"
                                                             >
-                                                                <option value="none">Free (None)</option>
+                                                                <option value="none">None</option>
+                                                                <option value="free">Free</option>
+                                                                <option value="basic">Basic</option>
+                                                                <option value="pro">Pro</option>
                                                                 <option value="premium">Premium</option>
                                                                 <option value="personal_token">Google Token</option>
                                                             </select>

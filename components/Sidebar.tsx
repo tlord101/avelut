@@ -14,6 +14,8 @@ const LogoutIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' })
   </svg>
 );
 
+
+
 interface SidebarProps {
   activeItem: string;
   onItemClick: (id: string) => void;
