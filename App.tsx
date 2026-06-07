@@ -33,15 +33,6 @@ import { ComingSoonScreen } from './components/ComingSoonScreen';
 import { SharedChatView } from './components/SharedChatView';
 import TermsAndConditions from './components/TermsAndConditions';
 import PrivacyPolicy from './components/PrivacyPolicy';
-// ---- Capacitor Native Integrations ----
-import { isNative, setStatusBarStyle, setStatusBarNavy, listenToKeyboard } from './utils/capacitorUtils';
-import { initNativeNotifications, cleanupNativeNotifications, clearDeliveredNotifications } from './utils/nativeNotifications';
-// Lazy import SplashScreen only when native
-let CapacitorSplashScreen: any = null;
-if (isNative()) {
-  import('@capacitor/splash-screen').then(m => { CapacitorSplashScreen = m.SplashScreen; }).catch(() => {});
-}
-
 
 declare var __app_id: string;
 
@@ -51,6 +42,164 @@ const AppLoader: React.FC = () => {
       <img src="/logo_icon.png" alt="Loading AVELUT..." className="w-28 h-28 object-contain animate-pulse" />
     </div>
   );
+};
+
+// =========================================================================
+// HIGH ACCURACY PWA AUTO-INSTALL HOOK & INTERFACE COMPONENT
+// =========================================================================
+const usePWAInstallEngine = () => {
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [isIOS, setIsIOS] = useState(false);
+    const [isStandalone, setIsStandalone] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // Check if application environment is running standalone already
+        const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches 
+            || (window.navigator as any).standalone === true;
+        setIsStandalone(isAppStandalone);
+
+        // Track Apple hardware environment profiles
+        const userAgent = window.navigator.userAgent.toLowerCase();
+        const isAppleDevice = /iphone|ipad|ipod/.test(userAgent);
+        setIsIOS(isAppleDevice);
+
+        const handlePromptCapture = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+
+        window.addEventListener('beforeinstallprompt', handlePromptCapture);
+        return () => window.removeEventListener('beforeinstallprompt', handlePromptCapture);
+    }, []);
+
+    const executeInstallationPipeline = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+        }
+    };
+
+    return { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline };
+};
+
+const PWAInstallBannerOverlay: React.FC = () => {
+    const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
+    const [dismissed, setDismissed] = useState(false);
+    const canTriggerNativeInstall = !!deferredPrompt;
+
+    if (isStandalone || dismissed) return null;
+
+    return (
+        <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install AVELUT">
+            <div className="relative p-4">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ice-blue via-brand-500 to-brand-900" />
+
+                <div className="flex items-start gap-3">
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <img src="/logo_icon.png" alt="AVELUT" className="h-11 w-11 object-contain" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-base font-black tracking-tight text-charcoal">
+                                {canTriggerNativeInstall ? 'Install AVELUT' : isIOS ? 'Add AVELUT to iPhone' : 'Install AVELUT'}
+                            </h2>
+                            <span className="rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900">
+                                {isIOS ? 'iOS' : 'Android'}
+                            </span>
+                        </div>
+                        <p className="mt-1 text-sm leading-relaxed text-charcoal/65">
+                            {canTriggerNativeInstall
+                                ? 'Install AVELUT from your browser for quick access any time.'
+                                : isIOS
+                                    ? 'Open Safari’s share menu, then choose Add to Home Screen.'
+                                    : 'Open the browser menu and choose Install app.'}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setDismissed(true)}
+                        className="rounded-full p-1 text-charcoal/45 transition hover:bg-white hover:text-charcoal"
+                        aria-label="Dismiss install tip"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <div className="flex items-center gap-2 text-brand-900">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                                {canTriggerNativeInstall ? (
+                                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 3v12" />
+                                        <path d="M7 8l5-5 5 5" />
+                                        <rect x="4" y="15" width="16" height="6" rx="2" />
+                                    </svg>
+                                ) : (
+                                    <MenuIcon className="h-5 w-5" />
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 1</p>
+                                <p className="text-sm font-bold">{canTriggerNativeInstall ? 'Tap Install' : 'Tap Menu'}</p>
+                            </div>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
+                            {canTriggerNativeInstall
+                                ? 'Confirm installation in the browser prompt.'
+                                : isIOS
+                                    ? 'Open Safari’s share menu.'
+                                    : 'Open Chrome’s menu in the top-right corner.'}
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
+                        <div className="flex items-center gap-2 text-brand-900">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 3v12" />
+                                    <path d="M7 8l5-5 5 5" />
+                                    <rect x="4" y="15" width="16" height="6" rx="2" />
+                                </svg>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 2</p>
+                                <p className="text-sm font-bold">Add to Home</p>
+                            </div>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
+                            {canTriggerNativeInstall
+                                ? 'The browser will add AVELUT to your device.'
+                                : 'Choose Add to Home Screen to finish setup.'}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-500 px-4 py-3 text-off-white">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
+                        <img src="/logo_icon.png" alt="AVELUT" className="h-6 w-6 object-contain" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-bold leading-tight">Install from Chrome for quick access</p>
+                        <p className="text-[11px] text-white/80">No app store required, just a browser install.</p>
+                    </div>
+                    {canTriggerNativeInstall && (
+                        <button
+                            type="button"
+                            onClick={() => executeInstallationPipeline()}
+                            className="ml-auto rounded-full bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-brand-900 transition hover:bg-ice-blue"
+                        >
+                            Install
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // ==========================================
@@ -162,7 +311,6 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(true);
     const [isOnboarding, setIsOnboarding] = useState(false);
-    const nativeNotifInitRef = useRef(false);
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
 
     const [activeItem, setActiveItemState] = useState<string>(() => {
@@ -309,50 +457,12 @@ const App: React.FC = () => {
         checkAndSeedUsageSettings();
     }, []);
 
-    // =====================================================
-    // CAPACITOR: Splash screen, Status bar, Keyboard setup
-    // =====================================================
-    useEffect(() => {
-        if (!isNative()) return;
-        // Set status bar style
-        setStatusBarStyle(true);
-        // Hide splash screen after app shell loads
-        const hideSplash = async () => {
-            try {
-                const { SplashScreen } = await import('@capacitor/splash-screen');
-                await SplashScreen.hide({ fadeOutDuration: 300 });
-            } catch (err) {
-                console.warn('[App] SplashScreen.hide error:', err);
-            }
-        };
-        // Small delay to ensure UI is ready
-        const t = setTimeout(hideSplash, 500);
-        // Keyboard push-up handling
-        const cleanup = listenToKeyboard(
-            (height) => {
-                document.documentElement.style.setProperty('--keyboard-height', `${height}px`);
-            },
-            () => {
-                document.documentElement.style.setProperty('--keyboard-height', '0px');
-            }
-        );
-        return () => {
-            clearTimeout(t);
-            cleanup();
-        };
-    }, []);
-
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
           setUser(currentUser);
           if (!currentUser) {
             setUserProfile(null);
             tourStatusRef.current = 'unknown';
-            // Cleanup native notifications on logout
-            if (isNative()) {
-                cleanupNativeNotifications();
-                nativeNotifInitRef.current = false;
-            }
           }
           setIsLoading(false);
         });
@@ -574,26 +684,6 @@ const App: React.FC = () => {
             off(userChatsRef, 'value', unsubscribeUnreadCount);
         };
     }, [userProfile?.uid]);
-
-    // =====================================================
-    // CAPACITOR: Init native push notifications after login
-    // =====================================================
-    useEffect(() => {
-        if (!isNative()) return;
-        if (!user || !userProfile) return;
-        if (nativeNotifInitRef.current) return;
-        nativeNotifInitRef.current = true;
-
-        initNativeNotifications(
-            user,
-            addToast,
-            setActiveItem,
-            setPendingMessengerChatId
-        ).catch(err => {
-            console.error('[App] initNativeNotifications error:', err);
-            nativeNotifInitRef.current = false;
-        });
-    }, [user, userProfile, addToast, setActiveItem]);
 
     useEffect(() => {
         if (!userProfile) {
@@ -856,19 +946,6 @@ const App: React.FC = () => {
     }
 
     if (activeItem === 'admin') {
-        // Admin panel is web-only — block access from native Capacitor app
-        if (isNative()) {
-            return (
-                <div key="admin-native-blocked" className="flex items-center justify-center min-h-screen bg-off-white">
-                    <div className="text-center p-8">
-                        <img src="/logo_icon.png" alt="AVELUT" className="w-20 h-20 object-contain mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-brand-900 mb-2">Admin Panel</h2>
-                        <p className="text-charcoal/70">Please use the web browser to access the admin panel.</p>
-                    </div>
-                </div>
-            );
-        }
-
         if (!isAdminAuthenticated) {
             return <div key="admin-login-state"><AdminLogin onLogin={() => setIsAdminAuthenticated(true)} /></div>;
         }
@@ -975,6 +1052,9 @@ const App: React.FC = () => {
 
     return (
         <div className="h-screen flex flex-col md:flex-row bg-off-white text-charcoal font-sans overflow-hidden relative">
+            {/* Automatic PWA App Intercept Modal Overlay */}
+            <PWAInstallBannerOverlay />
+
             <Sidebar
                 activeItem={activeItem}
                 onItemClick={setActiveItem}

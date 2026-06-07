@@ -416,6 +416,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   
   // Custom Input Bar States: 1 (Default), 2 (Typing), 3 (Listening), 4 (Ambient/Live Voice)
   const [inputState, setInputState] = useState<number>(1);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState<boolean>(false);
 
   const sectionRef = useRef<HTMLElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -1503,20 +1504,64 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
               {inputState !== 4 && (
                 <div className="relative w-full h-[64px] bg-[#1e1f20] rounded-full flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                   
-                  <button 
-                    type="button" 
-                    onClick={() => attachmentInputRef.current?.click()}
-                    disabled={isSending}
-                    className="text-white hover:opacity-80 transition active:scale-95 shrink-0 flex items-center justify-center w-8 h-8 disabled:opacity-40"
-                    aria-label="Upload attachment"
-                  >
-                    <PlusIcon />
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+                      disabled={isSending}
+                      className={`text-white hover:opacity-80 transition active:scale-95 shrink-0 flex items-center justify-center w-8 h-8 disabled:opacity-40 ${showAttachmentMenu ? 'bg-neutral-800 rounded-full' : ''}`}
+                      aria-label="Upload attachment"
+                    >
+                      <PlusIcon />
+                    </button>
+
+                    {showAttachmentMenu && (
+                      <div className="absolute bottom-12 left-0 w-48 bg-[#1e1f20] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (attachmentInputRef.current) {
+                              attachmentInputRef.current.accept = "image/*";
+                              attachmentInputRef.current.click();
+                            }
+                            setShowAttachmentMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-400">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                          Upload Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (attachmentInputRef.current) {
+                              attachmentInputRef.current.accept = "application/pdf";
+                              attachmentInputRef.current.click();
+                            }
+                            setShowAttachmentMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-400">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                          </svg>
+                          Upload PDF
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <input
                     ref={attachmentInputRef}
                     type="file"
-                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     className="hidden"
                     onChange={handleAttachmentChange}
                   />
