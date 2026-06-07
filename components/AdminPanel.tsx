@@ -545,7 +545,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const handleSimulateRefund = async () => {
         try {
-            const mockUser = allUsersList.find(u => u.subscription_status === 'premium') || allUsersList[0];
+            const mockUser = allUsersList.find(u => u.subscription_status === 'premium') || allUsersList[0] || userProfile;
             if (!mockUser) {
                 addToast('No users registered to simulate refund', 'error');
                 return;
@@ -568,7 +568,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const handleSimulateComplaint = async () => {
         try {
-            const mockUser = allUsersList[0];
+            const mockUser = allUsersList[0] || userProfile;
             if (!mockUser) {
                 addToast('No users registered to simulate complaint', 'error');
                 return;
