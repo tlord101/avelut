@@ -106,10 +106,23 @@ export const initNativeNotifications = async (
     _actionPerformedListenerRef = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const data = action.notification.data || {};
       
+      // Handle Action Buttons (e.g. Reply)
+      if (action.actionId === 'reply_action') {
+         if (data.chatId) {
+           setTimeout(() => {
+             setActiveItem('messenger');
+             setPendingChatId(String(data.chatId));
+           }, 50);
+         }
+         return;
+      }
+
       // Handle messenger chat open
       if (data.chatId) {
-        setActiveItem('messenger');
-        setPendingChatId(String(data.chatId));
+        setTimeout(() => {
+          setActiveItem('messenger');
+          setPendingChatId(String(data.chatId));
+        }, 50);
         return;
       }
 
@@ -125,10 +138,31 @@ export const initNativeNotifications = async (
         };
         const target = screenMap[data.screen];
         if (target) {
-          setActiveItem(target);
+          // Delaying state update slightly prevents race conditions with app resume rendering glitch
+          setTimeout(() => setActiveItem(target), 50);
         }
       }
     });
+
+    // Register Notification Categories for Action Buttons
+    try {
+        await PushNotifications.registerActionTypes({
+            types: [
+                {
+                    id: 'MESSENGER_ACTION',
+                    actions: [
+                        {
+                            id: 'reply_action',
+                            title: 'Reply',
+                            foreground: true
+                        }
+                    ]
+                }
+            ]
+        });
+    } catch (e) {
+        console.warn('[nativeNotifications] Action Types not supported on this platform', e);
+    }
 
     // Step 7: Deliver any pending (tapped) notifications from when app was closed
     const deliveredNotifications = await PushNotifications.getDeliveredNotifications();
