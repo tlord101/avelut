@@ -13,9 +13,11 @@ import { UploadCenter } from './components/UploadCenter';
 import { Onboarding } from './components/Onboarding';
 import { ActivationScreen } from './components/ActivationScreen';
 import { createAvelutAI } from './utils/inference';
+import { Capacitor } from '@capacitor/core';
 import { AdminPanel } from './components/AdminPanel';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
+import { PullToRefresh } from './components/PullToRefresh';
 import { MainContent } from './MainContent';
 import { CalendarModal } from './components/CalendarModal';
 import { NotificationsPanel } from './components/NotificationsPanel';
@@ -92,7 +94,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
     const [dismissed, setDismissed] = useState(false);
     const canTriggerNativeInstall = !!deferredPrompt;
 
-    if (isStandalone || dismissed) return null;
+    if (Capacitor.isNativePlatform() || isStandalone || dismissed) return null;
 
     return (
         <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install AVELUT">
@@ -1080,11 +1082,17 @@ const App: React.FC = () => {
                     unreadMessagesCount={unreadMessagesCount}
                     userProfile={userProfile}
                 />
-                <div className={
-                    activeItem === 'chat' || activeItem === 'messenger'
-                    ? "flex-1 min-h-0 overflow-hidden flex flex-col"
-                    : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
-                }>
+                <PullToRefresh 
+                    className={
+                        activeItem === 'chat' || activeItem === 'messenger'
+                        ? "flex-1 min-h-0 overflow-hidden flex flex-col"
+                        : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
+                    }
+                    onRefresh={async () => {
+                        await new Promise(r => setTimeout(r, 600));
+                        window.location.reload();
+                    }}
+                >
                     {userProfile && (
                         <MainContent
                             key={activeItem}
@@ -1101,7 +1109,7 @@ const App: React.FC = () => {
                             startTour={startTour}
                         />
                     )}
-                </div>
+                </PullToRefresh>
             </main>
             {showPrivacyModal && <PrivacyConsentModal onAllow={() => handleConsent(true)} onDeny={() => handleConsent(false)} />}
             <NotificationsPanel
@@ -1121,7 +1129,7 @@ const App: React.FC = () => {
             <BottomNavBar
               activeItem={activeItem}
               onItemClick={setActiveItem}
-              isVisible={!isMobileSidebarOpen}
+              isVisible={true}
               userProfile={userProfile}
             />
             <GuidedTour 
