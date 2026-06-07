@@ -11,17 +11,17 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
         
         if (!notification) return null;
 
-        // Fetch user's FCM token
-        const userSnap = await admin.database().ref(`/users/${userId}`).once('value');
-        const userData = userSnap.val();
+        // Fetch user's FCM token from device tokens
+        const tokenSnap = await admin.database().ref(`/user_device_tokens/${userId}`).once('value');
+        const tokenData = tokenSnap.val();
 
-        if (!userData || !userData.fcm_token) {
-            console.log(`Skipping notification for user ${userId}. No FCM Token registered.`);
+        if (!tokenData || !tokenData.fcm_token) {
+            console.log(`Skipping notification for user ${userId}. No FCM Token registered in user_device_tokens.`);
             return null;
         }
 
         const message = {
-            token: userData.fcm_token,
+            token: tokenData.fcm_token,
             notification: {
                 title: notification.title || 'AVELUT',
                 body: notification.message || '',
@@ -34,15 +34,18 @@ exports.onNotificationWritten = functions.database.ref('/notifications/{userId}/
                 notification: {
                     color: '#002D62',
                     sound: 'default',
+                    channelId: 'avelut-alerts'
                 }
             },
-            webpush: {
-                notification: {
-                    icon: 'https://ai.vaultsglofin.com/logo_notification.png',
-                    badge: 'https://ai.vaultsglofin.com/logo_notification.png',
-                    vibrate: [200, 100, 200],
-                    tag: 'avelut-alert',
-                    renotify: true
+            apns: {
+                payload: {
+                    aps: {
+                        alert: {
+                            title: notification.title || 'AVELUT',
+                            body: notification.message || ''
+                        },
+                        sound: 'default'
+                    }
                 }
             }
         };
@@ -105,12 +108,21 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
             }
         }
 
-        // Read recipient's FCM token and check if they enabled notifications
-        const recipientSnap = await admin.database().ref(`/users/${recipientId}`).once('value');
-        const recipientData = recipientSnap.val();
+        // Read recipient's FCM token from user_device_tokens
+        const tokenSnap = await admin.database().ref(`/user_device_tokens/${recipientId}`).once('value');
+        const tokenData = tokenSnap.val();
 
-        if (!recipientData || !recipientData.fcm_token) {
-            console.log(`Skipping message push for user ${recipientId}. No token registered.`);
+        // Still check if they have notifications enabled in their profile
+        const recipientProfileSnap = await admin.database().ref(`/users/${recipientId}`).once('value');
+        const recipientProfile = recipientProfileSnap.val();
+
+        if (!recipientProfile || recipientProfile.notifications_enabled === false) {
+             console.log(`Skipping message push for user ${recipientId}. Notifications disabled.`);
+             return null;
+        }
+
+        if (!tokenData || !tokenData.fcm_token) {
+            console.log(`Skipping message push for user ${recipientId}. No token registered in user_device_tokens.`);
             return null;
         }
 
@@ -120,7 +132,7 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
         else if (type === 'file') bodyPreview = '📄 Sent a file';
 
         const payload = {
-            token: recipientData.fcm_token,
+            token: tokenData.fcm_token,
             notification: {
                 title: senderName,
                 body: bodyPreview,
@@ -133,15 +145,18 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
                 notification: {
                     color: '#002D62',
                     sound: 'default',
+                    channelId: 'avelut-alerts'
                 }
             },
-            webpush: {
-                notification: {
-                    icon: senderData.photo_url || 'https://ai.vaultsglofin.com/logo_notification.png',
-                    badge: 'https://ai.vaultsglofin.com/logo_notification.png',
-                    vibrate: [200, 100, 200],
-                    tag: `chat-${chatId}`,
-                    renotify: true
+            apns: {
+                payload: {
+                    aps: {
+                        alert: {
+                            title: senderName,
+                            body: bodyPreview
+                        },
+                        sound: 'default'
+                    }
                 }
             }
         };
@@ -160,6 +175,9 @@ exports.onChatMessageSent = functions.database.ref('/messages/{chatId}/{messageI
 exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
     const usersSnap = await admin.database().ref('/users').once('value');
     if (!usersSnap.exists()) return null;
+    
+    const tokensSnap = await admin.database().ref('/user_device_tokens').once('value');
+    const deviceTokens = tokensSnap.val() || {};
 
     const users = usersSnap.val();
     const now = Date.now();
@@ -168,9 +186,10 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
 
     for (const userId in users) {
         const user = users[userId];
-        if (user.notifications_enabled && user.fcm_token && user.last_activity_date && user.last_activity_date < twentyFourHoursAgo) {
+        const tokenData = deviceTokens[userId];
+        if (user.notifications_enabled !== false && tokenData && tokenData.fcm_token && user.last_activity_date && user.last_activity_date < twentyFourHoursAgo) {
             const message = {
-                token: user.fcm_token,
+                token: tokenData.fcm_token,
                 notification: {
                     title: '📚 Ready to study?',
                     body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on AVELUT.`,
@@ -179,15 +198,18 @@ exports.sendAutomaticReminders = functions.pubsub.schedule('every 24 hours').onR
                     notification: {
                         color: '#002D62',
                         sound: 'default',
+                        channelId: 'avelut-alerts'
                     }
                 },
-                webpush: {
-                    notification: {
-                        icon: 'https://ai.vaultsglofin.com/logo_notification.png',
-                        badge: 'https://ai.vaultsglofin.com/logo_notification.png',
-                        vibrate: [200, 100, 200],
-                        tag: 'avelut-reminder',
-                        renotify: true
+                apns: {
+                    payload: {
+                        aps: {
+                            alert: {
+                                title: '📚 Ready to study?',
+                                body: `Hi ${user.display_name || 'there'}! It's time to review your roadmap and continue your lessons on AVELUT.`
+                            },
+                            sound: 'default'
+                        }
                     }
                 }
             };

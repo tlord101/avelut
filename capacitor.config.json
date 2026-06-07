@@ -16,7 +16,8 @@
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#002D62"
+      "backgroundColor": "#002D62",
+      "overlaysWebView": false
     },
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]

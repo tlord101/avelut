@@ -19,11 +19,12 @@ let _actionPerformedListenerRef: any = null;
  */
 const saveFcmToken = async (uid: string, token: string): Promise<void> => {
   try {
-    await update(dbRef(db, `users/${uid}`), {
+    await update(dbRef(db, `user_device_tokens/${uid}`), {
       fcm_token: token,
       fcm_platform: Capacitor.getPlatform(),
+      updated_at: Date.now()
     });
-    console.log('[nativeNotifications] FCM token saved to Firebase:', token.substring(0, 20) + '...');
+    console.log('[nativeNotifications] FCM token saved to user_device_tokens:', token.substring(0, 20) + '...');
   } catch (err) {
     console.error('[nativeNotifications] Failed to save FCM token:', err);
   }

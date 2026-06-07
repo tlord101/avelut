@@ -33,6 +33,7 @@ import { ComingSoonScreen } from './components/ComingSoonScreen';
 import { SharedChatView } from './components/SharedChatView';
 import TermsAndConditions from './components/TermsAndConditions';
 import PrivacyPolicy from './components/PrivacyPolicy';
+import { initNativeNotifications, cleanupNativeNotifications } from './utils/nativeNotifications';
 
 declare var __app_id: string;
 
@@ -463,11 +464,14 @@ const App: React.FC = () => {
           if (!currentUser) {
             setUserProfile(null);
             tourStatusRef.current = 'unknown';
+            cleanupNativeNotifications();
+          } else {
+            initNativeNotifications(currentUser, addToast, setActiveItem, setPendingMessengerChatId);
           }
           setIsLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [addToast, setActiveItem]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
