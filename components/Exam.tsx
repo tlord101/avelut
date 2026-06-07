@@ -126,9 +126,12 @@ interface ExamProps {
 }
 
 export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
-  const [examState, setExamState] = useState<'start' | 'generating' | 'in_progress' | 'completed' | 'history' | 'review'>('start');
+  const [examState, setExamState] = useState<'start' | 'generating' | 'in_progress' | 'completed' | 'history' | 'review' | 'flashcards'>('start');
   const [examMode, setExamMode] = useState<'ai' | 'pq'>('ai');
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [flashcards, setFlashcards] = useState<{front: string; back: string}[]>([]);
+  const [flashcardIndex, setFlashcardIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -336,15 +339,72 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   }, [timeLeft, examState, finishExam]);
 
 
+  const generateFlashcards = async () => {
+    const creditsConsumed = await consumeCredits(userProfile.uid, 10, addToast);
+    if (!creditsConsumed) {
+      setLimitModalData({ limit: 0, used: 0, price: 500, batchCount: 100 });
+      setShowLimitModal(true);
+      return;
+    }
+
+    setExamState('generating');
+    try {
+      if (!ai) throw new Error('Gemini API key is not configured in App Controls.');
+      const safeDepartment = sanitizePromptInput(getCourseNameById(userProfile.department_id));
+      const safeLevel = sanitizePromptInput(userProfile.level);
+      const safeTopics = completedTopicNames.map((topicName, index) => sanitizePromptInput(topicName) || `Topic ${index + 1}`);
+
+      const result = await attemptApiCall(async () => {
+        const response = await ai.models.generateContent({
+          model: geminiModel,
+          contents: [{ role: 'user', parts: [{ text: `Generate 10 flashcards for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on these topics: ${safeTopics.join(', ')}. Provide a front (concept/question) and a back (definition/answer).` }] }],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                flashcards: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      front: { type: Type.STRING },
+                      back: { type: Type.STRING }
+                    },
+                    required: ['front', 'back']
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        if (!response.text) throw new Error('AI returned an empty response while generating flashcards.');
+        const responseData = JSON.parse(response.text);
+        if (!(responseData.flashcards && responseData.flashcards.length > 0)) throw new Error("Failed to generate valid flashcards from AI response.");
+        setFlashcards(responseData.flashcards);
+        setFlashcardIndex(0);
+        setIsFlipped(false);
+        setExamState('flashcards');
+      });
+
+      if (!result.success) addToast(result.message, 'error');
+    } catch (error: any) {
+      console.error(error);
+      addToast(error.message, 'error');
+      setExamState('start');
+    }
+  };
+
   const generateQuestions = async () => {
     // Check exam limits
-    const limitCheck = checkExamsLimit(userProfile, usageStats, appSettings);
-    if (!limitCheck.allowed) {
+    const creditsConsumed = await consumeCredits(userProfile.uid, 10, addToast);
+    if (!creditsConsumed) {
       setLimitModalData({
-        limit: limitCheck.limit,
-        used: limitCheck.used,
-        price: limitCheck.price,
-        batchCount: limitCheck.count
+        limit: 0,
+        used: 0,
+        price: 500,
+        batchCount: 100
       });
       setShowLimitModal(true);
       return;
@@ -467,6 +527,87 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
             </div>
         );
       
+      case 'flashcards':
+        const currentCard = flashcards[flashcardIndex];
+        if (!currentCard) return null;
+        return (
+          <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
+            <div className="flex justify-between items-center bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100">
+                <div className="px-4">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Card</p>
+                    <p className="text-lg font-black text-gray-900">{flashcardIndex + 1} <span className="text-gray-300 mx-1">/</span> {flashcards.length}</p>
+                </div>
+                <button
+                  onClick={() => setExamState('start')}
+                  className="p-3 rounded-xl bg-white text-gray-400 hover:text-red-500 shadow-sm transition-all"
+                >
+                    <XIcon className="w-5 h-5" />
+                </button>
+            </div>
+
+            <div
+              onClick={() => setIsFlipped(!isFlipped)}
+              className="w-full aspect-video min-h-[300px] cursor-pointer"
+              style={{ perspective: '1000px' }}
+            >
+              <div
+                className="relative w-full h-full transition-all duration-500"
+                style={{
+                  transformStyle: 'preserve-3d',
+                  transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                }}
+              >
+                {/* Front */}
+                <div
+                  className="absolute inset-0 bg-white rounded-3xl border-2 border-indigo-100 shadow-xl flex items-center justify-center p-8 text-center"
+                  style={{ backfaceVisibility: 'hidden' }}
+                >
+                  <h3 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight leading-tight">{currentCard.front}</h3>
+                </div>
+
+                {/* Back */}
+                <div
+                  className="absolute inset-0 bg-indigo-600 rounded-3xl border-2 border-indigo-700 shadow-xl flex items-center justify-center p-8 text-center text-white"
+                  style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                >
+                  <p className="text-xl md:text-2xl font-bold leading-relaxed">{currentCard.back}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+               <button
+                  onClick={() => {
+                      if (flashcardIndex > 0) {
+                          setFlashcardIndex(prev => prev - 1);
+                          setIsFlipped(false);
+                      }
+                  }}
+                  disabled={flashcardIndex === 0}
+                  className="flex-1 bg-white border border-gray-200 text-gray-700 font-black py-4 rounded-2xl hover:bg-gray-50 transition-all disabled:opacity-50 text-xs uppercase tracking-widest"
+               >
+                  Previous
+               </button>
+               <button
+                  onClick={() => {
+                      if (flashcardIndex < flashcards.length - 1) {
+                          setFlashcardIndex(prev => prev + 1);
+                          setIsFlipped(false);
+                      } else {
+                          setScore(flashcards.length); // Max score for finishing deck
+                          setExamState('completed');
+                      }
+                  }}
+                  className="flex-1 bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all text-xs uppercase tracking-widest shadow-md shadow-indigo-600/20"
+               >
+                  {flashcardIndex < flashcards.length - 1 ? 'Next Card' : 'Finish Deck'}
+               </button>
+            </div>
+
+            <p className="text-center text-gray-400 text-xs font-bold uppercase tracking-widest mt-4">Tap card to flip</p>
+          </div>
+        );
+
       case 'in_progress':
         const currentQuestion = questions[currentQuestionIndex];
         if (!currentQuestion) return null;
@@ -693,13 +834,22 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                     Practice with AI-generated questions based specifically on the topics you've recently covered.
                 </p>
                 {canStartExam ? (
-                    <button
-                        onClick={generateQuestions}
-                        disabled={!isGeminiConfigured}
-                        className="w-full mt-6 bg-lime-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-lime-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {isGeminiConfigured ? 'Start AI Exam' : 'AI Exam Unavailable (Missing API Key)'}
-                    </button>
+                    <div className="flex gap-2 mt-6">
+                        <button
+                            onClick={generateQuestions}
+                            disabled={!isGeminiConfigured}
+                            className="flex-1 bg-lime-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-lime-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60 text-xs"
+                        >
+                            {isGeminiConfigured ? 'Quiz' : 'Unavailable'}
+                        </button>
+                        <button
+                            onClick={generateFlashcards}
+                            disabled={!isGeminiConfigured}
+                            className="flex-1 bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-indigo-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60 text-xs"
+                        >
+                            {isGeminiConfigured ? 'Flashcards' : 'Unavailable'}
+                        </button>
+                    </div>
                 ) : (
                     <div className="mt-6 text-xs text-yellow-800 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
                         Complete at least one topic in the Study Guide.
