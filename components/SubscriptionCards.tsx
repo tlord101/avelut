@@ -236,7 +236,7 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Developer Key */}
+        {/* Card 4: Connect to Gemini */}
         <div className={`w-[85vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink rounded-[24px] border border-slate-200 bg-white p-6 flex flex-col justify-between transition-all relative hover:border-emerald-300 ${
           showCurrentPlan && userProfile.subscription_status === 'personal_token'
             ? 'border-emerald-600 shadow-lg'
@@ -249,13 +249,13 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
                 <polyline points="8 6 2 12 8 18" />
               </svg>
             </div>
-            <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Developer Key</h4>
+            <h4 className="font-extrabold text-xl text-slate-900 leading-tight">Connect to Gemini</h4>
             <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
-              Use your personal Google Gemini API key to activate and bypass all limits.
+              We partner with Google to give you the best services. Connect your personal Google Gemini API key to bypass all limits.
             </p>
             <div className="flex items-baseline gap-1.5 mt-5 mb-5">
-              <span className="text-4xl font-extrabold text-emerald-600 tracking-tight">Dev</span>
-              <span className="text-slate-500 font-bold text-sm">Token</span>
+              <span className="text-4xl font-extrabold text-emerald-600 tracking-tight">Gemini</span>
+              <span className="text-slate-500 font-bold text-sm">Key</span>
             </div>
 
             <div className="mb-6">

@@ -401,6 +401,7 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const triggerScanRef = useRef<(() => void) | null>(null);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
         createAvelutAI(appSettings, userProfile)
@@ -825,6 +826,8 @@ const App: React.FC = () => {
             is_online: true,
             last_seen: now,
             has_completed_tour: false,
+            is_activated: true,
+            subscription_status: 'free',
         };
         try {
             const userRef = dbRef(db, `users/${user.uid}`);
@@ -1088,7 +1091,7 @@ const App: React.FC = () => {
                     id="main-scroll-container"
                     className={
                         activeItem === 'chat' || activeItem === 'messenger'
-                        ? "flex-1 min-h-0 overflow-hidden flex flex-col"
+                        ? "flex-1 min-h-0 overflow-hidden flex flex-col content-with-bottom-nav"
                         : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
                     }
                 >
@@ -1106,6 +1109,7 @@ const App: React.FC = () => {
                             handleProfileUpdate={handleProfileUpdate}
                             handleDeleteAccount={handleAccountDeletion}
                             startTour={startTour}
+                            triggerScanRef={triggerScanRef}
                         />
                     )}
                 </div>
@@ -1128,6 +1132,13 @@ const App: React.FC = () => {
             <BottomNavBar
               activeItem={activeItem}
               onItemClick={setActiveItem}
+              onCenterActionClick={() => {
+                  if (activeItem === 'visual_solver') {
+                      triggerScanRef.current?.();
+                  } else {
+                      setActiveItem('visual_solver');
+                  }
+              }}
               isVisible={true}
               userProfile={userProfile}
             />

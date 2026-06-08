@@ -14,9 +14,10 @@ interface BottomNavBarProps {
   isVisible: boolean;
   userProfile: UserProfile | null;
   items?: { id: string, icon: React.ReactElement, label: string }[];
+  onCenterActionClick?: () => void;
 }
 
-export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items }) => {
+export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items, onCenterActionClick }) => {
   const baseNavItems = [
     { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
@@ -50,7 +51,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     return () => observer.disconnect();
   }, []);
 
-  if (!isVisible || activeIndex === -1) {
+  if (!isVisible) {
     return null;
   }
 
@@ -82,8 +83,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
   // If we don't have exactly 5 items (e.g. Admin view), render a clean flat glassmorphic bar
   if (navItems.length !== 5) {
     return (
-      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent">
-        <div className="relative w-full max-w-md h-16 bg-white/75 backdrop-blur-xl rounded-full shadow-2xl border border-white/30 px-6 flex items-center justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent">
+        <div className="relative w-full max-w-md h-16 bg-white/90 backdrop-blur-xl rounded-full shadow-2xl border border-white/50 px-6 flex items-center justify-around">
           {navItems.map((item) => {
             const isActive = activeItem === item.id;
             const color = isActive ? '#0052FF' : '#002D62';
@@ -136,7 +137,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
   ].join(' ');
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up">
+    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up">
       {/* SVG Clip Path definition */}
       <svg width="0" height="0" className="absolute">
         <defs>
@@ -152,7 +153,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       >
         {/* Glassmorphic Background clipped to the custom notch shape */}
         <div 
-          className="absolute inset-0 bg-white/70 backdrop-blur-xl shadow-[0_-8px_30px_rgba(0,45,98,0.08)]"
+          className="absolute inset-0 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_rgba(0,45,98,0.08)]"
           style={{ clipPath: 'url(#navbar-clip)' }}
         />
 
@@ -174,7 +175,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
 
         {/* Center Raised Camera Button */}
         <button
-          onClick={() => onItemClick(navItems[2].id)}
+          onClick={() => onCenterActionClick ? onCenterActionClick() : onItemClick(navItems[2].id)}
           className="absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer"
         >
           <CameraIcon className="w-8 h-8 text-[#002D62]" />
