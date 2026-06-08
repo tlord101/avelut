@@ -825,6 +825,8 @@ const App: React.FC = () => {
             is_online: true,
             last_seen: now,
             has_completed_tour: false,
+            is_activated: true,
+            subscription_status: 'free',
         };
         try {
             const userRef = dbRef(db, `users/${user.uid}`);
@@ -1088,7 +1090,7 @@ const App: React.FC = () => {
                     id="main-scroll-container"
                     className={
                         activeItem === 'chat' || activeItem === 'messenger'
-                        ? "flex-1 min-h-0 overflow-hidden flex flex-col"
+                        ? "flex-1 min-h-0 overflow-hidden flex flex-col content-with-bottom-nav"
                         : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav"
                     }
                 >

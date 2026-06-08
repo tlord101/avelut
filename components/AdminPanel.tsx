@@ -713,6 +713,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
     };
 
+    const handleAddUserCredits = async (uid: string) => {
+        const credits = window.prompt("Enter the number of additional Visual Solver messages to add:");
+        if (!credits || isNaN(Number(credits))) return;
+        try {
+            const userStatsRef = dbRef(db, `users/${uid}/usage_stats`);
+            const snap = await get(userStatsRef);
+            const currentPurchased = snap.val()?.additional_visual_messages_purchased || 0;
+            await update(userStatsRef, { additional_visual_messages_purchased: currentPurchased + Number(credits) });
+            addToast(`Successfully added ${credits} credits to user!`, "success");
+        } catch (error: any) {
+            addToast(error.message || "Failed to add credits", "error");
+        }
+    };
+
     const fetchSentNotifications = async () => {
         if (sentNotifications.length === 0) {
             setIsSentNotificationsLoading(true);
@@ -4475,7 +4489,7 @@ FORMAT:
                                                                     {user.is_admin ? 'Admin' : 'Student'}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-right">
+                                                        <td className="px-6 py-4 text-right flex flex-col items-end gap-2">
                                                             <select
                                                                 value={user.subscription_status || 'none'}
                                                                 onChange={(e) => handleUpdateUserSubscription(user.uid, e.target.value as 'none' | 'free' | 'basic' | 'pro' | 'personal_token' | 'premium')}
@@ -4488,6 +4502,12 @@ FORMAT:
                                                                 <option value="premium">Premium</option>
                                                                 <option value="personal_token">Google Token</option>
                                                             </select>
+                                                            <button
+                                                                onClick={() => handleAddUserCredits(user.uid)}
+                                                                className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100 transition"
+                                                            >
+                                                                + Add Credits
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))}

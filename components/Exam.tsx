@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
+import { FlashcardsUI } from './FlashcardsUI';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course, AppSettings } from '../types';
@@ -528,84 +529,15 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         );
       
       case 'flashcards':
-        const currentCard = flashcards[flashcardIndex];
-        if (!currentCard) return null;
         return (
-          <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
-            <div className="flex justify-between items-center bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100">
-                <div className="px-4">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Card</p>
-                    <p className="text-lg font-black text-gray-900">{flashcardIndex + 1} <span className="text-gray-300 mx-1">/</span> {flashcards.length}</p>
-                </div>
-                <button
-                  onClick={() => setExamState('start')}
-                  className="p-3 rounded-xl bg-white text-gray-400 hover:text-red-500 shadow-sm transition-all"
-                >
-                    <XIcon className="w-5 h-5" />
-                </button>
-            </div>
-
-            <div
-              onClick={() => setIsFlipped(!isFlipped)}
-              className="w-full aspect-video min-h-[300px] cursor-pointer"
-              style={{ perspective: '1000px' }}
-            >
-              <div
-                className="relative w-full h-full transition-all duration-500"
-                style={{
-                  transformStyle: 'preserve-3d',
-                  transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
-                }}
-              >
-                {/* Front */}
-                <div
-                  className="absolute inset-0 bg-white rounded-3xl border-2 border-indigo-100 shadow-xl flex items-center justify-center p-8 text-center"
-                  style={{ backfaceVisibility: 'hidden' }}
-                >
-                  <h3 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight leading-tight">{currentCard.front}</h3>
-                </div>
-
-                {/* Back */}
-                <div
-                  className="absolute inset-0 bg-indigo-600 rounded-3xl border-2 border-indigo-700 shadow-xl flex items-center justify-center p-8 text-center text-white"
-                  style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-                >
-                  <p className="text-xl md:text-2xl font-bold leading-relaxed">{currentCard.back}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-               <button
-                  onClick={() => {
-                      if (flashcardIndex > 0) {
-                          setFlashcardIndex(prev => prev - 1);
-                          setIsFlipped(false);
-                      }
-                  }}
-                  disabled={flashcardIndex === 0}
-                  className="flex-1 bg-white border border-gray-200 text-gray-700 font-black py-4 rounded-2xl hover:bg-gray-50 transition-all disabled:opacity-50 text-xs uppercase tracking-widest"
-               >
-                  Previous
-               </button>
-               <button
-                  onClick={() => {
-                      if (flashcardIndex < flashcards.length - 1) {
-                          setFlashcardIndex(prev => prev + 1);
-                          setIsFlipped(false);
-                      } else {
-                          setScore(flashcards.length); // Max score for finishing deck
-                          setExamState('completed');
-                      }
-                  }}
-                  className="flex-1 bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all text-xs uppercase tracking-widest shadow-md shadow-indigo-600/20"
-               >
-                  {flashcardIndex < flashcards.length - 1 ? 'Next Card' : 'Finish Deck'}
-               </button>
-            </div>
-
-            <p className="text-center text-gray-400 text-xs font-bold uppercase tracking-widest mt-4">Tap card to flip</p>
-          </div>
+          <FlashcardsUI
+            flashcards={flashcards}
+            onClose={() => setExamState('start')}
+            onFinish={() => {
+              setScore(flashcards.length); // Max score for finishing deck
+              setExamState('completed');
+            }}
+          />
         );
 
       case 'in_progress':

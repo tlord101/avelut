@@ -425,3 +425,14 @@
 .avelut-admin.dark .border-lime-200 {
   border-color: rgba(163, 230, 53, 0.2) !important;
 }
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+}

@@ -82,8 +82,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
   // If we don't have exactly 5 items (e.g. Admin view), render a clean flat glassmorphic bar
   if (navItems.length !== 5) {
     return (
-      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent">
-        <div className="relative w-full max-w-md h-16 bg-white/75 backdrop-blur-xl rounded-full shadow-2xl border border-white/30 px-6 flex items-center justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent">
+        <div className="relative w-full max-w-md h-16 bg-white/90 backdrop-blur-xl rounded-full shadow-2xl border border-white/50 px-6 flex items-center justify-around">
           {navItems.map((item) => {
             const isActive = activeItem === item.id;
             const color = isActive ? '#0052FF' : '#002D62';
@@ -136,7 +136,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
   ].join(' ');
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-30 md:hidden animate-fade-in-up">
+    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up">
       {/* SVG Clip Path definition */}
       <svg width="0" height="0" className="absolute">
         <defs>
@@ -152,7 +152,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       >
         {/* Glassmorphic Background clipped to the custom notch shape */}
         <div 
-          className="absolute inset-0 bg-white/70 backdrop-blur-xl shadow-[0_-8px_30px_rgba(0,45,98,0.08)]"
+          className="absolute inset-0 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_rgba(0,45,98,0.08)]"
           style={{ clipPath: 'url(#navbar-clip)' }}
         />
 
