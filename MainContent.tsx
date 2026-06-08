@@ -25,6 +25,7 @@ interface MainContentProps {
     handleProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string; }>;
     handleDeleteAccount: () => Promise<{ success: boolean; error?: string; }>;
     startTour: () => void;
+    triggerScanRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export const MainContent: React.FC<MainContentProps> = ({
@@ -39,6 +40,7 @@ export const MainContent: React.FC<MainContentProps> = ({
     handleProfileUpdate,
     handleDeleteAccount,
     startTour,
+    triggerScanRef,
 }) => {
     if (!userProfile) return null;
 
@@ -52,7 +54,7 @@ export const MainContent: React.FC<MainContentProps> = ({
         case 'visual_solver':
             return (
                 <ErrorBoundary>
-                    <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} />
+                    <VisualSolver userProfile={userProfile} onStartChat={() => { /* No-op, handled by navigation */ }} triggerScanRef={triggerScanRef} />
                 </ErrorBoundary>
             );
         case 'exam':

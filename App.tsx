@@ -401,6 +401,7 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const triggerScanRef = useRef<(() => void) | null>(null);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
         createAvelutAI(appSettings, userProfile)
@@ -1108,6 +1109,7 @@ const App: React.FC = () => {
                             handleProfileUpdate={handleProfileUpdate}
                             handleDeleteAccount={handleAccountDeletion}
                             startTour={startTour}
+                            triggerScanRef={triggerScanRef}
                         />
                     )}
                 </div>
@@ -1130,6 +1132,13 @@ const App: React.FC = () => {
             <BottomNavBar
               activeItem={activeItem}
               onItemClick={setActiveItem}
+              onCenterActionClick={() => {
+                  if (activeItem === 'visual_solver') {
+                      triggerScanRef.current?.();
+                  } else {
+                      setActiveItem('visual_solver');
+                  }
+              }}
               isVisible={true}
               userProfile={userProfile}
             />
