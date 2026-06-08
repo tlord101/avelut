@@ -50,7 +50,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
     return () => observer.disconnect();
   }, []);
 
-  if (!isVisible || activeIndex === -1) {
+  if (!isVisible) {
     return null;
   }
 
