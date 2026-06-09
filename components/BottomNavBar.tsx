@@ -153,9 +153,11 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       >
         {/* Glassmorphic Background clipped to the custom notch shape */}
         <div 
-          className="absolute inset-0 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_rgba(0,45,98,0.08)]"
+          className="absolute inset-0 shadow-[0_-8px_30px_rgba(0,45,98,0.08)] z-0"
           style={{ clipPath: 'url(#navbar-clip)' }}
-        />
+        >
+           <div className="absolute inset-0 bg-white/95 backdrop-blur-xl"></div>
+        </div>
 
         {/* Premium highlight border tracing the notch shape */}
         <svg 
