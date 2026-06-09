@@ -149,8 +149,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, userP
   return (
     <>
       {/* Mobile Sidebar */}
-      <div className={`fixed inset-0 z-[130] transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="absolute inset-0 bg-charcoal/30 backdrop-blur-sm" onClick={onCloseMobileSidebar} aria-hidden="true"></div>
+      {/* Ensure the overlay is detached from the sliding element so the transform doesn't clip z-index issues */}
+      <div
+        className={`fixed inset-0 z-[125] bg-charcoal/30 backdrop-blur-sm transition-opacity duration-300 md:hidden ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onCloseMobileSidebar}
+        aria-hidden="true"
+      ></div>
+      <div
+        className={`fixed inset-y-0 left-0 z-[130] w-80 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
         <aside className="relative w-80 h-full bg-white/70 backdrop-blur-lg border-r border-white/40 shadow-xl">
           <SidebarContent
             isExpanded={true}
