@@ -21,7 +21,7 @@ import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { LockIcon } from './icons/LockIcon';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkStudyGuideCoursesLimit, checkStudyGuideCourseRequestsLimit, incrementCourseRequestsUsed } from '../utils/usage';
+import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
 
 declare var __app_id: string;
 
@@ -354,8 +354,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [tutorialsError, setTutorialsError] = useState<string | null>(null);
     const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string } | null>(null);
     const [brokenThumbnails, setBrokenThumbnails] = useState<Record<string, boolean>>({});
-    const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('ai_requests_per_course');
-    const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5, courseId: '' });
+    const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
     const [isLoading, setIsLoading] = useState(false);
     const [isIllustrating, setIsIllustrating] = useState(false);
     const [textbookContext, setTextbookContext] = useState<string>('');
@@ -848,15 +847,11 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
         }
 
         const courseId = topic.courseId || topic.course_id || 'unknown';
-        const limitCheck = checkStudyGuideCourseRequestsLimit(courseId, userProfile, usageStats, appSettings);
+        const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
         if (!limitCheck.allowed) {
-            setLimitModalFeature('ai_requests_per_course');
             setLimitModalData({
-                limit: limitCheck.limit,
-                used: limitCheck.used,
-                price: limitCheck.price,
-                batchCount: limitCheck.count,
-                courseId
+                balance: limitCheck.balance,
+                cost: limitCheck.cost
             });
             setShowLimitModal(true);
             onClose();
@@ -912,7 +907,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 timestamp: Date.now() 
             };
             setMessages([botMessage]);
-            await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
+            await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, `Study Guide - ${topic.topic_name} (Initial)`);
         });
         setStreamingBotText(null);
 
@@ -1002,15 +997,11 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         }
 
         const courseId = topic.courseId || topic.course_id || 'unknown';
-        const limitCheck = checkStudyGuideCourseRequestsLimit(courseId, userProfile, usageStats, appSettings);
+        const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
         if (!limitCheck.allowed) {
-            setLimitModalFeature('ai_requests_per_course');
             setLimitModalData({
-                limit: limitCheck.limit,
-                used: limitCheck.used,
-                price: limitCheck.price,
-                batchCount: limitCheck.count,
-                courseId
+                balance: limitCheck.balance,
+                cost: limitCheck.cost
             });
             setShowLimitModal(true);
             return;
@@ -1140,7 +1131,7 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(newBotMsgRef, botMessageData);
-                await incrementCourseRequestsUsed(userProfile.uid, courseId, limitCheck.windowStart);
+                await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, `Study Guide - ${topic.topic_name}`);
             });
             setStreamingBotText(null);
 
@@ -1524,14 +1515,10 @@ Student: "${tempInput}"
                 onClose={() => setShowLimitModal(false)}
                 userProfile={userProfile}
                 appSettings={appSettings}
-                featureType={limitModalFeature}
-                limitValue={limitModalData.limit}
-                usedValue={limitModalData.used}
-                price={limitModalData.price}
-                batchCount={limitModalData.batchCount}
+                cost={limitModalData.cost}
+                balance={limitModalData.balance}
                 addToast={addToast}
                 onSuccessPurchase={() => {}}
-                courseId={limitModalData.courseId}
             />
 
             {/* Video Tutorials bottom drawer */}
@@ -1966,19 +1953,9 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   }));
   const { addToast } = useToast();
 
-  const [usageStats, setUsageStats] = useState<any>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('courses');
-  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
+  const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
   const { settings: appSettings } = useAppSettings();
-
-  useEffect(() => {
-    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
-    const unsubscribe = onValue(usageRef, (snapshot) => {
-      setUsageStats(snapshot.val() || {});
-    });
-    return () => unsubscribe();
-  }, [userProfile.uid]);
 
   const isUserExempt = !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
   const isFreeUser = !isUserExempt && (userProfile?.subscription_status === 'free' || !userProfile?.subscription_status);
@@ -2082,45 +2059,12 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         return;
     }
 
-    const isUnlockedInDb = usageStats?.unlocked_courses?.[courseId];
-    if (isUserExempt || isUnlockedInDb) {
-        setExpandedCourses(prev => {
-            const newSet = new Set(prev);
-            newSet.add(courseId);
-            return newSet;
-        });
-        return;
-    }
-
-    // Limit course outline expansion by checking checkStudyGuideCoursesLimit
-    const limitCheck = checkStudyGuideCoursesLimit(userProfile, usageStats, appSettings);
-    if (!limitCheck.allowed) {
-        setLimitModalFeature('courses');
-        setLimitModalData({
-            limit: limitCheck.limit,
-            used: limitCheck.used,
-            price: limitCheck.price,
-            batchCount: 1
-        });
-        setShowLimitModal(true);
-        return;
-    }
-
-    // Lock course in database
-    try {
-        const path = `users/${userProfile.uid}/usage_stats/unlocked_courses/${courseId}`;
-        await update(dbRef(db), { [path]: true });
-        addToast('New course outline unlocked successfully!', 'success');
-        
-        setExpandedCourses(prev => {
-            const newSet = new Set(prev);
-            newSet.add(courseId);
-            return newSet;
-        });
-    } catch (e: any) {
-        console.error(e);
-        addToast('Failed to unlock course: ' + e.message, 'error');
-    }
+    // Credits no longer needed for expanding course outline as per unified credit system focus on AI usage
+    setExpandedCourses(prev => {
+        const newSet = new Set(prev);
+        newSet.add(courseId);
+        return newSet;
+    });
   };
 
   const handleMarkTopicComplete = async (course: Course, topic: Topic) => {
@@ -2297,11 +2241,8 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             onClose={() => setShowLimitModal(false)}
             userProfile={userProfile}
             appSettings={appSettings}
-            featureType={limitModalFeature}
-            limitValue={limitModalData.limit}
-            usedValue={limitModalData.used}
-            price={limitModalData.price}
-            batchCount={limitModalData.batchCount}
+            cost={limitModalData.cost}
+            balance={limitModalData.balance}
             addToast={addToast}
             onSuccessPurchase={() => {}}
         />

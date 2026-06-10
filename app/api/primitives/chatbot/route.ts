@@ -7,11 +7,14 @@ export const maxDuration = 30
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
+  // Server-side context truncation: only process last 10 messages to optimize tokens
+  const optimizedMessages = messages.slice(-10);
+
   const result = streamText({
     model: openai("gpt-4.1-nano"),
     system:
       "You are a helpful assistant with access to tools. Use the getCurrentDate tool when users ask about dates, time, or current information. You are also able to use the getTime tool to get the current time in a specific timezone.",
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(optimizedMessages),
     tools: {
       getTime: tool({
         description: "Get the current time in a specific timezone",

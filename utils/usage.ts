@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { ref as dbRef, push, set, update, get } from 'firebase/database';
+import { ref as dbRef, push, set, update, get, runTransaction } from 'firebase/database';
 import type { UserProfile, AppSettings } from '../types';
 import { DEFAULT_USAGE_SETTINGS } from './appSettings';
 
@@ -24,7 +24,7 @@ interface PaystackPurchaseOptions {
   email: string;
   amount: number;
   userId: string;
-  purchaseType: 'subscription' | 'additional_messages' | 'additional_course' | 'additional_course_request' | 'additional_exams';
+  purchaseType: 'subscription' | 'additional_credits';
   metadata?: any;
   onSuccess: (reference: string) => Promise<void>;
   onCancel?: () => void;
@@ -130,175 +130,67 @@ export const triggerPaystackPurchase = async (options: PaystackPurchaseOptions) 
   }
 };
 
+// Cost configuration map
+export const AI_COSTS = {
+  VISUAL_SOLVE: 2,
+  CHAT_INTERACTION: 1,
+  FLASHCARD_GENERATION: 3,
+};
+
 // Check if user is exempt from limits
 const isExempt = (userProfile: UserProfile): boolean => {
   return !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
 };
 
-// 1. Visual solver/chat limits
-export const checkVisualMessagesLimit = (
+/**
+ * Validates if the user has enough AI credits for a given action.
+ */
+export const checkAICredits = (
   userProfile: UserProfile,
-  usageStats: any,
+  cost: number,
   appSettings: AppSettings
 ) => {
   if (isExempt(userProfile)) {
-    return { allowed: true, used: 0, limit: Infinity, price: 0, count: Infinity };
+    return { allowed: true, balance: Infinity, cost: 0 };
   }
 
   const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
   const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
+  const monthlyLimit = usageSettings.plans[planKey]?.limits?.monthly_ai_credits ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.monthly_ai_credits;
   
-  const planLimit = usageSettings.plans[planKey]?.limits?.visual_messages ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.visual_messages;
-  const additionalPurchased = usageStats?.additional_visual_messages_purchased || 0;
-  const used = usageStats?.visual_messages_used || 0;
-  
-  const isUnlimited = planLimit === -1;
-  const allowed = isUnlimited || used < (planLimit + additionalPurchased);
-  const price = usageSettings.additional_prices?.visual_messages_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.visual_messages_price;
-  const count = usageSettings.additional_prices?.visual_messages_count ?? DEFAULT_USAGE_SETTINGS.additional_prices.visual_messages_count;
+  const balance = userProfile.ai_credits_balance ?? monthlyLimit;
+  const allowed = balance >= cost;
 
-  return { allowed, used, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count };
+  return { allowed, balance, cost };
 };
 
-// 2. Exams limit
-export const checkExamsLimit = (
-  userProfile: UserProfile,
-  usageStats: any,
-  appSettings: AppSettings
-) => {
-  if (isExempt(userProfile)) {
-    return { allowed: true, used: 0, limit: Infinity, price: 0, count: Infinity };
-  }
-
-  const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
-  const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
-
-  const planLimit = usageSettings.plans[planKey]?.limits?.exams ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.exams;
-  const additionalPurchased = usageStats?.additional_exams_purchased || 0;
-  const used = usageStats?.exams_generated || 0;
-
-  const isUnlimited = planLimit === -1;
-  const allowed = isUnlimited || used < (planLimit + additionalPurchased);
-  const price = 200; // default NGN
-  const count = 5; // default 5 additional exams
-
-  return { allowed, used, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count };
-};
-
-// 3. Study guide courses limit
-export const checkStudyGuideCoursesLimit = (
-  userProfile: UserProfile,
-  usageStats: any,
-  appSettings: AppSettings
-) => {
-  if (isExempt(userProfile)) {
-    return { allowed: true, used: 0, limit: Infinity, price: 0 };
-  }
-
-  const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
-  const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
-
-  const planLimit = usageSettings.plans[planKey]?.limits?.courses ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.courses;
-  const additionalPurchased = usageStats?.additional_courses_purchased || 0;
-  const unlockedCount = Object.keys(usageStats?.unlocked_courses || {}).length;
-
-  const isUnlimited = planLimit === -1;
-  const allowed = isUnlimited || unlockedCount < (planLimit + additionalPurchased);
-  const price = usageSettings.additional_prices?.studyguide_course_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.studyguide_course_price;
-
-  return { allowed, used: unlockedCount, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price };
-};
-
-// 4. Study guide requests limit per course (resets every 2 hours)
-export const checkStudyGuideCourseRequestsLimit = (
-  courseId: string,
-  userProfile: UserProfile,
-  usageStats: any,
-  appSettings: AppSettings
-) => {
-  if (isExempt(userProfile)) {
-    return { allowed: true, used: 0, limit: Infinity, price: 0, count: Infinity, secondsLeft: 0, windowStart: Date.now() };
-  }
-
-  const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
-  const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
-
-  const planLimit = usageSettings.plans[planKey]?.limits?.ai_requests_per_course ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.ai_requests_per_course;
-  
-  const courseData = usageStats?.courses_requests?.[courseId] || { requests_used: 0, window_start_time: Date.now(), additional_requests_purchased: 0 };
-  
-  const now = Date.now();
-  const windowDuration = 2 * 60 * 60 * 1000; // 2 hours
-  const timeElapsed = now - courseData.window_start_time;
-
-  let requestsUsed = courseData.requests_used;
-  let windowStart = courseData.window_start_time;
-
-  if (timeElapsed > windowDuration) {
-    requestsUsed = 0;
-    windowStart = now;
-  }
-
-  const additionalPurchased = courseData.additional_requests_purchased || 0;
-  const isUnlimited = planLimit === -1;
-  const allowed = isUnlimited || requestsUsed < (planLimit + additionalPurchased);
-  const price = usageSettings.additional_prices?.studyguide_request_price ?? DEFAULT_USAGE_SETTINGS.additional_prices.studyguide_request_price;
-  const count = 5; // 5 additional requests per purchase
-
-  const secondsLeft = Math.max(0, Math.ceil((windowDuration - timeElapsed) / 1000));
-
-  return { allowed, used: requestsUsed, limit: isUnlimited ? Infinity : (planLimit + additionalPurchased), price, count, secondsLeft, windowStart };
-};
-
-// Update message usage counter
-export const incrementVisualMessagesUsed = async (userId: string) => {
+/**
+ * Safely decrements user AI credit balance in the database.
+ */
+export const deductAICredits = async (userId: string, cost: number, featureName: string) => {
   try {
-    const statsRef = dbRef(db, `users/${userId}/usage_stats`);
-    const snapshot = await push(dbRef(db, `users/${userId}/temp`)); // just a dummy to fetch then update, or runTransaction. Let's do a simple get/update.
-    // Or we use standard Realtime Database update / incremental structure.
-    // Actually, get and update is fast enough and simple:
-    const dataRef = dbRef(db, `users/${userId}/usage_stats/visual_messages_used`);
-    // Wait, let's run a transaction or fetch first
-    const usageStatsRef = dbRef(db, `users/${userId}/usage_stats`);
-    const currentSnap = await get(usageStatsRef);
-    const currentVal = currentSnap.val() || {};
-    const newUsed = (currentVal.visual_messages_used || 0) + 1;
-    await update(usageStatsRef, { visual_messages_used: newUsed });
+    const userRef = dbRef(db, `users/${userId}`);
+    const result = await runTransaction(userRef, (profile) => {
+      if (profile) {
+        const currentBalance = profile.ai_credits_balance ?? 0;
+        profile.ai_credits_balance = Math.max(0, currentBalance - cost);
+      }
+      return profile;
+    });
+
+    if (result.committed) {
+      // Log usage
+      const usageLogRef = push(dbRef(db, `usage_logs/credits/${userId}`));
+      await set(usageLogRef, {
+        feature: featureName,
+        deduction: cost,
+        timestamp: Date.now(),
+      });
+    }
   } catch (err) {
-    console.error('Failed to increment visual messages:', err);
+    console.error('Failed to deduct AI credits:', err);
   }
 };
 
-// Update exams generated counter
-export const incrementExamsGenerated = async (userId: string) => {
-  try {
-    const usageStatsRef = dbRef(db, `users/${userId}/usage_stats`);
-    const currentSnap = await get(usageStatsRef);
-    const currentVal = currentSnap.val() || {};
-    const newUsed = (currentVal.exams_generated || 0) + 1;
-    await update(usageStatsRef, { exams_generated: newUsed });
-  } catch (err) {
-    console.error('Failed to increment exams generated:', err);
-  }
-};
-
-// Update course AI requests counter
-export const incrementCourseRequestsUsed = async (userId: string, courseId: string, windowStart?: number) => {
-  try {
-    const usageStatsRef = dbRef(db, `users/${userId}/usage_stats`);
-    const currentSnap = await get(usageStatsRef);
-    const currentVal = currentSnap.val() || {};
-    const coursesRequests = currentVal.courses_requests || {};
-    
-    // Fallback if windowStart is missing or invalid
-    const courseData = coursesRequests[courseId] || { requests_used: 0, window_start_time: windowStart || Date.now(), additional_requests_purchased: 0 };
-    
-    courseData.requests_used = (courseData.requests_used || 0) + 1;
-    courseData.window_start_time = windowStart || courseData.window_start_time || Date.now(); // preserve window start or fallback
-
-    coursesRequests[courseId] = courseData;
-    await update(usageStatsRef, { courses_requests: coursesRequests });
-  } catch (err) {
-    console.error('Failed to increment course requests:', err);
-  }
-};
+// LEGACY trackers kept temporarily for smooth migration or removed if not referenced.
+// We will replace their calls in components in the next step.

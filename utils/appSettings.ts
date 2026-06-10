@@ -9,10 +9,7 @@ export const DEFAULT_USAGE_SETTINGS = {
       description: 'Fundamental study tools with standard constraints',
       price: 0,
       limits: {
-        courses: 2,
-        ai_requests_per_course: 5,
-        exams: 3,
-        visual_messages: 10,
+        monthly_ai_credits: 10,
       },
     },
     basic: {
@@ -20,10 +17,7 @@ export const DEFAULT_USAGE_SETTINGS = {
       description: 'Unlock advanced guides and higher limits. Twitter-style blue badge included.',
       price: 1000,
       limits: {
-        courses: 5,
-        ai_requests_per_course: 20,
-        exams: 10,
-        visual_messages: 50,
+        monthly_ai_credits: 50,
       },
     },
     pro: {
@@ -31,10 +25,7 @@ export const DEFAULT_USAGE_SETTINGS = {
       description: 'Ultimate academic assistance with maximum limits. Purple badge included.',
       price: 2500,
       limits: {
-        courses: 15,
-        ai_requests_per_course: 100,
-        exams: 50,
-        visual_messages: 200,
+        monthly_ai_credits: 200,
       },
     },
   },
@@ -76,10 +67,7 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
         description: raw.usage_settings.plans?.free?.description || DEFAULT_USAGE_SETTINGS.plans.free.description,
         price: typeof raw.usage_settings.plans?.free?.price === 'number' ? raw.usage_settings.plans.free.price : DEFAULT_USAGE_SETTINGS.plans.free.price,
         limits: {
-          courses: typeof raw.usage_settings.plans?.free?.limits?.courses === 'number' ? raw.usage_settings.plans.free.limits.courses : DEFAULT_USAGE_SETTINGS.plans.free.limits.courses,
-          ai_requests_per_course: typeof raw.usage_settings.plans?.free?.limits?.ai_requests_per_course === 'number' ? raw.usage_settings.plans.free.limits.ai_requests_per_course : DEFAULT_USAGE_SETTINGS.plans.free.limits.ai_requests_per_course,
-          exams: typeof raw.usage_settings.plans?.free?.limits?.exams === 'number' ? raw.usage_settings.plans.free.limits.exams : DEFAULT_USAGE_SETTINGS.plans.free.limits.exams,
-          visual_messages: typeof raw.usage_settings.plans?.free?.limits?.visual_messages === 'number' ? raw.usage_settings.plans.free.limits.visual_messages : DEFAULT_USAGE_SETTINGS.plans.free.limits.visual_messages,
+          monthly_ai_credits: typeof raw.usage_settings.plans?.free?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.free.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.free.limits.monthly_ai_credits,
         }
       },
       basic: {
@@ -87,10 +75,7 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
         description: raw.usage_settings.plans?.basic?.description || DEFAULT_USAGE_SETTINGS.plans.basic.description,
         price: typeof raw.usage_settings.plans?.basic?.price === 'number' ? raw.usage_settings.plans.basic.price : DEFAULT_USAGE_SETTINGS.plans.basic.price,
         limits: {
-          courses: typeof raw.usage_settings.plans?.basic?.limits?.courses === 'number' ? raw.usage_settings.plans.basic.limits.courses : DEFAULT_USAGE_SETTINGS.plans.basic.limits.courses,
-          ai_requests_per_course: typeof raw.usage_settings.plans?.basic?.limits?.ai_requests_per_course === 'number' ? raw.usage_settings.plans.basic.limits.ai_requests_per_course : DEFAULT_USAGE_SETTINGS.plans.basic.limits.ai_requests_per_course,
-          exams: typeof raw.usage_settings.plans?.basic?.limits?.exams === 'number' ? raw.usage_settings.plans.basic.limits.exams : DEFAULT_USAGE_SETTINGS.plans.basic.limits.exams,
-          visual_messages: typeof raw.usage_settings.plans?.basic?.limits?.visual_messages === 'number' ? raw.usage_settings.plans.basic.limits.visual_messages : DEFAULT_USAGE_SETTINGS.plans.basic.limits.visual_messages,
+          monthly_ai_credits: typeof raw.usage_settings.plans?.basic?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.basic.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.basic.limits.monthly_ai_credits,
         }
       },
       pro: {
@@ -98,10 +83,7 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
         description: raw.usage_settings.plans?.pro?.description || DEFAULT_USAGE_SETTINGS.plans.pro.description,
         price: typeof raw.usage_settings.plans?.pro?.price === 'number' ? raw.usage_settings.plans.pro.price : DEFAULT_USAGE_SETTINGS.plans.pro.price,
         limits: {
-          courses: typeof raw.usage_settings.plans?.pro?.limits?.courses === 'number' ? raw.usage_settings.plans.pro.limits.courses : DEFAULT_USAGE_SETTINGS.plans.pro.limits.courses,
-          ai_requests_per_course: typeof raw.usage_settings.plans?.pro?.limits?.ai_requests_per_course === 'number' ? raw.usage_settings.plans.pro.limits.ai_requests_per_course : DEFAULT_USAGE_SETTINGS.plans.pro.limits.ai_requests_per_course,
-          exams: typeof raw.usage_settings.plans?.pro?.limits?.exams === 'number' ? raw.usage_settings.plans.pro.limits.exams : DEFAULT_USAGE_SETTINGS.plans.pro.limits.exams,
-          visual_messages: typeof raw.usage_settings.plans?.pro?.limits?.visual_messages === 'number' ? raw.usage_settings.plans.pro.limits.visual_messages : DEFAULT_USAGE_SETTINGS.plans.pro.limits.visual_messages,
+          monthly_ai_credits: typeof raw.usage_settings.plans?.pro?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.pro.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.pro.limits.monthly_ai_credits,
         }
       }
     },
@@ -113,4 +95,3 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
     }
   } : DEFAULT_USAGE_SETTINGS,
 });
-

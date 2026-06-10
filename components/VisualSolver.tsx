@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue } from 'firebase/database';
-import { checkVisualMessagesLimit, incrementVisualMessagesUsed } from '../utils/usage';
+import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { createAvelutAI } from '../utils/inference';
 import type { UserProfile } from '../types';
@@ -179,18 +179,8 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
     const [cropBox, setCropBox] = useState<CropBox>({ x: 0.05, y: 0.125, width: 0.9, height: 0.75 });
     const [customPrompt, setCustomPrompt] = useState<string>('');
 
-    const [usageStats, setUsageStats] = useState<any>(null);
     const [showLimitModal, setShowLimitModal] = useState(false);
-    const [limitModalFeature, setLimitModalFeature] = useState<'visual_messages' | 'courses' | 'ai_requests_per_course' | 'exams'>('visual_messages');
-    const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
-
-    useEffect(() => {
-        const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
-        const unsubscribe = onValue(usageRef, (snapshot) => {
-            setUsageStats(snapshot.val() || {});
-        });
-        return () => unsubscribe();
-    }, [userProfile.uid]);
+    const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -386,14 +376,11 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         if (!scannedImage) return;
 
         // Perform limit check
-        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
         if (!limitCheck.allowed) {
-            setLimitModalFeature('visual_messages');
             setLimitModalData({
-                limit: limitCheck.limit,
-                used: limitCheck.used,
-                price: limitCheck.price,
-                batchCount: limitCheck.count
+                balance: limitCheck.balance,
+                cost: limitCheck.cost
             });
             setShowLimitModal(true);
             return;
@@ -472,7 +459,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
 
             setAnalysisResult(result.text || '');
-            await incrementVisualMessagesUsed(userProfile.uid);
+            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Detailed');
         });
         
         if (result.success) {
@@ -487,14 +474,11 @@ Make it visually engaging, well-spaced, and easy to follow!`;
         if (!scannedImage) return;
     
         // Perform limit check
-        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
         if (!limitCheck.allowed) {
-            setLimitModalFeature('visual_messages');
             setLimitModalData({
-                limit: limitCheck.limit,
-                used: limitCheck.used,
-                price: limitCheck.price,
-                batchCount: limitCheck.count
+                balance: limitCheck.balance,
+                cost: limitCheck.cost
             });
             setShowLimitModal(true);
             return;
@@ -520,7 +504,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
     
             setAnalysisResult(result.text || '');
-            await incrementVisualMessagesUsed(userProfile.uid);
+            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Quick Answer');
         });
         
         if (result.success) {
@@ -535,14 +519,11 @@ Make it visually engaging, well-spaced, and easy to follow!`;
         if (!scannedImage) return;
     
         // Perform limit check
-        const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
         if (!limitCheck.allowed) {
-            setLimitModalFeature('visual_messages');
             setLimitModalData({
-                limit: limitCheck.limit,
-                used: limitCheck.used,
-                price: limitCheck.price,
-                batchCount: limitCheck.count
+                balance: limitCheck.balance,
+                cost: limitCheck.cost
             });
             setShowLimitModal(true);
             return;
@@ -568,7 +549,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             });
     
             setAnalysisResult(result.text || '');
-            await incrementVisualMessagesUsed(userProfile.uid);
+            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Solution');
         });
         
         if (result.success) {
@@ -772,7 +753,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
 
     return (
         <div className="flex-1 flex flex-col w-full">
-            <div className="flex-1 bg-gray-300 rounded-xl border border-gray-200 overflow-hidden relative">
+            <div className="h-[calc(100vh-84px)] bg-gray-300 rounded-xl border border-gray-200 overflow-hidden relative">
                 <canvas ref={canvasRef} className="hidden"></canvas>
                 {renderContent()}
             </div>
@@ -781,11 +762,8 @@ Make it visually engaging, well-spaced, and easy to follow!`;
                 onClose={() => setShowLimitModal(false)}
                 userProfile={userProfile}
                 appSettings={appSettings}
-                featureType={limitModalFeature}
-                limitValue={limitModalData.limit}
-                usedValue={limitModalData.used}
-                price={limitModalData.price}
-                batchCount={limitModalData.batchCount}
+                cost={limitModalData.cost}
+                balance={limitModalData.balance}
                 addToast={addToast}
                 onSuccessPurchase={() => {}}
             />

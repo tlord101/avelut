@@ -15,7 +15,7 @@ import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkVisualMessagesLimit, incrementVisualMessagesUsed } from '../utils/usage';
+import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -380,21 +380,12 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const [statusText, setStatusText] = useState('Ready to help with math, science, and study plans.');
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
-  const [usageStats, setUsageStats] = useState<any>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 1 });
+  const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
 
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const { addToast } = useToast();
-
-  useEffect(() => {
-    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
-    const unsubscribe = onValue(usageRef, (snapshot) => {
-      setUsageStats(snapshot.val() || {});
-    });
-    return () => unsubscribe();
-  }, [userProfile.uid]);
   const geminiModel = appSettings.primary_gemini_model;
   const usePersonalToken = !!(
     userProfile?.use_personal_token &&
@@ -691,13 +682,11 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     if ((!prompt && filesToSend.length === 0) || isSending) return;
 
     // Check message limits
-    const limitCheck = checkVisualMessagesLimit(userProfile, usageStats, appSettings);
+    const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
     if (!limitCheck.allowed) {
       setLimitModalData({
-        limit: limitCheck.limit,
-        used: limitCheck.used,
-        price: limitCheck.price,
-        batchCount: limitCheck.count
+        balance: limitCheck.balance,
+        cost: limitCheck.cost
       });
       setShowLimitModal(true);
       return;
@@ -864,6 +853,9 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
       let responseText = '';
       const aiResult = await attemptApiCall(async () => {
+        // Optimize payload: preserve system instructions but only send last 5 messages for context
+        const contextMessages = nextMessages.slice(-5);
+
         const responseStream = await ai.models.generateContentStream({
           model: geminiModel,
           contents: [
@@ -883,7 +875,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
                     storedAttachments.length ? `ATTACHMENTS: ${storedAttachments.map(item => item.name).join(', ')}` : '',
                     '',
-                    `Conversation so far:\n${nextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
+                    `Conversation so far:\n${contextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
                   ].filter(Boolean).join('\n'),
                 },
                 ...attachmentParts,
@@ -913,8 +905,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
       const finalResponseText = aiResult.data || 'I could not generate a response right now. Please try again.';
       
-      // Increment message usage counter
-      await incrementVisualMessagesUsed(userProfile.uid);
+      // Deduct credits
+      await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, 'AI Assistant Chat');
 
       await push(messagesRef, {
         text: finalResponseText,
@@ -1487,7 +1479,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           </section>
 
           {/* Integrated AVELUT Input Layout Panel */}
-          <footer className="w-full bg-[#060814] pb-[84px] md:pb-4 px-4 z-30 shrink-0">
+          <footer className="w-full bg-[#060814] pb-[92px] md:pb-4 px-4 z-30 shrink-0">
             <div className="w-full max-w-xl mx-auto transition-all duration-300 mb-2.5">
               
               {/* Attachment Preview */}
@@ -1682,11 +1674,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         onClose={() => setShowLimitModal(false)}
         userProfile={userProfile}
         appSettings={appSettings}
-        featureType="visual_messages"
-        limitValue={limitModalData.limit}
-        usedValue={limitModalData.used}
-        price={limitModalData.price}
-        batchCount={limitModalData.batchCount}
+        cost={limitModalData.cost}
+        balance={limitModalData.balance}
         addToast={addToast}
         onSuccessPurchase={() => {}}
       />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSwipeable } from 'react-swipeable';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { XIcon } from './icons/XIcon';
 
 interface FlashcardsUIProps {
@@ -11,156 +11,172 @@ interface FlashcardsUIProps {
 export const FlashcardsUI: React.FC<FlashcardsUIProps> = ({ flashcards, onFinish, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [exitX, setExitX] = useState(0);
 
-  const handleNext = () => {
-    if (currentIndex < flashcards.length - 1) {
-      setIsFlipped(false);
-      setCurrentIndex((prev) => prev + 1);
-    } else {
-      onFinish();
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-150, 150], [-25, 25]);
+  const opacity = useTransform(x, [-150, -100, 0, 100, 150], [0, 1, 1, 1, 0]);
+
+  const handleDragEnd = (event: any, info: any) => {
+    if (info.offset.x > 150 || info.velocity.x > 500) {
+      setExitX(500);
+      swipeNext();
+    } else if (info.offset.x < -150 || info.velocity.x < -500) {
+      setExitX(-500);
+      swipeNext();
     }
+  };
+
+  const swipeNext = () => {
+    setIsFlipped(false);
+    if (currentIndex < flashcards.length - 1) {
+      setTimeout(() => {
+        setCurrentIndex((prev) => prev + 1);
+        x.set(0);
+        setExitX(0);
+      }, 200);
+    } else {
+      setTimeout(onFinish, 200);
+    }
+  };
+
+  const handleNextManual = () => {
+    setExitX(500);
+    swipeNext();
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
       setIsFlipped(false);
       setCurrentIndex((prev) => prev - 1);
+      x.set(0);
+      setExitX(0);
     }
   };
-
-  const swipeHandlers = useSwipeable({
-    onSwipedLeft: handleNext,
-    onSwipedRight: handlePrev,
-    preventScrollOnSwipe: true,
-    trackMouse: true,
-  });
 
   if (!flashcards.length) return null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500 py-10 w-full px-4 overflow-hidden" {...swipeHandlers}>
-      <div className="flex justify-between items-center bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100 z-10 relative">
-        <div className="px-4">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Card</p>
-          <p className="text-lg font-black text-gray-900">
-            {currentIndex + 1} <span className="text-gray-300 mx-1">/</span> {flashcards.length}
-          </p>
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col overflow-hidden font-sans select-none">
+      {/* Premium Header */}
+      <header className="flex justify-between items-center px-6 py-4 border-b border-[#E2E8F0] shrink-0">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.2em] mb-0.5">Card Queue</span>
+          <span className="text-sm font-bold text-[#1E293B]">
+            {currentIndex + 1} <span className="text-[#CBD5E1] mx-1">/</span> {flashcards.length}
+          </span>
         </div>
         <button
           onClick={onClose}
-          className="p-3 rounded-xl bg-white text-gray-400 hover:text-red-500 shadow-sm transition-all"
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] hover:text-[#EF4444] transition-colors"
         >
           <XIcon className="w-5 h-5" />
         </button>
-      </div>
+      </header>
 
-      <div className="relative w-full aspect-[4/3] max-w-md mx-auto perspective-1000">
-        {flashcards.map((card, index) => {
-          const diff = index - currentIndex;
-          const isCurrent = diff === 0;
-          const isPrev = diff < 0;
-          const isNext = diff > 0;
+      {/* Main Flashcard Arena */}
+      <main className="flex-1 relative flex items-center justify-center p-6 bg-[#FFFFFF]">
+        <div className="relative w-full max-w-sm aspect-[3/4]">
+          <AnimatePresence mode="popLayout">
+            {flashcards.slice(currentIndex, currentIndex + 3).map((card, idx) => {
+              const stackIndex = idx;
+              const isFront = stackIndex === 0;
 
-          // Compute styles based on position relative to currentIndex
-          let translateX = '0%';
-          let translateY = '0%';
-          let scale = 1;
-          let zIndex = 10;
-          let opacity = 1;
-          let rotateZ = '0deg';
-
-          if (isPrev) {
-            translateX = '-30%';
-            translateY = '10%';
-            scale = 0.9;
-            zIndex = 5;
-            opacity = 0.6;
-            rotateZ = '-5deg';
-          } else if (isNext) {
-            translateX = '30%';
-            translateY = '10%';
-            scale = 0.9;
-            zIndex = 5;
-            opacity = 0.6;
-            rotateZ = '5deg';
-          }
-
-          if (Math.abs(diff) > 1) {
-            opacity = 0; // Hide cards further away
-          }
-
-          return (
-            <div
-              key={index}
-              className={`absolute inset-0 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform origin-bottom cursor-pointer ${
-                isCurrent ? 'z-10' : 'pointer-events-none'
-              }`}
-              style={{
-                transform: `translateX(${translateX}) translateY(${translateY}) scale(${scale}) rotateZ(${rotateZ})`,
-                zIndex,
-                opacity,
-              }}
-              onClick={() => {
-                if (isCurrent) setIsFlipped(!isFlipped);
-              }}
-            >
-              <div
-                className="relative w-full h-full transition-transform duration-700 preserve-3d shadow-2xl rounded-3xl"
-                style={{
-                  transform: isCurrent && isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-                }}
-              >
-                {/* Front side */}
-                <div
-                  className="absolute inset-0 bg-white rounded-3xl border border-gray-100 flex flex-col items-center justify-center p-8 text-center backface-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)]"
+              return (
+                <motion.div
+                  key={`${currentIndex + idx}`}
+                  style={isFront ? { x, rotate, opacity } : {}}
+                  drag={isFront ? "x" : false}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  onDragEnd={isFront ? handleDragEnd : undefined}
+                  initial={{
+                    scale: 0.9,
+                    y: stackIndex * -8,
+                    rotate: stackIndex === 1 ? 3 : stackIndex === 2 ? -3 : 0,
+                    opacity: 0
+                  }}
+                  animate={{
+                    scale: 1 - stackIndex * 0.05,
+                    y: stackIndex * -8,
+                    rotate: stackIndex === 1 ? 3 : stackIndex === 2 ? -3 : 0,
+                    opacity: 1,
+                    zIndex: 30 - stackIndex
+                  }}
+                  exit={{
+                    x: exitX,
+                    opacity: 0,
+                    rotate: exitX > 0 ? 45 : -45,
+                    transition: { duration: 0.3 }
+                  }}
+                  className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                  onClick={() => {
+                    if (isFront) setIsFlipped(!isFlipped);
+                  }}
                 >
-                  <h3 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight leading-tight">
-                    {card.front}
-                  </h3>
-                </div>
+                  <div className="relative w-full h-full preserve-3d transition-transform duration-500 shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-[#E2E8F0] rounded-[2rem] bg-white overflow-hidden">
+                    <motion.div
+                      animate={{ rotateY: isFlipped && isFront ? 180 : 0 }}
+                      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                      className="w-full h-full relative preserve-3d"
+                    >
+                      {/* Front Side */}
+                      <div className="absolute inset-0 backface-hidden flex flex-col items-center justify-center p-8 text-center">
+                        <div className="absolute top-8 left-8 w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
+                        <h3 className="text-xl md:text-2xl font-bold text-[#1E293B] leading-snug">
+                          {card.front}
+                        </h3>
+                      </div>
 
-                {/* Back side */}
-                <div
-                  className="absolute inset-0 bg-white rounded-3xl border border-gray-100 flex flex-col items-center justify-center p-8 text-center backface-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)]"
-                  style={{ transform: 'rotateY(180deg)' }}
-                >
-                  <div className="absolute top-6 left-6 text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-full">
-                    Answer
+                      {/* Back Side */}
+                      <div
+                        className="absolute inset-0 backface-hidden flex flex-col items-center justify-center p-8 text-center bg-[#F8FAFC]"
+                        style={{ transform: 'rotateY(180deg)' }}
+                      >
+                        <span className="absolute top-8 left-8 text-[10px] font-black uppercase tracking-widest text-[#3B82F6] px-3 py-1 bg-[#DBEAFE] rounded-full">
+                          Answer
+                        </span>
+                        <p className="text-lg md:text-xl font-medium text-[#475569] leading-relaxed">
+                          {card.back}
+                        </p>
+                      </div>
+                    </motion.div>
                   </div>
-                  <p className="text-xl md:text-2xl font-bold leading-relaxed text-gray-700">
-                    {card.back}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      </main>
 
-      <div className="flex gap-4 justify-center mt-8 px-4 z-10 relative">
-        <button
-          onClick={handlePrev}
-          disabled={currentIndex === 0}
-          className="w-16 h-16 flex items-center justify-center bg-white border border-gray-200 text-gray-700 font-black rounded-full hover:bg-gray-50 hover:scale-105 transition-all disabled:opacity-30 disabled:hover:scale-100 shadow-sm"
-          aria-label="Previous card"
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <button
-          onClick={handleNext}
-          className={`px-8 h-16 flex items-center justify-center text-white font-black rounded-full hover:scale-105 transition-all shadow-md shadow-indigo-600/20 text-sm uppercase tracking-widest ${
-             currentIndex < flashcards.length - 1 ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-lime-500 hover:bg-lime-600'
-          }`}
-        >
-          {currentIndex < flashcards.length - 1 ? 'Next' : 'Finish'}
-        </button>
-      </div>
+      {/* Control Actions */}
+      <footer className="px-6 py-10 flex flex-col items-center gap-6 border-t border-[#E2E8F0] shrink-0">
+        <div className="flex gap-4 w-full max-w-sm">
+          <button
+            onClick={handlePrev}
+            disabled={currentIndex === 0}
+            className="flex-1 h-14 flex items-center justify-center rounded-2xl bg-white border border-[#E2E8F0] text-[#1E293B] font-bold text-xs uppercase tracking-widest hover:bg-[#F8FAFC] active:scale-95 transition-all disabled:opacity-30"
+          >
+            Previous
+          </button>
+          <button
+            onClick={handleNextManual}
+            className={`flex-[2] h-14 flex items-center justify-center rounded-2xl text-white font-black text-xs uppercase tracking-widest active:scale-95 transition-all ${
+              currentIndex < flashcards.length - 1 ? 'bg-[#1E293B]' : 'bg-[#10B981]'
+            }`}
+          >
+            {currentIndex < flashcards.length - 1 ? 'Next Card' : 'Finish Session'}
+          </button>
+        </div>
 
-      <p className="text-center text-gray-400 text-xs font-bold uppercase tracking-widest mt-6">
-        Tap to flip • Swipe to navigate
-      </p>
+        <p className="text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.25em]">
+          Swipe to navigate • Tap to reveal
+        </p>
+      </footer>
+
+      <style>{`
+        .preserve-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+      `}</style>
     </div>
   );
 };

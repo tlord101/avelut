@@ -33,6 +33,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^12.5.0",
+    "framer-motion": "^12.40.0",
     "katex": "^0.16.25",
     "lucide-react": "^1.16.0",
     "mammoth": "^1.12.0",
