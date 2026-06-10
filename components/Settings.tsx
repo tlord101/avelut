@@ -10,6 +10,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { VerificationBadge } from './VerificationBadge';
 import { triggerPaystackPurchase } from '../utils/usage';
+import { LimitExceededModal } from './LimitExceededModal';
 import { DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
 import type { AppSettings } from '../types';
 import { isNative } from '../utils/capacitorUtils';
@@ -25,6 +26,46 @@ interface SettingsProps {
   onProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
   onDeleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
+
+const CreditRefillCTA: React.FC<{ balance: number; onRefill: () => void }> = ({ balance, onRefill }) => (
+  <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl overflow-hidden relative group">
+    <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all duration-500" />
+    <div className="relative z-10">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1 block">Live AI Balance</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-black text-white tracking-tighter">{balance}</span>
+            <span className="text-xs font-bold text-slate-400">Credits Available</span>
+          </div>
+        </div>
+        <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-inner">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onRefill}
+          className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+        >
+          Refill Credits
+        </button>
+        <button
+          onClick={() => {
+            const el = document.getElementById('subscription-plans');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="flex-1 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 text-slate-200 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-[0.98]"
+        >
+          Upgrade Plan
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const Switch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }> = ({ checked, onChange, disabled }) => (
   <button
@@ -167,6 +208,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRefillModalOpen, setIsRefillModalOpen] = useState(false);
 
   useEffect(() => {
     setIsNotificationSwitchOn(userProfile.notifications_enabled);
@@ -492,11 +534,19 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
         )}
       </div>
 
-      <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
+      <div id="subscription-plans" className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Subscription & Plans</h3>
         <p className="text-xs text-gray-500 mb-6 font-semibold">
           Manage your account subscription plan. Upgrade or connect your own API key to bypass limits.
         </p>
+
+        {/* Unified Credit Balance Display */}
+        <div className="mb-8">
+           <CreditRefillCTA
+             balance={userProfile.ai_credits_balance ?? 0}
+             onRefill={() => setIsRefillModalOpen(true)}
+           />
+        </div>
 
         {/* Current active plan callout */}
         <div className="mb-6 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center">
@@ -915,6 +965,17 @@ export const Settings: React.FC<SettingsProps> = ({ user, userProfile, appSettin
         onCancel={() => setIsDeleteModalOpen(false)}
         confirmText="Yes, delete my account"
         isConfirming={isDeleting}
+      />
+
+      <LimitExceededModal
+        isOpen={isRefillModalOpen}
+        onClose={() => setIsRefillModalOpen(false)}
+        userProfile={userProfile}
+        appSettings={appSettings}
+        cost={0} // Cost is 0 for purely manual refill window
+        balance={userProfile.ai_credits_balance ?? 0}
+        addToast={addToast}
+        onSuccessPurchase={() => {}}
       />
     </div>
   );

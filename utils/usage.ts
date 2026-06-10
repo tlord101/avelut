@@ -172,7 +172,11 @@ export const deductAICredits = async (userId: string, cost: number, featureName:
     const userRef = dbRef(db, `users/${userId}`);
     const result = await runTransaction(userRef, (profile) => {
       if (profile) {
-        const currentBalance = profile.ai_credits_balance ?? 0;
+        const planKey = (profile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
+        const defaultLimit = DEFAULT_USAGE_SETTINGS.plans[planKey]?.monthly_ai_credits ?? 10;
+
+        // If balance is missing, initialize with plan default before deducting
+        const currentBalance = profile.ai_credits_balance ?? defaultLimit;
         profile.ai_credits_balance = Math.max(0, currentBalance - cost);
       }
       return profile;
