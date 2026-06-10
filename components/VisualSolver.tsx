@@ -13,12 +13,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useToast } from '../hooks/useToast';
 // --- INLINE ICONS ---
-const ShutterIcon: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
-    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-        <circle cx="32" cy="32" r="30" fill="white" fillOpacity="0.2" />
-        <circle cx="32" cy="32" r="26" stroke="white" strokeWidth="4" />
-    </svg>
-);
 const ErrorIcon: React.FC<{ className?: string }> = ({ className = 'w-8 h-8' }) => (
      <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -753,7 +747,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
 
     return (
         <div className="flex-1 flex flex-col w-full">
-            <div className="h-[calc(100vh-84px)] bg-gray-300 rounded-xl border border-gray-200 overflow-hidden relative">
+            <div className="h-[calc(100vh-90px)] bg-gray-300 rounded-xl border border-gray-200 overflow-hidden relative">
                 <canvas ref={canvasRef} className="hidden"></canvas>
                 {renderContent()}
             </div>
