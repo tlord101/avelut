@@ -156,7 +156,7 @@ export const checkAICredits = (
 
   const planKey = (userProfile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
   const usageSettings = appSettings.usage_settings || DEFAULT_USAGE_SETTINGS;
-  const monthlyLimit = usageSettings.plans[planKey]?.limits?.monthly_ai_credits ?? DEFAULT_USAGE_SETTINGS.plans.free.limits.monthly_ai_credits;
+  const monthlyLimit = usageSettings.plans[planKey]?.monthly_ai_credits ?? DEFAULT_USAGE_SETTINGS.plans.free.monthly_ai_credits;
   
   const balance = userProfile.ai_credits_balance ?? monthlyLimit;
   const allowed = balance >= cost;
