@@ -139,15 +139,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up">
-      {/* SVG Clip Path definition */}
-      <svg width="0" height="0" className="absolute">
-        <defs>
-          <clipPath id="navbar-clip" clipPathUnits="userSpaceOnUse">
-            <path d={pathD} />
-          </clipPath>
-        </defs>
-      </svg>
-
       <div 
         ref={containerRef}
         className="relative w-full max-w-md h-[calc(76px+env(safe-area-inset-bottom,0px))] bg-transparent"
