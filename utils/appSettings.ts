@@ -8,24 +8,27 @@ export const DEFAULT_USAGE_SETTINGS = {
       name: 'Free Plan',
       description: 'Fundamental study tools with standard constraints',
       price: 0,
+      monthly_ai_credits: 10,
       limits: {
-        monthly_ai_credits: 10,
+        courses: 2,
       },
     },
     basic: {
       name: 'Basic Plan',
       description: 'Unlock advanced guides and higher limits. Twitter-style blue badge included.',
       price: 1000,
+      monthly_ai_credits: 50,
       limits: {
-        monthly_ai_credits: 50,
+        courses: 5,
       },
     },
     pro: {
       name: 'Pro Plan',
       description: 'Ultimate academic assistance with maximum limits. Purple badge included.',
       price: 2500,
+      monthly_ai_credits: 200,
       limits: {
-        monthly_ai_credits: 200,
+        courses: 15,
       },
     },
   },
@@ -66,24 +69,27 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
         name: raw.usage_settings.plans?.free?.name || DEFAULT_USAGE_SETTINGS.plans.free.name,
         description: raw.usage_settings.plans?.free?.description || DEFAULT_USAGE_SETTINGS.plans.free.description,
         price: typeof raw.usage_settings.plans?.free?.price === 'number' ? raw.usage_settings.plans.free.price : DEFAULT_USAGE_SETTINGS.plans.free.price,
+        monthly_ai_credits: typeof raw.usage_settings.plans?.free?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.free.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.free.monthly_ai_credits,
         limits: {
-          monthly_ai_credits: typeof raw.usage_settings.plans?.free?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.free.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.free.limits.monthly_ai_credits,
+          courses: typeof raw.usage_settings.plans?.free?.limits?.courses === 'number' ? raw.usage_settings.plans.free.limits.courses : DEFAULT_USAGE_SETTINGS.plans.free.limits.courses,
         }
       },
       basic: {
         name: raw.usage_settings.plans?.basic?.name || DEFAULT_USAGE_SETTINGS.plans.basic.name,
         description: raw.usage_settings.plans?.basic?.description || DEFAULT_USAGE_SETTINGS.plans.basic.description,
         price: typeof raw.usage_settings.plans?.basic?.price === 'number' ? raw.usage_settings.plans.basic.price : DEFAULT_USAGE_SETTINGS.plans.basic.price,
+        monthly_ai_credits: typeof raw.usage_settings.plans?.basic?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.basic.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.basic.monthly_ai_credits,
         limits: {
-          monthly_ai_credits: typeof raw.usage_settings.plans?.basic?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.basic.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.basic.limits.monthly_ai_credits,
+          courses: typeof raw.usage_settings.plans?.basic?.limits?.courses === 'number' ? raw.usage_settings.plans.basic.limits.courses : DEFAULT_USAGE_SETTINGS.plans.basic.limits.courses,
         }
       },
       pro: {
         name: raw.usage_settings.plans?.pro?.name || DEFAULT_USAGE_SETTINGS.plans.pro.name,
         description: raw.usage_settings.plans?.pro?.description || DEFAULT_USAGE_SETTINGS.plans.pro.description,
         price: typeof raw.usage_settings.plans?.pro?.price === 'number' ? raw.usage_settings.plans.pro.price : DEFAULT_USAGE_SETTINGS.plans.pro.price,
+        monthly_ai_credits: typeof raw.usage_settings.plans?.pro?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.pro.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.pro.monthly_ai_credits,
         limits: {
-          monthly_ai_credits: typeof raw.usage_settings.plans?.pro?.limits?.monthly_ai_credits === 'number' ? raw.usage_settings.plans.pro.limits.monthly_ai_credits : DEFAULT_USAGE_SETTINGS.plans.pro.limits.monthly_ai_credits,
+          courses: typeof raw.usage_settings.plans?.pro?.limits?.courses === 'number' ? raw.usage_settings.plans.pro.limits.courses : DEFAULT_USAGE_SETTINGS.plans.pro.limits.courses,
         }
       }
     },

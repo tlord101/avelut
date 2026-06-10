@@ -88,6 +88,7 @@ export const FlashcardsUI: React.FC<FlashcardsUIProps> = ({ flashcards, onFinish
                   style={isFront ? { x, rotate, opacity } : {}}
                   drag={isFront ? "x" : false}
                   dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.7}
                   onDragEnd={isFront ? handleDragEnd : undefined}
                   initial={{
                     scale: 0.9,
@@ -100,10 +101,10 @@ export const FlashcardsUI: React.FC<FlashcardsUIProps> = ({ flashcards, onFinish
                     y: stackIndex * -8,
                     rotate: stackIndex === 1 ? 3 : stackIndex === 2 ? -3 : 0,
                     opacity: 1,
-                    zIndex: 30 - stackIndex
+                    zIndex: stackIndex === 0 ? 30 : stackIndex === 1 ? 20 : 10
                   }}
                   exit={{
-                    x: exitX,
+                    x: exitX > 0 ? 300 : -300,
                     opacity: 0,
                     rotate: exitX > 0 ? 45 : -45,
                     transition: { duration: 0.3 }

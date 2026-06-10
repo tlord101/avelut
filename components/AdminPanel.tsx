@@ -3029,56 +3029,14 @@ FORMAT:
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit (Enter -1 for Unlimited)</label>
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Monthly AI Credits</label>
                                                 <input
                                                     type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.visual_messages ?? 0}
+                                                    value={appSettingsDraft.usage_settings?.plans?.free?.monthly_ai_credits ?? 0}
                                                     onChange={e => {
                                                         const draft = { ...appSettingsDraft };
                                                         draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.free.limits.visual_messages = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.courses ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.free.limits.courses = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset) (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.ai_requests_per_course ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.free.limits.ai_requests_per_course = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Exams Generated Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.free?.limits?.exams ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.free.limits.exams = Number(e.target.value);
+                                                        draft.usage_settings.plans.free.monthly_ai_credits = Number(e.target.value);
                                                         setAppSettingsDraft(draft);
                                                     }}
                                                     className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
@@ -3137,56 +3095,14 @@ FORMAT:
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit (Enter -1 for Unlimited)</label>
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Monthly AI Credits</label>
                                                 <input
                                                     type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.visual_messages ?? 0}
+                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.monthly_ai_credits ?? 0}
                                                     onChange={e => {
                                                         const draft = { ...appSettingsDraft };
                                                         draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.basic.limits.visual_messages = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.courses ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.basic.limits.courses = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset) (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.ai_requests_per_course ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.basic.limits.ai_requests_per_course = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Exams Generated Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.basic?.limits?.exams ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.basic.limits.exams = Number(e.target.value);
+                                                        draft.usage_settings.plans.basic.monthly_ai_credits = Number(e.target.value);
                                                         setAppSettingsDraft(draft);
                                                     }}
                                                     className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
@@ -3245,56 +3161,14 @@ FORMAT:
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Messages Limit (Enter -1 for Unlimited)</label>
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Monthly AI Credits</label>
                                                 <input
                                                     type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.visual_messages ?? 0}
+                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.monthly_ai_credits ?? 0}
                                                     onChange={e => {
                                                         const draft = { ...appSettingsDraft };
                                                         draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.pro.limits.visual_messages = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Unlocked Courses Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.courses ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.pro.limits.courses = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Queries Per Course Limit (2h sliding reset) (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.ai_requests_per_course ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.pro.limits.ai_requests_per_course = Number(e.target.value);
-                                                        setAppSettingsDraft(draft);
-                                                    }}
-                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Exams Generated Limit (Enter -1 for Unlimited)</label>
-                                                <input
-                                                    type="number"
-                                                    value={appSettingsDraft.usage_settings?.plans?.pro?.limits?.exams ?? 0}
-                                                    onChange={e => {
-                                                        const draft = { ...appSettingsDraft };
-                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
-                                                        draft.usage_settings.plans.pro.limits.exams = Number(e.target.value);
+                                                        draft.usage_settings.plans.pro.monthly_ai_credits = Number(e.target.value);
                                                         setAppSettingsDraft(draft);
                                                     }}
                                                     className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"

@@ -155,13 +155,14 @@ export interface DashboardData {
 }
 
 export interface PlanLimit {
-  monthly_ai_credits: number;
+  courses: number;
 }
 
 export interface PlanConfig {
   name: string;
   description: string;
   price: number;
+  monthly_ai_credits: number;
   limits: PlanLimit;
 }
 
