@@ -6,7 +6,7 @@ import { FlashcardsUI } from './FlashcardsUI';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course, AppSettings } from '../types';
-import { checkExamsLimit, incrementExamsGenerated } from '../utils/usage';
+import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -155,17 +155,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
 
-  const [usageStats, setUsageStats] = useState<any>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitModalData, setLimitModalData] = useState({ limit: 0, used: 0, price: 0, batchCount: 5 });
-
-  useEffect(() => {
-    const usageRef = dbRef(db, `users/${userProfile.uid}/usage_stats`);
-    const unsubscribe = onValue(usageRef, (snapshot) => {
-      setUsageStats(snapshot.val() || {});
-    });
-    return () => unsubscribe();
-  }, [userProfile.uid]);
+  const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
   const geminiModel = appSettings.primary_gemini_model;
   const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
   const isGeminiConfigured = Boolean(ai);
@@ -341,9 +332,12 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
 
   const generateFlashcards = async () => {
-    const creditsConsumed = await consumeCredits(userProfile.uid, 10, addToast);
-    if (!creditsConsumed) {
-      setLimitModalData({ limit: 0, used: 0, price: 500, batchCount: 100 });
+    const limitCheck = checkAICredits(userProfile, AI_COSTS.FLASHCARD_GENERATION, appSettings);
+    if (!limitCheck.allowed) {
+      setLimitModalData({
+        balance: limitCheck.balance,
+        cost: limitCheck.cost
+      });
       setShowLimitModal(true);
       return;
     }
@@ -386,6 +380,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         setFlashcards(responseData.flashcards);
         setFlashcardIndex(0);
         setIsFlipped(false);
+        await deductAICredits(userProfile.uid, AI_COSTS.FLASHCARD_GENERATION, 'Flashcard Generation');
         setExamState('flashcards');
       });
 
@@ -398,14 +393,12 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   };
 
   const generateQuestions = async () => {
-    // Check exam limits
-    const creditsConsumed = await consumeCredits(userProfile.uid, 10, addToast);
-    if (!creditsConsumed) {
+    // Check credits for exam generation (cost same as chat interaction for now)
+    const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
+    if (!limitCheck.allowed) {
       setLimitModalData({
-        limit: 0,
-        used: 0,
-        price: 500,
-        batchCount: 100
+        balance: limitCheck.balance,
+        cost: limitCheck.cost
       });
       setShowLimitModal(true);
       return;
@@ -459,8 +452,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         }
         const newQuestions = responseData.questions;
 
-        // Increment exam usage counter
-        await incrementExamsGenerated(userProfile.uid);
+        // Deduct credits
+        await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, 'Mock Exam Generation');
 
         setQuestions(newQuestions);
         setTimeLeft(newQuestions.length * TIME_PER_QUESTION_SECONDS);
@@ -862,11 +855,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         onClose={() => setShowLimitModal(false)}
         userProfile={userProfile}
         appSettings={appSettings}
-        featureType="exams"
-        limitValue={limitModalData.limit}
-        usedValue={limitModalData.used}
-        price={limitModalData.price}
-        batchCount={limitModalData.batchCount}
+        cost={limitModalData.cost}
+        balance={limitModalData.balance}
         addToast={addToast}
         onSuccessPurchase={() => {}}
       />

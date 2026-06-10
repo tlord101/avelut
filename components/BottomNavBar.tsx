@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HomeIcon } from './icons/HomeIcon';
 import { CameraIcon } from './icons/CameraIcon';
+import { ShutterIcon } from './icons/ShutterIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { AIIcon } from './icons/AIIcon';
 import { ChatsIcon } from './icons/ChatsIcon';
@@ -151,10 +152,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
         ref={containerRef}
         className="relative w-full max-w-md h-[calc(76px+env(safe-area-inset-bottom,0px))] bg-transparent"
       >
-        {/* Glassmorphic Background clipped to the custom notch shape */}
+        {/* Glassmorphic Background clipped to the custom notch shape using inline path() */}
         <div 
           className="absolute inset-0 shadow-[0_-8px_30px_rgba(0,45,98,0.08)] z-0"
-          style={{ clipPath: 'url(#navbar-clip)' }}
+          style={{ clipPath: `path('${pathD}')` }}
         >
            <div className="absolute inset-0 bg-white/95 backdrop-blur-xl"></div>
         </div>
@@ -175,12 +176,16 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
           style={{ animationDuration: '4s' }}
         />
 
-        {/* Center Raised Camera Button */}
+        {/* Center Raised Dual-Function Camera Button */}
         <button
           onClick={() => onCenterActionClick ? onCenterActionClick() : onItemClick(navItems[2].id)}
-          className="absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer"
+          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${activeItem === 'visual_solver' ? 'ring-4 ring-[#002D62]/20 animate-pulse' : ''}`}
         >
-          <CameraIcon className="w-8 h-8 text-[#002D62]" />
+          {activeItem === 'visual_solver' ? (
+            <ShutterIcon className="w-8 h-8 text-[#002D62]" />
+          ) : (
+            <CameraIcon className="w-8 h-8 text-[#002D62]" />
+          )}
         </button>
 
         {/* Navigation Tabs Container */}

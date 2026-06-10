@@ -34,6 +34,7 @@ export interface UserProfile {
   selected_free_course_id?: string;
   fcm_token?: string;
   default_semester_tab?: string;
+  ai_credits_balance?: number;
 }
 
 export interface Message {
@@ -154,10 +155,7 @@ export interface DashboardData {
 }
 
 export interface PlanLimit {
-  courses: number;
-  ai_requests_per_course: number;
-  exams: number;
-  visual_messages: number;
+  monthly_ai_credits: number;
 }
 
 export interface PlanConfig {
