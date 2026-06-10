@@ -468,7 +468,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
 
     const handleQuickAnswer = useCallback(async () => {
         if (!scannedImage) return;
@@ -513,7 +513,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
 
     const handleSolution = useCallback(async () => {
         if (!scannedImage) return;
@@ -558,7 +558,7 @@ Make it visually engaging, well-spaced, and easy to follow!`;
             addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
             setCameraState('preview');
         }
-    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, usageStats, appSettings, addToast]);
+    }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
 
     const handleRetake = () => {
         setScannedImage(null);

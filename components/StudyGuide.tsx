@@ -230,7 +230,6 @@ interface LearningInterfaceProps {
     userProfile: UserProfile;
     topic: Topic & { courseName: string; courseId?: string; course_id?: string };
     onClose: () => void;
-    usageStats: any;
 }
 
 const INVIDIOUS_INSTANCES = [
@@ -341,7 +340,7 @@ const parseMessageSuggestions = (text: string): { cleanText: string; suggestions
     return { cleanText: text, suggestions: [] };
 };
 
-const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose, usageStats }) => {
+const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
     const [input, setInput] = useState('');
@@ -916,7 +915,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setIsLoading(false);
             onClose();
         }
-    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, usageStats, topic.courseId, topic.course_id, setStreamingBotText]);
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, topic.courseId, topic.course_id, setStreamingBotText]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -2128,7 +2127,6 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         userProfile={userProfile}
         topic={selectedTopic}
         onClose={() => setSelectedTopic(null)}
-        usageStats={usageStats}
       />
     );
   }
@@ -2190,7 +2188,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     <div className="max-w-4xl mx-auto space-y-6">
                         {filteredCourses.map(course => {
                             const isExpanded = expandedCourses.has(course.course_id);
-                            const isUnlocked = isUserExempt || !!(usageStats?.unlocked_courses?.[course.course_id]);
+                            const isUnlocked = true; // Credit system migration: course outlines are now always visible, AI interaction costs credits
                             return (
                                 <div key={course.course_id} className="relative">
                                     <CourseHeader
