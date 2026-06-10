@@ -91,10 +91,10 @@ export const LimitExceededModal: React.FC<LimitExceededModalProps> = ({
             ⚡
           </div>
           <h3 className="text-lg font-black text-slate-900 leading-tight">
-            AI Credits Required
+            Out of AI Credits
           </h3>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Universal AI Credit System
+            Top-up your balance to continue using AI features.
           </p>
         </div>
 
