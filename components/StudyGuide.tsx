@@ -1948,7 +1948,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
   const [filter, setFilter] = useState(() => ({
     searchTerm: '',
-    semester: (userProfile.default_semester_tab || 'all') as 'all' | 'first' | 'second'
+    semester: (userProfile.default_semester_tab || 'second') as 'all' | 'first' | 'second'
   }));
   const { addToast } = useToast();
 

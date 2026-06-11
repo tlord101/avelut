@@ -41,7 +41,7 @@ export const DEFAULT_USAGE_SETTINGS = {
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  primary_gemini_model: 'gemini-2.5-flash-lite',
+  primary_gemini_model: 'gemini-1.5-flash',
   gemini_api_key: '',
   upload_center_uploads_enabled: true,
   coming_soon_enabled: false,
