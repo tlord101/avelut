@@ -386,62 +386,16 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             const base64Data = scannedImage.split(',')[1];
             if (!base64Data) throw new Error("Could not extract image data.");
             
-            const basePrompt = `You are AVELUT, an expert AI educator. Analyze the problem in the image and provide a comprehensive, well-structured tutorial.`;
-            const customInstruction = customPrompt ? `\n\n**ADDITIONAL INSTRUCTIONS FROM USER:**\n${customPrompt}\n` : '';
+            const basePrompt = `Expert AI educator. Solve the image problem fast. Use LaTeX for math ($...$, $$...$$).`;
+            const customInstruction = customPrompt ? ` User instructions: ${customPrompt}` : '';
             const promptText = `${basePrompt}${customInstruction}
-
-**FORMATTING REQUIREMENTS:**
-1. Start with a clear # Title identifying the problem type
-2. Use ## for major sections (Understanding, Solution, Steps, etc.)
-3. Use ### for sub-sections
-4. Number all solution steps clearly
-5. **Bold** all key concepts, formulas, and important terms
-6. Use *italics* for emphasis and definitions
-7. Wrap ALL mathematical expressions in LaTeX:
-   - Inline math: $x^2 + y^2 = z^2$
-   - Display math: $$\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$
-8. Use > blockquotes for important notes, tips, or warnings
-9. Create clear visual hierarchy with proper spacing
-10. Use bullet points for lists of concepts
-11. Use numbered lists for sequential steps
-12. Add horizontal rules (---) between major sections
-13. Use tables for comparing values or showing work
-
-**STRUCTURE YOUR RESPONSE:**
-# [Problem Type/Title]
-
-## 📋 Understanding the Problem
-[Explain what we're solving and identify given information]
-
-## 🎯 Key Concepts
-- **Concept 1**: Definition
-- **Concept 2**: Definition
-
-## 📝 Solution Strategy
-[Overview of approach]
-
-## 🔢 Step-by-Step Solution
-
-### Step 1: [Action]
-Detailed explanation with math: $formula$
-
-### Step 2: [Action]
-$$
-detailed\\:calculation
-$$
-
-[Continue with all steps...]
-
-## ✅ Final Answer
-[Clear, highlighted answer]
-
-## 💡 Key Takeaways
-- Important point 1
-- Important point 2
-
-> **Note:** [Any important reminders or common mistakes to avoid]
-
-Make it visually engaging, well-spaced, and easy to follow!`;
+# [Title]
+## 📋 Summary
+[Concise summary]
+## 🔢 Solution
+[Numbered steps with math]
+## ✅ Answer
+[Final Answer]`;
 
             if (!aiClient) throw new Error('AI client not available');
             const result = await aiClient.models.generateContent({
