@@ -7,6 +7,7 @@ import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useGoogleDrivePicker } from '../hooks/useGoogleDrivePicker';
 import type { Course, Topic } from '../types';
 import { getWindowPathname } from '../utils/pathname';
 
@@ -212,6 +213,7 @@ export const UploadCenter: React.FC = () => {
   const { addToast } = useToast();
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
+  const { openPicker } = useGoogleDrivePicker();
   const geminiModel = appSettings.primary_gemini_model;
   const ai = useMemo(() => createAvelutAI(appSettings, null), [appSettings]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
@@ -487,6 +489,14 @@ export const UploadCenter: React.FC = () => {
     });
 
     setCatalog(Array.from(courseMap.values()).sort((a, b) => a.course.course_name.localeCompare(b.course.course_name)));
+  };
+
+  const handleGoogleDrivePick = (onFilesSelected: (files: File[]) => void) => {
+    openPicker({
+      clientId: appSettings.google_client_id || '',
+      apiKey: appSettings.google_api_key || '',
+      onFilesSelected
+    });
   };
 
   const handleFileUpload = async (courseEntry: CatalogEntry, files: FileList | File[]) => {
@@ -1094,20 +1104,36 @@ FORMAT:
                               }
                             }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (catalogEntry) {
-                                fileInputRefs.current[requestKey]?.click();
-                              } else {
-                                addToast('This course is still syncing. Try again in a moment.', 'info');
-                              }
-                            }}
-                            disabled={!catalogEntry || isUploadingCourseKey === requestKey}
-                            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isUploadingCourseKey === requestKey ? 'Uploading...' : 'Upload'}
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (catalogEntry) {
+                                  fileInputRefs.current[requestKey]?.click();
+                                } else {
+                                  addToast('This course is still syncing. Try again in a moment.', 'info');
+                                }
+                              }}
+                              disabled={!catalogEntry || isUploadingCourseKey === requestKey}
+                              className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isUploadingCourseKey === requestKey ? 'Uploading...' : 'Upload'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (catalogEntry) {
+                                  handleGoogleDrivePick((files) => handleFileUpload(catalogEntry, files));
+                                } else {
+                                  addToast('This course is still syncing. Try again in a moment.', 'info');
+                                }
+                              }}
+                              disabled={!catalogEntry || isUploadingCourseKey === requestKey}
+                              className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center hover:bg-blue-100 transition disabled:opacity-50"
+                            >
+                              <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" alt="Drive" className="w-5 h-5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1130,7 +1156,7 @@ FORMAT:
                       <span className="rounded-full bg-slate-100 px-3 py-1">{entry.course.semester || selectedSemester}</span>
                       <span className="rounded-full bg-slate-100 px-3 py-1">{entry.departmentIds.length} department{entry.departmentIds.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <div className="mt-5">
+                    <div className="mt-5 flex gap-2">
                       <input
                         ref={(node) => { fileInputRefs.current[entry.key] = node; }}
                         type="file"
@@ -1147,9 +1173,17 @@ FORMAT:
                         type="button"
                         onClick={() => fileInputRefs.current[entry.key]?.click()}
                         disabled={isUploadingCourseKey === entry.key}
-                        className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isUploadingCourseKey === entry.key ? 'Uploading...' : 'Upload textbook PDF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGoogleDrivePick((files) => handleFileUpload(entry, files))}
+                        disabled={isUploadingCourseKey === entry.key}
+                        className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center hover:bg-blue-100 transition disabled:opacity-50"
+                      >
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" alt="Drive" className="w-5 h-5" />
                       </button>
                     </div>
                   </div>

@@ -5,6 +5,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { GoogleGenAI, Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useGoogleDrivePicker } from '../hooks/useGoogleDrivePicker';
 import type { UserProfile, Question, Course, Topic, EmailConfig } from '../types';
 import { MenuIcon } from './icons/MenuIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -395,6 +396,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [isEmailConfigLoading, setIsEmailConfigLoading] = useState(false);
     const [isEmailConfigSaving, setIsEmailConfigSaving] = useState(false);
     const { addToast } = useToast();
+    const { openPicker } = useGoogleDrivePicker();
 
     // Analytics and Payments Real-Time Logging State
     const [aiRequestLogs, setAiRequestLogs] = useState<any[]>([]);
@@ -1103,6 +1105,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             custom_user_limit_tpm: appSettingsDraft.custom_user_limit_tpm ?? 250000,
             usage_settings: appSettingsDraft.usage_settings || DEFAULT_USAGE_SETTINGS,
             youtube_api_key: (appSettingsDraft.youtube_api_key || '').trim(),
+        google_client_id: (appSettingsDraft.google_client_id || '').trim(),
+        google_api_key: (appSettingsDraft.google_api_key || '').trim(),
         };
 
         setIsSavingAppSettings(true);
@@ -1482,6 +1486,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             addToast(error?.message || 'Failed to delete course', 'error');
         }
     }, [addToast, allDepartments, courseAdminView, isManagerCourseView, loadDepartmentCourses]);
+
+    const handleGoogleDrivePick = (onFilesSelected: (files: File[]) => void) => {
+        openPicker({
+            clientId: appSettings.google_client_id || '',
+            apiKey: appSettings.google_api_key || '',
+            onFilesSelected
+        });
+    };
 
     const handleAddQuestion = async () => {
         if (!uploadDepartmentId || !uploadLevel || !uploadCourseName || !year || !newQuestion.question || !newQuestion.correctAnswer) {
@@ -3478,6 +3490,38 @@ FORMAT:
                                 <hr className="border-gray-100 my-4" />
 
                                 <div>
+                                    <h4 className="text-base font-black text-gray-900">Google Drive Integration</h4>
+                                    <p className="text-xs text-gray-500">Configure credentials for Google Drive course file imports.</p>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Google Client ID</span>
+                                        <input
+                                            type="text"
+                                            value={appSettingsDraft.google_client_id || ''}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, google_client_id: e.target.value }))}
+                                            placeholder="Enter Google Client ID..."
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        />
+                                    </label>
+
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-gray-700">Google API Key</span>
+                                        <input
+                                            type="password"
+                                            value={appSettingsDraft.google_api_key || ''}
+                                            onChange={e => setAppSettingsDraft(prev => ({ ...prev, google_api_key: e.target.value }))}
+                                            placeholder="Enter Google API Key..."
+                                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                            autoComplete="off"
+                                        />
+                                    </label>
+                                </div>
+
+                                <hr className="border-gray-100 my-4" />
+
+                                <div>
                                     <h4 className="text-base font-black text-gray-900">Paystack Subscriptions Config</h4>
                                     <p className="text-xs text-gray-500">Configure keys for premium subscriptions (₦5,000/semester).</p>
                                 </div>
@@ -3653,12 +3697,22 @@ FORMAT:
                                 </div>
 
                                 <div className="flex flex-col gap-3">
-                                    <input 
-                                        type="file" 
-                                        accept="application/pdf"
-                                        onChange={e => setPqFile(e.target.files?.[0] || null)}
-                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
-                                    />
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <input
+                                            type="file"
+                                            accept="application/pdf"
+                                            onChange={e => setPqFile(e.target.files?.[0] || null)}
+                                            className="flex-1 text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleGoogleDrivePick((files) => setPqFile(files[0] || null))}
+                                            className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-widest hover:bg-blue-100 transition border border-blue-200 flex items-center gap-2"
+                                        >
+                                            <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" alt="" className="w-4 h-4" />
+                                            Drive
+                                        </button>
+                                    </div>
                                     {isPQProcessing && (
                                         <div className="flex items-center gap-2 text-lime-700 text-sm font-medium animate-pulse">
                                             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -3982,13 +4036,23 @@ FORMAT:
 
                                         <div className="space-y-2">
                                             <label className="text-xs font-black uppercase tracking-widest text-gray-500">Course Form PDF(s)</label>
-                                            <input
-                                                type="file"
-                                                multiple
-                                                accept="application/pdf"
-                                                onChange={e => setCourseRegistrationFiles(e.target.files ? Array.from(e.target.files) : [])}
-                                                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
-                                            />
+                                            <div className="flex flex-col sm:flex-row gap-3">
+                                                <input
+                                                    type="file"
+                                                    multiple
+                                                    accept="application/pdf"
+                                                    onChange={e => setCourseRegistrationFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                                    className="flex-1 text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleGoogleDrivePick(setCourseRegistrationFiles)}
+                                                    className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-widest hover:bg-blue-100 transition border border-blue-200 flex items-center gap-2"
+                                                >
+                                                    <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" alt="" className="w-4 h-4" />
+                                                    Drive
+                                                </button>
+                                            </div>
                                             <p className="text-xs text-gray-500 mt-1">
                                                 Duplicate courses are merged automatically, and first/second semester values are preserved for semester badges.
                                             </p>
@@ -4128,13 +4192,23 @@ FORMAT:
 
                                                 <div className="space-y-3">
                                                     <p className="text-xs font-black uppercase tracking-widest text-slate-400">Upload Textbook PDFs</p>
-                                                    <input
-                                                        type="file"
-                                                        multiple
-                                                        accept="application/pdf"
-                                                        onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
-                                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
-                                                    />
+                                                    <div className="flex flex-col sm:flex-row gap-3">
+                                                        <input
+                                                            type="file"
+                                                            multiple
+                                                            accept="application/pdf"
+                                                            onChange={e => setCourseDetailFiles(e.target.files ? Array.from(e.target.files) : [])}
+                                                            className="flex-1 text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-lime-100 file:text-lime-700 hover:file:bg-lime-200 cursor-pointer"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleGoogleDrivePick(setCourseDetailFiles)}
+                                                            className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-widest hover:bg-blue-100 transition border border-blue-200 flex items-center gap-2"
+                                                        >
+                                                            <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" alt="" className="w-4 h-4" />
+                                                            Drive
+                                                        </button>
+                                                    </div>
                                                     <p className="text-xs text-gray-500">You can select and upload multiple PDF textbooks at once.</p>
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <input

@@ -49,7 +49,16 @@ interface AvelutAIProps {
 }
 
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
-const LIVE_ACCESS_TOKEN = process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
+// Safely access process.env for Vite environment
+const getLiveAccessToken = () => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
+    }
+  } catch (e) {}
+  return '';
+};
+const LIVE_ACCESS_TOKEN = getLiveAccessToken();
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -611,11 +620,21 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       const nextMessages: AssistantMessage[] = [];
       snapshot.forEach(child => {
         const value = child.val() || {};
+        const rawAttachments = value.attachments;
+        let attachments: AssistantAttachment[] | undefined;
+
+        if (rawAttachments) {
+          attachments = Array.isArray(rawAttachments)
+            ? rawAttachments
+            : Object.values(rawAttachments) as AssistantAttachment[];
+        }
+
         nextMessages.push({
           id: child.key || createMessageId(),
           sender: mapSender(value.sender),
           text: value.text || '',
           timestamp: Number(value.timestamp || 0),
+          attachments,
         });
       });
 
@@ -714,7 +733,10 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     const nextMessages = [...messages, userMessage];
     const isNewConversation = !activeHistoryId;
     const activeConversation = history.find(item => item.id === activeHistoryId);
-    const shouldGenerateTitle = isNewConversation || !activeConversation || activeConversation.title === 'New Chat';
+    const shouldGenerateTitle = isNewConversation ||
+                               !activeConversation ||
+                               activeConversation.title === 'New Chat' ||
+                               activeConversation.title === 'Current chat';
 
     setMessages(nextMessages);
     setInputValue('');
