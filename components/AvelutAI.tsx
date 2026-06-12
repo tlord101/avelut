@@ -15,7 +15,7 @@ import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -701,7 +701,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     if ((!prompt && filesToSend.length === 0) || isSending) return;
 
     // Check message limits
-    const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
+    const featureCost = getFeatureCost('chat_interaction', appSettings);
+    const limitCheck = checkAICredits(userProfile, featureCost, appSettings);
     if (!limitCheck.allowed) {
       setLimitModalData({
         balance: limitCheck.balance,
@@ -928,7 +929,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       const finalResponseText = aiResult.data || 'I could not generate a response right now. Please try again.';
       
       // Deduct credits
-      await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, 'AI Assistant Chat');
+      await deductAICredits(userProfile.uid, featureCost, 'AI Assistant Chat', appSettings);
 
       await push(messagesRef, {
         text: finalResponseText,

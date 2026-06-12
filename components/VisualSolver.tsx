@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue } from 'firebase/database';
-import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { createAvelutAI } from '../utils/inference';
 import type { UserProfile } from '../types';
@@ -370,7 +370,8 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         if (!scannedImage) return;
 
         // Perform limit check
-        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
+        const cost = getFeatureCost('visual_solve', appSettings);
+        const limitCheck = checkAICredits(userProfile, cost, appSettings);
         if (!limitCheck.allowed) {
             setLimitModalData({
                 balance: limitCheck.balance,
@@ -407,7 +408,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             });
 
             setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Detailed');
+            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings);
         });
         
         if (result.success) {
@@ -422,7 +423,8 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         if (!scannedImage) return;
     
         // Perform limit check
-        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
+        const cost = getFeatureCost('visual_solve', appSettings);
+        const limitCheck = checkAICredits(userProfile, cost, appSettings);
         if (!limitCheck.allowed) {
             setLimitModalData({
                 balance: limitCheck.balance,
@@ -452,7 +454,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             });
     
             setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Quick Answer');
+            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
         });
         
         if (result.success) {
@@ -467,7 +469,8 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         if (!scannedImage) return;
     
         // Perform limit check
-        const limitCheck = checkAICredits(userProfile, AI_COSTS.VISUAL_SOLVE, appSettings);
+        const cost = getFeatureCost('visual_solve', appSettings);
+        const limitCheck = checkAICredits(userProfile, cost, appSettings);
         if (!limitCheck.allowed) {
             setLimitModalData({
                 balance: limitCheck.balance,
@@ -497,7 +500,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
             });
     
             setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, AI_COSTS.VISUAL_SOLVE, 'Visual Solver - Solution');
+            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
         });
         
         if (result.success) {

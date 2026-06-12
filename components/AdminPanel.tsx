@@ -3254,6 +3254,106 @@ FORMAT:
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Feature Credit Costs */}
+                                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-4">
+                                        <h4 className="font-extrabold text-sm text-slate-850 uppercase tracking-wider flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                                            <span>Feature Credit Consumption (Costs per Action)</span>
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Visual Solve / Scan Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.visual_solve ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.visual_solve = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Chat Interaction Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.chat_interaction ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.chat_interaction = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Flashcard Generation Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.flashcard_generation ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.flashcard_generation = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">AI Quiz Generation Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.ai_quiz_generation ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.ai_quiz_generation = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Study Guide Lesson Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.study_guide_lesson ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.study_guide_lesson = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">Study Guide / Course Extraction Cost</label>
+                                                <input
+                                                    type="number"
+                                                    value={appSettingsDraft.usage_settings?.feature_costs?.study_guide_extraction ?? 0}
+                                                    onChange={e => {
+                                                        const draft = { ...appSettingsDraft };
+                                                        draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                        draft.usage_settings.feature_costs = draft.usage_settings.feature_costs || { ...DEFAULT_USAGE_SETTINGS.feature_costs };
+                                                        draft.usage_settings.feature_costs.study_guide_extraction = Number(e.target.value);
+                                                        setAppSettingsDraft(draft);
+                                                    }}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <button

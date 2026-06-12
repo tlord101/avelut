@@ -130,11 +130,19 @@ export const triggerPaystackPurchase = async (options: PaystackPurchaseOptions) 
   }
 };
 
-// Cost configuration map
+// Helper to get dynamic costs from app settings with fallbacks
+export const getFeatureCost = (
+  feature: 'visual_solve' | 'chat_interaction' | 'flashcard_generation' | 'study_guide_extraction' | 'ai_quiz_generation' | 'study_guide_lesson',
+  appSettings: AppSettings
+): number => {
+  return appSettings.usage_settings?.feature_costs?.[feature] ?? DEFAULT_USAGE_SETTINGS.feature_costs[feature];
+};
+
+// Legacy object for backward compatibility, mapped to dynamic getter
 export const AI_COSTS = {
-  VISUAL_SOLVE: 2,
-  CHAT_INTERACTION: 1,
-  FLASHCARD_GENERATION: 3,
+  get VISUAL_SOLVE() { return DEFAULT_USAGE_SETTINGS.feature_costs.visual_solve; },
+  get CHAT_INTERACTION() { return DEFAULT_USAGE_SETTINGS.feature_costs.chat_interaction; },
+  get FLASHCARD_GENERATION() { return DEFAULT_USAGE_SETTINGS.feature_costs.flashcard_generation; },
 };
 
 // Check if user is exempt from limits
@@ -167,13 +175,14 @@ export const checkAICredits = (
 /**
  * Safely decrements user AI credit balance in the database.
  */
-export const deductAICredits = async (userId: string, cost: number, featureName: string) => {
+export const deductAICredits = async (userId: string, cost: number, featureName: string, appSettings?: AppSettings) => {
   try {
     const userRef = dbRef(db, `users/${userId}`);
     const result = await runTransaction(userRef, (profile) => {
       if (profile) {
         const planKey = (profile.subscription_status || 'free') as 'free' | 'basic' | 'pro';
-        const defaultLimit = DEFAULT_USAGE_SETTINGS.plans[planKey]?.monthly_ai_credits ?? 10;
+        const usageSettings = appSettings?.usage_settings || DEFAULT_USAGE_SETTINGS;
+        const defaultLimit = usageSettings.plans[planKey]?.monthly_ai_credits ?? DEFAULT_USAGE_SETTINGS.plans[planKey]?.monthly_ai_credits ?? 10;
 
         // If balance is missing, initialize with plan default before deducting
         const currentBalance = profile.ai_credits_balance ?? defaultLimit;

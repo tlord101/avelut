@@ -21,7 +21,7 @@ import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { LockIcon } from './icons/LockIcon';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 
 declare var __app_id: string;
 
@@ -846,7 +846,8 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
         }
 
         const courseId = topic.courseId || topic.course_id || 'unknown';
-        const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
+        const featureCost = getFeatureCost('study_guide_lesson', appSettings);
+        const limitCheck = checkAICredits(userProfile, featureCost, appSettings);
         if (!limitCheck.allowed) {
             setLimitModalData({
                 balance: limitCheck.balance,
@@ -906,7 +907,8 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 timestamp: Date.now() 
             };
             setMessages([botMessage]);
-            await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, `Study Guide - ${topic.topic_name} (Initial)`);
+            const featureCost = getFeatureCost('study_guide_lesson', appSettings);
+            await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name} (Initial)`, appSettings);
         });
         setStreamingBotText(null);
 
@@ -996,7 +998,8 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         }
 
         const courseId = topic.courseId || topic.course_id || 'unknown';
-        const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
+        const featureCost = getFeatureCost('study_guide_lesson', appSettings);
+        const limitCheck = checkAICredits(userProfile, featureCost, appSettings);
         if (!limitCheck.allowed) {
             setLimitModalData({
                 balance: limitCheck.balance,
@@ -1130,7 +1133,8 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(newBotMsgRef, botMessageData);
-                await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, `Study Guide - ${topic.topic_name}`);
+                const featureCost = getFeatureCost('study_guide_lesson', appSettings);
+                await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings);
             });
             setStreamingBotText(null);
 
