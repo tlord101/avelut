@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as fir
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
 import { ref as storageRef, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { useToast } from '../hooks/useToast';
+import { getFeatureModel } from '../utils/usage';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useGoogleDrivePicker } from '../hooks/useGoogleDrivePicker';
@@ -214,7 +215,7 @@ export const UploadCenter: React.FC = () => {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const { openPicker } = useGoogleDrivePicker();
-  const geminiModel = appSettings.primary_gemini_model;
+  const geminiModel = getFeatureModel('study_guide_extraction', appSettings);
   const ai = useMemo(() => createAvelutAI(appSettings, null), [appSettings]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');

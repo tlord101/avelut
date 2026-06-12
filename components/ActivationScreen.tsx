@@ -64,7 +64,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
       try {
         const testClient = new GoogleGenAI({ apiKey: enteredKey.trim() });
         const response = await testClient.models.generateContent({
-          model: 'gemini-2.5-flash-lite',
+          model: 'gemini-3.1-flash-lite',
           contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
         });
         if (!response.text) {

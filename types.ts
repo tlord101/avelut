@@ -180,6 +180,15 @@ export interface UsageSettings {
     study_guide_lesson: number;
     study_guide_extraction: number;
   };
+  feature_models?: {
+    visual_solve?: string;
+    chat_interaction?: string;
+    flashcard_generation?: string;
+    ai_quiz_generation?: string;
+    study_guide_lesson?: string;
+    study_guide_extraction?: string;
+    title_generation?: string;
+  };
   additional_prices: {
     visual_messages_price: number;
     visual_messages_count: number;

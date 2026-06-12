@@ -15,7 +15,7 @@ import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -395,7 +395,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
   const { addToast } = useToast();
-  const geminiModel = appSettings.primary_gemini_model;
+  const geminiModel = getFeatureModel('chat_interaction', appSettings);
   const usePersonalToken = !!(
     userProfile?.use_personal_token &&
     userProfile?.personal_api_key?.trim()
@@ -675,7 +675,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
     try {
       const result = await ai.models.generateContent({
-        model: geminiModel,
+        model: getFeatureModel('title_generation', appSettings),
         contents: [{
           role: 'user',
           parts: [{

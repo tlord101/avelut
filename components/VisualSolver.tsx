@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue } from 'firebase/database';
-import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { createAvelutAI } from '../utils/inference';
 import type { UserProfile } from '../types';
@@ -188,7 +188,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
-    const geminiModel = appSettings.primary_gemini_model;
+    const geminiModel = getFeatureModel('visual_solve', appSettings);
     const aiClient = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
     const { addToast } = useToast();
 

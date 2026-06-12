@@ -32,14 +32,6 @@ export const Header: React.FC<HeaderProps> = ({
     return (
         <header className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 md:pt-8 pb-6 bg-transparent">
             <div className="flex items-center">
-                <button
-                  onClick={onMenuClick}
-                  data-tour-id="mobile-menu-button"
-                  className="md:hidden mr-4 w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-charcoal opacity-70 hover:opacity-100 transition-opacity shadow-sm"
-                  aria-label="Open menu"
-                >
-                  <MenuIcon />
-                </button>
                 <div className="flex items-center gap-3">
                     <h2 className="text-2xl md:text-3xl font-bold text-charcoal tracking-tighter uppercase">
                         {currentPageLabel}

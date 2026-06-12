@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { getWindowPathname } from '../utils/pathname';
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS, DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
+import { getFeatureModel } from '../utils/usage';
 
 interface AdminPanelProps {
     userProfile: UserProfile;
@@ -245,6 +246,7 @@ const mergeCourseRecord = (
         topics: resolvedTopics,
         textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
         textbook_urls: mergedCourseUrls,
+        textbook_shared_key: (sourceCourse as any).textbook_shared_key || (baseCourse as any).textbook_shared_key,
         semester: normalizeSemester(sourceCourse.semester || (baseCourse as Course).semester),
     };
 };
@@ -347,8 +349,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const { settings: appSettings } = useAppSettings();
-    const geminiModel = appSettings.primary_gemini_model;
+    const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
+    const geminiModel = appSettings.primary_gemini_model; // Primary model for general tasks
     const geminiApiKey = appSettings.gemini_api_key.trim();
     const ai = useMemo(() => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null), [geminiApiKey]);
     const [isSavingAppSettings, setIsSavingAppSettings] = useState(false);
@@ -363,6 +365,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const isManagerCourseView = courseAdminView.mode === 'manager-list' || courseAdminView.mode === 'manager-detail';
     const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
     const [isUsersLoading, setIsUsersLoading] = useState(false);
+    const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
     const [recipientMode, setRecipientMode] = useState<'all' | 'single'>('all');
     const [selectedRecipientId, setSelectedRecipientId] = useState('');
     const [announcementTitle, setAnnouncementTitle] = useState('');
@@ -874,12 +877,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     useEffect(() => {
-        void fetchDepartments();
-        void fetchUsageLogs();
-        void fetchUsers();
-        void fetchSentNotifications();
-        void fetchSentEmails();
-        void fetchEmailConfig();
+        const loadAllInitialData = async () => {
+            setIsInitialDataLoading(true);
+            await Promise.all([
+                fetchDepartments(),
+                fetchUsageLogs(),
+                fetchUsers(),
+                fetchSentNotifications(),
+                fetchSentEmails(),
+                fetchEmailConfig()
+            ]);
+            setIsInitialDataLoading(false);
+        };
+        void loadAllInitialData();
     }, []);
 
     useEffect(() => {
@@ -1473,7 +1483,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             });
 
             await update(departmentRef, { course_list: nextCourses });
-            if (course.course_name) {
+            if (course.course_name && !(course as any).textbook_shared_key) {
                 await remove(dbRef(db, `textbook_contexts/${currentDepartmentId}/${currentLevel}/${course.course_name}`));
             }
 
@@ -1528,7 +1538,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
 
         setIsPQProcessing(true);
-        setExtractionProgress(`Extracting questions with ${geminiModel}...`);
+        const extractionModel = getFeatureModel('ai_quiz_generation', appSettings);
+        setExtractionProgress(`Extracting questions with ${extractionModel}...`);
 
         try {
             const reader = new FileReader();
@@ -1559,7 +1570,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }`;
 
             const response = await ai.models.generateContent({
-                model: geminiModel,
+                model: extractionModel,
                 contents: [
                     {
                         role: 'user',
@@ -1644,6 +1655,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
 
         setIsCourseImporting(true);
+        const extractionModel = getFeatureModel('study_guide_extraction', appSettings);
         setCourseImportProgress(`Extracting courses from PDF 1/${courseRegistrationFiles.length}...`);
 
         try {
@@ -1693,7 +1705,7 @@ FORMAT:
 }`;
 
                 const response = await ai.models.generateContent({
-                    model: geminiModel,
+                    model: extractionModel,
                     contents: [
                         {
                             role: 'user',
@@ -1855,6 +1867,7 @@ FORMAT:
         const { course_name, level } = selectedCourse;
 
         setIsUploading(true);
+        const extractionModel = getFeatureModel('study_guide_extraction', appSettings);
         setExtractionProgress(`Uploading 1/${pdfFiles.length} to storage...`);
 
         try {
@@ -1874,7 +1887,7 @@ FORMAT:
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
 
-                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with ${geminiModel}...`);
+                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with ${extractionModel}...`);
                 
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
@@ -1911,7 +1924,7 @@ FORMAT:
             }`;
 
                 const response = await ai.models.generateContent({
-                    model: geminiModel,
+                    model: extractionModel,
                     contents: [
                         {
                             role: 'user',
@@ -2239,6 +2252,17 @@ FORMAT:
     ];
 
     const activeNavItems = navigationItems.filter(item => visibleTabs.includes(item.id as AdminTab));
+
+    if (isAppSettingsLoading || isInitialDataLoading) {
+        return (
+            <div className="min-h-screen bg-[#f4f6f9] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
+                    <p className="text-slate-500 font-bold animate-pulse uppercase tracking-widest text-[10px]">Initializing Admin Center...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#f4f6f9] flex text-slate-800 w-full overflow-hidden font-sans select-none avelut-admin">
@@ -3354,6 +3378,38 @@ FORMAT:
                                             </div>
                                         </div>
                                     </div>
+
+                                    <div className="mt-6 border-t border-slate-100 pt-6">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Feature-Specific AI Models</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {[
+                                                { id: 'visual_solve', label: 'Visual Solver' },
+                                                { id: 'chat_interaction', label: 'AI Chat' },
+                                                { id: 'flashcard_generation', label: 'Flashcards' },
+                                                { id: 'ai_quiz_generation', label: 'Quiz Gen' },
+                                                { id: 'study_guide_lesson', label: 'Study Guide' },
+                                                { id: 'study_guide_extraction', label: 'Extraction' },
+                                                { id: 'title_generation', label: 'Title Gen' },
+                                            ].map((feature) => (
+                                                <div key={feature.id} className="space-y-1">
+                                                    <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-450">{feature.label} Model</label>
+                                                    <input
+                                                        type="text"
+                                                        value={appSettingsDraft.usage_settings?.feature_models?.[feature.id as keyof UsageSettings['feature_models']] ?? ''}
+                                                        onChange={e => {
+                                                            const draft = { ...appSettingsDraft };
+                                                            draft.usage_settings = draft.usage_settings || { ...DEFAULT_USAGE_SETTINGS };
+                                                            draft.usage_settings.feature_models = draft.usage_settings.feature_models || { ...DEFAULT_USAGE_SETTINGS.feature_models };
+                                                            draft.usage_settings.feature_models[feature.id as keyof UsageSettings['feature_models']] = e.target.value;
+                                                            setAppSettingsDraft(draft);
+                                                        }}
+                                                        placeholder="gemini-3.1-flash-lite"
+                                                        className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-150 outline-none"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <button
@@ -3555,7 +3611,7 @@ FORMAT:
                                         type="text"
                                         value={appSettingsDraft.primary_gemini_model}
                                         onChange={e => setAppSettingsDraft(prev => ({ ...prev, primary_gemini_model: e.target.value }))}
-                                        placeholder="gemini-2.5-flash-lite"
+                                        placeholder="gemini-3.1-flash-lite"
                                         className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
                                     />
                                     <p className="mt-2 text-xs text-gray-500">Paste any Gemini model string here, then save to apply it across AI features.</p>

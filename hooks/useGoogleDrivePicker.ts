@@ -7,8 +7,16 @@ interface GoogleDrivePickerOptions {
   onFilesSelected: (files: File[]) => void;
 }
 
+const GOOGLE_ACCESS_TOKEN_KEY = 'avelut_google_drive_token';
+
 export const useGoogleDrivePicker = () => {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(GOOGLE_ACCESS_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [isPickerLoading, setIsPickerLoading] = useState(false);
   const { addToast } = useToast();
 
@@ -84,6 +92,11 @@ export const useGoogleDrivePicker = () => {
           callback: (response: any) => {
             if (response.access_token) {
               setAccessToken(response.access_token);
+              try {
+                localStorage.setItem(GOOGLE_ACCESS_TOKEN_KEY, response.access_token);
+              } catch (e) {
+                console.warn("Failed to persist Google token:", e);
+              }
               initializePicker(response.access_token);
             } else {
               setIsPickerLoading(false);

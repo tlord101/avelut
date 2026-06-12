@@ -239,7 +239,7 @@ export const createAvelutAI = (
       void push(dbRef(db, 'usage_logs/ai_requests'), {
         timestamp: Date.now(),
         user_id: userProfile?.uid || 'anonymous',
-        model: appSettings.primary_gemini_model || 'gemini-2.5-flash-lite',
+      model: appSettings.primary_gemini_model || 'gemini-3.1-flash-lite',
         use_personal_token: usePersonalToken
       });
     } catch (err) {

@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
+import { getFeatureModel } from '../utils/usage';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import ReactMarkdown from 'react-markdown';
@@ -470,7 +471,7 @@ export const Chat: React.FC<ChatProps> = ({ userProfile }) => {
     const { addToast } = useToast();
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
-    const geminiModel = appSettings.primary_gemini_model;
+    const geminiModel = getFeatureModel('chat_interaction', appSettings);
     const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
 
     useEffect(() => {
