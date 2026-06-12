@@ -4,6 +4,7 @@ import { ref as dbRef, get, set } from 'firebase/database';
 import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
+import { getFeatureModel } from '../utils/usage';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile } from '../types';
@@ -30,7 +31,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, u
     const { addToast } = useToast();
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
-    const geminiModel = appSettings.primary_gemini_model;
+    const geminiModel = getFeatureModel('chat_interaction', appSettings);
     const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
 
     const [timetable, setTimetable] = useState<StudySession[]>([]);

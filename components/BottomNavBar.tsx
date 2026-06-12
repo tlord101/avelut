@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HomeIcon } from './icons/HomeIcon';
+import { MenuIcon } from './icons/MenuIcon';
 import { CameraIcon } from './icons/CameraIcon';
 import { ShutterIcon } from './icons/ShutterIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
@@ -20,7 +20,7 @@ interface BottomNavBarProps {
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items, onCenterActionClick }) => {
   const baseNavItems = [
-    { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
+    { id: 'mobile_menu', icon: <MenuIcon />, label: 'Menu' },
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
     { id: 'visual_solver', icon: <CameraIcon />, label: 'Solver' },
     { id: 'chat', icon: <AIIcon />, label: 'AI' },
@@ -29,7 +29,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
 
   const adminNavItems = [
     { id: 'admin', icon: <ShieldCheckIcon />, label: 'Admin' },
-    { id: 'dashboard', icon: <HomeIcon />, label: 'Home' },
+    { id: 'mobile_menu', icon: <MenuIcon />, label: 'Menu' },
   ];
 
   const navItems = items || (userProfile?.is_admin ? adminNavItems : baseNavItems);

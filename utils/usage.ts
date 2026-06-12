@@ -138,6 +138,13 @@ export const getFeatureCost = (
   return appSettings.usage_settings?.feature_costs?.[feature] ?? DEFAULT_USAGE_SETTINGS.feature_costs[feature];
 };
 
+export const getFeatureModel = (
+  feature: 'visual_solve' | 'chat_interaction' | 'flashcard_generation' | 'study_guide_extraction' | 'ai_quiz_generation' | 'study_guide_lesson' | 'title_generation',
+  appSettings: AppSettings
+): string => {
+  return appSettings.usage_settings?.feature_models?.[feature] || appSettings.primary_gemini_model || DEFAULT_APP_SETTINGS.primary_gemini_model;
+};
+
 // Legacy object for backward compatibility, mapped to dynamic getter
 export const AI_COSTS = {
   get VISUAL_SOLVE() { return DEFAULT_USAGE_SETTINGS.feature_costs.visual_solve; },

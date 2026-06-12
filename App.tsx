@@ -41,7 +41,7 @@ declare var __app_id: string;
 
 const AppLoader: React.FC = () => {
   return (
-    <div className="flex items-center justify-center min-h-screen" role="status" aria-label="Loading AVELUT application">
+    <div className="flex items-center justify-center min-h-screen bg-[#f8fafc]" role="status" aria-label="Loading AVELUT application">
       <img src="/logo_icon.png" alt="Loading AVELUT..." className="w-28 h-28 object-contain animate-pulse" />
     </div>
   );
@@ -1131,7 +1131,13 @@ const App: React.FC = () => {
             )}
             <BottomNavBar
               activeItem={activeItem}
-              onItemClick={setActiveItem}
+              onItemClick={(id) => {
+                if (id === 'mobile_menu') {
+                    setIsMobileSidebarOpen(true);
+                } else {
+                    setActiveItem(id);
+                }
+              }}
               onCenterActionClick={() => {
                   if (activeItem === 'visual_solver') {
                       triggerScanRef.current?.();

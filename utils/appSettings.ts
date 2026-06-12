@@ -40,6 +40,15 @@ export const DEFAULT_USAGE_SETTINGS = {
     study_guide_lesson: 1,
     study_guide_extraction: 5,
   },
+  feature_models: {
+    visual_solve: 'gemini-3.1-flash-lite',
+    chat_interaction: 'gemini-3.1-flash-lite',
+    flashcard_generation: 'gemini-3.1-flash-lite',
+    ai_quiz_generation: 'gemini-3.1-flash-lite',
+    study_guide_lesson: 'gemini-3.1-flash-lite',
+    study_guide_extraction: 'gemini-3.1-flash-lite',
+    title_generation: 'gemini-3.1-flash-lite',
+  },
   additional_prices: {
     visual_messages_price: 200,
     visual_messages_count: 10,
@@ -49,7 +58,7 @@ export const DEFAULT_USAGE_SETTINGS = {
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  primary_gemini_model: 'gemini-1.5-flash',
+  primary_gemini_model: 'gemini-3.1-flash-lite',
   gemini_api_key: '',
   upload_center_uploads_enabled: true,
   coming_soon_enabled: false,
@@ -83,6 +92,15 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
       ai_quiz_generation: typeof raw.usage_settings.feature_costs?.ai_quiz_generation === 'number' ? raw.usage_settings.feature_costs.ai_quiz_generation : DEFAULT_USAGE_SETTINGS.feature_costs.ai_quiz_generation,
       study_guide_lesson: typeof raw.usage_settings.feature_costs?.study_guide_lesson === 'number' ? raw.usage_settings.feature_costs.study_guide_lesson : DEFAULT_USAGE_SETTINGS.feature_costs.study_guide_lesson,
       study_guide_extraction: typeof raw.usage_settings.feature_costs?.study_guide_extraction === 'number' ? raw.usage_settings.feature_costs.study_guide_extraction : DEFAULT_USAGE_SETTINGS.feature_costs.study_guide_extraction,
+    },
+    feature_models: {
+      visual_solve: raw.usage_settings.feature_models?.visual_solve || DEFAULT_USAGE_SETTINGS.feature_models.visual_solve,
+      chat_interaction: raw.usage_settings.feature_models?.chat_interaction || DEFAULT_USAGE_SETTINGS.feature_models.chat_interaction,
+      flashcard_generation: raw.usage_settings.feature_models?.flashcard_generation || DEFAULT_USAGE_SETTINGS.feature_models.flashcard_generation,
+      ai_quiz_generation: raw.usage_settings.feature_models?.ai_quiz_generation || DEFAULT_USAGE_SETTINGS.feature_models.ai_quiz_generation,
+      study_guide_lesson: raw.usage_settings.feature_models?.study_guide_lesson || DEFAULT_USAGE_SETTINGS.feature_models.study_guide_lesson,
+      study_guide_extraction: raw.usage_settings.feature_models?.study_guide_extraction || DEFAULT_USAGE_SETTINGS.feature_models.study_guide_extraction,
+      title_generation: raw.usage_settings.feature_models?.title_generation || DEFAULT_USAGE_SETTINGS.feature_models.title_generation,
     },
     plans: {
       free: {

@@ -6,7 +6,7 @@ import { FlashcardsUI } from './FlashcardsUI';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course, AppSettings } from '../types';
-import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -157,7 +157,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
-  const geminiModel = appSettings.primary_gemini_model;
+  const geminiModel = getFeatureModel('ai_quiz_generation', appSettings);
   const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
   const isGeminiConfigured = Boolean(ai);
 
@@ -352,7 +352,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
       const result = await attemptApiCall(async () => {
         const response = await ai.models.generateContent({
-          model: geminiModel,
+          model: getFeatureModel('flashcard_generation', appSettings),
           contents: [{ role: 'user', parts: [{ text: `Generate 10 flashcards for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on these topics: ${safeTopics.join(', ')}. Provide a front (concept/question) and a back (definition/answer).` }] }],
           config: {
             responseMimeType: "application/json",

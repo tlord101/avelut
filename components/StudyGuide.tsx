@@ -19,9 +19,9 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { useToast } from '../hooks/useToast';
 import { SparklesIcon } from './icons/SparklesIcon';
-import { LockIcon } from './icons/LockIcon';
+import { BookOpen } from 'lucide-react';
 import { LimitExceededModal } from './LimitExceededModal';
-import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 
 declare var __app_id: string;
 
@@ -362,7 +362,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const isAwardingTimeXpRef = useRef(false);
     const [shouldAutoTeach, setShouldAutoTeach] = useState(false);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
-    const geminiModel = appSettings.primary_gemini_model;
+    const geminiModel = getFeatureModel('study_guide_lesson', appSettings);
     const ai = useMemo(
         () => createAvelutAI(appSettings, userProfile),
         [appSettings, userProfile]
@@ -629,7 +629,11 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
 
     useEffect(() => {
         const fetchTextbook = async () => {
-            const textbookRef = dbRef(db, `textbook_contexts/${userProfile.department_id}/${userProfile.level}/${topic.courseName}`);
+            const sharedKey = (topic as any).textbook_shared_key;
+            const textbookRef = sharedKey
+                ? dbRef(db, `textbook_contexts/shared/${sharedKey}`)
+                : dbRef(db, `textbook_contexts/${userProfile.department_id}/${userProfile.level}/${topic.courseName}`);
+
             const snap = await get(textbookRef);
             if (snap.exists()) {
                 const data = snap.val();
@@ -1845,7 +1849,7 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
                         {isCompleted ? (
                             <CheckIcon className="w-8 h-8"/>
                         ) : (
-                            <LockIcon className="w-7 h-7" />
+                            <BookOpen className="w-7 h-7" />
                         )}
                         
                         {/* Status Tooltip/Indicator */}
@@ -1872,23 +1876,14 @@ const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => 
 const CourseHeader: React.FC<{ 
     course: Course, 
     isExpanded: boolean, 
-    onClick: () => void,
-    isUnlocked: boolean,
-    isExempt: boolean,
-    onUnlock: () => void
-}> = ({ course, isExpanded, onClick, isUnlocked, isExempt, onUnlock }) => {
+    onClick: () => void
+}> = ({ course, isExpanded, onClick }) => {
     const courseLabel = course.course_code || course.course_id || course.course_name;
 
     return (
         <div className="w-full max-w-4xl mx-auto py-2">
             <div className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition`}>
-                <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => {
-                    if (isExempt || isUnlocked) {
-                        onClick();
-                    } else {
-                        onUnlock();
-                    }
-                }}>
+                <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={onClick}>
                     <div className="flex items-center gap-3">
                         <div className="text-sm font-black text-gray-700">{courseLabel}</div>
                         <div className="text-xs text-gray-500">{course.course_name}</div>
@@ -1896,31 +1891,9 @@ const CourseHeader: React.FC<{
                 </div>
 
                 <div className="mt-2 sm:mt-0 flex items-center gap-3 justify-between">
-                    {!isExempt && (
-                        <>
-                            {isUnlocked ? (
-                                <span className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full font-black text-[9px] uppercase tracking-wider whitespace-nowrap">
-                                    Unlocked Course
-                                </span>
-                            ) : (
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onUnlock();
-                                    }}
-                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition shadow-sm active:scale-95 whitespace-nowrap"
-                                >
-                                    Unlock Course
-                                </button>
-                            )}
-                        </>
-                    )}
-                    
-                    {(isExempt || isUnlocked) && (
-                        <button onClick={onClick} className="p-1.5 text-gray-400 hover:text-gray-600 transition">
-                            <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
-                        </button>
-                    )}
+                    <button onClick={onClick} className="p-1.5 text-gray-400 hover:text-gray-600 transition">
+                        <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    </button>
                 </div>
             </div>
         </div>
@@ -1961,7 +1934,6 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const { settings: appSettings } = useAppSettings();
 
   const isUserExempt = !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
-  const isFreeUser = !isUserExempt && (userProfile?.subscription_status === 'free' || !userProfile?.subscription_status);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -2168,23 +2140,6 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12">
-            {isFreeUser && (
-                <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl mb-6 text-sm text-slate-800 font-semibold max-w-4xl mx-auto flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">⚠️</div>
-                    <div>
-                        <h4 className="font-bold text-amber-900 mb-0.5">Free / Custom Token Limit 🎓</h4>
-                        {userProfile.selected_free_course_id ? (
-                            <p className="text-[11px] text-amber-800 leading-relaxed font-semibold">
-                                You are currently on the free/custom token tier. You have unlocked one course as your single active course. Upgrade to Premium to unlock all courses!
-                            </p>
-                        ) : (
-                            <p className="text-[11px] text-amber-800 leading-relaxed font-semibold">
-                                You can unlock and study <strong>exactly one course</strong> from your department curriculum to minimize API token costs. Please select the course you'd like to unlock from the list below.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            )}
             {isLoading ? (
                 <StudyGuideSkeleton />
             ) : (
@@ -2192,16 +2147,12 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     <div className="max-w-4xl mx-auto space-y-6">
                         {filteredCourses.map(course => {
                             const isExpanded = expandedCourses.has(course.course_id);
-                            const isUnlocked = true; // Credit system migration: course outlines are now always visible, AI interaction costs credits
                             return (
                                 <div key={course.course_id} className="relative">
                                     <CourseHeader
                                         course={course}
                                         isExpanded={isExpanded}
                                         onClick={() => toggleCourse(course.course_id)}
-                                        isUnlocked={isUnlocked}
-                                        isExempt={isUserExempt}
-                                        onUnlock={() => toggleCourse(course.course_id)}
                                     />
                                     <div className={`grid transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-8' : 'grid-rows-[0fr] opacity-0'}`}>
                                         <div className="overflow-hidden">
@@ -2212,7 +2163,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                         topic={topic}
                                                         isCompleted={userProgress[topic.topic_id]?.is_complete || false}
                                                         studyDurationSeconds={userProgress[topic.topic_id]?.study_duration_seconds || 0}
-                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name, courseId: course.course_id, course_id: course.course_id })}
+                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name, courseId: course.course_id, course_id: course.course_id, textbook_shared_key: (course as any).textbook_shared_key })}
                                                         onMarkComplete={() => void handleMarkTopicComplete(course, topic)}
                                                         index={index}
                                                         pathColor="bg-gray-100"
