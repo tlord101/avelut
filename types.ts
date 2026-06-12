@@ -172,6 +172,14 @@ export interface UsageSettings {
     basic: PlanConfig;
     pro: PlanConfig;
   };
+  feature_costs: {
+    visual_solve: number;
+    chat_interaction: number;
+    flashcard_generation: number;
+    ai_quiz_generation: number;
+    study_guide_lesson: number;
+    study_guide_extraction: number;
+  };
   additional_prices: {
     visual_messages_price: number;
     visual_messages_count: number;

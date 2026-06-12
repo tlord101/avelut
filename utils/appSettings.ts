@@ -32,6 +32,14 @@ export const DEFAULT_USAGE_SETTINGS = {
       },
     },
   },
+  feature_costs: {
+    visual_solve: 2,
+    chat_interaction: 1,
+    flashcard_generation: 3,
+    ai_quiz_generation: 1,
+    study_guide_lesson: 1,
+    study_guide_extraction: 5,
+  },
   additional_prices: {
     visual_messages_price: 200,
     visual_messages_count: 10,
@@ -68,6 +76,14 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
   custom_user_limit_rpm: typeof raw?.custom_user_limit_rpm === 'number' ? raw.custom_user_limit_rpm : DEFAULT_APP_SETTINGS.custom_user_limit_rpm,
   custom_user_limit_tpm: typeof raw?.custom_user_limit_tpm === 'number' ? raw.custom_user_limit_tpm : DEFAULT_APP_SETTINGS.custom_user_limit_tpm,
   usage_settings: raw?.usage_settings ? {
+    feature_costs: {
+      visual_solve: typeof raw.usage_settings.feature_costs?.visual_solve === 'number' ? raw.usage_settings.feature_costs.visual_solve : DEFAULT_USAGE_SETTINGS.feature_costs.visual_solve,
+      chat_interaction: typeof raw.usage_settings.feature_costs?.chat_interaction === 'number' ? raw.usage_settings.feature_costs.chat_interaction : DEFAULT_USAGE_SETTINGS.feature_costs.chat_interaction,
+      flashcard_generation: typeof raw.usage_settings.feature_costs?.flashcard_generation === 'number' ? raw.usage_settings.feature_costs.flashcard_generation : DEFAULT_USAGE_SETTINGS.feature_costs.flashcard_generation,
+      ai_quiz_generation: typeof raw.usage_settings.feature_costs?.ai_quiz_generation === 'number' ? raw.usage_settings.feature_costs.ai_quiz_generation : DEFAULT_USAGE_SETTINGS.feature_costs.ai_quiz_generation,
+      study_guide_lesson: typeof raw.usage_settings.feature_costs?.study_guide_lesson === 'number' ? raw.usage_settings.feature_costs.study_guide_lesson : DEFAULT_USAGE_SETTINGS.feature_costs.study_guide_lesson,
+      study_guide_extraction: typeof raw.usage_settings.feature_costs?.study_guide_extraction === 'number' ? raw.usage_settings.feature_costs.study_guide_extraction : DEFAULT_USAGE_SETTINGS.feature_costs.study_guide_extraction,
+    },
     plans: {
       free: {
         name: raw.usage_settings.plans?.free?.name || DEFAULT_USAGE_SETTINGS.plans.free.name,

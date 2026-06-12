@@ -6,7 +6,7 @@ import { FlashcardsUI } from './FlashcardsUI';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, serverTimestamp } from 'firebase/database';
 import type { UserProfile, Question, ExamHistoryItem, ExamQuestionResult, UserProgress, Course, AppSettings } from '../types';
-import { checkAICredits, deductAICredits, AI_COSTS } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -332,7 +332,8 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
 
 
   const generateFlashcards = async () => {
-    const limitCheck = checkAICredits(userProfile, AI_COSTS.FLASHCARD_GENERATION, appSettings);
+    const cost = getFeatureCost('flashcard_generation', appSettings);
+    const limitCheck = checkAICredits(userProfile, cost, appSettings);
     if (!limitCheck.allowed) {
       setLimitModalData({
         balance: limitCheck.balance,
@@ -380,7 +381,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         setFlashcards(responseData.flashcards);
         setFlashcardIndex(0);
         setIsFlipped(false);
-        await deductAICredits(userProfile.uid, AI_COSTS.FLASHCARD_GENERATION, 'Flashcard Generation');
+        await deductAICredits(userProfile.uid, cost, 'Flashcard Generation', appSettings);
         setExamState('flashcards');
       });
 
@@ -393,8 +394,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
   };
 
   const generateQuestions = async () => {
-    // Check credits for exam generation (cost same as chat interaction for now)
-    const limitCheck = checkAICredits(userProfile, AI_COSTS.CHAT_INTERACTION, appSettings);
+    // Check credits for exam generation
+    const cost = getFeatureCost('ai_quiz_generation', appSettings);
+    const limitCheck = checkAICredits(userProfile, cost, appSettings);
     if (!limitCheck.allowed) {
       setLimitModalData({
         balance: limitCheck.balance,
@@ -453,7 +455,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         const newQuestions = responseData.questions;
 
         // Deduct credits
-        await deductAICredits(userProfile.uid, AI_COSTS.CHAT_INTERACTION, 'Mock Exam Generation');
+        await deductAICredits(userProfile.uid, cost, 'Mock Exam Generation', appSettings);
 
         setQuestions(newQuestions);
         setTimeLeft(newQuestions.length * TIME_PER_QUESTION_SECONDS);
