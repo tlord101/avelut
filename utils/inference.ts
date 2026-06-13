@@ -201,31 +201,22 @@ export const createAvelutAI = (
       // 1. Context Compaction Adapter
       const mathOrCodeRequested = isMathOrCodeRequested(processedParams.contents);
       
-      const compact = (obj: any): any => {
-        if (obj && typeof obj === 'object') {
-          if ('inlineData' in obj) {
-            return obj;
+      if (processedParams && Array.isArray(processedParams.contents)) {
+        processedParams.contents = processedParams.contents.map((content: any) => {
+          if (content && Array.isArray(content.parts)) {
+            return {
+              ...content,
+              parts: content.parts.map((part: any) => {
+                if (part && typeof part.text === 'string') {
+                  return { ...part, text: compactContext(part.text, mathOrCodeRequested) };
+                }
+                return part;
+              })
+            };
           }
-          if (Array.isArray(obj)) {
-            return obj.map(item => compact(item));
-          }
-          const res: any = {};
-          for (const key in obj) {
-            if (key === 'inlineData') {
-              res[key] = obj[key];
-            } else {
-              res[key] = compact(obj[key]);
-            }
-          }
-          return res;
-        }
-        if (typeof obj === 'string') {
-          return compactContext(obj, mathOrCodeRequested);
-        }
-        return obj;
-      };
-      
-      processedParams = compact(processedParams);
+          return content;
+        });
+      }
 
       // 2. Context Compression Pass
       processedParams = compressContext(processedParams, limitTpm);

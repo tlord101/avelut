@@ -878,7 +878,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         const contextMessages = nextMessages.slice(-5);
 
         const responseStream = await ai.models.generateContentStream({
-          model: geminiModel,
+          model: geminiModel || 'gemini-2.0-flash',
           contents: [
             {
               role: 'user',
@@ -894,7 +894,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
                     'If the question needs calculations, show the steps and final formula neatly.',
                     courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
-                    storedAttachments.length ? `ATTACHMENTS: ${storedAttachments.map(item => item.name).join(', ')}` : '',
+                    storedAttachments?.length ? `ATTACHMENTS: ${storedAttachments.map(i => i.name).join(', ')}` : '',
                     '',
                     `Conversation so far:\n${contextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
                   ].filter(Boolean).join('\n'),
@@ -905,10 +905,16 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           ],
         });
 
-        for await (const chunk of responseStream) {
-          const chunkText = chunk.text || '';
-          responseText += chunkText;
-          setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: responseText } : m));
+        try {
+          for await (const chunk of responseStream) {
+            const chunkText = chunk.text || '';
+            responseText += chunkText;
+            setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: responseText } : m));
+          }
+        } catch (streamError) {
+          console.error('Error during response streaming:', streamError);
+          setIsSending(false);
+          throw streamError;
         }
 
         if (!responseText) {
@@ -921,6 +927,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         console.error('Gemini assistant error:', aiResult.message);
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: 'Sorry, I ran into a problem generating that reply. Please try again.' } : m));
         setStatusText('Unable to respond right now.');
+        setIsSending(false); // Safeguard: immediately un-freeze the UI out of "Thinking..." state
         return;
       }
 

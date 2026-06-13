@@ -589,23 +589,33 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                 });
                 setTutorials(initialItems);
 
-                // Fetch real videos asynchronously in parallel
+                // Fetch real videos asynchronously in parallel with individual failure isolation
                 void (async () => {
-                    try {
-                        const resolved = await Promise.all(initialItems.map(async (item) => {
-                            const real = await fetchRealYoutubeVideo(item.searchQuery, item.predictedVideoId, appSettings?.youtube_api_key);
+                    const resolved = await Promise.all(initialItems.map(async (item) => {
+                        try {
+                            const realVideo = await fetchRealYoutubeVideo(
+                                item.searchQuery,
+                                item.predictedVideoId,
+                                appSettings?.youtube_api_key
+                            );
                             return {
                                 ...item,
-                                videoId: real.videoId,
-                                thumbnailUrl: real.thumbnailUrl
+                                videoId: realVideo.videoId,
+                                thumbnailUrl: realVideo.thumbnailUrl
                             };
-                        }));
-                        setTutorials(resolved);
-                    } catch (err: any) {
-                        console.error('Failed to load video details from YouTube API:', err);
-                        setTutorials([]);
-                        setTutorialsError(err.message || 'Failed to fetch YouTube tutorials.');
-                    }
+                        } catch (err) {
+                            console.warn(`YouTube hook failed silently for query: ${item.searchQuery}`, err);
+                            // Fallback: use predicted info or standard placeholders instead of breaking the UI
+                            return {
+                                ...item,
+                                videoId: item.predictedVideoId || 'dQw4w9WgXcQ',
+                                thumbnailUrl: item.predictedVideoId
+                                  ? `https://img.youtube.com/vi/${item.predictedVideoId}/mqdefault.jpg`
+                                  : `https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500`
+                            };
+                        }
+                    }));
+                    setTutorials(resolved);
                 })();
             } else {
                 throw new Error(result.message || 'Failed to parse JSON response');
