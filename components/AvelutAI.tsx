@@ -418,7 +418,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
   const sectionRef = useRef<HTMLElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const inputElementRef = useRef<HTMLInputElement>(null);
+  const inputElementRef = useRef<HTMLTextAreaElement>(null);
   const liveSessionRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -739,6 +739,9 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
     setMessages(nextMessages);
     setInputValue('');
+    if (inputElementRef.current) {
+      inputElementRef.current.style.height = 'auto';
+    }
     clearAttachment(); // Clear immediately from the composer input bar!
     setIsSending(true);
     setStatusText('Thinking...');
@@ -970,7 +973,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     }
   };
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputValue(val);
     if (val.length > 0) {
@@ -978,6 +981,11 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     } else {
       setInputState(1);
     }
+
+    // Auto-expand height
+    const target = e.target;
+    target.style.height = 'auto';
+    target.style.height = `${Math.min(target.scrollHeight, 180)}px`;
   };
 
   const handleLiveServerMessage = async (msg: any) => {
@@ -1495,7 +1503,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                   </div>
                 ))}
 
-                {isSending && (
+                {isSending && !messages.find(m => m.id.startsWith('models/gemini') || (m.sender === 'assistant' && m.text.length > 0 && m.timestamp && m.timestamp > Date.now() - 60000)) && (
                   <div className="flex justify-start">
                     <div className="rounded-3xl border border-neutral-800 bg-[#0e1227] px-4 py-3 text-sm text-slate-400 shadow-sm">
                       {uploadProgress ? (
@@ -1530,7 +1538,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
               {/* STATES 1, 2, 3: Stadium Input Box Bar */}
               {inputState !== 4 && (
-                <div className="relative w-full h-[64px] bg-[#1e1f20] rounded-full flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                <div className="relative w-full min-h-[64px] bg-[#1e1f20] rounded-[32px] flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                   
                   <div className="relative">
                     <button
@@ -1594,20 +1602,22 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     onChange={handleAttachmentChange}
                   />
 
-                  <div className="flex-1 h-full flex items-center px-2 min-w-0">
+                  <div className="flex-1 flex items-center px-2 min-w-0 max-h-[180px] overflow-y-auto py-2">
                     {(inputState === 1 || inputState === 2) ? (
-                      <input 
+                      <textarea
                         ref={inputElementRef}
-                        type="text"
                         value={inputValue}
                         onChange={handleTextChange}
                         placeholder="Ask AVELUT"
-                        className="w-full h-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed"
+                        rows={1}
+                        className="w-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed resize-none leading-relaxed"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
                             void handleSend();
                           }
                         }}
+                        style={{ height: 'auto' }}
                       />
                     ) : (
                       <div className="flex items-center justify-start gap-[4px] py-1 select-none overflow-hidden w-full h-full pl-1">
