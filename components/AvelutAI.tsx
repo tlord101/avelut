@@ -49,12 +49,10 @@ interface AvelutAIProps {
 }
 
 const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
-// Safely access process.env for Vite environment
+// Safely access Vite environment
 const getLiveAccessToken = () => {
   try {
-    if (typeof process !== 'undefined' && process.env) {
-      return process.env.GEMINI_LIVE_ACCESS_TOKEN || '';
-    }
+    return import.meta.env.VITE_GEMINI_LIVE_ACCESS_TOKEN || '';
   } catch (e) {}
   return '';
 };
@@ -950,8 +948,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       setStatusText('Response ready.');
     } catch (error) {
       console.error('Gemini assistant error:', error);
-      setMessages([
-        ...messages,
+      setMessages(prev => [
+        ...prev,
         {
           id: createMessageId(),
           sender: 'assistant',
@@ -1076,6 +1074,14 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     liveSessionTokenRef.current = sessionToken;
 
     try {
+      // Force AudioContext initialization inside user interaction tracking
+      if (!outputAudioContextRef.current) {
+        outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (outputAudioContextRef.current.state === 'suspended') {
+        await outputAudioContextRef.current.resume();
+      }
+
       setStatusText('Requesting microphone...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -1588,7 +1594,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                         type="text"
                         value={inputValue}
                         onChange={handleTextChange}
-                        disabled={isSending}
                         placeholder="Ask AVELUT"
                         className="w-full h-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed"
                         onKeyDown={(e) => {
