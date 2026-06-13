@@ -136,7 +136,7 @@ const TutorialDisplay: React.FC<TutorialDisplayProps> = ({ scannedImage, tutoria
                 <div className="max-w-4xl mx-auto">
                     <button 
                         onClick={onClose} 
-                        className="w-full bg-emerald hover:bg-emerald-hover text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-2"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-2"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -206,7 +206,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         interactionRef.current = null;
         document.body.style.overflow = '';
         window.removeEventListener('mousemove', handleMove);
-        window.removeEventListener('touchmove', handleMove);
+        window.removeEventListener('touchmove', handleMove, { passive: false } as any);
         window.removeEventListener('mouseup', handleInteractionEnd);
         window.removeEventListener('touchend', handleInteractionEnd);
     }, []);
@@ -382,14 +382,16 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         }
 
         setCameraState('analyzing');
+        setError('');
         
-        const result = await attemptApiCall(async () => {
-            const base64Data = scannedImage.split(',')[1];
-            if (!base64Data) throw new Error("Could not extract image data.");
-            
-            const basePrompt = `Expert AI educator. Solve the image problem fast. Use LaTeX for math ($...$, $$...$$).`;
-            const customInstruction = customPrompt ? ` User instructions: ${customPrompt}` : '';
-            const promptText = `${basePrompt}${customInstruction}
+        try {
+            const result = await attemptApiCall(async () => {
+                const base64Data = scannedImage.split(',')[1];
+                if (!base64Data) throw new Error("Could not extract image data.");
+
+                const basePrompt = `Expert AI educator. Solve the image problem fast. Use LaTeX for math ($...$, $$...$$).`;
+                const customInstruction = customPrompt ? ` User instructions: ${customPrompt}` : '';
+                const promptText = `${basePrompt}${customInstruction}
 # [Title]
 ## 📋 Summary
 [Concise summary]
@@ -398,23 +400,28 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 ## ✅ Answer
 [Final Answer]`;
 
-            if (!aiClient) throw new Error('AI client not available');
-            const result = await aiClient.models.generateContent({
-                model: geminiModel,
-                contents: [{ role: 'user', parts: [
-                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
-                    { text: promptText }
-                ]}],
+                if (!aiClient) throw new Error('AI client not available');
+                const result = await aiClient.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                        { text: promptText }
+                    ]}],
+                });
+
+                setAnalysisResult(result.text || '');
+                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings);
             });
 
-            setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings);
-        });
-        
-        if (result.success) {
-            setCameraState('showingTutorial');
-        } else {
-            addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+            if (result.success) {
+                setCameraState('showingTutorial');
+            } else {
+                addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+                setCameraState('preview');
+            }
+        } catch (err) {
+            console.error("Analysis failed:", err);
+            setError("Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
@@ -435,32 +442,39 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         }
 
         setCameraState('analyzing');
+        setError('');
         
-        const result = await attemptApiCall(async () => {
-            const base64Data = scannedImage.split(',')[1];
-            if (!base64Data) throw new Error("Could not extract image data.");
-            
-            const basePrompt = `Analyze the problem in the image and provide only the final answer, without any explanation or steps. Be direct and concise.`;
-            const customInstruction = customPrompt ? ` ${customPrompt}` : '';
-            const promptText = `${basePrompt}${customInstruction}`;
-    
-            if (!aiClient) throw new Error('AI client not available');
-            const result = await aiClient.models.generateContent({
-                model: geminiModel,
-                contents: [{ role: 'user', parts: [
-                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
-                    { text: promptText }
-                ]}],
+        try {
+            const result = await attemptApiCall(async () => {
+                const base64Data = scannedImage.split(',')[1];
+                if (!base64Data) throw new Error("Could not extract image data.");
+
+                const basePrompt = `Analyze the problem in the image and provide only the final answer, without any explanation or steps. Be direct and concise.`;
+                const customInstruction = customPrompt ? ` ${customPrompt}` : '';
+                const promptText = `${basePrompt}${customInstruction}`;
+        
+                if (!aiClient) throw new Error('AI client not available');
+                const result = await aiClient.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                        { text: promptText }
+                    ]}],
+                });
+
+                setAnalysisResult(result.text || '');
+                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
             });
-    
-            setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
-        });
-        
-        if (result.success) {
-            setCameraState('showingTutorial');
-        } else {
-            addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+
+            if (result.success) {
+                setCameraState('showingTutorial');
+            } else {
+                addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+                setCameraState('preview');
+            }
+        } catch (err) {
+            console.error("Quick answer failed:", err);
+            setError("Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
@@ -481,32 +495,39 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         }
 
         setCameraState('analyzing');
+        setError('');
         
-        const result = await attemptApiCall(async () => {
-            const base64Data = scannedImage.split(',')[1];
-            if (!base64Data) throw new Error("Could not extract image data.");
-            
-            const basePrompt = `Answer the question or solve the problem shown in the image. Provide a clear, concise solution without unnecessary details or lengthy explanations. Give the answer directly as it was asked.`;
-            const customInstruction = customPrompt ? ` ${customPrompt}` : '';
-            const promptText = `${basePrompt}${customInstruction}`;
-    
-            if (!aiClient) throw new Error('AI client not available');
-            const result = await aiClient.models.generateContent({
-                model: geminiModel,
-                contents: [{ role: 'user', parts: [
-                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
-                    { text: promptText }
-                ]}],
+        try {
+            const result = await attemptApiCall(async () => {
+                const base64Data = scannedImage.split(',')[1];
+                if (!base64Data) throw new Error("Could not extract image data.");
+
+                const basePrompt = `Answer the question or solve the problem shown in the image. Provide a clear, concise solution without unnecessary details or lengthy explanations. Give the answer directly as it was asked.`;
+                const customInstruction = customPrompt ? ` ${customPrompt}` : '';
+                const promptText = `${basePrompt}${customInstruction}`;
+        
+                if (!aiClient) throw new Error('AI client not available');
+                const result = await aiClient.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                        { text: promptText }
+                    ]}],
+                });
+
+                setAnalysisResult(result.text || '');
+                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
             });
-    
-            setAnalysisResult(result.text || '');
-            await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
-        });
-        
-        if (result.success) {
-            setCameraState('showingTutorial');
-        } else {
-            addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+
+            if (result.success) {
+                setCameraState('showingTutorial');
+            } else {
+                addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
+                setCameraState('preview');
+            }
+        } catch (err) {
+            console.error("Solution failed:", err);
+            setError("Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
@@ -657,7 +678,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                                         </div>
                                         <button 
                                             onClick={handleAnalyze} 
-                                            className="w-full bg-emerald text-white font-bold py-4 px-6 rounded-xl hover:bg-emerald-hover transition-all text-lg flex items-center justify-center gap-2 active:scale-95"
+                                            className="w-full bg-emerald-600 text-white font-bold py-4 px-6 rounded-xl hover:bg-emerald-500 transition-all text-lg flex items-center justify-center gap-2 active:scale-95"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
