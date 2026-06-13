@@ -1407,7 +1407,7 @@ Student: "${tempInput}"
                                             <button
                                                 key={sIdx}
                                                 onClick={() => handleSend(suggestion)}
-                                                disabled={isLoading || isIllustrating}
+                                                disabled={isThinking || isIllustrating}
                                                 className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer select-none"
                                             >
                                                 {suggestion}
@@ -1476,20 +1476,6 @@ Student: "${tempInput}"
                         </div>
                     );
                 })()}
-                {isLoading && 
-                    <div className="flex items-start gap-3 animate-fade-in-up">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0">
-                           <GraduationCapIcon className="w-full h-full p-1.5 text-white" />
-                        </div>
-                        <div className="max-w-lg p-3 px-4 rounded-2xl bg-white border border-gray-200 rounded-bl-none">
-                            <div className="flex items-center space-x-2">
-                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                            </div>
-                        </div>
-                    </div>
-                }
                  {isIllustrating &&
                     <div className="flex items-start gap-3 animate-fade-in-up">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0">
@@ -1715,7 +1701,7 @@ Student: "${tempInput}"
                                         setMessageActionPosition(null);
                                         void handleGenerateIllustration(textToIllustrate);
                                     }}
-                                    disabled={isLoading || isIllustrating}
+                                    disabled={isThinking || isIllustrating}
                                     className="w-full rounded-xl border border-gray-100 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-800 transition hover:bg-gray-50 disabled:opacity-50"
                                 >
                                     🎨 Visualize
