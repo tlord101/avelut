@@ -354,7 +354,8 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     const [activeVideo, setActiveVideo] = useState<{ title: string; searchQuery: string; videoId?: string; thumbnailUrl?: string } | null>(null);
     const [brokenThumbnails, setBrokenThumbnails] = useState<Record<string, boolean>>({});
     const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
-    const [isLoading, setIsLoading] = useState(false);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [isThinking, setIsThinking] = useState(false);
     const [isIllustrating, setIsIllustrating] = useState(false);
     const [textbookContext, setTextbookContext] = useState<string>('');
     const [selectedTopicContext, setSelectedTopicContext] = useState<string>('');
@@ -374,7 +375,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     });
     const { attemptApiCall } = useApiLimiter();
     const { addToast } = useToast();
-    const isInitialChatLoading = isLoading && messages.length === 0;
+    const isInitialChatLoading = isHistoryLoading && messages.length === 0;
 
     // Sharing and forwarding states
     const [showShareDropdown, setShowShareDropdown] = useState(false);
@@ -851,7 +852,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
     }, [topic.topic_id, userProfile.uid]);
 
     const initiateAutoTeach = useCallback(async () => {
-        if (isAppSettingsLoading) {
+        if (isAppSettingsLoading || isThinking) {
             return;
         }
         if (!ai) {
@@ -872,7 +873,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             return;
         }
 
-        setIsLoading(true);
+        setIsThinking(true);
         const prompt = `
 Context:
 Department: ${userProfile.department_id}
@@ -925,10 +926,10 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name} (Initial)`, appSettings);
         });
         setStreamingBotText(null);
+        setIsThinking(false);
 
         if (!result.success) {
             addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
-            setIsLoading(false);
             onClose();
         }
     }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, topic.courseId, topic.course_id, setStreamingBotText]);
@@ -954,11 +955,12 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
     useEffect(() => {
         const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
         
-        setIsLoading(true);
+        setIsHistoryLoading(true);
         const unsubscribe = onValue(messagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data) {
                 setShouldAutoTeach(true);
+                setIsHistoryLoading(false);
                 return;
             } else {
                 setShouldAutoTeach(false);
@@ -970,13 +972,13 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                     image_url: msg.image_url,
                 })).sort((a,b) => a.timestamp - b.timestamp);
                 setMessages(fetchedMessages);
-                setIsLoading(false);
+                setIsHistoryLoading(false);
             }
         }, (error) => {
             console.error("Error initializing lesson:", error);
             addToast("Could not start the lesson. Please try again.", "error");
             onClose();
-            setIsLoading(false);
+            setIsHistoryLoading(false);
         });
 
         return () => off(messagesRef, 'value', unsubscribe);
@@ -991,7 +993,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isLoading, isIllustrating]);
+    }, [messages, isThinking, isIllustrating, streamingBotText]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
@@ -1005,7 +1007,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
     
     const handleSend = async (messageText?: string) => {
         const textToSend = messageText || input;
-        if ((!textToSend.trim() && !file) || isLoading || isIllustrating) return;
+        if ((!textToSend.trim() && !file) || isThinking || isIllustrating) return;
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
             return;
@@ -1029,6 +1031,13 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         // Clear input immediately for better UX
         setInput('');
+        // Reset textarea height manually as well
+        const textareas = document.querySelectorAll('textarea');
+        textareas.forEach(ta => {
+            if (ta.placeholder === "Ask a question...") {
+                ta.style.height = 'auto';
+            }
+        });
         setFile(null);
         setFileData(null);
         
@@ -1043,7 +1052,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         
         // Show user message immediately
         setMessages(prev => [...prev, optimisticUserMessage]);
-        setIsLoading(true);
+        setIsThinking(true);
 
         try {
             let imageUrl: string | undefined;
@@ -1159,7 +1168,7 @@ Student: "${tempInput}"
             console.error('Error in chat:', err);
             addToast('Sorry, something went wrong. Please try again.', 'error');
         } finally {
-            setIsLoading(false);
+            setIsThinking(false);
         }
     };
 
@@ -1224,6 +1233,14 @@ Student: "${tempInput}"
     };
     
     const lastBotMessageIndex = messages.map(m => m.sender).lastIndexOf('bot');
+
+    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInput(e.target.value);
+        // Auto-expand height
+        const target = e.target;
+        target.style.height = 'auto';
+        target.style.height = `${Math.min(target.scrollHeight, 180)}px`;
+    };
 
     return (
         <div className="flex flex-col h-full w-full bg-gray-50 md:rounded-xl border border-gray-200 overflow-hidden">
@@ -1409,6 +1426,11 @@ Student: "${tempInput}"
                     )
                 })}
                 {streamingBotText !== null && (() => {
+                    const lastMsg = messages[messages.length - 1];
+                    // Safeguard against double rendering when DB syncs before streaming text is cleared
+                    if (lastMsg && lastMsg.sender === 'bot' && lastMsg.text && lastMsg.text.length >= streamingBotText.length) {
+                        return null;
+                    }
                     const { cleanText: cleanStreamingText } = parseMessageSuggestions(streamingBotText);
                     return (
                         <div className="flex items-start gap-3 w-full animate-fade-in-up justify-start">
@@ -1481,6 +1503,20 @@ Student: "${tempInput}"
                         </div>
                     </div>
                 }
+                {isThinking && streamingBotText === null && (
+                    <div className="flex items-start gap-3 animate-fade-in-up">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-lime-400 to-teal-500 flex-shrink-0">
+                           <GraduationCapIcon className="w-full h-full p-1.5 text-white" />
+                        </div>
+                        <div className="max-w-lg p-3 px-4 rounded-2xl bg-white border border-gray-200 rounded-bl-none shadow-sm">
+                            <div className="flex items-center space-x-2">
+                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 <div ref={messagesEndRef} />
                 </>
                 )}
@@ -1491,10 +1527,7 @@ Student: "${tempInput}"
                 <div className="relative flex items-center">
                     <textarea 
                         value={input} 
-                        onChange={(e) => {
-                            e.preventDefault();
-                            setInput(e.target.value);
-                        }} 
+                        onChange={handleTextChange}
                         onKeyDown={(e) => { 
                             if (e.key === 'Enter' && !e.shiftKey) { 
                                 e.preventDefault(); 
@@ -1502,23 +1535,24 @@ Student: "${tempInput}"
                             } 
                         }} 
                         placeholder="Ask a question..." 
-                        className="w-full bg-white border border-gray-300 rounded-full py-3 pl-12 pr-14 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none resize-none overflow-hidden" 
+                        className="w-full bg-white border border-gray-300 rounded-[24px] py-3.5 pl-12 pr-14 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none resize-none overflow-y-auto max-h-[180px] transition-all"
                         rows={1}
-                        disabled={isLoading || isIllustrating}
+                        disabled={isThinking || isIllustrating}
                         autoComplete="off"
                         spellCheck="true"
+                        style={{ height: 'auto' }}
                     />
                     <label className="absolute left-4 cursor-pointer text-gray-500 hover:text-gray-900 transition-colors">
                         <PaperclipIcon className="w-5 h-5" />
-                        <input type="file" className="hidden" onChange={handleFileChange} disabled={isLoading || isIllustrating} accept="image/*" />
+                        <input type="file" className="hidden" onChange={handleFileChange} disabled={isThinking || isIllustrating} accept="image/*" />
                     </label>
                     <button 
                         onClick={(e) => {
                             e.preventDefault();
                             handleSend();
                         }} 
-                        disabled={isLoading || isIllustrating || (!input.trim() && !file)} 
-                        className="absolute right-3 bg-lime-600 rounded-full p-2 text-white hover:bg-lime-700 active:bg-lime-800 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-lime-600"
+                        disabled={isThinking || isIllustrating || (!input.trim() && !file)}
+                        className="absolute right-3 bg-lime-600 rounded-full p-2.5 text-white hover:bg-lime-700 active:bg-lime-800 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-lime-600 shadow-md"
                     >
                         <SendIcon className="w-5 h-5" />
                     </button>
