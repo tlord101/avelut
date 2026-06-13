@@ -2039,6 +2039,28 @@ FORMAT:
 
             addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} synced to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
             await fetchDepartments();
+
+            // 💡 PINECONE VECTOR SYNC TRIGGER
+            setExtractionProgress("Syncing semantic vectors to Pinecone database cluster...");
+            try {
+                const vectorSyncResponse = await fetch('/api/textbooks/ingest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pdfUrl: primaryPdfUrl,
+                        courseKey: courseKey,
+                        courseName: course_name,
+                        level: level,
+                        semester: selectedCourse.semester
+                    })
+                });
+
+                if (!vectorSyncResponse.ok) throw new Error("Vector catalog synchronization failed.");
+                addToast("Semantic chunk maps upserted to Pinecone index successfully!", "success");
+            } catch (vectorErr: any) {
+                console.error("Vector sync failed:", vectorErr);
+                addToast("Textbook stored, but vector chunk sync failed.", "info");
+            }
         } catch (error: any) {
             console.error(error);
             addToast(`Error: ${error.message}`, "error");
