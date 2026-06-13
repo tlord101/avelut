@@ -680,6 +680,25 @@ FORMAT:
 
       addToast(`${courseEntry.course.course_name} uploaded successfully.`, 'success');
       await refreshCatalog();
+
+      // 💡 PINECONE VECTOR SYNC TRIGGER FOR UPLOAD CENTER
+      try {
+        const vectorSyncResponse = await fetch('/api/textbooks/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pdfUrl: primaryPdfUrl,
+            courseKey: courseEntry.key,
+            courseName: courseEntry.course.course_name,
+            level: courseEntry.course.level,
+            semester: courseEntry.course.semester || selectedSemester
+          })
+        });
+
+        if (!vectorSyncResponse.ok) throw new Error("Vector ingestion endpoint dropped packet payload.");
+      } catch (vectorErr: any) {
+        console.error("Upload Center Vector indexing sync fallback caught:", vectorErr);
+      }
     } catch (error: any) {
       console.error('Upload failed:', error);
       addToast(error?.message || 'Could not upload the course.', 'error');
