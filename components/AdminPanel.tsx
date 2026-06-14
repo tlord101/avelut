@@ -1198,6 +1198,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // Textbook State
     const [isUploading, setIsUploading] = useState(false);
     const [extractionProgress, setExtractionProgress] = useState('');
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [migrationProgress, setMigrationProgress] = useState('');
 
     const [uploadDepartmentId, setUploadDepartmentId] = useState('');
     const [uploadLevel, setUploadLevel] = useState('');
@@ -1994,20 +1996,19 @@ FORMAT:
 
             // Merge any existing shared context with newly extracted syllabus and pdfs
             const sharedSnapshot = await get(sharedTextbookRef);
+            
             const existingShared = sharedSnapshot.exists() ? sharedSnapshot.val() : {};
             const existingSharedPdfUrls: string[] = Array.isArray(existingShared?.pdf_urls) ? existingShared.pdf_urls.filter(Boolean) : [];
             if (existingShared?.pdf_url && !existingSharedPdfUrls.includes(existingShared.pdf_url)) {
                 existingSharedPdfUrls.push(existingShared.pdf_url);
             }
             const mergedSharedPdfUrls = Array.from(new Set([...existingSharedPdfUrls, ...uploadedUrls]));
-            const mergedSharedSyllabus = mergeTopics(
-                Array.isArray(existingShared?.syllabus) ? existingShared.syllabus : [],
-                extractedTopicGroups.flat()
-            );
+            const mergedSharedSyllabus = Array.isArray(existingShared?.syllabus) ? existingShared.syllabus : [];
             const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingShared?.pdf_url, mergedSharedPdfUrls);
 
             // Write canonical shared textbook data
             await set(sharedTextbookRef, {
+                ...existingShared,
                 pdf_url: primaryPdfUrl,
                 pdf_urls: mergedSharedPdfUrls,
                 syllabus: mergedSharedSyllabus,
@@ -2024,7 +2025,7 @@ FORMAT:
                 const existingDepartmentCourses = normalizeCourseList(departmentSnapshot.val()?.course_list);
 
                 const isPrimaryDepartmentTarget = targetDepartmentId === primaryDepartmentId;
-                const coursesForTargetDepartment = isPrimaryDepartmentTarget ? sourceCourseList : existingDepartmentCourses;
+                const coursesForTargetDepartment = isPrimaryDepartmentTarget ? (overrideCourseList || existingDepartmentCourses) : existingDepartmentCourses;
 
                 // Ensure the course entry carries a reference to the shared textbook
                 const courseWithSharedRef = {
@@ -2039,19 +2040,9 @@ FORMAT:
                 await update(departmentRef, {
                     course_list: updatedCourseList
                 });
-
-                if (targetDepartmentId === primaryDepartmentId) {
-                    primaryDepartmentCourses = updatedCourseList;
-                }
             }
 
-            if (primaryDepartmentCourses) {
-                if (!overrideCourseList) {
-                    setCoursesList(primaryDepartmentCourses);
-                }
-            }
-
-            addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} synced to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
+            addToast(`${uploadedUrls.length} textbook${uploadedUrls.length > 1 ? 's' : ''} for ${course_name} synced!`, "success");
             await fetchDepartments();
 
             // 💡 PINECONE VECTOR SYNC TRIGGER
@@ -2061,9 +2052,9 @@ FORMAT:
                 const { ingestTextToPinecone } = await import('../utils/pinecone');
 
                 let rawText = '';
-                if (selectedTextbookFile && selectedTextbookFile.length > 0) {
+                if (files && files.length > 0) {
                     setExtractionProgress('Extracting textbook content locally...');
-                    rawText = await extractTextFromPDF(selectedTextbookFile[0]);
+                    rawText = await extractTextFromPDF(files[0]);
                 } else if (primaryPdfUrl) {
                     setExtractionProgress('Downloading remote textbook for extraction...');
                     const response = await fetch(primaryPdfUrl);
@@ -2093,11 +2084,94 @@ FORMAT:
                 addToast("Textbook stored, but vector chunk sync failed.", "info");
             }
         } catch (error: any) {
-            console.error(error);
-            addToast(`Error: ${error.message}`, "error");
+            console.error('Upload error:', error);
+            addToast(`Upload failed: ${error.message}`, "error");
         } finally {
             setIsUploading(false);
             setExtractionProgress('');
+        }
+    };
+
+    const handleMassVectorMigration = async () => {
+        if (!appSettingsDraft.pinecone_api_key) {
+            addToast("Pinecone API key is required for migration.", "error");
+            return;
+        }
+
+        const confirmMigration = window.confirm("This will download all existing textbook PDFs across all departments and ingest them into Pinecone. This may take a very long time and consume Pinecone read/write capacity. Are you sure?");
+        if (!confirmMigration) return;
+
+        setIsMigrating(true);
+        setMigrationProgress("Starting migration...");
+        try {
+            const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+            const { ingestTextToPinecone } = await import('../utils/pinecone');
+
+            // Find all unique courses with a textbook URL across all shared textbooks
+            const sharedTextbooksSnapshot = await get(dbRef(db, 'shared_textbooks'));
+            const coursesToMigrate = new Map<string, any>();
+            
+            if (sharedTextbooksSnapshot.exists()) {
+                const sharedData = sharedTextbooksSnapshot.val();
+                Object.keys(sharedData).forEach(key => {
+                    const data = sharedData[key];
+                    const url = data.pdf_url || (data.pdf_urls && data.pdf_urls.length > 0 ? data.pdf_urls[0] : null);
+                    if (url) {
+                        coursesToMigrate.set(key, { ...data, url, key });
+                    }
+                });
+            }
+
+            const total = coursesToMigrate.size;
+            if (total === 0) {
+                addToast("No textbooks found to migrate.", "info");
+                setIsMigrating(false);
+                return;
+            }
+
+            let current = 0;
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const [key, courseData] of coursesToMigrate.entries()) {
+                current++;
+                setMigrationProgress(`Migrating ${current}/${total}: ${courseData.course_name || key}...`);
+                try {
+                    const response = await fetch(courseData.url);
+                    if (!response.ok) throw new Error("Failed to download PDF");
+                    const blob = await response.blob();
+                    
+                    setMigrationProgress(`Extracting text for ${courseData.course_name || key}...`);
+                    const rawText = await extractTextFromPDF(blob);
+                    
+                    setMigrationProgress(`Ingesting vectors for ${courseData.course_name || key}...`);
+                    const ingestResult = await ingestTextToPinecone(
+                        rawText,
+                        key,
+                        courseData.course_name || 'Unknown Course',
+                        courseData.level || '100',
+                        courseData.semester || 'First',
+                        appSettingsDraft,
+                        (progress) => setMigrationProgress(`[${current}/${total}] ${progress}`)
+                    );
+                    if (ingestResult.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (err: any) {
+                    console.error(`Migration failed for ${courseData.course_name || key}:`, err);
+                    failCount++;
+                }
+            }
+
+            addToast(`Migration complete! Success: ${successCount}, Failed: ${failCount}`, successCount > 0 ? "success" : "info");
+        } catch (error: any) {
+            console.error("Migration error:", error);
+            addToast("Migration process encountered a fatal error.", "error");
+        } finally {
+            setIsMigrating(false);
+            setMigrationProgress('');
         }
     };
 
@@ -3749,6 +3823,20 @@ FORMAT:
                                 >
                                     Test Pinecone Connection
                                 </button>
+                                
+                                <button
+                                    type="button"
+                                    disabled={isMigrating}
+                                    onClick={handleMassVectorMigration}
+                                    className={`w-full mt-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${isMigrating ? 'bg-orange-100 text-orange-400 cursor-not-allowed' : 'bg-orange-600/10 text-orange-600 hover:bg-orange-600/20 focus:ring-4 focus:ring-orange-500/20'}`}
+                                >
+                                    {isMigrating ? 'Migration in Progress...' : 'Mass Migrate Firebase Textbooks to Pinecone'}
+                                </button>
+                                {migrationProgress && (
+                                    <p className="mt-2 text-xs text-orange-600 font-medium animate-pulse">
+                                        {migrationProgress}
+                                    </p>
+                                )}
 
                                 <hr className="border-gray-100 my-4" />
 
