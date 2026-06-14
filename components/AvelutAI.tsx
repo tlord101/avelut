@@ -359,6 +359,7 @@ const CloseXIcon = () => (
 export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(() => {

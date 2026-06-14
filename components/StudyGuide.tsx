@@ -1402,18 +1402,16 @@ Student: "${tempInput}"
                                     )}
                                 </div>
                                 {message.sender === 'bot' && suggestions.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 mt-2 max-w-full">
+                                    <div className="flex flex-wrap gap-2 mt-2 max-w-full relative z-30">
                                         {suggestions.map((suggestion, sIdx) => (
                                             <button
                                                 key={sIdx}
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    void handleSend(suggestion);
+                                                onClick={() => {
+                                                    handleSend(suggestion);
                                                 }}
                                                 disabled={isThinking || isIllustrating}
-                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer select-none disabled:opacity-50"
+                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-sm hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed pointer-events-auto touch-manipulation"
                                             >
                                                 {suggestion}
                                             </button>
