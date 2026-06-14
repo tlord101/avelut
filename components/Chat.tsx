@@ -265,7 +265,7 @@ const TextChat: React.FC<{
                     model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: currentInput }] }]
                 });
-                const text = typeof result.text === 'function' ? result.text() : result.text;
+                const text = result.response.text();
                 if (!text) {
                     throw new Error('Gemini returned an empty response.');
                 }

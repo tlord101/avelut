@@ -565,7 +565,7 @@ FORMAT:
 }`;
 
         const aiResult = await attemptApiCall(async () => {
-          const response = await ai.models.generateContent({
+          const aiResponse = await ai.models.generateContent({
             model: geminiModel,
             contents: [
               {
@@ -601,7 +601,7 @@ FORMAT:
             },
           });
 
-          const text = typeof response.text === 'function' ? response.text() : response.text;
+          const text = aiResponse.response.text();
           if (!text) {
             throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
           }
