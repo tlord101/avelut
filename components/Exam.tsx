@@ -375,6 +375,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
+        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
         const text = aiResponse.response.text();
         if (!text) throw new Error('AI returned an empty response while generating flashcards.');
         const responseData = JSON.parse(text);
@@ -446,6 +447,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
+        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
         const text = aiResponse.response.text();
         if (!text) {
           throw new Error('AI returned an empty response while generating exam questions.');

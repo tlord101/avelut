@@ -244,6 +244,12 @@ export const createAvelutAI = (
   return {
     models: {
       generateContent: async (params: any) => {
+        const processed = await prepareParams(params);
+        return await rawClient.models.generateContent(processed);
+      },
+      generateContentStream: async (params: any) => {
+        const processed = await prepareParams(params);
+        return await rawClient.models.generateContentStream(processed);
         const { model, ...rest } = await prepareParams(params);
         const generativeModel = rawClient.getGenerativeModel({
             model: model || appSettings.primary_gemini_model || 'gemini-2.0-flash'

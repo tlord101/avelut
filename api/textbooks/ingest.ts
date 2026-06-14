@@ -66,6 +66,12 @@ export async function POST(req: Request) {
       const textChunk = chunks[i];
 
       // Request vector coordinates from Google
+      const embeddingResponse = await ai.models.embedContent({
+        model: 'text-embedding-004',
+        contents: [{ parts: [{ text: textChunk }] }]
+      });
+
+      const vectorValues = embeddingResponse.embeddings?.[0]?.values;
       const embeddingResponse = await model.embedContent(textChunk);
 
       const vectorValues = embeddingResponse.embedding?.values;
@@ -80,6 +86,7 @@ export async function POST(req: Request) {
           level: level || "",
           semester: semester || "",
           chunk_index: i,
+          text: textChunk // Corrected key to match search
           text_content: textChunk
         }
       });

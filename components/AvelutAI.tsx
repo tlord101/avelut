@@ -482,6 +482,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           }],
         }],
       });
+      const titleText = typeof result.text === 'function' ? result.text() : result.text;
       const titleText = result.response.text();
       return normalizeTitle((titleText || '').split('\n')[0] || fallbackTitle);
     } catch (error) {

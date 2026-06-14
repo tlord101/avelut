@@ -66,6 +66,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
         const response = await testClient.getGenerativeModel({ model: 'gemini-1.5-flash' }).generateContent({
           contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
         });
+        const text = typeof response.text === 'function' ? response.text() : response.text;
         const text = response.response.text();
         if (!text) {
           throw new Error('Key validation failed.');
