@@ -173,8 +173,9 @@ Return valid JSON as an object with key "sessions" which is an array of objects.
                     }
                 });
 
-                if (!response.text) throw new Error('AI returned an empty timetable.');
-                return JSON.parse(response.text);
+                const text = typeof response.text === 'function' ? response.text() : response.text;
+                if (!text) throw new Error('AI returned an empty timetable.');
+                return JSON.parse(text);
             });
 
             if (result.success && result.data && Array.isArray(result.data.sessions)) {

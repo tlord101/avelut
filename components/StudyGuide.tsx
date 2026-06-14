@@ -573,7 +573,7 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                         }
                     }
                 });
-                const text = response.text || '[]';
+                const text = typeof response.text === 'function' ? response.text() : (response.text || '[]');
                 return JSON.parse(text);
             });
 
