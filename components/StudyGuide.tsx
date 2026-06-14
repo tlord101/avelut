@@ -874,7 +874,10 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
         }
 
         setIsThinking(true);
-        const prompt = `
+        setStreamingBotText('');
+
+        try {
+            const prompt = `
 Context:
 Department: ${userProfile.department_id}
 Course: ${topic.courseName}
@@ -885,54 +888,59 @@ ${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 Task:
 Please start teaching me about "${topic.topic_name}". Give me a simple and clear introduction to the topic.
 `;
-        setStreamingBotText('');
-        const result = await attemptApiCall(async () => {
-            let responseText = '';
-            const responseStream = await ai.models.generateContentStream({
-                model: geminiModel,
-                config: { systemInstruction },
-                contents: [{ role: 'user', parts: [{ text: prompt }] }]
+            const result = await attemptApiCall(async () => {
+                let responseText = '';
+                const responseStream = await ai.models.generateContentStream({
+                    model: geminiModel,
+                    config: { systemInstruction },
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }]
+                });
+
+                for await (const chunk of responseStream) {
+                    const chunkText = chunk.text || '';
+                    responseText += chunkText;
+                    setStreamingBotText(responseText);
+                }
+
+                if (!responseText) {
+                    throw new Error('Gemini returned an empty response.');
+                }
+
+                const botResponseText = responseText.trim();
+
+                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+                const newMsgRef = push(messagesRef);
+                const msgData = {
+                    sender: 'bot',
+                    text: botResponseText,
+                    timestamp: serverTimestamp(),
+                };
+                await set(newMsgRef, msgData);
+
+                const botMessage: Message = {
+                    id: newMsgRef.key!,
+                    text: botResponseText,
+                    sender: 'bot',
+                    timestamp: Date.now()
+                };
+                setMessages([botMessage]);
+                const featureCost = getFeatureCost('study_guide_lesson', appSettings);
+                await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name} (Initial)`, appSettings);
             });
 
-            for await (const chunk of responseStream) {
-                const chunkText = chunk.text || '';
-                responseText += chunkText;
-                setStreamingBotText(responseText);
+            if (!result.success) {
+                addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
+                onClose();
             }
-
-            if (!responseText) {
-                throw new Error('Gemini returned an empty response.');
-            }
-            
-            const botResponseText = responseText.trim();
-
-            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-            const newMsgRef = push(messagesRef);
-            const msgData = {
-                sender: 'bot',
-                text: botResponseText,
-                timestamp: serverTimestamp(),
-            };
-            await set(newMsgRef, msgData);
-
-            const botMessage: Message = { 
-                id: newMsgRef.key!, 
-                text: botResponseText, 
-                sender: 'bot', 
-                timestamp: Date.now() 
-            };
-            setMessages([botMessage]);
-            const featureCost = getFeatureCost('study_guide_lesson', appSettings);
-            await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name} (Initial)`, appSettings);
-        });
-        setStreamingBotText(null);
-        setIsThinking(false);
-
-        if (!result.success) {
-            addToast(result.message || 'Sorry, I had trouble starting the lesson.', 'error');
+        } catch (err: any) {
+            console.error('AutoTeach Error:', err);
+            addToast(err.message || 'Failed to start the lesson.', 'error');
             onClose();
+        } finally {
+            setStreamingBotText(null);
+            setIsThinking(false);
         }
-    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, topic.courseId, topic.course_id, setStreamingBotText]);
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, topic.courseId, topic.course_id]);
 
     const handleMarkTopicComplete = async () => {
         try {
@@ -1156,10 +1164,14 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(newBotMsgRef, botMessageData);
+
+                // Release thinking state early for better UX
+                setIsThinking(false);
+                setStreamingBotText(null);
+
                 const featureCost = getFeatureCost('study_guide_lesson', appSettings);
                 await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings);
             });
-            setStreamingBotText(null);
 
             if (!result.success) {
                 addToast(result.message, 'error');
@@ -1169,6 +1181,7 @@ Student: "${tempInput}"
             addToast('Sorry, something went wrong. Please try again.', 'error');
         } finally {
             setIsThinking(false);
+            setStreamingBotText(null);
         }
     };
 
@@ -1185,51 +1198,56 @@ Student: "${tempInput}"
         setIsIllustrating(true);
         addToast("Creating a visualization for you...", "info");
 
-        const result = await attemptApiCall(async () => {
-            const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
-            const response = await ai.models.generateContent({
-                model: geminiModel,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        try {
+            const result = await attemptApiCall(async () => {
+                const prompt = `Create an educational visualization for this study guide explanation:\n\n${promptText}`;
+                const response = await ai.models.generateContent({
+                    model: geminiModel,
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                });
+
+                const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+                const imageUrls: string[] = [];
+                for (const part of parts) {
+                    if (!part.inlineData?.data) continue;
+
+                    const mimeType = part.inlineData.mimeType || 'image/png';
+                    const fileExtension = mimeType.split('/')[1] || 'png';
+                    const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
+                    const uniqueImageId = createUniqueId();
+                    const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
+                    const uploadResult = await uploadBytes(storageRefObj, imageBlob);
+                    const publicUrl = await getDownloadURL(uploadResult.ref);
+                    imageUrls.push(publicUrl);
+                }
+
+                if (imageUrls.length === 0) {
+                    throw new Error("No image visualization was returned by the API.");
+                }
+
+                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+
+                for (const publicUrl of imageUrls) {
+                    const imageMsgRef = push(messagesRef);
+                    const imageMessageData = {
+                        sender: 'bot',
+                        image_url: publicUrl,
+                        timestamp: serverTimestamp(),
+                    };
+                    await set(imageMsgRef, imageMessageData);
+                }
             });
 
-            const parts = response.candidates?.[0]?.content?.parts ?? [];
-
-            const imageUrls: string[] = [];
-            for (const part of parts) {
-                if (!part.inlineData?.data) continue;
-
-                const mimeType = part.inlineData.mimeType || 'image/png';
-                const fileExtension = mimeType.split('/')[1] || 'png';
-                const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
-                const uniqueImageId = createUniqueId();
-                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
-                const uploadResult = await uploadBytes(storageRefObj, imageBlob);
-                const publicUrl = await getDownloadURL(uploadResult.ref);
-                imageUrls.push(publicUrl);
+            if (!result.success) {
+                addToast(result.message || "Failed to generate image.", "error");
             }
-
-            if (imageUrls.length === 0) {
-                throw new Error("No image visualization was returned by the API.");
-            }
-
-            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
-
-            for (const publicUrl of imageUrls) {
-                const imageMsgRef = push(messagesRef);
-                const imageMessageData = {
-                    sender: 'bot',
-                    image_url: publicUrl,
-                    timestamp: serverTimestamp(),
-                };
-                await set(imageMsgRef, imageMessageData);
-            }
-
-        });
-
-        if (!result.success) {
-            addToast(result.message || "Failed to generate image after multiple attempts.", "error");
+        } catch (err: any) {
+            console.error('Illustration Error:', err);
+            addToast(err.message || "Failed to generate image.", "error");
+        } finally {
+            setIsIllustrating(false);
         }
-        setIsIllustrating(false);
     };
     
     const lastBotMessageIndex = messages.map(m => m.sender).lastIndexOf('bot');
@@ -1402,7 +1420,7 @@ Student: "${tempInput}"
                                     )}
                                 </div>
                                 {message.sender === 'bot' && suggestions.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 mt-2 max-w-full relative z-30">
+                                    <div className="flex flex-wrap gap-2 mt-2 max-w-full relative z-40">
                                         {suggestions.map((suggestion, sIdx) => (
                                             <button
                                                 key={sIdx}
