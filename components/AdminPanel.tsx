@@ -247,9 +247,15 @@ const mergeCourseRecord = (
         topics: resolvedTopics,
         textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
         textbook_urls: mergedCourseUrls,
-        textbook_shared_key: (sourceCourse as any).textbook_shared_key || (baseCourse as any).textbook_shared_key,
         semester: normalizeSemester(sourceCourse.semester || (baseCourse as Course).semester),
-    };
+    } as any;
+
+    const sharedKey = (sourceCourse as any).textbook_shared_key || (baseCourse as any).textbook_shared_key;
+    if (sharedKey !== undefined && sharedKey !== null) {
+        mergedCourse.textbook_shared_key = sharedKey;
+    }
+
+    return mergedCourse;
 };
 
 const upsertCourseInList = (
@@ -2051,20 +2057,37 @@ FORMAT:
             // 💡 PINECONE VECTOR SYNC TRIGGER
             setExtractionProgress("Syncing semantic vectors to Pinecone database cluster...");
             try {
-                const vectorSyncResponse = await fetch('/api/textbooks/ingest', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        pdfUrl: primaryPdfUrl,
-                        courseKey: courseKey,
-                        courseName: course_name,
-                        level: level,
-                        semester: selectedCourse.semester
-                    })
-                });
+                const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+                const { ingestTextToPinecone } = await import('../utils/pinecone');
 
-                if (!vectorSyncResponse.ok) throw new Error("Vector catalog synchronization failed.");
-                addToast("Semantic chunk maps upserted to Pinecone index successfully!", "success");
+                let rawText = '';
+                if (selectedTextbookFile && selectedTextbookFile.length > 0) {
+                    setExtractionProgress('Extracting textbook content locally...');
+                    rawText = await extractTextFromPDF(selectedTextbookFile[0]);
+                } else if (primaryPdfUrl) {
+                    setExtractionProgress('Downloading remote textbook for extraction...');
+                    const response = await fetch(primaryPdfUrl);
+                    if (!response.ok) throw new Error("Failed to download remote PDF");
+                    const blob = await response.blob();
+                    setExtractionProgress('Extracting textbook content...');
+                    rawText = await extractTextFromPDF(blob);
+                }
+
+                if (rawText) {
+                    setExtractionProgress('Syncing to Pinecone database...');
+                    const ingestResult = await ingestTextToPinecone(
+                        rawText,
+                        courseKey,
+                        course_name,
+                        level,
+                        selectedCourse.semester || '',
+                        appSettings,
+                        (progress) => setExtractionProgress(progress)
+                    );
+
+                    if (!ingestResult.success) throw new Error(ingestResult.message || "Vector ingestion failed.");
+                    addToast("Semantic chunk maps upserted to Pinecone index successfully!", "success");
+                }
             } catch (vectorErr: any) {
                 console.error("Vector sync failed:", vectorErr);
                 addToast("Textbook stored, but vector chunk sync failed.", "info");
@@ -3698,6 +3721,34 @@ FORMAT:
                                     />
                                     <p className="mt-2 text-xs text-gray-500">The serverless Pinecone index name (usually "avelut-textbooks").</p>
                                 </label>
+
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        if (!appSettingsDraft.pinecone_api_key) {
+                                            addToast("Please enter a Pinecone API key first.", "error");
+                                            return;
+                                        }
+                                        addToast("Testing Pinecone connection...", "info");
+                                        try {
+                                            const { Pinecone } = await import('@pinecone-database/pinecone');
+                                            const pc = new Pinecone({ apiKey: appSettingsDraft.pinecone_api_key });
+                                            const indexList = await pc.listIndexes();
+                                            const indexNames = indexList.indexes?.map(idx => idx.name) || [];
+                                            if (indexNames.includes(appSettingsDraft.pinecone_index_name)) {
+                                                addToast(`Success! Found index "${appSettingsDraft.pinecone_index_name}".`, "success");
+                                            } else {
+                                                addToast(`Connected, but index "${appSettingsDraft.pinecone_index_name}" not found. Available: ${indexNames.join(', ') || 'None'}`, "error");
+                                            }
+                                        } catch (err: any) {
+                                            console.error("Pinecone test error:", err);
+                                            addToast("Failed to connect to Pinecone. Check your API key.", "error");
+                                        }
+                                    }}
+                                    className="w-full mt-2 rounded-2xl bg-emerald-600/10 px-4 py-3 text-sm font-semibold text-emerald-600 hover:bg-emerald-600/20 focus:ring-4 focus:ring-emerald-500/20"
+                                >
+                                    Test Pinecone Connection
+                                </button>
 
                                 <hr className="border-gray-100 my-4" />
 
