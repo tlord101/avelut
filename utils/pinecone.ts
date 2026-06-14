@@ -36,7 +36,7 @@ export async function searchPinecone(
     // 1. Generate embedding for the search query
     const embeddingResponse = await ai.models.embedContent({
       model: 'text-embedding-004',
-      contents: [{ parts: [{ text: query }] }]
+      contents: query,
     });
     
     const vectorValues = embeddingResponse.embeddings?.[0]?.values;
@@ -132,7 +132,7 @@ export async function ingestTextToPinecone(
       // Request vector coordinates from Google
       const embeddingResponse = await ai.models.embedContent({
         model: 'text-embedding-004',
-        contents: [{ parts: [{ text: textChunk }] }]
+        contents: textChunk,
       });
 
       const vectorValues = embeddingResponse.embeddings?.[0]?.values;
