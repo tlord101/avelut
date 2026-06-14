@@ -41,13 +41,13 @@ export const DEFAULT_USAGE_SETTINGS = {
     study_guide_extraction: 5,
   },
   feature_models: {
-    visual_solve: 'gemini-1.5-flash',
-    chat_interaction: 'gemini-1.5-flash',
-    flashcard_generation: 'gemini-1.5-flash',
-    ai_quiz_generation: 'gemini-1.5-flash',
-    study_guide_lesson: 'gemini-1.5-flash',
-    study_guide_extraction: 'gemini-1.5-flash',
-    title_generation: 'gemini-1.5-flash',
+    visual_solve: 'gemini-3.1-flash-lite',
+    chat_interaction: 'gemini-3.1-flash-lite',
+    flashcard_generation: 'gemini-3.1-flash-lite',
+    ai_quiz_generation: 'gemini-3.1-flash-lite',
+    study_guide_lesson: 'gemini-3.1-flash-lite',
+    study_guide_extraction: 'gemini-3.1-flash-lite',
+    title_generation: 'gemini-3.1-flash-lite',
   },
   additional_prices: {
     visual_messages_price: 200,
@@ -58,7 +58,7 @@ export const DEFAULT_USAGE_SETTINGS = {
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  primary_gemini_model: 'gemini-1.5-flash',
+  primary_gemini_model: 'gemini-3.1-flash-lite',
   gemini_api_key: '',
   upload_center_uploads_enabled: true,
   coming_soon_enabled: false,

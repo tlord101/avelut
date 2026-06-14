@@ -64,7 +64,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
       try {
         const testClient = new GoogleGenAI({ apiKey: enteredKey.trim() });
         const response = await testClient.models.generateContent({
-          model: 'gemini-1.5-flash',
+          model: 'gemini-3.1-flash-lite',
           contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
         });
         const text = typeof response.text === 'function' ? (response as any).text() : response.text;
