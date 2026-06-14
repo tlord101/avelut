@@ -684,21 +684,30 @@ FORMAT:
 
       // 💡 PINECONE VECTOR SYNC TRIGGER FOR UPLOAD CENTER
       try {
-        const vectorSyncResponse = await fetch('/api/textbooks/ingest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pdfUrl: primaryPdfUrl,
-            courseKey: courseEntry.key,
-            courseName: courseEntry.course.course_name,
-            level: courseEntry.course.level,
-            semester: courseEntry.course.semester || selectedSemester
-          })
-        });
+        const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+        const { ingestTextToPinecone } = await import('../utils/pinecone');
 
-        if (!vectorSyncResponse.ok) throw new Error("Vector ingestion endpoint dropped packet payload.");
+        addToast('Extracting textbook content...', 'info');
+        const rawText = await extractTextFromPDF(pdfFiles[0]);
+        
+        addToast('Syncing to Pinecone database...', 'info');
+        const ingestResult = await ingestTextToPinecone(
+          rawText,
+          courseEntry.key,
+          courseEntry.course.course_name,
+          courseEntry.course.level,
+          courseEntry.course.semester || selectedSemester,
+          appSettings,
+          (progress) => console.log(progress)
+        );
+
+        if (!ingestResult.success) {
+           throw new Error(ingestResult.message || "Vector ingestion failed.");
+        }
+        addToast('Pinecone vector indexing complete!', 'success');
       } catch (vectorErr: any) {
         console.error("Upload Center Vector indexing sync fallback caught:", vectorErr);
+        addToast('Warning: Textbook uploaded but vector search sync failed.', 'info');
       }
     } catch (error: any) {
       console.error('Upload failed:', error);

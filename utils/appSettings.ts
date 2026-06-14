@@ -70,6 +70,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   youtube_api_key: '',
   google_client_id: '',
   google_api_key: '',
+  pinecone_api_key: '',
+  pinecone_index_name: '',
 };
 
 export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefined): AppSettings => ({
@@ -78,6 +80,8 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
   youtube_api_key: (raw?.youtube_api_key || DEFAULT_APP_SETTINGS.youtube_api_key || '').toString().trim(),
   google_client_id: (raw?.google_client_id || DEFAULT_APP_SETTINGS.google_client_id || '').toString().trim(),
   google_api_key: (raw?.google_api_key || DEFAULT_APP_SETTINGS.google_api_key || '').toString().trim(),
+  pinecone_api_key: (raw?.pinecone_api_key || DEFAULT_APP_SETTINGS.pinecone_api_key || '').toString().trim(),
+  pinecone_index_name: (raw?.pinecone_index_name || DEFAULT_APP_SETTINGS.pinecone_index_name || '').toString().trim(),
   upload_center_uploads_enabled: raw?.upload_center_uploads_enabled ?? DEFAULT_APP_SETTINGS.upload_center_uploads_enabled,
   coming_soon_enabled: raw?.coming_soon_enabled ?? DEFAULT_APP_SETTINGS.coming_soon_enabled,
   paystack_public_key: (raw?.paystack_public_key || DEFAULT_APP_SETTINGS.paystack_public_key).toString().trim(),

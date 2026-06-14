@@ -210,6 +210,8 @@ export interface AppSettings {
   youtube_api_key?: string;
   google_client_id?: string;
   google_api_key?: string;
+  pinecone_api_key?: string;
+  pinecone_index_name?: string;
 }
 
 // Type for the new Notification System

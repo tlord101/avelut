@@ -353,16 +353,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       const result = await attemptApiCall(async () => {
         let retrievedContext = "";
         try {
-            const searchResponse = await fetch('/api/textbooks/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: `Flashcards for ${safeTopics.join(', ')}`, courseKey: userProfile.department_id, limit: 5 })
-            });
-            if (searchResponse.ok) {
-                const searchData = await searchResponse.json();
-                if (searchData.success && searchData.results?.length > 0) {
-                    retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchData.results.map((r: any) => r.text).join('\n\n');
-                }
+            const { searchPinecone } = await import('../utils/pinecone');
+            const searchResult = await searchPinecone(`Flashcards for ${safeTopics.join(', ')}`, userProfile.department_id, 5, appSettings);
+            if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
+                retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchResult.results.map((r: any) => r.text).join('\n\n');
             }
         } catch (err) {
             console.warn("RAG retrieval failed:", err);
@@ -439,16 +433,10 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       const result = await attemptApiCall(async () => {
         let retrievedContext = "";
         try {
-            const searchResponse = await fetch('/api/textbooks/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: `Multiple-choice questions for ${safeTopics.join(', ')}`, courseKey: userProfile.department_id, limit: 5 })
-            });
-            if (searchResponse.ok) {
-                const searchData = await searchResponse.json();
-                if (searchData.success && searchData.results?.length > 0) {
-                    retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchData.results.map((r: any) => r.text).join('\n\n');
-                }
+            const { searchPinecone } = await import('../utils/pinecone');
+            const searchResult = await searchPinecone(`Multiple-choice questions for ${safeTopics.join(', ')}`, userProfile.department_id, 5, appSettings);
+            if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
+                retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchResult.results.map((r: any) => r.text).join('\n\n');
             }
         } catch (err) {
             console.warn("RAG retrieval failed:", err);

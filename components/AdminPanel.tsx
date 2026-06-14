@@ -1117,8 +1117,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             custom_user_limit_tpm: appSettingsDraft.custom_user_limit_tpm ?? 250000,
             usage_settings: appSettingsDraft.usage_settings || DEFAULT_USAGE_SETTINGS,
             youtube_api_key: (appSettingsDraft.youtube_api_key || '').trim(),
-        google_client_id: (appSettingsDraft.google_client_id || '').trim(),
-        google_api_key: (appSettingsDraft.google_api_key || '').trim(),
+            google_client_id: (appSettingsDraft.google_client_id || '').trim(),
+            google_api_key: (appSettingsDraft.google_api_key || '').trim(),
+            pinecone_api_key: (appSettingsDraft.pinecone_api_key || '').trim(),
+            pinecone_index_name: (appSettingsDraft.pinecone_index_name || '').trim(),
         };
 
         setIsSavingAppSettings(true);
@@ -3669,6 +3671,32 @@ FORMAT:
                                         autoComplete="off"
                                     />
                                     <p className="mt-2 text-xs text-gray-500">This key is used globally to fetch tutorial search results directly from YouTube, bypassing proxy scrapers.</p>
+                                </label>
+
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-semibold text-gray-700">Pinecone API Key</span>
+                                    <input
+                                        type="password"
+                                        value={appSettingsDraft.pinecone_api_key || ''}
+                                        onChange={e => setAppSettingsDraft(prev => ({ ...prev, pinecone_api_key: e.target.value }))}
+                                        placeholder="Enter Pinecone API Key..."
+                                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        autoComplete="off"
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500">Required for textbook extraction and vector embeddings.</p>
+                                </label>
+
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-semibold text-gray-700">Pinecone Index Name</span>
+                                    <input
+                                        type="text"
+                                        value={appSettingsDraft.pinecone_index_name || ''}
+                                        onChange={e => setAppSettingsDraft(prev => ({ ...prev, pinecone_index_name: e.target.value }))}
+                                        placeholder="e.g. avelut-textbooks"
+                                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-lime-500 focus:ring-4 focus:ring-lime-100"
+                                        autoComplete="off"
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500">The serverless Pinecone index name (usually "avelut-textbooks").</p>
                                 </label>
 
                                 <hr className="border-gray-100 my-4" />

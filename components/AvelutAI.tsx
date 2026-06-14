@@ -369,7 +369,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
         contextParts.push(`STUDENT DEPARTMENT: ${userProfile.department_id}`);
         contextParts.push(`STUDENT LEVEL: ${userProfile.level}`);
-        contextParts.push(readCourseText(courses, userProfile.level));
+
 
         const sharedKeys = Array.from(new Set(courses.map(course => (course as Course & { textbook_shared_key?: string }).textbook_shared_key).filter(Boolean)));
         for (const sharedKey of sharedKeys) {
@@ -686,17 +686,12 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         // 💡 RAG: Retrieve relevant textbook context from Pinecone
         let retrievedContext = "";
         try {
-          const searchResponse = await fetch('/api/textbooks/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: prompt, limit: 3 })
-          });
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            if (searchData.success && searchData.results?.length > 0) {
-              retrievedContext = "\n\nRELEVANT TEXTBOOK CONTEXT:\n" +
-                searchData.results.map((r: any) => `[From ${r.course_name}]: ${r.text}`).join('\n\n');
-            }
+          const { searchPinecone } = await import('../utils/pinecone');
+          const searchResult = await searchPinecone(prompt, undefined, 3, appSettings);
+          
+          if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
+            retrievedContext = "\n\nRELEVANT TEXTBOOK CONTEXT:\n" +
+              searchResult.results.map((r: any) => `[From ${r.course_name}]: ${r.text}`).join('\n\n');
           }
         } catch (searchErr) {
           console.warn("RAG retrieval failed:", searchErr);
