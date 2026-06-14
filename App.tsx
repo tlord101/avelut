@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import { readCachedJson, writeCachedJson } from './utils/cache';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth as firebaseAuth, firebaseSignOut, db, onAuthStateChanged, updateProfile, type FirebaseUser } from './firebase';
@@ -14,7 +14,7 @@ import { Onboarding } from './components/Onboarding';
 import { ActivationScreen } from './components/ActivationScreen';
 import { createAvelutAI } from './utils/inference';
 import { Capacitor } from '@capacitor/core';
-import { AdminPanel } from './components/AdminPanel';
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(module => ({ default: module.AdminPanel })));
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { NativePullToRefresh } from './components/NativePullToRefresh';
@@ -972,17 +972,19 @@ const App: React.FC = () => {
 
         return (
             <ErrorBoundary>
-                <AdminPanel
-                    userProfile={mockAdminProfile}
-                    pathname={adminPath}
-                    onNavigate={(path) => {
-                        setAdminPath(path);
-                        if (typeof window !== 'undefined') { window.history.pushState(null, '', path); }
-                        if (!path.startsWith('/admin')) {
-                            setActiveItem(resolveActiveItemFromPath(path));
-                        }
-                    }}
-                />
+                <Suspense fallback={<AppLoader />}>
+                    <AdminPanel
+                        userProfile={mockAdminProfile}
+                        pathname={adminPath}
+                        onNavigate={(path) => {
+                            setAdminPath(path);
+                            if (typeof window !== 'undefined') { window.history.pushState(null, '', path); }
+                            if (!path.startsWith('/admin')) {
+                                setActiveItem(resolveActiveItemFromPath(path));
+                            }
+                        }}
+                    />
+                </Suspense>
             </ErrorBoundary>
         );
     }
