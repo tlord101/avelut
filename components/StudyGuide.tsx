@@ -1018,6 +1018,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
         if ((!textToSend.trim() && !file) || isThinking || isIllustrating) return;
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
+            setIsThinking(false);
             return;
         }
 
@@ -1030,6 +1031,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 cost: limitCheck.cost
             });
             setShowLimitModal(true);
+            setIsThinking(false);
             return;
         }
         
@@ -1184,10 +1186,6 @@ Student: "${tempInput}"
                     timestamp: serverTimestamp(),
                 };
                 await set(newBotMsgRef, botMessageData);
-
-                // Release thinking state early for better UX
-                setIsThinking(false);
-                setStreamingBotText(null);
 
                 const featureCost = getFeatureCost('study_guide_lesson', appSettings);
                 await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings);

@@ -389,9 +389,29 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 const base64Data = scannedImage.split(',')[1];
                 if (!base64Data) throw new Error("Could not extract image data.");
 
+                let retrievedContext = "";
+                if (customPrompt) {
+                    try {
+                        const searchResponse = await fetch('/api/textbooks/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: customPrompt, limit: 3 })
+                        });
+                        if (searchResponse.ok) {
+                            const searchData = await searchResponse.json();
+                            if (searchData.success && searchData.results?.length > 0) {
+                                retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchData.results.map((r: any) => r.text).join('\n\n');
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("RAG retrieval failed:", err);
+                    }
+                }
+
                 const basePrompt = `Expert AI educator. Solve the image problem fast. Use LaTeX for math ($...$, $$...$$).`;
                 const customInstruction = customPrompt ? ` User instructions: ${customPrompt}` : '';
                 const promptText = `${basePrompt}${customInstruction}
+${retrievedContext}
 # [Title]
 ## 📋 Summary
 [Concise summary]

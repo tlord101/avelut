@@ -5,6 +5,7 @@ import { z } from "zod"
 export const maxDuration = 30
 
 export async function POST(req: Request) {
+  try {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
   // Server-side context truncation: only process last 10 messages to optimize tokens
@@ -67,4 +68,10 @@ export async function POST(req: Request) {
   })
 
   return result.toUIMessageStreamResponse()
+  } catch (error: any) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }
