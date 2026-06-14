@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
-import { createAvelutAI } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import { Type } from '@google/genai';
 import { FlashcardsUI } from './FlashcardsUI';
 import { db } from '../firebase';
@@ -375,8 +375,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
-        const text = aiResponse.response.text();
+        const text = getResponseText(aiResponse);
         if (!text) throw new Error('AI returned an empty response while generating flashcards.');
         const responseData = JSON.parse(text);
         if (!(responseData.flashcards && responseData.flashcards.length > 0)) throw new Error("Failed to generate valid flashcards from AI response.");
@@ -447,8 +446,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
-        const text = aiResponse.response.text();
+        const text = getResponseText(aiResponse);
         if (!text) {
           throw new Error('AI returned an empty response while generating exam questions.');
         }

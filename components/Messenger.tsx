@@ -1082,7 +1082,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!activeChat || !e.target.files || e.target.files.length === 0 || !firebaseUser) return;
         const selectedFiles = Array.from(e.target.files);
-        for (const file of selectedFiles) {
+        for (const fileItem of selectedFiles) {
+            const file = fileItem as any;
             const localTimestamp = Date.now();
             const tempId = `temp_file_${localTimestamp}`;
             const fileType = file.type.startsWith('image/') ? 'image' : 'file';
@@ -1103,7 +1104,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, file);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
-                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+                setOptimisticMessages(prev => prev.filter((m: any) => m.id !== tempId));
                 if (file.type.startsWith('image/')) {
                     await sendMsg(`![${file.name}](${fileDownloadUrl})`, 'image');
                 } else {
@@ -1112,7 +1113,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             } catch (err) {
                 // Safeguarded catch wrapper from leaking standard error object down state tracking arrays
               addToast(`Failed to upload asset: ${file.name}`, 'error');
-                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+                setOptimisticMessages(prev => prev.filter((m: any) => m.id !== tempId));
             }
         }
     };
@@ -1120,7 +1121,8 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     const handleImageSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!activeChat || !e.target.files || e.target.files.length === 0 || !firebaseUser) return;
         const selectedImages = Array.from(e.target.files);
-        for (const img of selectedImages) {
+        for (const imgItem of selectedImages) {
+            const img = imgItem as any;
             const localTimestamp = Date.now();
             const tempId = `temp_img_${localTimestamp}`;
             
@@ -1140,11 +1142,11 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 const fileBucketRef = storageRef(storage, cloudPath);
                 const snapshot = await uploadBytes(fileBucketRef, img);
                 const fileDownloadUrl = await getDownloadURL(snapshot.ref);
-                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+                setOptimisticMessages(prev => prev.filter((m: any) => m.id !== tempId));
                 await sendMsg(`![Captured Image](${fileDownloadUrl})`, 'image');
             } catch (err) {
               addToast('Failed to upload visual layout media.', 'error');
-                setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+                setOptimisticMessages(prev => prev.filter((m: any) => m.id !== tempId));
             }
         }
     };
@@ -1872,9 +1874,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                 className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition flex items-center gap-1.5 ${partnerActiveSubTab === 'requests' ? 'bg-[#009EE2] text-white' : 'text-[#6C757D] hover:text-[#212529] hover:bg-white/50'}`}
                             >
                                 Requests
-                                {Object.values(partnerRequests).filter(req => req.status === 'received').length > 0 && (
+                                {Object.values(partnerRequests).filter((req: any) => req.status === 'received').length > 0 && (
                                     <span className="bg-red-500 text-white rounded-full text-[10px] font-black h-4.5 w-4.5 flex items-center justify-center animate-pulse">
-                                        {Object.values(partnerRequests).filter(req => req.status === 'received').length}
+                                        {Object.values(partnerRequests).filter((req: any) => req.status === 'received').length}
                                     </span>
                                 )}
                             </button>
@@ -1951,7 +1953,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                                         <div className="shrink-0">
                                                             {isPartner ? (
                                                                 <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full flex items-center gap-1">✓ Connected</span>
-                                                            ) : req?.status === 'sent' ? (
+                                                            ) : (req as any)?.status === 'sent' ? (
                                                                 <button
                                                                     onClick={() => cancelPartnerRequest(u)}
                                                                     className="text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-100 px-3 py-1.5 rounded-xl transition cursor-pointer select-none"
@@ -1959,7 +1961,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                                                 >
                                                                     Pending
                                                                 </button>
-                                                            ) : req?.status === 'received' ? (
+                                                            ) : (req as any)?.status === 'received' ? (
                                                                 <div className="flex gap-1.5">
                                                                     <button
                                                                         onClick={() => acceptPartnerRequest(u)}
@@ -1989,10 +1991,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                     <div>
                                         <h3 className="text-xs font-bold uppercase tracking-wider text-[#6C757D] mb-3">Received Partner Requests</h3>
                                         <div className="space-y-3">
-                                            {Object.values(partnerRequests).filter(req => req.status === 'received').length === 0 ? (
+                                            {Object.values(partnerRequests).filter((req: any) => req.status === 'received').length === 0 ? (
                                                 <p className="text-xs font-medium text-[#6C757D] italic p-4 bg-neutral-50 rounded-2xl text-center border border-dashed border-neutral-200">No incoming requests</p>
                                             ) : (
-                                                Object.values(partnerRequests).filter(req => req.status === 'received').map(req => {
+                                                Object.values(partnerRequests).filter((req: any) => req.status === 'received').map((req: any) => {
                                                     const sender = allUsers.find(x => x.uid === req.senderId) || { display_name: req.senderName, photo_url: '', department_id: '', level: '', uid: req.senderId } as any;
                                                     return (
                                                         <div key={req.senderId} className="flex items-center gap-3 p-3.5 bg-neutral-50 border border-[#E9ECEF] rounded-2xl">
@@ -2026,10 +2028,10 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                     <div>
                                         <h3 className="text-xs font-bold uppercase tracking-wider text-[#6C757D] mb-3">Pending Sent Requests</h3>
                                         <div className="space-y-3">
-                                            {Object.values(partnerRequests).filter(req => req.status === 'sent').length === 0 ? (
+                                            {Object.values(partnerRequests).filter((req: any) => req.status === 'sent').length === 0 ? (
                                                 <p className="text-xs font-medium text-[#6C757D] italic p-4 bg-neutral-50 rounded-2xl text-center border border-dashed border-neutral-200">No pending sent requests</p>
                                             ) : (
-                                                Object.values(partnerRequests).filter(req => req.status === 'sent').map(req => {
+                                                Object.values(partnerRequests).filter((req: any) => req.status === 'sent').map((req: any) => {
                                                     const receiver = allUsers.find(x => x.uid === req.receiverId) || { display_name: 'Learner', photo_url: '', department_id: '', level: '', uid: req.receiverId } as any;
                                                     return (
                                                         <div key={req.receiverId} className="flex items-center gap-3 p-3.5 bg-neutral-50 border border-[#E9ECEF] rounded-2xl">

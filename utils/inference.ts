@@ -169,6 +169,16 @@ class RpmRateLimiter {
 const globalRateLimiter = new RpmRateLimiter(10);
 
 /**
+ * Safe helper to extract text from a Gemini API response.
+ * Handles both getter and method versions of .text property.
+ */
+export const getResponseText = (response: any): string => {
+  if (!response) return '';
+  const text = response.text;
+  return typeof text === 'function' ? text() : (text || '');
+};
+
+/**
  * Centralized client factory that instantiates or wraps the GoogleGenAI client.
  * Injects RPM rate limiting, context compaction, and context compression when a personal key is used.
  */
@@ -250,19 +260,6 @@ export const createAvelutAI = (
       generateContentStream: async (params: any) => {
         const processed = await prepareParams(params);
         return await rawClient.models.generateContentStream(processed);
-        const { model, ...rest } = await prepareParams(params);
-        const generativeModel = rawClient.getGenerativeModel({
-            model: model || appSettings.primary_gemini_model || 'gemini-2.0-flash'
-        });
-        return await generativeModel.generateContent(rest);
-      },
-      generateContentStream: async (params: any) => {
-        const { model, ...rest } = await prepareParams(params);
-        const generativeModel = rawClient.getGenerativeModel({
-            model: model || appSettings.primary_gemini_model || 'gemini-2.0-flash'
-        });
-        const result = await generativeModel.generateContentStream(rest);
-        return result.stream;
       }
     }
   };
