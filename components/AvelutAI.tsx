@@ -19,6 +19,7 @@ import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from
 import { ChatIcon } from './icons/ChatIcon';
 import { XIcon } from './icons/XIcon';
 import { TrashIcon } from './icons/TrashIcon';
+import { CopyIcon } from './icons/CopyIcon';
 
 type AssistantSender = 'user' | 'assistant';
 
@@ -792,6 +793,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
               onClick={() => setIsSidebarOpen(false)}
               className="rounded-full border border-neutral-800 p-2 text-slate-400 md:hidden"
               aria-label="Close assistant history"
+              title="Close assistant history"
             >
               <XIcon className="h-5 w-5" />
             </button>
@@ -850,6 +852,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     }}
                     className="p-2 mt-2 rounded-full text-red-400 hover:bg-red-950/30"
                     aria-label={`Delete ${item.title}`}
+                    title={`Delete ${item.title}`}
                   >
                     <TrashIcon className="h-4 w-4" />
                   </button>
@@ -877,6 +880,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                 onClick={() => setIsSidebarOpen(true)}
                 className="rounded-2xl border border-neutral-800 bg-[#0d1122] p-2 text-slate-300 md:hidden"
                 aria-label="Open assistant history"
+                title="Open assistant history"
               >
                 <MenuIcon className="h-5 w-5" />
               </button>
@@ -955,20 +959,41 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                         </div>
                       )}
                       {message.sender === 'assistant' ? (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                          components={{
-                            p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props} />,
-                            ul: ({ node, ...props }) => <ul className="mb-3 list-disc space-y-1 pl-5 text-slate-200" {...props} />,
-                            ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5 text-slate-200" {...props} />,
-                            li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
-                            strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-400" {...props} />,
-                            pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-[#050711] p-4 text-sm text-slate-100 border border-neutral-800/40" {...props} />,
-                          }}
-                        >
-                          {message.text}
-                        </ReactMarkdown>
+                        <>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                              p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props} />,
+                              ul: ({ node, ...props }) => <ul className="mb-3 list-disc space-y-1 pl-5 text-slate-200" {...props} />,
+                              ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5 text-slate-200" {...props} />,
+                              li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                              strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-400" {...props} />,
+                              pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-[#050711] p-4 text-sm text-slate-100 border border-neutral-800/40" {...props} />,
+                            }}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
+                          <div className="mt-4 flex justify-end border-t border-neutral-800/40 pt-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(message.text);
+                                  addToast('Copied to clipboard', 'success');
+                                } catch (err) {
+                                  addToast('Failed to copy', 'error');
+                                }
+                              }}
+                              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:bg-neutral-800 hover:text-emerald-400 active:scale-95"
+                              aria-label="Copy message"
+                              title="Copy message"
+                            >
+                              <CopyIcon className="h-3.5 w-3.5" />
+                              Copy
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
                       )}
@@ -1030,8 +1055,65 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                 </div>
               )}
 
-              {/* Stadium Input Box Bar */}
-              <div className="relative w-full min-h-[64px] bg-[#1e1f20] rounded-[32px] flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+              {/* STATES 1, 2, 3: Stadium Input Box Bar */}
+              {inputState !== 4 && (
+                <div className="relative w-full min-h-[64px] bg-[#1e1f20] rounded-[32px] flex items-center justify-between pl-4 pr-2 border border-neutral-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                  
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+                      disabled={isSending}
+                      className={`text-white hover:opacity-80 transition active:scale-95 shrink-0 flex items-center justify-center w-8 h-8 disabled:opacity-40 ${showAttachmentMenu ? 'bg-neutral-800 rounded-full' : ''}`}
+                      aria-label="Upload attachment"
+                      title="Upload attachment"
+                    >
+                      <PlusIcon />
+                    </button>
+
+                    {showAttachmentMenu && (
+                      <div className="absolute bottom-12 left-0 w-48 bg-[#1e1f20] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (attachmentInputRef.current) {
+                              attachmentInputRef.current.accept = "image/*";
+                              attachmentInputRef.current.click();
+                            }
+                            setShowAttachmentMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-400">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                          Upload Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (attachmentInputRef.current) {
+                              attachmentInputRef.current.accept = "application/pdf";
+                              attachmentInputRef.current.click();
+                            }
+                            setShowAttachmentMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-400">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                          </svg>
+                          Upload PDF
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                 <div className="relative">
                   <button
@@ -1055,7 +1137,57 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                           }
                           setShowAttachmentMenu(false);
                         }}
-                        className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        style={{ height: 'auto' }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-start gap-[4px] py-1 select-none overflow-hidden w-full h-full pl-1">
+                        {[...Array(15)].map((_, i) => {
+                          const animatedHeights = ["h-3", "h-2", "h-4", "h-3", "h-5", "h-3", "h-4", "h-2", "h-4", "h-5", "h-3", "h-2", "h-4", "h-3", "h-2"];
+                          return (
+                            <div 
+                              key={i} 
+                              style={{ animationDelay: `${i * 0.08}s` }}
+                              className={`w-[2.2px] ${animatedHeights[i]} bg-neutral-300 rounded-full opacity-90 animate-voice-bar-pulse`}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-[9px] shrink-0">
+                    
+                    {(inputState === 1 || inputState === 2) && (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(3)}
+                        className="text-white hover:opacity-85 transition active:scale-90 flex items-center justify-center w-9 h-9"
+                        aria-label="Start voice input"
+                        title="Start voice input"
+                      >
+                        <MicIcon />
+                      </button>
+                    )}
+
+                    {inputState === 3 && (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(1)}
+                        className="w-[42px] h-[42px] bg-[#27282b]/80 hover:bg-[#2e3034] rounded-full flex items-center justify-center text-white transition active:scale-90"
+                        aria-label="Stop voice input"
+                        title="Stop voice input"
+                      >
+                        <StopIcon />
+                      </button>
+                    )}
+
+                    {(inputState === 1 && !inputValue.trim() && attachments.length === 0 && !isSending) ? (
+                      <button 
+                        type="button"
+                        onClick={() => setInputState(4)}
+                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95"
+                        aria-label="Enter live mode"
+                        title="Enter live mode"
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-400">
                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -1066,14 +1198,11 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (attachmentInputRef.current) {
-                            attachmentInputRef.current.accept = "application/pdf";
-                            attachmentInputRef.current.click();
-                          }
-                          setShowAttachmentMenu(false);
-                        }}
-                        className="w-full text-left px-4 py-3 text-sm text-white hover:bg-neutral-800 transition-colors flex items-center gap-3"
+                        onClick={() => { void handleSend(); }}
+                        disabled={isSending || (!inputValue.trim() && attachments.length === 0)}
+                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Send message"
+                        title="Send message"
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-400">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1087,38 +1216,50 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                <input
-                  ref={attachmentInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={handleAttachmentChange}
-                />
+              {/* STATE 4: Fullscreen Live mode controls selection panel */}
+              {inputState === 4 && (
+                <div className="w-full flex items-center justify-between px-2 py-4 animate-fade-in select-none bg-[#101114] rounded-3xl border border-neutral-800/40 p-4 shadow-xl">
+                  <button
+                    type="button"
+                    className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md"
+                    aria-label="Vision search"
+                    title="Vision search"
+                  >
+                    <VisionIcon />
+                  </button>
 
-                <div className="flex-1 flex items-center px-2 min-w-0 max-h-[180px] overflow-y-auto py-2">
-                  <textarea
-                    ref={inputElementRef}
-                    value={inputValue}
-                    onChange={handleTextChange}
-                    placeholder="Ask AVELUT"
-                    rows={1}
-                    className="w-full bg-transparent text-[17px] text-white placeholder-[#98999a] outline-none border-none pr-2 disabled:cursor-not-allowed resize-none leading-relaxed"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    style={{ height: 'auto' }}
-                  />
-                </div>
+                  <button
+                    type="button"
+                    className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md"
+                    aria-label="Share screen or upload"
+                    title="Share screen or upload"
+                  >
+                    <ShareUploadIcon />
+                  </button>
+
+                  <div className="relative w-[114px] h-[64px] bg-gradient-to-b from-[#08080a] to-[#0d0f14] rounded-full overflow-hidden border border-neutral-800/70 flex items-center justify-center shadow-lg">
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[86px] h-[18px] bg-[#38bdf8] rounded-full blur-[8px] opacity-80 animate-ambient-pulse" />
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[82px] h-[4px] bg-[#60a5fa] rounded-full opacity-90" />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-[#2a2b2e] rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md"
+                    aria-label="Toggle live microphone"
+                    title="Toggle live microphone"
+                  >
+                    <MicIcon />
+                  </button>
 
                 <div className="flex items-center gap-[9px] shrink-0">
                   <button 
                     type="button"
-                    onClick={() => { void handleSend(); }}
-                    disabled={isSending || (!inputValue.trim() && attachments.length === 0)}
-                    className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setInputState(1)}
+                    className="w-[52px] h-[52px] bg-[#1e1f20] hover:bg-red-950/20 rounded-full flex items-center justify-center text-white transition active:scale-90 shadow-md"
+                    aria-label="Exit live mode"
+                    title="Exit live mode"
                   >
                     <UpArrowIcon />
                   </button>
