@@ -693,9 +693,9 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     }
   };
 
-  const handleSend = async () => {
-    const prompt = inputValue.trim();
-    const filesToSend = [...attachments];
+  const handleSend = async (messageText?: string) => {
+    const prompt = (messageText || inputValue).trim();
+    const filesToSend = messageText ? [] : [...attachments];
     if ((!prompt && filesToSend.length === 0) || isSending) return;
 
     // Check message limits
@@ -877,6 +877,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
       let responseText = '';
       const aiResult = await attemptApiCall(async () => {
+        setStreamingBotText('');
         // Optimize payload: preserve system instructions but only send last 5 messages for context
         const contextMessages = nextMessages.slice(-5);
 
@@ -912,11 +913,10 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           for await (const chunk of responseStream) {
             const chunkText = chunk.text || '';
             responseText += chunkText;
-            setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: responseText } : m));
+            setStreamingBotText(responseText);
           }
         } catch (streamError) {
           console.error('Error during response streaming:', streamError);
-          setIsSending(false);
           throw streamError;
         }
 
@@ -928,9 +928,16 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
       if (!aiResult.success) {
         console.error('Gemini assistant error:', aiResult.message);
-        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: 'Sorry, I ran into a problem generating that reply. Please try again.' } : m));
         setStatusText('Unable to respond right now.');
-        setIsSending(false); // Safeguard: immediately un-freeze the UI out of "Thinking..." state
+        setMessages(prev => [
+            ...prev,
+            {
+              id: createMessageId(),
+              sender: 'assistant',
+              text: 'Sorry, I ran into a problem generating that reply. Please try again.',
+              timestamp: Date.now(),
+            },
+          ]);
         return;
       }
 
@@ -969,6 +976,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       setStatusText('Unable to respond right now.');
     } finally {
       setIsSending(false);
+      setStreamingBotText(null);
       setUploadProgress(null);
     }
   };
@@ -1442,7 +1450,16 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
               </div>
             ) : (
               <div className="mx-auto flex max-w-4xl flex-col gap-4">
-                {messages.map(message => (
+                {messages.map((message, idx) => {
+                  // If this is the last bot message and it's redundant with streaming, hide it temporarily
+                  if (streamingBotText !== null &&
+                      message.sender === 'assistant' &&
+                      idx === messages.length - 1 &&
+                      message.text.length >= (streamingBotText?.length || 0)) {
+                    return null;
+                  }
+
+                  return (
                   <div
                     key={message.id}
                     className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -1501,9 +1518,30 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                       )}
                     </div>
                   </div>
-                ))}
+                ); })}
 
-                {isSending && !messages.find(m => m.id.startsWith('models/gemini') || (m.sender === 'assistant' && m.text.length > 0 && m.timestamp && m.timestamp > Date.now() - 60000)) && (
+                {streamingBotText !== null && (
+                  <div className="flex justify-start">
+                    <div className="w-[90%] max-w-[90%] rounded-3xl border border-neutral-800/60 bg-[#0e1227] text-slate-200 px-4 py-3 shadow-sm">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props} />,
+                          ul: ({ node, ...props }) => <ul className="mb-3 list-disc space-y-1 pl-5 text-slate-200" {...props} />,
+                          ol: ({ node, ...props }) => <ol className="mb-3 list-decimal space-y-1 pl-5 text-slate-200" {...props} />,
+                          li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                          strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-400" {...props} />,
+                          pre: ({ node, ...props }) => <pre className="mb-3 overflow-x-auto rounded-2xl bg-[#050711] p-4 text-sm text-slate-100 border border-neutral-800/40" {...props} />,
+                        }}
+                      >
+                        {streamingBotText}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+
+                {isSending && streamingBotText === null && (
                   <div className="flex justify-start">
                     <div className="rounded-3xl border border-neutral-800 bg-[#0e1227] px-4 py-3 text-sm text-slate-400 shadow-sm">
                       {uploadProgress ? (
@@ -1657,7 +1695,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                       </button>
                     )}
 
-                    {inputState === 1 && !inputValue.trim() && attachments.length === 0 ? (
+                    {(inputState === 1 && !inputValue.trim() && attachments.length === 0 && !isSending) ? (
                       <button 
                         type="button"
                         onClick={() => setInputState(4)}
@@ -1670,7 +1708,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                         type="button"
                         onClick={() => { void handleSend(); }}
                         disabled={isSending || (!inputValue.trim() && attachments.length === 0)}
-                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50"
+                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <UpArrowIcon />
                       </button>
