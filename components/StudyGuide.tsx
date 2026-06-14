@@ -1406,9 +1406,14 @@ Student: "${tempInput}"
                                         {suggestions.map((suggestion, sIdx) => (
                                             <button
                                                 key={sIdx}
-                                                onClick={() => handleSend(suggestion)}
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    void handleSend(suggestion);
+                                                }}
                                                 disabled={isThinking || isIllustrating}
-                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer select-none"
+                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer select-none disabled:opacity-50"
                                             >
                                                 {suggestion}
                                             </button>
