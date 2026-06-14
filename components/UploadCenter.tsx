@@ -601,11 +601,12 @@ FORMAT:
             },
           });
 
-          if (!response.text) {
+          const responseText = typeof response.text === 'function' ? response.text() : (response.text || '');
+          if (!responseText) {
             throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
           }
 
-          const responseData = JSON.parse(response.text);
+          const responseData = JSON.parse(responseText);
           const syllabusData = Array.isArray(responseData?.syllabus)
             ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
             : [];

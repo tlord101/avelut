@@ -265,10 +265,11 @@ const TextChat: React.FC<{
                     model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: currentInput }] }]
                 });
-                if (!result.text) {
+                const resultText = typeof result.text === 'function' ? result.text() : (result.text || '');
+                if (!resultText) {
                     throw new Error('Gemini returned an empty response.');
                 }
-                return result.text;
+                return resultText;
             });
 
             if (!aiResult.success) {

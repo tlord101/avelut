@@ -67,7 +67,8 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
           model: 'gemini-3.1-flash-lite',
           contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
         });
-        if (!response.text) {
+        const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+        if (!responseText) {
           throw new Error('Key validation failed.');
         }
 

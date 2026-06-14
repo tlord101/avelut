@@ -55,15 +55,16 @@ export async function POST(req: Request) {
     const index = pc.index(process.env.PINECONE_INDEX_NAME || 'avelut-textbooks');
     const records = [];
 
-    const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
-
     for (let i = 0; i < chunks.length; i++) {
       const textChunk = chunks[i];
 
       // Request vector coordinates from Google
-      const embeddingResponse = await model.embedContent(textChunk);
+      const embeddingResponse = await ai.models.embedContent({
+        model: 'text-embedding-004',
+        contents: [{ role: 'user', parts: [{ text: textChunk }] }]
+      });
 
-      const vectorValues = embeddingResponse.embedding?.values;
+      const vectorValues = embeddingResponse.embeddings?.[0]?.values;
       if (!vectorValues) continue;
 
       records.push({

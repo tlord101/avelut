@@ -375,8 +375,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        if (!response.text) throw new Error('AI returned an empty response while generating flashcards.');
-        const responseData = JSON.parse(response.text);
+        const responseText = typeof response.text === 'function' ? response.text() : (response.text || '');
+        if (!responseText) throw new Error('AI returned an empty response while generating flashcards.');
+        const responseData = JSON.parse(responseText);
         if (!(responseData.flashcards && responseData.flashcards.length > 0)) throw new Error("Failed to generate valid flashcards from AI response.");
         setFlashcards(responseData.flashcards);
         setFlashcardIndex(0);
@@ -445,10 +446,11 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        if (!response.text) {
+        const responseText = typeof response.text === 'function' ? response.text() : (response.text || '');
+        if (!responseText) {
           throw new Error('AI returned an empty response while generating exam questions.');
         }
-        const responseData = JSON.parse(response.text);
+        const responseData = JSON.parse(responseText);
         if (!(responseData.questions && responseData.questions.length > 0)) {
           throw new Error("Failed to generate valid questions from AI response.");
         }

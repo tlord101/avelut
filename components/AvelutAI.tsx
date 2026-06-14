@@ -482,7 +482,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           }],
         }],
       });
-      return normalizeTitle((result.text || '').split('\n')[0] || fallbackTitle);
+      const generatedText = typeof result.text === 'function' ? result.text() : (result.text || '');
+      return normalizeTitle(generatedText.split('\n')[0] || fallbackTitle);
     } catch (error) {
       console.error('Failed to generate chat title:', error);
       return fallbackTitle;
