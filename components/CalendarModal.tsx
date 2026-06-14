@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, get, set } from 'firebase/database';
-import { createAvelutAI, getResponseText } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { Type } from '@google/genai';
 import { useToast } from '../hooks/useToast';
 import { getFeatureModel } from '../utils/usage';
@@ -173,7 +173,8 @@ Return valid JSON as an object with key "sessions" which is an array of objects.
                     }
                 });
 
-                const text = getResponseText(response);
+                const text = typeof response.text === 'function' ? response.text() : response.text;
+                const text = response.response.text();
                 if (!text) throw new Error('AI returned an empty timetable.');
                 return JSON.parse(text);
             });

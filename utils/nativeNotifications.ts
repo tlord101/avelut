@@ -146,7 +146,7 @@ export const initNativeNotifications = async (
 
     // Register Notification Categories for Action Buttons
     try {
-        await (PushNotifications as any).registerActionTypes({
+        await PushNotifications.registerActionTypes({
             types: [
                 {
                     id: 'MESSENGER_ACTION',

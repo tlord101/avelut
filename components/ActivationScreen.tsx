@@ -63,11 +63,11 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
       setIsActivating(true);
       try {
         const testClient = new GoogleGenAI({ apiKey: enteredKey.trim() });
-        const response = await testClient.models.generateContent({
-          model: 'gemini-1.5-flash',
+        const response = await testClient.getGenerativeModel({ model: 'gemini-1.5-flash' }).generateContent({
           contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
         });
-        const text = typeof response.text === 'function' ? (response as any).text() : response.text;
+        const text = typeof response.text === 'function' ? response.text() : response.text;
+        const text = response.response.text();
         if (!text) {
           throw new Error('Key validation failed.');
         }

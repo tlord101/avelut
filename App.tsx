@@ -753,8 +753,8 @@ const App: React.FC = () => {
             .filter(topicId => userProgress[topicId]?.is_complete && topicIdsForLevel.has(topicId))
             .length;
         const topicDurations = Object.entries(userProgress)
-            .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof (progress as any).study_duration_seconds === 'number' && (progress as any).study_duration_seconds > 0)
-            .map(([, progress]) => (progress as any).study_duration_seconds || 0);
+            .filter(([topicId, progress]) => topicIdsForLevel.has(topicId) && typeof progress.study_duration_seconds === 'number' && progress.study_duration_seconds > 0)
+            .map(([, progress]) => progress.study_duration_seconds || 0);
         const totalStudySeconds = topicDurations.reduce((acc: number, seconds: number) => acc + seconds, 0);
         const averageTopicStudySeconds = topicDurations.length > 0 ? Math.round(totalStudySeconds / topicDurations.length) : 0;
 
@@ -763,7 +763,7 @@ const App: React.FC = () => {
             return topicIds.length > 0 && topicIds.every(topicId => userProgress[topicId]?.is_complete);
         }).length;
         const courseDurations = coursesForLevel
-            .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + ((userProgress[topic.topic_id] as any)?.study_duration_seconds || 0), 0))
+            .map((course: Course) => (course.topics || []).reduce((acc: number, topic) => acc + (userProgress[topic.topic_id]?.study_duration_seconds || 0), 0))
             .filter((seconds: number) => seconds > 0);
         const averageCourseStudySeconds = courseDurations.length > 0 ? Math.round(courseDurations.reduce((acc: number, seconds: number) => acc + seconds, 0) / courseDurations.length) : 0;
 

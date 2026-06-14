@@ -1,6 +1,6 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { GoogleGenAI } from '@google/genai';
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 
 // Use environment variables directly in the route
 const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY || '' });
@@ -45,8 +45,7 @@ export async function POST(req: Request) {
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
 
     // 2. Extract plain text
-    const parser = new PDFParse({ data: pdfBuffer });
-    const parsedPdf = await parser.getText();
+    const parsedPdf = await pdfParse(pdfBuffer);
     const rawText = parsedPdf.text;
     console.log(`Extracted ${rawText.length} characters from PDF`);
 
@@ -59,6 +58,10 @@ export async function POST(req: Request) {
     const index = pc.index(indexName);
     const records = [];
 
+    // Use models.embedContent for consistency with other SDK usage in the project if possible,
+    // but we'll stick to getGenerativeModel as per memory.
+    const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
+
     for (let i = 0; i < chunks.length; i++) {
       const textChunk = chunks[i];
 
@@ -69,7 +72,9 @@ export async function POST(req: Request) {
       });
 
       const vectorValues = embeddingResponse.embeddings?.[0]?.values;
+      const embeddingResponse = await model.embedContent(textChunk);
 
+      const vectorValues = embeddingResponse.embedding?.values;
       if (!vectorValues) continue;
 
       records.push({
@@ -81,13 +86,14 @@ export async function POST(req: Request) {
           level: level || "",
           semester: semester || "",
           chunk_index: i,
-          text: textChunk
+          text: textChunk // Corrected key to match search
+          text_content: textChunk
         }
       });
 
       // Upsert in safe batch limits of 100 entries
       if (records.length === 100 || i === chunks.length - 1) {
-        await index.upsert(records as any);
+        await index.upsert(records);
         records.length = 0; // Clear array buffer array
       }
     }

@@ -3,7 +3,6 @@ import { db, storage, auth } from '../firebase';
 import { ref as dbRef, set, push, update, get, remove, query, limitToLast } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleGenAI, Type } from '@google/genai';
-import type { UsageSettings } from '../types';
 import { useToast } from '../hooks/useToast';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useGoogleDrivePicker } from '../hooks/useGoogleDrivePicker';
@@ -1021,7 +1020,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 }
             });
 
-            const responseText = (response as any).text || '';
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
             if (!responseText) throw new Error('AI returned an empty suggestion.');
             const data = JSON.parse(responseText);
             setAnnouncementTitle((data.title || '').toString());
@@ -1148,7 +1147,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 model: modelToTest,
                 contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
             });
-            const responseText = (response as any).text || '';
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
             const preview = (responseText || '').trim();
             if (!preview) {
                 throw new Error('The test returned an empty response.');
@@ -1607,7 +1606,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 }
             });
 
-            const responseText = (response as any).text || '';
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
             if (!responseText) {
                 throw new Error("AI returned an empty response while extracting questions.");
             }
@@ -1746,7 +1745,7 @@ FORMAT:
                     }
                 });
 
-                const responseText = (response as any).text || '';
+                const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
                 if (!responseText) {
                     throw new Error("AI returned an empty response while extracting courses.");
                 }
@@ -1964,7 +1963,7 @@ FORMAT:
                     }
                 });
 
-                const responseText = (response as any).text || '';
+                const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
                 if (!responseText) {
                     throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
                 }

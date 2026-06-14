@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
-import { createAvelutAI, getResponseText } from '../utils/inference';
+import { createAvelutAI } from '../utils/inference';
 import { awardDailyStreak } from '../utils/streaks';
 import { Type } from '@google/genai';
 import { db, storage } from '../firebase';
@@ -573,7 +573,8 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                         }
                     }
                 });
-                const text = getResponseText(response) || '[]';
+                const text = (typeof response.text === 'function' ? response.text() : response.text) || '[]';
+                const text = response.response.text() || '[]';
                 return JSON.parse(text);
             });
 
@@ -897,7 +898,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 });
 
                 for await (const chunk of responseStream) {
-                    const chunkText = getResponseText(chunk);
+                    const chunkText = chunk.text();
                     responseText += chunkText;
                     setStreamingBotText(responseText);
                 }
@@ -1166,7 +1167,7 @@ Student: "${tempInput}"
                 });
 
                 for await (const chunk of responseStream) {
-                    const chunkText = getResponseText(chunk) || '';
+                    const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
                     responseText += chunkText;
                     setStreamingBotText(responseText);
                 }
