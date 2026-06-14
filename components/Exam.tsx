@@ -351,7 +351,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       const safeTopics = completedTopicNames.map((topicName, index) => sanitizePromptInput(topicName) || `Topic ${index + 1}`);
 
       const result = await attemptApiCall(async () => {
-        const response = await ai.models.generateContent({
+        const aiResponse = await ai.models.generateContent({
           model: getFeatureModel('flashcard_generation', appSettings),
           contents: [{ role: 'user', parts: [{ text: `Generate 10 flashcards for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on these topics: ${safeTopics.join(', ')}. Provide a front (concept/question) and a back (definition/answer).` }] }],
           config: {
@@ -375,8 +375,9 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        if (!response.text) throw new Error('AI returned an empty response while generating flashcards.');
-        const responseData = JSON.parse(response.text);
+        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
+        if (!text) throw new Error('AI returned an empty response while generating flashcards.');
+        const responseData = JSON.parse(text);
         if (!(responseData.flashcards && responseData.flashcards.length > 0)) throw new Error("Failed to generate valid flashcards from AI response.");
         setFlashcards(responseData.flashcards);
         setFlashcardIndex(0);
@@ -419,7 +420,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       });
 
       const result = await attemptApiCall(async () => {
-        const response = await ai.models.generateContent({
+        const aiResponse = await ai.models.generateContent({
           model: geminiModel,
           contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
           config: {
@@ -445,10 +446,11 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           }
         });
 
-        if (!response.text) {
+        const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
+        if (!text) {
           throw new Error('AI returned an empty response while generating exam questions.');
         }
-        const responseData = JSON.parse(response.text);
+        const responseData = JSON.parse(text);
         if (!(responseData.questions && responseData.questions.length > 0)) {
           throw new Error("Failed to generate valid questions from AI response.");
         }

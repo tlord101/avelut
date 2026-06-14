@@ -245,30 +245,11 @@ export const createAvelutAI = (
     models: {
       generateContent: async (params: any) => {
         const processed = await prepareParams(params);
-          const result = await rawClient.models.generateContent(processed);
-          // Standardize response to have .text() method if it only has .text property
-          if (result && typeof result.text === 'string' && typeof result.text !== 'function') {
-            const originalText = result.text;
-            (result as any).text = () => originalText;
-          }
-          return result;
+        return await rawClient.models.generateContent(processed);
       },
       generateContentStream: async (params: any) => {
         const processed = await prepareParams(params);
-          const responseStream = await rawClient.models.generateContentStream(processed);
-
-          // Wrap the async generator to standardize chunks
-          async function* wrappedStream() {
-            for await (const chunk of responseStream) {
-              if (chunk && typeof chunk.text === 'string' && typeof chunk.text !== 'function') {
-                const originalText = chunk.text;
-                (chunk as any).text = () => originalText;
-              }
-              yield chunk;
-            }
-          }
-
-          return wrappedStream();
+        return await rawClient.models.generateContentStream(processed);
       }
     }
   };

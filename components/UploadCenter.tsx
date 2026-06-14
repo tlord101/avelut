@@ -565,7 +565,7 @@ FORMAT:
 }`;
 
         const aiResult = await attemptApiCall(async () => {
-          const response = await ai.models.generateContent({
+          const aiResponse = await ai.models.generateContent({
             model: geminiModel,
             contents: [
               {
@@ -601,11 +601,12 @@ FORMAT:
             },
           });
 
-          if (!response.text) {
+          const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
+          if (!text) {
             throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
           }
 
-          const responseData = JSON.parse(response.text);
+          const responseData = JSON.parse(text);
           const syllabusData = Array.isArray(responseData?.syllabus)
             ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
             : [];

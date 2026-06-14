@@ -47,23 +47,27 @@ export async function POST(req: Request) {
     // 2. Extract plain text
     const parsedPdf = await pdfParse(pdfBuffer);
     const rawText = parsedPdf.text;
+    console.log(`Extracted ${rawText.length} characters from PDF`);
 
     // 3. Process Semantic Chunking
     const chunks = splitIntoSemanticParagraphs(rawText);
+    console.log(`Split into ${chunks.length} chunks`);
 
     // 4. Generate Vector Vectors via text-embedding-004
-    const index = pc.index(process.env.PINECONE_INDEX_NAME || 'avelut-textbooks');
+    const indexName = process.env.PINECONE_INDEX_NAME || 'avelut-textbooks';
+    const index = pc.index(indexName);
     const records = [];
-
-    const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
 
     for (let i = 0; i < chunks.length; i++) {
       const textChunk = chunks[i];
 
       // Request vector coordinates from Google
-      const embeddingResponse = await model.embedContent(textChunk);
+      const embeddingResponse = await ai.models.embedContent({
+        model: 'text-embedding-004',
+        contents: [{ parts: [{ text: textChunk }] }]
+      });
 
-      const vectorValues = embeddingResponse.embedding?.values;
+      const vectorValues = embeddingResponse.embeddings?.[0]?.values;
       if (!vectorValues) continue;
 
       records.push({
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
           level: level || "",
           semester: semester || "",
           chunk_index: i,
-          text_content: textChunk
+          text: textChunk // Corrected key to match search
         }
       });
 
