@@ -244,12 +244,19 @@ export const createAvelutAI = (
   return {
     models: {
       generateContent: async (params: any) => {
-        const processed = await prepareParams(params);
-        return await rawClient.models.generateContent(processed);
+        const { model, ...rest } = await prepareParams(params);
+        const generativeModel = rawClient.getGenerativeModel({
+            model: model || appSettings.primary_gemini_model || 'gemini-2.0-flash'
+        });
+        return await generativeModel.generateContent(rest);
       },
       generateContentStream: async (params: any) => {
-        const processed = await prepareParams(params);
-        return await rawClient.models.generateContentStream(processed);
+        const { model, ...rest } = await prepareParams(params);
+        const generativeModel = rawClient.getGenerativeModel({
+            model: model || appSettings.primary_gemini_model || 'gemini-2.0-flash'
+        });
+        const result = await generativeModel.generateContentStream(rest);
+        return result.stream;
       }
     }
   };

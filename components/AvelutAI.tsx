@@ -482,7 +482,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           }],
         }],
       });
-      return normalizeTitle((result.text || '').split('\n')[0] || fallbackTitle);
+      const titleText = result.response.text();
+      return normalizeTitle((titleText || '').split('\n')[0] || fallbackTitle);
     } catch (error) {
       console.error('Failed to generate chat title:', error);
       return fallbackTitle;
@@ -677,6 +678,25 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         // Optimize payload: preserve system instructions but only send last 5 messages for context
         const contextMessages = nextMessages.slice(-5);
 
+        // 💡 RAG: Retrieve relevant textbook context from Pinecone
+        let retrievedContext = "";
+        try {
+          const searchResponse = await fetch('/api/textbooks/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: prompt, limit: 3 })
+          });
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            if (searchData.success && searchData.results?.length > 0) {
+              retrievedContext = "\n\nRELEVANT TEXTBOOK CONTEXT:\n" +
+                searchData.results.map((r: any) => `[From ${r.course_name}]: ${r.text}`).join('\n\n');
+            }
+          }
+        } catch (searchErr) {
+          console.warn("RAG retrieval failed:", searchErr);
+        }
+
         const responseStream = await ai.models.generateContentStream({
           model: geminiModel || 'gemini-2.0-flash',
           contents: [
@@ -694,6 +714,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     'When math is involved, use Markdown and LaTeX formatting with inline $...$ and display $$...$$ equations.',
                     'If the question needs calculations, show the steps and final formula neatly.',
                     courseContext ? `COURSE CONTEXT:\n${courseContext}` : '',
+                    retrievedContext,
                     storedAttachments?.length ? `ATTACHMENTS: ${storedAttachments.map(i => i.name).join(', ')}` : '',
                     '',
                     `Conversation so far:\n${contextMessages.map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n\n')}`,
@@ -707,7 +728,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
         try {
           for await (const chunk of responseStream) {
-            const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
+            const chunkText = chunk.text();
             responseText += chunkText;
             setStreamingBotText(responseText);
           }

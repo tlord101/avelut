@@ -401,7 +401,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 [Final Answer]`;
 
                 if (!aiClient) throw new Error('AI client not available');
-                const result = await aiClient.models.generateContent({
+                const aiResult = await aiClient.models.generateContent({
                     model: geminiModel || 'gemini-2.0-flash',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
@@ -409,7 +409,9 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                const finalResult = aiResult.response.text();
+                if (!finalResult) throw new Error("AI returned an empty analysis.");
+
                 setAnalysisResult(finalResult);
 
                 // Deduct credits as soon as we have a result
@@ -417,15 +419,16 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 
                 // Allow UI to transition immediately after we have the data
                 setCameraState('showingTutorial');
+                return finalResult;
             });
 
             if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Analysis failed:", err);
-            setError("Failed to connect to the solver.");
+            setError(err.message || "Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
@@ -458,7 +461,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 const promptText = `${basePrompt}${customInstruction}`;
         
                 if (!aiClient) throw new Error('AI client not available');
-                const result = await aiClient.models.generateContent({
+                const aiResult = await aiClient.models.generateContent({
                     model: geminiModel || 'gemini-2.0-flash',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
@@ -466,19 +469,22 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                const finalResult = aiResult.response.text();
+                if (!finalResult) throw new Error("AI returned an empty response.");
+
                 setAnalysisResult(finalResult);
                 await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
                 setCameraState('showingTutorial');
+                return finalResult;
             });
 
             if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Quick answer failed:", err);
-            setError("Failed to connect to the solver.");
+            setError(err.message || "Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
@@ -511,7 +517,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 const promptText = `${basePrompt}${customInstruction}`;
         
                 if (!aiClient) throw new Error('AI client not available');
-                const result = await aiClient.models.generateContent({
+                const aiResult = await aiClient.models.generateContent({
                     model: geminiModel || 'gemini-2.0-flash',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
@@ -519,19 +525,22 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                const finalResult = aiResult.response.text();
+                if (!finalResult) throw new Error("AI returned an empty solution.");
+
                 setAnalysisResult(finalResult);
                 await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
                 setCameraState('showingTutorial');
+                return finalResult;
             });
 
             if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Solution failed:", err);
-            setError("Failed to connect to the solver.");
+            setError(err.message || "Failed to connect to the solver.");
             setCameraState('preview');
         }
     }, [scannedImage, attemptApiCall, customPrompt, aiClient, geminiModel, userProfile, appSettings, addToast]);
