@@ -707,7 +707,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
         try {
           for await (const chunk of responseStream) {
-            const chunkText = chunk.text || '';
+            const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
             responseText += chunkText;
             setStreamingBotText(responseText);
           }
@@ -719,10 +719,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         if (!responseText) {
           throw new Error('Gemini returned an empty response.');
         }
-
-        // Release thinking state early for better UX
-        setIsSending(false);
-        setStreamingBotText(null);
 
         return responseText.trim();
       });
@@ -754,6 +750,11 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         sender: 'assistant',
         timestamp: serverTimestamp(),
       });
+
+      // Clear streaming state ONLY after the Firebase push is initiated
+      // This reduces the "flicker" where the response disappears before syncing back.
+      setStreamingBotText(null);
+      setIsSending(false);
 
       const updates: { title?: string; last_updated_at: number } = {
         last_updated_at: 0,
