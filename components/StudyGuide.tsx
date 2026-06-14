@@ -1114,6 +1114,25 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setStreamingBotText('');
             const result = await attemptApiCall(async () => {
                 const history = updatedMessages.map(m => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text || ''}`).join('\n');
+
+                // 💡 RAG: Retrieve relevant textbook context from Pinecone
+                let retrievedContext = "";
+                try {
+                  const searchResponse = await fetch('/api/textbooks/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: tempInput, courseKey: topic.course_id || topic.courseId, limit: 3 })
+                  });
+                  if (searchResponse.ok) {
+                    const searchData = await searchResponse.json();
+                    if (searchData.success && searchData.results?.length > 0) {
+                      retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" +
+                        searchData.results.map((r: any) => r.text).join('\n\n');
+                    }
+                  }
+                } catch (searchErr) {
+                  console.warn("RAG retrieval failed:", searchErr);
+                }
                 
                 const prompt = `
 Context:
@@ -1125,6 +1144,7 @@ ${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 
 Conversation History:
 ${history}
+${retrievedContext}
 
 Task:
 Continue teaching this topic based on the student's latest message. If an image is provided, analyze it in your response.

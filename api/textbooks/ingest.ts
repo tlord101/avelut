@@ -47,14 +47,19 @@ export async function POST(req: Request) {
     // 2. Extract plain text
     const parsedPdf = await pdfParse(pdfBuffer);
     const rawText = parsedPdf.text;
+    console.log(`Extracted ${rawText.length} characters from PDF`);
 
     // 3. Process Semantic Chunking
     const chunks = splitIntoSemanticParagraphs(rawText);
+    console.log(`Split into ${chunks.length} chunks`);
 
     // 4. Generate Vector Vectors via text-embedding-004
-    const index = pc.index(process.env.PINECONE_INDEX_NAME || 'avelut-textbooks');
+    const indexName = process.env.PINECONE_INDEX_NAME || 'avelut-textbooks';
+    const index = pc.index(indexName);
     const records = [];
 
+    // Use models.embedContent for consistency with other SDK usage in the project if possible,
+    // but we'll stick to getGenerativeModel as per memory.
     const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
 
     for (let i = 0; i < chunks.length; i++) {
