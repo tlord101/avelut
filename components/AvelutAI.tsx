@@ -762,24 +762,26 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
       const finalResponseText = aiResult.data || 'I could not generate a response right now. Please try again.';
       
       // Deduct credits
-      await deductAICredits(userProfile.uid, featureCost, 'AI Assistant Chat', appSettings);
+      deductAICredits(userProfile.uid, featureCost, 'AI Assistant Chat', appSettings).catch(console.error);
 
-      await push(messagesRef, {
+      push(messagesRef, {
         text: finalResponseText,
         sender: 'assistant',
         timestamp: serverTimestamp(),
-      });
+      }).catch(console.error);
 
-
-      const updates: { title?: string; last_updated_at: number } = {
-        last_updated_at: 0,
-      };
       if (shouldGenerateTitle) {
-        updates.title = await generateChatTitle(userText, finalResponseText);
+        generateChatTitle(userText, finalResponseText).then(title => {
+          update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), {
+            title,
+            last_updated_at: Date.now()
+          }).catch(console.error);
+        });
+      } else {
+        update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), {
+          last_updated_at: Date.now()
+        }).catch(console.error);
       }
-
-      updates.last_updated_at = Date.now();
-      await update(dbRef(db, `chat_conversations/${userProfile.uid}/${conversationId}`), updates);
 
       setStatusText('Response ready.');
     } catch (error) {

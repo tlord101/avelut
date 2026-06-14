@@ -1089,7 +1089,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             if (imageUrl) {
                 userMessageData.image_url = imageUrl;
             }
-            await set(newUserMsgRef, userMessageData);
+            set(newUserMsgRef, userMessageData).catch(console.error);
             
             // Update the optimistic message with real data from database
             setMessages(prev => prev.map(m => 
@@ -1180,10 +1180,10 @@ Student: "${tempInput}"
                     text: botResponseText,
                     timestamp: serverTimestamp(),
                 };
-                await set(newBotMsgRef, botMessageData);
+                set(newBotMsgRef, botMessageData).catch(console.error);
 
                 const featureCost = getFeatureCost('study_guide_lesson', appSettings);
-                await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings);
+                deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings).catch(console.error);
             });
 
             if (!result.success) {
@@ -1248,7 +1248,7 @@ Student: "${tempInput}"
                         image_url: publicUrl,
                         timestamp: serverTimestamp(),
                     };
-                    await set(imageMsgRef, imageMessageData);
+                    set(imageMsgRef, imageMessageData).catch(console.error);
                 }
             });
 

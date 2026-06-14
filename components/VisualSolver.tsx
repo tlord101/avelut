@@ -429,7 +429,7 @@ ${retrievedContext}
                 setAnalysisResult(finalResult);
 
                 // Deduct credits as soon as we have a result
-                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings);
+                deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings).catch(console.error);
 
                 // Allow UI to transition immediately after we have the data
                 setCameraState('showingTutorial');
@@ -487,7 +487,7 @@ ${retrievedContext}
                 if (!finalResult) throw new Error("AI returned an empty response.");
 
                 setAnalysisResult(finalResult);
-                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
+                deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings).catch(console.error);
                 setCameraState('showingTutorial');
                 return finalResult;
             });
@@ -543,7 +543,7 @@ ${retrievedContext}
                 if (!finalResult) throw new Error("AI returned an empty solution.");
 
                 setAnalysisResult(finalResult);
-                await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
+                deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings).catch(console.error);
                 setCameraState('showingTutorial');
                 return finalResult;
             });

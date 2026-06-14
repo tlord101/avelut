@@ -289,7 +289,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
           const saveResults = async () => {
               try {
                   const examHistoryRef = push(dbRef(db, `exam_history/${userProfile.uid}`));
-                  await set(examHistoryRef, examResult);
+                  set(examHistoryRef, examResult).catch(console.error);
 
                   const notificationRef = push(dbRef(db, `notifications/${userProfile.uid}`));
                   const notificationData = {
@@ -299,7 +299,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                       is_read: false,
                       timestamp: serverTimestamp(),
                   };
-                  await set(notificationRef, notificationData);
+                  set(notificationRef, notificationData).catch(console.error);
               } catch (error) {
                   console.error("Failed to save exam results:", error);
                   addToast("Could not save your exam results.", 'error');
@@ -393,7 +393,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         setFlashcards(responseData.flashcards);
         setFlashcardIndex(0);
         setIsFlipped(false);
-        await deductAICredits(userProfile.uid, cost, 'Flashcard Generation', appSettings);
+        deductAICredits(userProfile.uid, cost, 'Flashcard Generation', appSettings).catch(console.error);
         setExamState('flashcards');
       });
 
@@ -479,7 +479,7 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         const newQuestions = responseData.questions;
 
         // Deduct credits
-        await deductAICredits(userProfile.uid, cost, 'Mock Exam Generation', appSettings);
+        deductAICredits(userProfile.uid, cost, 'Mock Exam Generation', appSettings).catch(console.error);
 
         setQuestions(newQuestions);
         setTimeLeft(newQuestions.length * TIME_PER_QUESTION_SECONDS);
