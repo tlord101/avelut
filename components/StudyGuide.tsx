@@ -574,6 +574,7 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
                     }
                 });
                 const text = (typeof response.text === 'function' ? response.text() : response.text) || '[]';
+                const text = response.response.text() || '[]';
                 return JSON.parse(text);
             });
 
@@ -897,7 +898,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 });
 
                 for await (const chunk of responseStream) {
-                    const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
+                    const chunkText = chunk.text();
                     responseText += chunkText;
                     setStreamingBotText(responseText);
                 }

@@ -58,6 +58,10 @@ export async function POST(req: Request) {
     const index = pc.index(indexName);
     const records = [];
 
+    // Use models.embedContent for consistency with other SDK usage in the project if possible,
+    // but we'll stick to getGenerativeModel as per memory.
+    const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
+
     for (let i = 0; i < chunks.length; i++) {
       const textChunk = chunks[i];
 
@@ -68,6 +72,9 @@ export async function POST(req: Request) {
       });
 
       const vectorValues = embeddingResponse.embeddings?.[0]?.values;
+      const embeddingResponse = await model.embedContent(textChunk);
+
+      const vectorValues = embeddingResponse.embedding?.values;
       if (!vectorValues) continue;
 
       records.push({
@@ -80,6 +87,7 @@ export async function POST(req: Request) {
           semester: semester || "",
           chunk_index: i,
           text: textChunk // Corrected key to match search
+          text_content: textChunk
         }
       });
 

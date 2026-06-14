@@ -602,6 +602,7 @@ FORMAT:
           });
 
           const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
+          const text = aiResponse.response.text();
           if (!text) {
             throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
           }

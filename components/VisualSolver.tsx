@@ -410,6 +410,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 });
 
                 const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
+                const finalResult = aiResult.response.text();
                 if (!finalResult) throw new Error("AI returned an empty analysis.");
 
                 setAnalysisResult(finalResult);
@@ -470,6 +471,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 });
 
                 const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
+                const finalResult = aiResult.response.text();
                 if (!finalResult) throw new Error("AI returned an empty response.");
 
                 setAnalysisResult(finalResult);
@@ -526,6 +528,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                 });
 
                 const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
+                const finalResult = aiResult.response.text();
                 if (!finalResult) throw new Error("AI returned an empty solution.");
 
                 setAnalysisResult(finalResult);

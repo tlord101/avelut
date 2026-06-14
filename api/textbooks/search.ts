@@ -22,6 +22,9 @@ export async function POST(req: Request) {
       contents: [{ parts: [{ text: query }] }]
     });
     const vectorValues = embeddingResponse.embeddings?.[0]?.values;
+    const model = ai.getGenerativeModel({ model: 'text-embedding-004' });
+    const embeddingResponse = await model.embedContent(query);
+    const vectorValues = embeddingResponse.embedding?.values;
 
     if (!vectorValues) {
       throw new Error("Failed to generate embedding for the query.");
@@ -47,6 +50,7 @@ export async function POST(req: Request) {
     const results = queryResponse.matches.map(match => ({
       score: match.score,
       text: match.metadata?.text || "",
+      text: match.metadata?.text_content || "",
       course_name: match.metadata?.course_name || "",
       chunk_index: match.metadata?.chunk_index
     }));

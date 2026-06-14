@@ -174,6 +174,7 @@ Return valid JSON as an object with key "sessions" which is an array of objects.
                 });
 
                 const text = typeof response.text === 'function' ? response.text() : response.text;
+                const text = response.response.text();
                 if (!text) throw new Error('AI returned an empty timetable.');
                 return JSON.parse(text);
             });

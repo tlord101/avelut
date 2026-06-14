@@ -483,6 +483,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         }],
       });
       const titleText = typeof result.text === 'function' ? result.text() : result.text;
+      const titleText = result.response.text();
       return normalizeTitle((titleText || '').split('\n')[0] || fallbackTitle);
     } catch (error) {
       console.error('Failed to generate chat title:', error);
@@ -728,7 +729,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
 
         try {
           for await (const chunk of responseStream) {
-            const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
+            const chunkText = chunk.text();
             responseText += chunkText;
             setStreamingBotText(responseText);
           }
