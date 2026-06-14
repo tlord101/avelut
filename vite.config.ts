@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ command }) => {
     return {
       // Use './' as base when building for Capacitor (native) so asset paths are relative.
-      // In dev mode we keep '/' for the dev server.
-      base: command === 'build' ? './' : '/',
+      // Use '/' for Vercel web deployments so dynamic nested routes can load assets.
+      base: process.env.VERCEL ? '/' : (command === 'build' ? './' : '/'),
       server: {
         port: 3000,
         host: '0.0.0.0',
