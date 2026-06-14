@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GoogleGenAI } from '@google/genai';
-import { createAvelutAI } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, off, set, push, get, remove, serverTimestamp, update } from 'firebase/database';
 import type { UserProfile, Message, ChatConversation } from '../types';
@@ -265,8 +265,7 @@ const TextChat: React.FC<{
                     model: geminiModel,
                     contents: [{ role: 'user', parts: [{ text: currentInput }] }]
                 });
-                const text = typeof result.text === 'function' ? result.text() : result.text;
-                const text = result.response.text();
+                const text = getResponseText(result);
                 if (!text) {
                     throw new Error('Gemini returned an empty response.');
                 }

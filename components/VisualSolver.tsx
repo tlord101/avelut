@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { ref as dbRef, onValue } from 'firebase/database';
 import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { LimitExceededModal } from './LimitExceededModal';
-import { createAvelutAI } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import type { UserProfile } from '../types';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -409,8 +409,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
-                const finalResult = aiResult.response.text();
+                const finalResult = getResponseText(aiResult);
                 if (!finalResult) throw new Error("AI returned an empty analysis.");
 
                 setAnalysisResult(finalResult);
@@ -470,8 +469,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
-                const finalResult = aiResult.response.text();
+                const finalResult = getResponseText(aiResult);
                 if (!finalResult) throw new Error("AI returned an empty response.");
 
                 setAnalysisResult(finalResult);
@@ -527,8 +525,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                const finalResult = typeof aiResult.text === 'function' ? aiResult.text() : aiResult.text;
-                const finalResult = aiResult.response.text();
+                const finalResult = getResponseText(aiResult);
                 if (!finalResult) throw new Error("AI returned an empty solution.");
 
                 setAnalysisResult(finalResult);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createAvelutAI } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import { Type } from '@google/genai';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, auth as firebaseAuth, firebaseSignOut, onAuthStateChanged, db, storage } from '../firebase';
 import { ref as dbRef, get, onValue, push, set, update } from 'firebase/database';
@@ -389,14 +389,14 @@ export const UploadCenter: React.FC = () => {
       new Map(requests.map(request => [request.course_key, request])).values()
     );
 
-    return uniqueRequests.map((request) => ({
+    return uniqueRequests.map((request: any) => ({
       request,
       catalogEntry: catalog.find(entry => entry.key === request.course_key) || null,
     }));
   }, [catalog, requests]);
 
   const recentUploads = useMemo(() => (
-    uploads.slice(0, 4).map((upload) => ({
+    uploads.slice(0, 4).map((upload: any) => ({
       upload,
       catalogEntry: catalog.find(entry => entry.key === upload.course_key) || null,
     }))
@@ -601,8 +601,7 @@ FORMAT:
             },
           });
 
-          const text = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
-          const text = aiResponse.response.text();
+          const text = getResponseText(aiResponse);
           if (!text) {
             throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
           }
