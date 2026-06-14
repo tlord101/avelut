@@ -897,7 +897,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 });
 
                 for await (const chunk of responseStream) {
-                    const chunkText = chunk.text || '';
+                    const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
                     responseText += chunkText;
                     setStreamingBotText(responseText);
                 }
@@ -1146,7 +1146,7 @@ Student: "${tempInput}"
                 });
 
                 for await (const chunk of responseStream) {
-                    const chunkText = chunk.text || '';
+                    const chunkText = typeof chunk.text === 'function' ? chunk.text() : (chunk.text || '');
                     responseText += chunkText;
                     setStreamingBotText(responseText);
                 }

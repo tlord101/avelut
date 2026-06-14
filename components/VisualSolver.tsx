@@ -409,13 +409,17 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                setAnalysisResult(result.text || '');
+                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                setAnalysisResult(finalResult);
+
+                // Deduct credits as soon as we have a result
                 await deductAICredits(userProfile.uid, cost, 'Visual Solver - Detailed', appSettings);
+
+                // Allow UI to transition immediately after we have the data
+                setCameraState('showingTutorial');
             });
 
-            if (result.success) {
-                setCameraState('showingTutorial');
-            } else {
+            if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }
@@ -462,13 +466,13 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                setAnalysisResult(result.text || '');
+                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                setAnalysisResult(finalResult);
                 await deductAICredits(userProfile.uid, cost, 'Visual Solver - Quick Answer', appSettings);
+                setCameraState('showingTutorial');
             });
 
-            if (result.success) {
-                setCameraState('showingTutorial');
-            } else {
+            if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }
@@ -515,13 +519,13 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
                     ]}],
                 });
 
-                setAnalysisResult(result.text || '');
+                const finalResult = typeof result.text === 'function' ? result.text() : (result.text || '');
+                setAnalysisResult(finalResult);
                 await deductAICredits(userProfile.uid, cost, 'Visual Solver - Solution', appSettings);
+                setCameraState('showingTutorial');
             });
 
-            if (result.success) {
-                setCameraState('showingTutorial');
-            } else {
+            if (!result.success) {
                 addToast(result.message || "Failed to analyze the image. Please try again.", 'error');
                 setCameraState('preview');
             }

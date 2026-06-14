@@ -1020,8 +1020,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 }
             });
 
-            if (!response.text) throw new Error('AI returned an empty suggestion.');
-            const data = JSON.parse(response.text);
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+            if (!responseText) throw new Error('AI returned an empty suggestion.');
+            const data = JSON.parse(responseText);
             setAnnouncementTitle((data.title || '').toString());
             setAnnouncementMessage((data.message || '').toString());
             addToast('Suggested announcement generated.', 'success');
@@ -1146,7 +1147,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 model: modelToTest,
                 contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
             });
-            const preview = (response.text || '').trim();
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+            const preview = (responseText || '').trim();
             if (!preview) {
                 throw new Error('The test returned an empty response.');
             }
@@ -1604,10 +1606,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 }
             });
 
-            if (!response.text) {
+            const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+            if (!responseText) {
                 throw new Error("AI returned an empty response while extracting questions.");
             }
-            const responseData = JSON.parse(response.text);
+            const responseData = JSON.parse(responseText);
             const extractedQuestions = responseData.questions || [];
 
             if (extractedQuestions.length === 0) throw new Error("No questions found in the PDF.");
@@ -1742,11 +1745,12 @@ FORMAT:
                     }
                 });
 
-                if (!response.text) {
+                const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+                if (!responseText) {
                     throw new Error("AI returned an empty response while extracting courses.");
                 }
 
-                const responseData = JSON.parse(response.text);
+                const responseData = JSON.parse(responseText);
                 const extractedSession = (responseData?.academic_session || '').toString().trim();
                 if (!extractedSessionLabel && extractedSession) {
                     extractedSessionLabel = extractedSession;
@@ -1959,10 +1963,11 @@ FORMAT:
                     }
                 });
 
-                if (!response.text) {
+                const responseText = typeof (response as any).text === 'function' ? (response as any).text() : (response.text || '');
+                if (!responseText) {
                     throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
                 }
-                const responseData = JSON.parse(response.text);
+                const responseData = JSON.parse(responseText);
                 const syllabusData = Array.isArray(responseData?.syllabus)
                     ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
                     : [];
