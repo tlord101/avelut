@@ -236,6 +236,36 @@ const UpArrowIcon = () => (
   </svg>
 );
 
+const MicIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" y1="19" x2="12" y2="23" />
+    <line x1="8" y1="23" x2="16" y2="23" />
+  </svg>
+);
+
+const StopIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+  </svg>
+);
+
+const VisionIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const ShareUploadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
 export default function AvelutAI({ userProfile }: AvelutAIProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -1115,28 +1145,21 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     )}
                   </div>
 
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
-                    disabled={isSending}
-                    className={`text-white hover:opacity-80 transition active:scale-95 shrink-0 flex items-center justify-center w-8 h-8 disabled:opacity-40 ${showAttachmentMenu ? 'bg-neutral-800 rounded-full' : ''}`}
-                    aria-label="Upload attachment"
-                  >
-                    <PlusIcon />
-                  </button>
-
-                  {showAttachmentMenu && (
-                    <div className="absolute bottom-12 left-0 w-48 bg-[#1e1f20] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (attachmentInputRef.current) {
-                            attachmentInputRef.current.accept = "image/*";
-                            attachmentInputRef.current.click();
+                  <div className="flex-1 mx-2 relative flex items-center min-h-[44px]">
+                    {(inputState === 1 || inputState === 2) ? (
+                      <textarea
+                        ref={inputElementRef}
+                        rows={1}
+                        value={inputValue}
+                        onChange={handleTextChange}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            void handleSend();
                           }
-                          setShowAttachmentMenu(false);
                         }}
+                        placeholder="Ask AVELUT anything..."
+                        className="w-full bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none py-2.5 max-h-[180px] overflow-y-auto"
                         style={{ height: 'auto' }}
                       />
                     ) : (
@@ -1156,7 +1179,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                   </div>
 
                   <div className="flex items-center gap-[9px] shrink-0">
-                    
                     {(inputState === 1 || inputState === 2) && (
                       <button 
                         type="button"
@@ -1181,40 +1203,29 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                       </button>
                     )}
 
-                    {(inputState === 1 && !inputValue.trim() && attachments.length === 0 && !isSending) ? (
-                      <button 
-                        type="button"
-                        onClick={() => setInputState(4)}
-                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95"
-                        aria-label="Enter live mode"
-                        title="Enter live mode"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-400">
-                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <polyline points="21 15 16 10 5 21" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (inputState === 1 && !inputValue.trim() && attachments.length === 0 && !isSending) {
+                          setInputState(4);
+                        } else {
+                          void handleSend();
+                        }
+                      }}
+                      disabled={isSending || (inputState !== 1 && inputState !== 2 && inputState !== 3) || (inputState === 2 && !inputValue.trim())}
+                      className="w-11 h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={inputState === 1 && !inputValue.trim() ? "Enter live mode" : "Send message"}
+                      title={inputState === 1 && !inputValue.trim() ? "Enter live mode" : "Send message"}
+                    >
+                      {inputState === 1 && !inputValue.trim() ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                         </svg>
-                        Upload Image
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { void handleSend(); }}
-                        disabled={isSending || (!inputValue.trim() && attachments.length === 0)}
-                        className="w-11 h-11 bg-[#19398a] hover:bg-[#1f47ad] text-white rounded-full flex items-center justify-center shadow-md transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                        aria-label="Send message"
-                        title="Send message"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-400">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <line x1="16" y1="13" x2="8" y2="13" />
-                          <line x1="16" y1="17" x2="8" y2="17" />
-                          <polyline points="10 9 9 9 8 9" />
-                        </svg>
-                        Upload PDF
-                      </button>
-                    </div>
-                  )}
+                      ) : (
+                        <UpArrowIcon />
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1253,7 +1264,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     <MicIcon />
                   </button>
 
-                <div className="flex items-center gap-[9px] shrink-0">
                   <button 
                     type="button"
                     onClick={() => setInputState(1)}
@@ -1261,11 +1271,10 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                     aria-label="Exit live mode"
                     title="Exit live mode"
                   >
-                    <UpArrowIcon />
+                    <XIcon className="w-5 h-5" />
                   </button>
                 </div>
-
-              </div>
+              )}
             </div>
           </footer>
         </main>

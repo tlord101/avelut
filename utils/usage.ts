@@ -1,7 +1,7 @@
 import { db } from '../firebase';
 import { ref as dbRef, push, set, update, get, runTransaction } from 'firebase/database';
 import type { UserProfile, AppSettings } from '../types';
-import { DEFAULT_USAGE_SETTINGS } from './appSettings';
+import { DEFAULT_USAGE_SETTINGS, DEFAULT_APP_SETTINGS } from './appSettings';
 
 // Load Paystack script dynamically
 const loadPaystackScript = (): Promise<boolean> => {
