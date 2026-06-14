@@ -698,7 +698,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         }
 
         const responseStream = await ai.models.generateContentStream({
-          model: geminiModel || 'gemini-2.0-flash',
+          model: geminiModel || 'gemini-3.1-flash-lite',
           contents: [
             {
               role: 'user',

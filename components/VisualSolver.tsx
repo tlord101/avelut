@@ -402,7 +402,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
 
                 if (!aiClient) throw new Error('AI client not available');
                 const aiResult = await aiClient.models.generateContent({
-                    model: geminiModel || 'gemini-2.0-flash',
+                    model: geminiModel || 'gemini-3.1-flash-lite',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                         { text: promptText }
@@ -462,7 +462,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         
                 if (!aiClient) throw new Error('AI client not available');
                 const aiResult = await aiClient.models.generateContent({
-                    model: geminiModel || 'gemini-2.0-flash',
+                    model: geminiModel || 'gemini-3.1-flash-lite',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                         { text: promptText }
@@ -518,7 +518,7 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         
                 if (!aiClient) throw new Error('AI client not available');
                 const aiResult = await aiClient.models.generateContent({
-                    model: geminiModel || 'gemini-2.0-flash',
+                    model: geminiModel || 'gemini-3.1-flash-lite',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
                         { text: promptText }
