@@ -98,7 +98,7 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("Vector ingestion crash event:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });

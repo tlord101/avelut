@@ -351,9 +351,26 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       const safeTopics = completedTopicNames.map((topicName, index) => sanitizePromptInput(topicName) || `Topic ${index + 1}`);
 
       const result = await attemptApiCall(async () => {
+        let retrievedContext = "";
+        try {
+            const searchResponse = await fetch('/api/textbooks/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: `Flashcards for ${safeTopics.join(', ')}`, courseKey: userProfile.department_id, limit: 5 })
+            });
+            if (searchResponse.ok) {
+                const searchData = await searchResponse.json();
+                if (searchData.success && searchData.results?.length > 0) {
+                    retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchData.results.map((r: any) => r.text).join('\n\n');
+                }
+            }
+        } catch (err) {
+            console.warn("RAG retrieval failed:", err);
+        }
+
         const aiResponse = await ai.models.generateContent({
           model: getFeatureModel('flashcard_generation', appSettings),
-          contents: [{ role: 'user', parts: [{ text: `Generate 10 flashcards for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on these topics: ${safeTopics.join(', ')}. Provide a front (concept/question) and a back (definition/answer).` }] }],
+          contents: [{ role: 'user', parts: [{ text: `Generate 10 flashcards for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on these topics: ${safeTopics.join(', ')}. Provide a front (concept/question) and a back (definition/answer). ${retrievedContext}` }] }],
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -420,9 +437,26 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
       });
 
       const result = await attemptApiCall(async () => {
+        let retrievedContext = "";
+        try {
+            const searchResponse = await fetch('/api/textbooks/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: `Multiple-choice questions for ${safeTopics.join(', ')}`, courseKey: userProfile.department_id, limit: 5 })
+            });
+            if (searchResponse.ok) {
+                const searchData = await searchResponse.json();
+                if (searchData.success && searchData.results?.length > 0) {
+                    retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" + searchData.results.map((r: any) => r.text).join('\n\n');
+                }
+            }
+        } catch (err) {
+            console.warn("RAG retrieval failed:", err);
+        }
+
         const aiResponse = await ai.models.generateContent({
           model: geminiModel,
-          contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options.` }] }],
+          contents: [{ role: 'user', parts: [{ text: `Generate 10 multiple-choice questions for a student studying "${safeDepartment}" at a "${safeLevel}" level, focusing on the following topics they have completed: ${safeTopics.join(', ')}. Ensure the options are distinct and the correct answer is one of the options. ${retrievedContext}` }] }],
           config: {
             responseMimeType: "application/json",
             responseSchema: {

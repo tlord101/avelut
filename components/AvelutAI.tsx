@@ -529,7 +529,11 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
     const nextMessages = [...messages, userMessage];
     const isNewConversation = !activeHistoryId;
     const activeConversation = history.find(item => item.id === activeHistoryId);
-    const shouldGenerateTitle = isNewConversation ||
+
+    // Count ONLY user messages to determine if this is the first interaction
+    const previousUserMessagesCount = messages.filter(m => m.sender === 'user').length;
+    const shouldGenerateTitle = previousUserMessagesCount === 0 ||
+                               isNewConversation ||
                                !activeConversation ||
                                activeConversation.title === 'New Chat' ||
                                activeConversation.title === 'Current chat';
@@ -555,6 +559,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           },
         ]);
         setStatusText('API key missing.');
+        setIsSending(false);
         return;
       }
 
@@ -756,8 +761,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
               timestamp: Date.now(),
             },
           ]);
-        setIsSending(false);
-        setStreamingBotText(null);
         return;
       }
 
@@ -772,10 +775,6 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
         timestamp: serverTimestamp(),
       });
 
-      // Clear streaming state ONLY after the Firebase push is initiated
-      // This reduces the "flicker" where the response disappears before syncing back.
-      setStreamingBotText(null);
-      setIsSending(false);
 
       const updates: { title?: string; last_updated_at: number } = {
         last_updated_at: 0,
