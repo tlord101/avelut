@@ -5,7 +5,7 @@ interface SubscriptionCardsProps {
   userProfile: UserProfile;
   appSettings: AppSettings;
   isVerifyingKey?: boolean;
-  onSelectPlan: (plan: 'free' | 'student' | 'pro' | 'personal_token', extraData?: { apiKey: string }) => void;
+  onSelectPlan: (plan: 'free' | 'basic' | 'pro' | 'personal_token', extraData?: { apiKey: string }) => void;
   showCurrentPlan?: boolean;
 }
 
@@ -104,7 +104,7 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="8 12 11 15 16 9" />
                 </svg>
-                <span>{usageSettings.plans.free.limits.monthly_credits} Monthly Credits</span>
+                <span>{usageSettings.plans.free.monthly_ai_credits} Monthly Credits</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -135,14 +135,14 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
               </svg>
             </div>
             <h4 className="font-extrabold text-xl text-slate-900 leading-tight">
-              {usageSettings.plans.student?.name || 'Student Plan'}
+              {usageSettings.plans.basic.name || 'Student Plan'}
             </h4>
             <p className="text-sm text-slate-500 mt-2 font-semibold leading-snug min-h-[40px]">
-              {usageSettings.plans.student?.description || "Take your study promotion to the next level."}
+              {usageSettings.plans.basic.description || "Take your study promotion to the next level."}
             </p>
             <div className="flex items-baseline gap-1.5 mt-5 mb-5">
               <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                ₦{billingInterval === 'monthly' ? usageSettings.plans.student?.price || 1000 : Math.round((usageSettings.plans.student?.price || 1000) * 0.75)}
+                ₦{billingInterval === 'monthly' ? usageSettings.plans.basic.price || 1000 : Math.round((usageSettings.plans.basic.price || 1000) * 0.75)}
               </span>
               <span className="text-slate-500 font-bold text-sm">/month</span>
             </div>
@@ -151,7 +151,7 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
               <span className="w-full text-center py-3 bg-blue-50 text-blue-600 text-sm font-bold rounded-xl block border border-blue-200 mb-6">Current Plan</span>
             ) : (
               <button
-                onClick={() => onSelectPlan('student')}
+                onClick={() => onSelectPlan('basic')}
                 disabled={isVerifyingKey}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/25 active:scale-[0.98] mb-6"
               >
@@ -165,7 +165,7 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="8 12 11 15 16 9" />
                 </svg>
-                <span>{usageSettings.plans.student?.limits.monthly_credits} Monthly Credits</span>
+                <span>{usageSettings.plans.basic.monthly_ai_credits} Monthly Credits</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -223,7 +223,7 @@ export const SubscriptionCards: React.FC<SubscriptionCardsProps> = ({
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="8 12 11 15 16 9" />
                 </svg>
-                <span>{usageSettings.plans.pro.limits.monthly_credits} Monthly Credits</span>
+                <span>{usageSettings.plans.pro.monthly_ai_credits} Monthly Credits</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <svg className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

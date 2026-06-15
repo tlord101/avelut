@@ -173,9 +173,9 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
                 </p>
                 <ul className="text-[11px] text-slate-700 mt-4 space-y-2 font-semibold">
                   <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.free.limits.courses === -1 ? 'Unlimited' : plans.free.limits.courses} Courses roadmap</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.free.limits.ai_requests_per_course === -1 ? 'Unlimited' : plans.free.limits.ai_requests_per_course} AI queries/course (2h reset)</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.free.limits.exams === -1 ? 'Unlimited' : plans.free.limits.exams} Exams limit</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.free.limits.visual_messages === -1 ? 'Unlimited' : plans.free.limits.visual_messages} AI assistance chat messages</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.free.monthly_ai_credits === -1 ? 'Unlimited' : plans.free.monthly_ai_credits} AI Credits / Month</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ Practice exams</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ AI assistance chat</li>
                 </ul>
               </div>
               <div className="mt-6 border-t border-slate-100 pt-4">
@@ -203,9 +203,9 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
                 </p>
                 <ul className="text-[11px] text-slate-700 mt-4 space-y-2 font-semibold">
                   <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.basic.limits.courses === -1 ? 'Unlimited' : plans.basic.limits.courses} Courses roadmap</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.basic.limits.ai_requests_per_course === -1 ? 'Unlimited' : plans.basic.limits.ai_requests_per_course} AI queries/course (2h reset)</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.basic.limits.exams === -1 ? 'Unlimited' : plans.basic.limits.exams} Practice exams</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.basic.limits.visual_messages === -1 ? 'Unlimited' : plans.basic.limits.visual_messages} Solver messages</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.basic.monthly_ai_credits === -1 ? 'Unlimited' : plans.basic.monthly_ai_credits} AI Credits / Month</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ Practice exams</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ Solver messages</li>
                   <li className="flex items-center gap-1.5 text-blue-600">★ Twitter-style blue badge</li>
                 </ul>
               </div>
@@ -234,9 +234,9 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
                 </p>
                 <ul className="text-[11px] text-slate-700 mt-4 space-y-2 font-semibold">
                   <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.pro.limits.courses === -1 ? 'Unlimited' : plans.pro.limits.courses} Courses roadmap</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.pro.limits.ai_requests_per_course === -1 ? 'Unlimited' : plans.pro.limits.ai_requests_per_course} AI queries/course (2h reset)</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.pro.limits.exams === -1 ? 'Unlimited' : plans.pro.limits.exams} Practice exams</li>
-                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.pro.limits.visual_messages === -1 ? 'Unlimited' : plans.pro.limits.visual_messages} Solver messages</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ {plans.pro.monthly_ai_credits === -1 ? 'Unlimited' : plans.pro.monthly_ai_credits} AI Credits / Month</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ Practice exams</li>
+                  <li className="flex items-center gap-1.5 text-slate-600">✓ Solver messages</li>
                   <li className="flex items-center gap-1.5 text-purple-600">★ Purple checkmark badge</li>
                 </ul>
               </div>

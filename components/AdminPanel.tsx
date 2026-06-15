@@ -239,7 +239,7 @@ const mergeCourseRecord = (
     const mergedCourseName = (sourceCourse.course_name || baseCourse.course_name || '').toString().trim();
     const mergedCourseId = (baseCourse.course_id || sourceCourse.course_id || getCourseMergeKey({ course_name: mergedCourseName }))?.toString();
 
-    return {
+    const mergedCourse: any = {
         ...baseCourse,
         ...sourceCourse,
         course_id: mergedCourseId || '',
@@ -248,7 +248,7 @@ const mergeCourseRecord = (
         textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
         textbook_urls: mergedCourseUrls,
         semester: normalizeSemester(sourceCourse.semester || (baseCourse as Course).semester),
-    } as any;
+    };
 
     const sharedKey = (sourceCourse as any).textbook_shared_key || (baseCourse as any).textbook_shared_key;
     if (sharedKey !== undefined && sharedKey !== null) {
@@ -1882,12 +1882,10 @@ FORMAT:
         const { course_name, level } = selectedCourse;
 
         setIsUploading(true);
-        const extractionModel = getFeatureModel('study_guide_extraction', appSettings);
         setExtractionProgress(`Uploading 1/${pdfFiles.length} to storage...`);
 
         try {
             const uploadedUrls: string[] = [];
-            const extractedTopicGroups: Topic[][] = [];
 
             for (let index = 0; index < pdfFiles.length; index++) {
                 const file = pdfFiles[index];
@@ -1901,88 +1899,6 @@ FORMAT:
                 const uploadResult = await uploadBytes(fileRef, file);
                 const downloadURL = await getDownloadURL(uploadResult.ref);
                 uploadedUrls.push(downloadURL);
-
-                setExtractionProgress(`Extracting syllabus ${index + 1}/${pdfFiles.length} with ${extractionModel}...`);
-                
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                const base64PDF = await new Promise<string>((resolve) => {
-                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-                });
-
-                const prompt = `Analyze this PDF textbook for "${course_name}" at "${level}" level.
-            Extract a comprehensive syllabus/course outline into a structured JSON array of topics with concise grounding context.
-            
-            RULES:
-            1. Output ONLY the JSON object.
-            2. The root object must have a "syllabus" key which is an array of objects.
-            3. Each topic object must have:
-               - topic_name (string)
-               - topic_id (slugified string)
-               - topic_context (string, 1-2 lines describing what this topic covers and why it matters in this course)
-               - start_point (string, where teaching should begin for this topic)
-               - end_point (string, where teaching should stop for this topic)
-            4. Keep context concise and specific to this course level.
-
-            FORMAT:
-            {
-                "syllabus": [
-                    {
-                        "topic_name": "Introduction to...",
-                        "topic_id": "intro_to_...",
-                        "topic_context": "Brief course-grounded context...",
-                        "start_point": "Start from ...",
-                        "end_point": "Stop after ..."
-                    },
-                    ...
-                ]
-            }`;
-
-                const response = await ai.models.generateContent({
-                    model: extractionModel,
-                    contents: [
-                        {
-                            role: 'user',
-                            parts: [
-                                { text: prompt },
-                                { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
-                            ]
-                        }
-                    ],
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                syllabus: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            topic_name: { type: Type.STRING },
-                                            topic_id: { type: Type.STRING },
-                                            topic_context: { type: Type.STRING },
-                                            start_point: { type: Type.STRING },
-                                            end_point: { type: Type.STRING }
-                                        },
-                                        required: ['topic_name', 'topic_id', 'topic_context', 'start_point', 'end_point']
-                                    }
-                                }
-                            },
-                            required: ['syllabus']
-                        }
-                    }
-                });
-
-                const responseText = (response as any).text || '';
-                if (!responseText) {
-                    throw new Error(`AI returned an empty response while extracting syllabus from ${file.name}.`);
-                }
-                const responseData = JSON.parse(responseText);
-                const syllabusData = Array.isArray(responseData?.syllabus)
-                    ? responseData.syllabus.map((topic: any, topicIndex: number) => sanitizeTopicMetadata(topic, topicIndex))
-                    : [];
-                extractedTopicGroups.push(syllabusData);
             }
 
             setExtractionProgress('Saving to database...');
@@ -2003,7 +1919,7 @@ FORMAT:
                 existingSharedPdfUrls.push(existingShared.pdf_url);
             }
             const mergedSharedPdfUrls = Array.from(new Set([...existingSharedPdfUrls, ...uploadedUrls]));
-            const mergedSharedSyllabus = Array.isArray(existingShared?.syllabus) ? existingShared.syllabus : [];
+            const mergedSharedSyllabus: any[] = [];
             const primaryPdfUrl = selectPrimaryPdfUrl(uploadedUrls, existingShared?.pdf_url, mergedSharedPdfUrls);
 
             // Write canonical shared textbook data
@@ -2175,45 +2091,7 @@ FORMAT:
         }
     };
 
-    const handleUpdateCourseOutline = async () => {
-        if (!departmentId) {
-            addToast("Please enter a Department ID", "error");
-            return;
-        }
 
-        try {
-            const syncDepartmentIds = getUniqueIds([departmentId, ...targetDepartmentIds]);
-            const normalizedPrimaryCourses = normalizeCourseList(coursesList);
-
-            if (!syncDepartmentIds.length) {
-                addToast("Please select at least one department", "error");
-                return;
-            }
-
-            await update(dbRef(db, `departments_data/${departmentId}`), {
-                course_list: normalizedPrimaryCourses
-            });
-            setCoursesList(normalizedPrimaryCourses);
-
-            const additionalDepartments = syncDepartmentIds.filter(id => id !== departmentId);
-            for (const targetDepartmentId of additionalDepartments) {
-                const targetDepartmentRef = dbRef(db, `departments_data/${targetDepartmentId}`);
-                const targetDepartmentSnapshot = await get(targetDepartmentRef);
-                const existingCourses = normalizeCourseList(targetDepartmentSnapshot.val()?.course_list);
-
-                const mergedCourses = mergeCourseListsIntoTarget(existingCourses, normalizedPrimaryCourses);
-
-                await update(targetDepartmentRef, {
-                    course_list: mergedCourses
-                });
-            }
-
-            addToast(`Course outline published to ${syncDepartmentIds.length} department${syncDepartmentIds.length > 1 ? 's' : ''}!`, "success");
-            await fetchDepartments();
-        } catch (error: any) {
-            addToast(error.message, "error");
-        }
-    };
 
     const addCourseField = () => {
         setCoursesList([...coursesList, { course_id: '', course_name: '', topics: [], level: LEVELS[0], semester: DEFAULT_SEMESTER }]);
@@ -2238,70 +2116,7 @@ FORMAT:
         [courseAdminView, managerCoursesForLevel]
     );
 
-    const [selectedManagerCourseTopics, setSelectedManagerCourseTopics] = useState<Topic[]>([]);
-    const [isSelectedManagerCourseTopicsLoading, setIsSelectedManagerCourseTopicsLoading] = useState(false);
 
-    useEffect(() => {
-        let isMounted = true;
-
-        const loadSelectedManagerCourseTopics = async () => {
-            if (!selectedManagerCourse) {
-                setSelectedManagerCourseTopics([]);
-                setIsSelectedManagerCourseTopicsLoading(false);
-                return;
-            }
-
-            const directTopics = Array.isArray(selectedManagerCourse.topics)
-                ? selectedManagerCourse.topics.map((topic, index) => sanitizeTopicMetadata(topic, index))
-                : [];
-
-            if (directTopics.length > 0) {
-                setSelectedManagerCourseTopics(directTopics);
-                setIsSelectedManagerCourseTopicsLoading(false);
-                return;
-            }
-
-            const courseKey = getCourseMergeKey(selectedManagerCourse);
-            if (!courseKey) {
-                setSelectedManagerCourseTopics([]);
-                setIsSelectedManagerCourseTopicsLoading(false);
-                return;
-            }
-
-            setIsSelectedManagerCourseTopicsLoading(true);
-            try {
-                const sharedSnapshot = await get(dbRef(db, `textbook_contexts/shared/${courseKey}`));
-                if (!isMounted || !sharedSnapshot.exists()) {
-                    if (isMounted) setSelectedManagerCourseTopics([]);
-                    return;
-                }
-
-                const sharedData = sharedSnapshot.val() || {};
-                const sharedTopics = Array.isArray(sharedData.syllabus)
-                    ? sharedData.syllabus.map((topic: any, index: number) => sanitizeTopicMetadata(topic, index))
-                    : [];
-
-                if (isMounted) {
-                    setSelectedManagerCourseTopics(sharedTopics);
-                }
-            } catch (error) {
-                console.error('Failed to load shared textbook topics for selected course:', error);
-                if (isMounted) {
-                    setSelectedManagerCourseTopics([]);
-                }
-            } finally {
-                if (isMounted) {
-                    setIsSelectedManagerCourseTopicsLoading(false);
-                }
-            }
-        };
-
-        void loadSelectedManagerCourseTopics();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [selectedManagerCourse]);
 
     const filteredGlobalCourses = useMemo(() => {
         const query = courseSearchQuery.trim().toLowerCase();
@@ -4600,27 +4415,7 @@ FORMAT:
                                                     </div>
                                                 ) : null}
 
-                                                <div className="space-y-3">
-                                                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Course Outline</p>
-                                                    {isSelectedManagerCourseTopicsLoading ? (
-                                                        <div className="p-8 rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-400 animate-pulse font-medium">
-                                                            Loading course outline from uploaded textbooks...
-                                                        </div>
-                                                    ) : selectedManagerCourseTopics.length ? (
-                                                        <div className="space-y-3">
-                                                            {selectedManagerCourseTopics.map((topic) => (
-                                                                <div key={topic.topic_id} className="rounded-xl border border-slate-100 p-4 bg-slate-50/50 hover:bg-slate-50 transition">
-                                                                    <div className="font-bold text-slate-800">{topic.topic_name}</div>
-                                                                    {topic.topic_context ? <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{topic.topic_context}</p> : null}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="p-8 rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-400 font-medium">
-                                                            No course outline yet. Upload textbooks to generate topics.
-                                                        </div>
-                                                    )}
-                                                </div>
+
 
                                                 <div className="flex justify-end items-center pt-5 border-t border-slate-100">
                                                     <button

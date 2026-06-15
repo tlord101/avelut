@@ -228,7 +228,7 @@ const StudyGuideSkeleton: React.FC = () => (
 // --- LEARNING INTERFACE COMPONENT (UNCHANGED LOGIC, STYLED TO FIT) ---
 interface LearningInterfaceProps {
     userProfile: UserProfile;
-    topic: Topic & { courseName: string; courseId?: string; course_id?: string };
+    course: Course;
     onClose: () => void;
 }
 
@@ -340,7 +340,7 @@ const parseMessageSuggestions = (text: string): { cleanText: string; suggestions
     return { cleanText: text, suggestions: [] };
 };
 
-const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topic, onClose }) => {
+const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, course, onClose }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [streamingBotText, setStreamingBotText] = useState<string | null>(null);
     const [input, setInput] = useState('');
@@ -454,7 +454,7 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
     }, [messageActionTarget]);
 
     const handleShareTopicChat = async () => {
-        if (!topic || !userProfile) return;
+        if (!course || !userProfile) return;
         try {
             const shareId = push(dbRef(db, 'shared_chats')).key;
             if (!shareId) return;
@@ -462,10 +462,10 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
             // Save details to DB
             const chatRef = dbRef(db, `shared_chats/${shareId}`);
             await set(chatRef, {
-                courseName: topic.courseName,
-                courseId: topic.courseId || topic.course_id || 'unspecified',
-                topicName: topic.topic_name,
-                topicId: topic.topic_id,
+                courseName: course.course_name,
+                courseId: course.course_id || course.course_id || 'unspecified',
+                topicName: course.course_name,
+                topicId: course.course_id,
                 messages: messages,
                 ownerId: userProfile.uid,
                 ownerName: userProfile.display_name || 'Learner',
@@ -529,19 +529,15 @@ const LearningInterface: React.FC<LearningInterfaceProps> = ({ userProfile, topi
         setIsTutorialsLoading(true);
         setTutorialsError(null);
         try {
-            const contextToUse = selectedTopicContext || [
-                topic.topic_context ? `Topic context: ${topic.topic_context}` : '',
-                topic.start_point ? `Start teaching from: ${topic.start_point}` : '',
-                topic.end_point ? `Stop teaching at: ${topic.end_point}` : '',
-            ].filter(Boolean).join('\n');
+            const contextToUse = textbookContext ? textbookContext : `Course: ${course.course_name}`;
 
             const prompt = `
-You are an expert academic advisor. Your task is to identify 5 to 10 highly specific, relevant video tutorials or search terms for the university-level topic: '${topic.topic_name}' under the course: '${topic.courseName}' at level: '${userProfile.level || 'University'}'.
+You are an expert academic advisor. Your task is to identify 5 to 10 highly specific, relevant video tutorials or search terms for the university-level course: '${course.course_name}' at level: '${userProfile.level || 'University'}'.
 
 CRITICAL INSTRUCTIONS FOR RELEVANCE AND CONTEXT:
-1. Every tutorial search query and title MUST be directly specific to the course ('${topic.courseName}') and topic ('${topic.topic_name}') at hand. Do NOT provide generic, out-of-context, or mismatched tutorials.
+1. Every tutorial search query and title MUST be directly specific to the course ('${course.course_name}') at hand. Do NOT provide generic, out-of-context, or mismatched tutorials.
 2. Ground your selections in the following context/summary of what the student is about to learn:
-${contextToUse ? contextToUse : `Topic: ${topic.topic_name}\nCourse: ${topic.courseName}`}
+${contextToUse}
 
 3. For each sub-topic, provide:
    - "title": A clear, educational title indicating precisely what sub-topic is covered.
@@ -640,40 +636,21 @@ Return valid JSON as a list of objects with keys: title, description, searchQuer
 
     useEffect(() => {
         const fetchTextbook = async () => {
-            const sharedKey = (topic as any).textbook_shared_key;
+            const sharedKey = (course as any).textbook_shared_key;
             const textbookRef = sharedKey
                 ? dbRef(db, `textbook_contexts/shared/${sharedKey}`)
-                : dbRef(db, `textbook_contexts/${userProfile.department_id}/${userProfile.level}/${topic.courseName}`);
+                : dbRef(db, `textbook_contexts/${userProfile.department_id}/${userProfile.level}/${course.course_name}`);
 
             const snap = await get(textbookRef);
             if (snap.exists()) {
                 const data = snap.val();
-                const syllabusTopics = Array.isArray(data.syllabus) ? data.syllabus : [];
-                const matchedTopic = syllabusTopics.find((entry: any) => (
-                    (entry?.topic_id && entry.topic_id === topic.topic_id) ||
-                    (entry?.topic_name && entry.topic_name === topic.topic_name)
-                ));
-                const topicContext = (topic.topic_context || matchedTopic?.topic_context || '').trim();
-                const startPoint = (topic.start_point || matchedTopic?.start_point || '').trim();
-                const endPoint = (topic.end_point || matchedTopic?.end_point || '').trim();
-                const contextBlock = [
-                    topicContext ? `Topic context: ${topicContext}` : '',
-                    startPoint ? `Start teaching from: ${startPoint}` : '',
-                    endPoint ? `Stop teaching at: ${endPoint}` : '',
-                ].filter(Boolean).join('\n');
-                setSelectedTopicContext(contextBlock);
-                setTextbookContext(`\n\nCOURSE TEXTBOOK CONTEXT:\nThis lesson must be strictly grounded in the following textbook syllabus and objectives:\n${JSON.stringify(data.syllabus)}`);
+                setTextbookContext(`\n\nCOURSE TEXTBOOK CONTEXT:\nThis lesson must be strictly grounded in the following textbook syllabus and objectives:\n${JSON.stringify(data.syllabus || data.course_outline || data)}`);
             } else {
-                const contextBlock = [
-                    topic.topic_context ? `Topic context: ${topic.topic_context}` : '',
-                    topic.start_point ? `Start teaching from: ${topic.start_point}` : '',
-                    topic.end_point ? `Stop teaching at: ${topic.end_point}` : '',
-                ].filter(Boolean).join('\n');
-                setSelectedTopicContext(contextBlock);
+                setTextbookContext('');
             }
         };
         fetchTextbook();
-    }, [userProfile.department_id, userProfile.level, topic.courseName, topic.topic_id, topic.topic_name, topic.topic_context, topic.start_point, topic.end_point]);
+    }, [userProfile.department_id, userProfile.level, course.course_name, course.course_id]);
 
     const systemInstruction = `You are AVELUT, an expert AI educator. Your primary goal is to provide a comprehensive and complete understanding of the given topic for a student at their specified level.
 
@@ -777,7 +754,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
     // TOPIC PRESENCE TRACKER: streak + study_duration_seconds
     // =====================================================
     useEffect(() => {
-        const topicId = topic.topic_id;
+        const topicId = course.course_id;
         const uid = userProfile.uid;
         const STREAK_THRESHOLD_MS = 10_000; // 10 seconds
         const SAVE_INTERVAL_MS = 30_000;    // save duration every 30s
@@ -849,7 +826,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             void saveStudyDuration();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [topic.topic_id, userProfile.uid]);
+    }, [course.course_id, userProfile.uid]);
 
     const initiateAutoTeach = useCallback(async () => {
         if (isAppSettingsLoading || isThinking) {
@@ -860,7 +837,7 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             return;
         }
 
-        const courseId = topic.courseId || topic.course_id || 'unknown';
+        const courseId = course.course_id || course.course_id || 'unknown';
         const featureCost = getFeatureCost('study_guide_lesson', appSettings);
         const limitCheck = checkAICredits(userProfile, featureCost, appSettings);
         if (!limitCheck.allowed) {
@@ -880,13 +857,13 @@ ${selectedTopicContext ? `\n\nSELECTED TOPIC BOUNDARY:\n${selectedTopicContext}`
             const prompt = `
 Context:
 Department: ${userProfile.department_id}
-Course: ${topic.courseName}
-Topic: ${topic.topic_name}
+Course: ${course.course_name}
+Topic: ${course.course_name}
 User Level: ${userProfile.level}
 ${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 
 Task:
-Please start teaching me about "${topic.topic_name}". Give me a simple and clear introduction to the topic.
+Please start teaching me about "${course.course_name}". Give me a simple and clear introduction to the topic.
 `;
             const result = await attemptApiCall(async () => {
                 let responseText = '';
@@ -908,7 +885,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
                 const botResponseText = responseText.trim();
 
-                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${course.course_id}`);
                 const newMsgRef = push(messagesRef);
                 const msgData = {
                     sender: 'bot',
@@ -925,7 +902,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 };
                 setMessages([botMessage]);
                 const featureCost = getFeatureCost('study_guide_lesson', appSettings);
-                await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name} (Initial)`, appSettings);
+                await deductAICredits(userProfile.uid, featureCost, `Study Guide - ${course.course_name} (Initial)`, appSettings);
             });
 
             if (!result.success) {
@@ -940,11 +917,11 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             setStreamingBotText(null);
             setIsThinking(false);
         }
-    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, topic.courseName, topic.topic_id, topic.topic_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, topic.courseId, topic.course_id]);
+    }, [ai, addToast, attemptApiCall, geminiModel, isAppSettingsLoading, onClose, selectedTopicContext, systemInstruction, course.course_name, course.course_id, course.course_name, userProfile.department_id, userProfile.level, userProfile.uid, appSettings, course.course_id, course.course_id]);
 
     const handleMarkTopicComplete = async () => {
         try {
-            const progressRef = dbRef(db, `user_progress/${userProfile.uid}/${topic.topic_id}`);
+            const progressRef = dbRef(db, `user_progress/${userProfile.uid}/${course.course_id}`);
             const currentSnapshot = await get(progressRef);
             const currentData = currentSnapshot.val() || {};
 
@@ -961,7 +938,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
     };
 
     useEffect(() => {
-        const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+        const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${course.course_id}`);
         
         setIsHistoryLoading(true);
         const unsubscribe = onValue(messagesRef, (snapshot) => {
@@ -991,7 +968,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
 
         return () => off(messagesRef, 'value', unsubscribe);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userProfile.uid, topic.topic_id]);
+    }, [userProfile.uid, course.course_id]);
 
     useEffect(() => {
         if (isAppSettingsLoading || !shouldAutoTeach) return;
@@ -1022,7 +999,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             return;
         }
 
-        const courseId = topic.courseId || topic.course_id || 'unknown';
+        const courseId = course.course_id || course.course_id || 'unknown';
         const featureCost = getFeatureCost('study_guide_lesson', appSettings);
         const limitCheck = checkAICredits(userProfile, featureCost, appSettings);
         if (!limitCheck.allowed) {
@@ -1068,13 +1045,13 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
             let imageUrl: string | undefined;
 
             if (tempFile) {
-                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-uploads/${topic.topic_id}/${Date.now()}-${tempFile.name}`);
+                const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-uploads/${course.course_id}/${Date.now()}-${tempFile.name}`);
                 const uploadResult = await uploadBytes(storageRefObj, tempFile);
                 imageUrl = await getDownloadURL(uploadResult.ref);
             }
 
             // Save user message to DB
-            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+            const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${course.course_id}`);
             const newUserMsgRef = push(messagesRef);
             const userMessageData: {
                 sender: 'user';
@@ -1121,7 +1098,7 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 let retrievedContext = "";
                 try {
                   const { searchPinecone } = await import('../utils/pinecone');
-                  const searchResult = await searchPinecone(tempInput, topic.course_id || topic.courseId, 3, appSettings);
+                  const searchResult = await searchPinecone(tempInput, course.course_id || course.course_id, 3, appSettings);
                   
                   if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
                     retrievedContext = "\n\nRELEVANT TEXTBOOK EXCERPTS:\n" +
@@ -1134,8 +1111,8 @@ Please start teaching me about "${topic.topic_name}". Give me a simple and clear
                 const prompt = `
 Context:
 Department: ${userProfile.department_id}
-Course: ${topic.courseName}
-Topic: ${topic.topic_name}
+Course: ${course.course_name}
+Topic: ${course.course_name}
 User Level: ${userProfile.level}
 ${selectedTopicContext ? `Topic Boundaries:\n${selectedTopicContext}` : ''}
 
@@ -1183,7 +1160,7 @@ Student: "${tempInput}"
                 set(newBotMsgRef, botMessageData).catch(console.error);
 
                 const featureCost = getFeatureCost('study_guide_lesson', appSettings);
-                deductAICredits(userProfile.uid, featureCost, `Study Guide - ${topic.topic_name}`, appSettings).catch(console.error);
+                deductAICredits(userProfile.uid, featureCost, `Study Guide - ${course.course_name}`, appSettings).catch(console.error);
             });
 
             if (!result.success) {
@@ -1229,7 +1206,7 @@ Student: "${tempInput}"
                     const fileExtension = mimeType.split('/')[1] || 'png';
                     const imageBlob = base64ToBlob(part.inlineData.data, mimeType);
                     const uniqueImageId = createUniqueId();
-                    const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${topic.topic_id}/${uniqueImageId}.${fileExtension}`);
+                    const storageRefObj = storageRef(storage, `${userProfile.uid}/study-guide-illustrations/${course.course_id}/${uniqueImageId}.${fileExtension}`);
                     const uploadResult = await uploadBytes(storageRefObj, imageBlob);
                     const publicUrl = await getDownloadURL(uploadResult.ref);
                     imageUrls.push(publicUrl);
@@ -1239,7 +1216,7 @@ Student: "${tempInput}"
                     throw new Error("No image visualization was returned by the API.");
                 }
 
-                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${topic.topic_id}`);
+                const messagesRef = dbRef(db, `study_guide_messages/${userProfile.uid}/${course.course_id}`);
 
                 for (const publicUrl of imageUrls) {
                     const imageMsgRef = push(messagesRef);
@@ -1278,7 +1255,7 @@ Student: "${tempInput}"
             {/* Sticky Header */}
             <header className="flex-shrink-0 flex items-center justify-between p-4 bg-white/80 backdrop-blur-lg border-b border-gray-200 z-10">
                 <button onClick={onClose} className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-full"><ArrowLeftIcon /></button>
-                <h2 className="text-lg font-bold text-gray-800 truncate mx-4 flex-1 text-center">{topic.topic_name}</h2>
+                <h2 className="text-lg font-bold text-gray-800 truncate mx-4 flex-1 text-center">{course.course_name}</h2>
                 <div className="flex items-center gap-2">
                     <button 
                         onClick={() => {
@@ -1855,91 +1832,9 @@ Student: "${tempInput}"
     );
 };
 
-// --- NEW LEARNING PATH COMPONENTS ---
-const TopicNode: React.FC<{ topic: Topic, isCompleted: boolean, onSelect: () => void, onMarkComplete: () => void, index: number, pathColor: string, studyDurationSeconds?: number, isSaving?: boolean }> = ({ topic, isCompleted, onSelect, onMarkComplete, index, pathColor, studyDurationSeconds = 0, isSaving = false }) => {
-    const isEven = index % 2 === 0;
-    
-    return (
-        <div className="relative w-full py-12 flex items-center justify-center">
-            {/* Vertical Connector Line */}
-            <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1.5 ${isCompleted ? 'bg-emerald' : 'bg-gray-200'} z-0`}></div>
-
-            <div className={`w-full max-w-2xl flex items-center ${isEven ? 'flex-row' : 'flex-row-reverse'} relative z-10`}>
-                {/* Content Side */}
-                <div className={`w-1/2 px-8 ${isEven ? 'text-right' : 'text-left'}`}>
-                    <div className={`group cursor-pointer inline-block`} onClick={onSelect}>
-                            <div className={`flex items-center gap-3`}> 
-                                <div>
-                                    <h4 className={`text-sm font-bold uppercase tracking-widest ${isCompleted ? 'text-emerald' : 'text-gray-400 group-hover:text-gray-600'} transition-colors duration-300`}>
-                                        {isCompleted ? 'Mastered' : 'Topic'}
-                                    </h4>
-                                    <p className={`mt-1 text-lg font-semibold leading-tight ${isCompleted ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-700'} transition-colors duration-300`}>
-                                        {topic.topic_name}
-                                    </p>
-                                </div>
-                                <div className="ml-2">
-                                    <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-medium">{formatDuration(studyDurationSeconds)}</span>
-                                </div>
-                            </div>
-                            <div className="mt-3 flex items-center justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!isCompleted) {
-                                            onMarkComplete();
-                                        }
-                                    }}
-                                    disabled={isCompleted || isSaving}
-                                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${isCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'} disabled:opacity-60`}
-                                    aria-label={isCompleted ? `${topic.topic_name} completed` : `Mark ${topic.topic_name} complete`}
-                                >
-                                    <CheckCircleIcon className="w-4 h-4" />
-                                    {isCompleted ? 'Completed' : isSaving ? 'Saving' : 'Mark complete'}
-                                </button>
-                            </div>
-                        </div>
-                </div>
-
-                {/* Node Side */}
-                <div className="relative flex items-center justify-center">
-                    <button 
-                        onClick={onSelect}
-                        className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 transform hover:scale-105 active:scale-95
-                            ${isCompleted 
-                                ? 'bg-emerald text-white' 
-                                : 'bg-white border-2 border-gray-200 text-gray-300 hover:border-gray-300'}`}
-                    >
-                        {isCompleted ? (
-                            <CheckIcon className="w-8 h-8"/>
-                        ) : (
-                            <BookOpen className="w-7 h-7" />
-                        )}
-                        
-                        {/* Status Tooltip/Indicator */}
-                        {!isCompleted && (
-                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-[10px] font-black uppercase tracking-tighter rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                                Start Learning
-                            </div>
-                        )}
-                    </button>
-                    
-                    {/* Pulsing indicator for current topic (not yet completed but first in list) */}
-                    {!isCompleted && index === 0 && (
-                        <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-emerald pointer-events-none"></div>
-                    )}
-                </div>
-
-                {/* Empty Side for alignment */}
-                <div className="w-1/2"></div>
-            </div>
-        </div>
-    );
-};
-
 const CourseHeader: React.FC<{ 
     course: Course, 
-    isExpanded: boolean, 
+    isExpanded?: boolean, 
     onClick: () => void
 }> = ({ course, isExpanded, onClick }) => {
     const courseLabel = course.course_code || course.course_id || course.course_name;
@@ -1952,12 +1847,6 @@ const CourseHeader: React.FC<{
                         <div className="text-sm font-black text-gray-700">{courseLabel}</div>
                         <div className="text-xs text-gray-500">{course.course_name}</div>
                     </div>
-                </div>
-
-                <div className="mt-2 sm:mt-0 flex items-center gap-3 justify-between">
-                    <button onClick={onClick} className="p-1.5 text-gray-400 hover:text-gray-600 transition">
-                        <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
-                    </button>
                 </div>
             </div>
         </div>
@@ -1983,10 +1872,9 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
   const [courses, setCourses] = useState<Course[]>(() => {
     return readCachedJson<Course[]>(`avelut_courses_${userProfile.uid}`, []);
   });
-  const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
-  const [selectedTopic, setSelectedTopic] = useState<(Topic & { courseName: string; courseId?: string; course_id?: string }) | null>(null);
+
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isMarkingTopicId, setIsMarkingTopicId] = useState<string | null>(null);
   const [filter, setFilter] = useState(() => ({
     searchTerm: '',
     semester: (userProfile.default_semester_tab || 'second') as 'all' | 'first' | 'second'
@@ -2087,86 +1975,30 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     };
     fetchCourses();
   }, [userProfile.department_id, userProfile.level, addToast, userProfile.uid]);
-  
-  const toggleCourse = async (courseId: string) => {
-    if (expandedCourses.has(courseId)) {
-        setExpandedCourses(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(courseId);
-            return newSet;
-        });
-        return;
-    }
 
-    // Credits no longer needed for expanding course outline as per unified credit system focus on AI usage
-    setExpandedCourses(prev => {
-        const newSet = new Set(prev);
-        newSet.add(courseId);
-        return newSet;
-    });
-  };
-
-  const handleMarkTopicComplete = async (course: Course, topic: Topic) => {
-    if (userProgress[topic.topic_id]?.is_complete) return;
-    setIsMarkingTopicId(topic.topic_id);
-    try {
-        const progressRef = dbRef(db, `user_progress/${userProfile.uid}/${topic.topic_id}`);
-        const currentSnapshot = await get(progressRef);
-        const currentData = currentSnapshot.val() || {};
-        await update(progressRef, {
-            is_complete: true,
-            timestamp: Date.now(),
-            study_duration_seconds: currentData.study_duration_seconds || 0,
-            xp_earned: currentData.xp_earned || 0,
-            course_id: course.course_id,
-            course_name: course.course_name,
-            department_id: userProfile.department_id,
-            level: course.level,
-        });
-        addToast(`${topic.topic_name} marked complete.`, 'success');
-    } catch (error) {
-        console.error('Failed to mark topic complete:', error);
-        addToast('Could not mark the topic as complete.', 'error');
-    } finally {
-        setIsMarkingTopicId(null);
-    }
-  };
 
   const filteredCourses = courses
-    .map(course => {
+    .filter(course => {
         if (filter.semester !== 'all' && course.semester !== filter.semester) {
-            return null;
+            return false;
         }
 
         const searchTerm = filter.searchTerm.trim().toLowerCase();
         if (!searchTerm) {
-            return course;
+            return true;
         }
 
-        const matchesCourse = [course.course_name, course.course_code, course.course_id]
+        return [course.course_name, course.course_code, course.course_id]
             .filter(Boolean)
             .some(value => value!.toLowerCase().includes(searchTerm));
+    });
 
-        const filteredTopics = course.topics.filter(topic => 
-            [topic.topic_name, topic.topic_id, topic.topic_context]
-                .filter(Boolean)
-                .some(value => value!.toLowerCase().includes(searchTerm))
-        );
-
-        if (!matchesCourse && filteredTopics.length === 0) {
-            return null;
-        }
-
-        return matchesCourse ? course : { ...course, topics: filteredTopics };
-    })
-    .filter((c): c is Course => c !== null);
-
-  if (selectedTopic) {
+  if (selectedCourse) {
     return (
       <LearningInterface
         userProfile={userProfile}
-        topic={selectedTopic}
-        onClose={() => setSelectedTopic(null)}
+        course={selectedCourse}
+        onClose={() => setSelectedCourse(null)}
       />
     );
   }
@@ -2208,38 +2040,16 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 <StudyGuideSkeleton />
             ) : (
                 filteredCourses.length > 0 ? (
-                    <div className="max-w-4xl mx-auto space-y-6">
-                        {filteredCourses.map(course => {
-                            const isExpanded = expandedCourses.has(course.course_id);
-                            return (
-                                <div key={course.course_id} className="relative">
-                                    <CourseHeader
-                                        course={course}
-                                        isExpanded={isExpanded}
-                                        onClick={() => toggleCourse(course.course_id)}
-                                    />
-                                    <div className={`grid transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-8' : 'grid-rows-[0fr] opacity-0'}`}>
-                                        <div className="overflow-hidden">
-                                            <div className="relative pb-12">
-                                                {course.topics.map((topic, index) => (
-                                                    <TopicNode
-                                                        key={topic.topic_id}
-                                                        topic={topic}
-                                                        isCompleted={userProgress[topic.topic_id]?.is_complete || false}
-                                                        studyDurationSeconds={userProgress[topic.topic_id]?.study_duration_seconds || 0}
-                                                        onSelect={() => setSelectedTopic({ ...topic, courseName: course.course_name, courseId: course.course_id, course_id: course.course_id, textbook_shared_key: (course as any).textbook_shared_key })}
-                                                        onMarkComplete={() => void handleMarkTopicComplete(course, topic)}
-                                                        index={index}
-                                                        pathColor="bg-gray-100"
-                                                        isSaving={isMarkingTopicId === topic.topic_id}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                    <div className="max-w-4xl mx-auto space-y-4">
+                        {filteredCourses.map(course => (
+                            <div key={course.course_id} className="relative">
+                                <CourseHeader
+                                    course={course}
+                                    isExpanded={false}
+                                    onClick={() => setSelectedCourse(course)}
+                                />
+                            </div>
+                        ))}
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center p-20 text-center">

@@ -89,12 +89,18 @@ export interface Course {
   course_unit?: number;
   course_status?: string;
   academic_session?: string;
-  topics: Topic[];
+  topics?: Topic[];
   level: string; // 100lvl, 200lvl, etc.
   semester?: 'first' | 'second';
   textbook_url?: string;
   textbook_urls?: string[];
   textbook_shared_key?: string;
+  progress?: {
+    last_context?: string;
+    completed?: boolean;
+    started_at?: number;
+    last_accessed?: number;
+  };
 }
 
 export interface Department {
