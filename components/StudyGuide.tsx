@@ -992,7 +992,14 @@ Please start teaching me about "${course.course_name}". Give me a simple and cle
     
     const handleSend = async (messageText?: string) => {
         const textToSend = messageText || input;
-        if ((!textToSend.trim() && !file) || isThinking || isIllustrating) return;
+        
+        if (isThinking || isIllustrating) {
+            addToast("Please wait for the AI to finish its current response.", "info");
+            return;
+        }
+        
+        if (!textToSend.trim() && !file) return;
+
         if (!ai) {
             addToast('Gemini API key is not configured in App Controls.', 'error');
             setIsThinking(false);
@@ -1418,8 +1425,7 @@ Student: "${tempInput}"
                                                 onClick={() => {
                                                     handleSend(suggestion);
                                                 }}
-                                                disabled={isThinking || isIllustrating}
-                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-sm hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed pointer-events-auto touch-manipulation"
+                                                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 hover:border-blue-200 text-blue-700 border border-blue-100 rounded-full text-xs font-bold transition-all shadow-sm hover:scale-105 active:scale-95 cursor-pointer pointer-events-auto touch-manipulation"
                                             >
                                                 {suggestion}
                                             </button>
