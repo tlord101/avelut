@@ -341,7 +341,7 @@ const AvelutMessageInput: React.FC<AvelutInputProps> = ({
   const swipeDeltaX = isSwiping ? Math.min(0, Math.max(-110, currentX - startX)) : 0;
 
   return (
-    <div className="w-full max-w-[800px] mx-auto relative select-none z-40 px-4">
+    <div className="w-[95%] max-w-6xl mx-auto relative select-none z-40 px-4">
       <input type="file" ref={fileInputRef} onChange={onFileSelect} className="hidden" multiple accept="*/*" />
       <input type="file" ref={imageInputRef} onChange={onImageSelect} className="hidden" multiple accept="image/*" />
 
@@ -1561,7 +1561,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         </div>
 
                         {/* 2. FULL HEIGHT Message Stream Box Container */}
-                        <div className="w-full h-full absolute inset-0 overflow-y-auto px-4 pt-24 pb-44 md:pb-28 md:px-8 space-y-6 max-w-3xl mx-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth">
+                        <div className="w-[95%] h-full absolute inset-0 overflow-y-auto px-4 pt-24 pb-44 md:pb-28 md:px-8 space-y-6 max-w-6xl mx-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth">
                             {combinedMessageStream.length === 0 ? (
                               <div className="flex min-h-[48vh] flex-col items-center justify-center text-center">
                                 <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-sm border border-[#E9ECEF]">
@@ -1593,7 +1593,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                                                 <Avatar className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-[#E9ECEF]" photo_url={selectedChatUser.photo_url} display_name={selectedChatUser.display_name || 'Learner'} />
                                             )}
                                             
-                                            <div className={`px-5 py-3.5 shadow-sm max-w-[80%] text-[15px] md:text-[16px] relative select-text ${
+                                            <div className={`px-5 py-3.5 shadow-sm max-w-[95%] text-[15px] md:text-[16px] relative select-text ${
                                                 isMe 
                                                     ? 'bg-[#009EE2] text-white rounded-[24px] rounded-tr-[4px]' 
                                                     : 'bg-white text-[#212529] rounded-[24px] rounded-bl-[4px] border border-[#E9ECEF]'
