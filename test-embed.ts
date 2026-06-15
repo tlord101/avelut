@@ -4,12 +4,12 @@ async function main() {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     try {
         const response = await ai.models.embedContent({
-            model: 'text-embedding-004',
+            model: 'gemini-embedding-2',
             contents: 'What is the meaning of life?',
         });
-        console.log("text-embedding-004 SUCCESS");
+        console.log("gemini-embedding-2 SUCCESS");
     } catch (e: any) {
-        console.error("text-embedding-004 ERROR:", e.message);
+        console.error("gemini-embedding-2 ERROR:", e.message);
     }
 }
 main();
