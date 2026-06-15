@@ -136,23 +136,23 @@ export async function ingestTextToPinecone(
       });
 
       const vectorValues = embeddingResponse.embeddings?.[0]?.values;
-      if (!vectorValues) continue;
-
-      records.push({
-        id: `${courseKey}_chunk_${i}`,
-        values: vectorValues,
-        metadata: {
-          course_key: courseKey,
-          course_name: courseName || "",
-          level: level || "",
-          semester: semester || "",
-          chunk_index: i,
-          text: textChunk
-        }
-      });
+      if (vectorValues && vectorValues.length > 0) {
+        records.push({
+          id: `${courseKey}_chunk_${i}`,
+          values: vectorValues,
+          metadata: {
+            course_key: courseKey,
+            course_name: courseName || "",
+            level: level || "",
+            semester: semester || "",
+            chunk_index: i,
+            text: textChunk
+          }
+        });
+      }
 
       // Upsert in safe batch limits of 100 entries
-      if (records.length === 100 || i === chunks.length - 1) {
+      if (records.length === 100 || (i === chunks.length - 1 && records.length > 0)) {
         if (onProgress) onProgress(`Upserting chunks batch to Pinecone (${i + 1}/${chunks.length})...`);
         await index.upsert(records as any);
         records.length = 0; // Clear array buffer
