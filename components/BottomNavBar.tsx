@@ -65,7 +65,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
         key={itemId}
         data-tour-id={`bottomnav-${itemId}`}
         onClick={() => { triggerHaptic(); onItemClick(itemId); }}
-        className="flex flex-col items-center justify-center h-full w-full focus:outline-none group active:scale-95 transition-all duration-200"
+        className="flex flex-col items-center justify-center h-full w-full focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 rounded-lg group active:scale-95 transition-all duration-200"
         style={{ color }}
       >
         <div className="mb-1 transition-transform group-hover:scale-105 duration-200">
@@ -93,7 +93,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
               <button
                 key={item.id}
                 onClick={() => onItemClick(item.id)}
-                className="flex flex-col items-center justify-center focus:outline-none"
+                className="flex flex-col items-center justify-center focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 rounded-lg"
                 style={{ color }}
               >
                 <div className="mb-1">
@@ -170,7 +170,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
         {/* Center Raised Dual-Function Camera Button */}
         <button
           onClick={() => onCenterActionClick ? onCenterActionClick() : onItemClick(navItems[2].id)}
-          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${activeItem === 'visual_solver' ? 'ring-4 ring-[#002D62]/20 animate-pulse' : ''}`}
+          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white border-[5px] border-[#002D62] flex items-center justify-center shadow-[0_8px_24px_rgba(0,45,98,0.18)] hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 transition-all z-30 cursor-pointer ${activeItem === 'visual_solver' ? 'ring-4 ring-[#002D62]/20 animate-pulse' : ''}`}
+          aria-label={navItems[2].label}
+          title={navItems[2].label}
         >
           {activeItem === 'visual_solver' ? (
             <ShutterIcon className="w-8 h-8 text-[#002D62]" />
