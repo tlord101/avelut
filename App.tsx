@@ -123,8 +123,19 @@ const usePWAInstallEngine = () => {
 
 const PWAInstallBannerOverlay: React.FC = () => {
     const { deferredPrompt, isIOS, isStandalone, executeInstallationPipeline } = usePWAInstallEngine();
-    const [dismissed, setDismissed] = useState(false);
+    const [dismissed, setDismissed] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('pwa_install_dismissed') === 'true';
+        }
+        return false;
+    });
     const canTriggerNativeInstall = !!deferredPrompt;
+
+    useEffect(() => {
+        if (dismissed && typeof window !== 'undefined') {
+            localStorage.setItem('pwa_install_dismissed', 'true');
+        }
+    }, [dismissed]);
 
     if (Capacitor.isNativePlatform() || isStandalone || dismissed) return null;
 
