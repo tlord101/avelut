@@ -239,7 +239,7 @@ const mergeCourseRecord = (
     const mergedCourseName = (sourceCourse.course_name || baseCourse.course_name || '').toString().trim();
     const mergedCourseId = (baseCourse.course_id || sourceCourse.course_id || getCourseMergeKey({ course_name: mergedCourseName }))?.toString();
 
-    return {
+    const result: any = {
         ...baseCourse,
         ...sourceCourse,
         course_id: mergedCourseId || '',
@@ -248,14 +248,14 @@ const mergeCourseRecord = (
         textbook_url: getPrimaryTextbookUrl(mergedCourseUrls),
         textbook_urls: mergedCourseUrls,
         semester: normalizeSemester(sourceCourse.semester || (baseCourse as Course).semester),
-    } as any;
+    };
 
     const sharedKey = (sourceCourse as any).textbook_shared_key || (baseCourse as any).textbook_shared_key;
     if (sharedKey !== undefined && sharedKey !== null) {
-        mergedCourse.textbook_shared_key = sharedKey;
+        result.textbook_shared_key = sharedKey;
     }
 
-    return mergedCourse;
+    return result;
 };
 
 const upsertCourseInList = (
