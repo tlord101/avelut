@@ -56,7 +56,7 @@ export async function searchPinecone(
       contents: query,
     });
     
-    const vectorValues = embeddingResponse.embeddings?.[0]?.values;
+    const vectorValues = embeddingResponse.embeddings?.[0]?.values || (embeddingResponse as any).embedding?.values;
 
     if (!vectorValues) {
       return { success: false, message: "Failed to generate embedding for the query." };
@@ -152,7 +152,7 @@ export async function ingestTextToPinecone(
         contents: textChunk,
       });
 
-      const vectorValues = embeddingResponse.embeddings?.[0]?.values;
+      const vectorValues = embeddingResponse.embeddings?.[0]?.values || (embeddingResponse as any).embedding?.values;
       if (vectorValues && vectorValues.length > 0) {
         records.push({
           id: `${courseKey}_chunk_${i}`,
@@ -171,7 +171,7 @@ export async function ingestTextToPinecone(
       // Upsert in safe batch limits of 100 entries
       if (records.length === 100 || (i === chunks.length - 1 && records.length > 0)) {
         if (onProgress) onProgress(`Upserting chunks batch to Pinecone (${i + 1}/${chunks.length})...`);
-        await index.upsert(records as any);
+        await index.upsert({ records });
         records.length = 0; // Clear array buffer
       }
     }
