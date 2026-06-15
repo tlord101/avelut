@@ -9,6 +9,23 @@ interface SearchResult {
 }
 
 /**
+ * Helper to safely instantiate Pinecone while suppressing its hardcoded
+ * browser-usage warning since this is an intended admin client action.
+ */
+function createPineconeClient(apiKey: string): Pinecone {
+  const originalWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    if (typeof args[0] === 'string' && args[0].includes('The Pinecone SDK is intended for server-side use only')) {
+      return;
+    }
+    originalWarn.apply(console, args);
+  };
+  const pc = new Pinecone({ apiKey });
+  console.warn = originalWarn;
+  return pc;
+}
+
+/**
  * Perform a vector search on the Pinecone index using client-side genAI embeddings.
  */
 export async function searchPinecone(
@@ -30,7 +47,7 @@ export async function searchPinecone(
       return { success: false, message: "Pinecone or Gemini API key is missing in App Controls." };
     }
 
-    const pc = new Pinecone({ apiKey: pineconeApiKey });
+    const pc = createPineconeClient(pineconeApiKey);
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
     // 1. Generate embedding for the search query
@@ -117,7 +134,7 @@ export async function ingestTextToPinecone(
       return { success: false, message: "Pinecone or Gemini API key is missing in App Controls." };
     }
 
-    const pc = new Pinecone({ apiKey: pineconeApiKey });
+    const pc = createPineconeClient(pineconeApiKey);
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
     const chunks = splitIntoSemanticParagraphs(rawText);
