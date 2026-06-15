@@ -957,7 +957,7 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto flex max-w-4xl flex-col gap-4">
+              <div className="mx-auto flex w-[95%] max-w-6xl flex-col gap-4">
                 {messages.map((message, idx) => {
                   // If this is the last bot message and it's redundant with streaming, hide it temporarily
                   if (streamingBotText !== null &&
@@ -1090,8 +1090,8 @@ export default function AvelutAI({ userProfile }: AvelutAIProps) {
           </section>
 
           {/* Integrated AVELUT Input Layout Panel */}
-          <footer className="w-full bg-[#060814] pb-[92px] md:pb-4 px-4 z-30 shrink-0">
-            <div className="w-full max-w-xl mx-auto transition-all duration-300 mb-2.5">
+          <footer className="w-full bg-[#060814] pb-[92px] md:pb-4 px-4 z-30 shrink-0 flex justify-center">
+            <div className="w-[95%] max-w-6xl transition-all duration-300 mb-2.5">
               
               {/* Attachment Preview */}
               {attachments.length > 0 && (

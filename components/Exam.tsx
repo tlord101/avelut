@@ -771,8 +771,15 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
         const canStartExam = completedTopicNames.length > 0;
 
         return (
-          <div className="max-w-4xl mx-auto w-full text-center space-y-12 py-12 animate-in fade-in zoom-in-95 duration-700">
-            <h3 className="text-2xl font-bold text-gray-900">Ready for your exam?</h3>
+          <div className="max-w-4xl mx-auto w-full text-center space-y-12 py-12 animate-in fade-in zoom-in-95 duration-700 relative">
+            <button 
+              onClick={() => setExamState('history')} 
+              className="absolute -top-6 sm:top-0 left-0 inline-flex items-center text-gray-600 font-semibold hover:text-lime-600 transition-colors bg-gray-50 px-4 py-2 rounded-xl shadow-sm border border-gray-100"
+            >
+              <ListIcon className="w-5 h-5 mr-2" />
+              View Exam History
+            </button>
+            <h3 className="text-2xl font-bold text-gray-900 pt-12 sm:pt-0">Ready for your exam?</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* AI Generated Exam */}
@@ -859,14 +866,6 @@ export const Exam: React.FC<ExamProps> = ({ userProfile, userProgress }) => {
                 )}
               </div>
             </div>
-
-            <button 
-              onClick={() => setExamState('history')} 
-              className="inline-flex items-center text-gray-600 font-semibold hover:text-lime-600 transition-colors mt-8"
-            >
-              <ListIcon className="w-5 h-5 mr-2" />
-              View Exam History
-            </button>
           </div>
         );
     }

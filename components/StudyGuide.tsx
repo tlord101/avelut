@@ -1841,19 +1841,34 @@ Student: "${tempInput}"
 const CourseHeader: React.FC<{ 
     course: Course, 
     isExpanded?: boolean, 
-    onClick: () => void
-}> = ({ course, isExpanded, onClick }) => {
+    onClick: () => void,
+    userProgress?: any
+}> = ({ course, isExpanded, onClick, userProgress }) => {
     const courseLabel = course.course_code || course.course_id || course.course_name;
+    const timeSpent = userProgress?.course_time_spent?.[course.course_id] || 0;
 
     return (
         <div className="w-full max-w-4xl mx-auto py-2">
-            <div className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition`}>
-                <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={onClick}>
-                    <div className="flex items-center gap-3">
-                        <div className="text-sm font-black text-gray-700">{courseLabel}</div>
-                        <div className="text-xs text-gray-500">{course.course_name}</div>
+            <div className={`w-full flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl hover:shadow-md hover:border-blue-200 transition-all cursor-pointer`} onClick={onClick}>
+                <div className="flex-1 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-inner shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                    </div>
+                    <div className="flex flex-col">
+                        <div className="text-base font-black text-gray-800 tracking-tight">{courseLabel}</div>
+                        <div className="text-xs font-semibold text-gray-500 line-clamp-1">{course.course_name}</div>
                     </div>
                 </div>
+                {timeSpent > 0 && (
+                    <div className="mt-3 sm:mt-0 flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full border border-gray-100 text-[10px] font-bold text-gray-500 shadow-sm shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                        </svg>
+                        {formatDuration(timeSpent)} spent
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -2053,6 +2068,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                     course={course}
                                     isExpanded={false}
                                     onClick={() => setSelectedCourse(course)}
+                                    userProgress={userProgress}
                                 />
                             </div>
                         ))}

@@ -622,12 +622,12 @@ ${retrievedContext}
                 return (
                     <div className="w-full h-full flex flex-col bg-black">
                         {/* Camera View Area */}
-                        <div className="flex-1 relative overflow-hidden">
-                            <video ref={videoRef} playsInline autoPlay muted className="w-full h-full object-cover"></video>
+                        <div className="flex-1 relative overflow-hidden flex items-center justify-center p-2 sm:p-4 bg-gray-900">
+                            <video ref={videoRef} playsInline autoPlay muted className="w-full h-full object-contain rounded-xl shadow-lg"></video>
                             <div 
                                 style={{ 
-                                    left: `${cropBox.x * 100}%`, top: `${cropBox.y * 100}%`,
-                                    width: `${cropBox.width * 100}%`, height: `${cropBox.height * 100}%`
+                                    left: `calc(${cropBox.x * 100}% + 8px)`, top: `calc(${cropBox.y * 100}% + 8px)`,
+                                    width: `calc(${cropBox.width * 100}% - 16px)`, height: `calc(${cropBox.height * 100}% - 16px)`
                                 }}
                                 className={`absolute border-4 border-dashed rounded-lg cursor-move transition-colors duration-300 
                                     ${cameraState === 'scanning' ? 'border-lime-400 animate-[scan-pulse_1s_ease-in-out_infinite]' : 'border-white/80'}`}
@@ -645,21 +645,21 @@ ${retrievedContext}
                                     </div>
                                 ))}
                             </div>
-                            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white bg-black/50 px-3 py-1 text-sm rounded-full pointer-events-none w-fit text-center">
+                            <div className="absolute top-8 left-1/2 -translate-x-1/2 text-white bg-black/60 px-4 py-1.5 text-sm rounded-full pointer-events-none w-fit text-center shadow-md">
                                 Drag and resize to frame the problem
                             </div>
                         </div>
                         {/* Shutter Button Area */}
-                        <div className="flex-shrink-0 flex items-center h-16 bg-gray-100 px-4 justify-end">
+                        <div className="flex-shrink-0 flex items-center h-20 bg-gray-900 px-4 sm:px-6 justify-center border-t border-gray-800 z-20">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 aria-label="Upload photo"
-                                className="flex items-center gap-2 px-4 py-3 bg-gray-700 text-white rounded-full hover:bg-gray-800 transition-colors shadow-lg font-semibold"
+                                className="flex items-center justify-center gap-2 px-6 py-3 w-full max-w-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg font-bold text-base active:scale-95"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                 </svg>
-                                Upload Photo
+                                Upload Photo to Solve
                             </button>
                             <input
                                 ref={fileInputRef}

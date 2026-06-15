@@ -110,7 +110,7 @@ export const FlashcardsUI: React.FC<FlashcardsUIProps> = ({ flashcards, onFinish
                     transition: { duration: 0.3 }
                   }}
                   className="absolute inset-0 cursor-grab active:cursor-grabbing"
-                  onClick={() => {
+                  onTap={() => {
                     if (isFront) setIsFlipped(!isFlipped);
                   }}
                 >
