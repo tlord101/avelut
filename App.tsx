@@ -14,6 +14,38 @@ import { Onboarding } from './components/Onboarding';
 import { ActivationScreen } from './components/ActivationScreen';
 import { createAvelutAI } from './utils/inference';
 import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
+
+const useAutoPermissions = () => {
+    useEffect(() => {
+        const requestPermissions = async () => {
+            try {
+                // Notifications
+                if (Capacitor.isNativePlatform()) {
+                    let permStatus = await PushNotifications.checkPermissions();
+                    if (permStatus.receive === 'prompt') {
+                        await PushNotifications.requestPermissions();
+                    }
+                } else {
+                    if ('Notification' in window && Notification.permission === 'default') {
+                        await Notification.requestPermission();
+                    }
+                }
+                
+                // Camera
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            } catch (err) {
+                console.warn("Auto permissions skipped or failed:", err);
+            }
+        };
+
+        const timer = setTimeout(requestPermissions, 2500);
+        return () => clearTimeout(timer);
+    }, []);
+};
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(module => ({ default: module.AdminPanel })));
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -97,109 +129,42 @@ const PWAInstallBannerOverlay: React.FC = () => {
     if (Capacitor.isNativePlatform() || isStandalone || dismissed) return null;
 
     return (
-        <div className="fixed bottom-5 right-5 z-[99998] w-[min(92vw,380px)] overflow-hidden rounded-[28px] border border-brand-100 bg-off-white shadow-[0_24px_80px_rgba(0,45,98,0.22)] animate-fade-in" role="dialog" aria-modal="false" aria-label="Install AVELUT">
-            <div className="relative p-4">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ice-blue via-brand-500 to-brand-900" />
+        <div className="fixed inset-0 z-[99998] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Install AVELUT">
+            <div className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-brand-100 bg-white shadow-2xl p-6 text-center animate-scale-in">
+                <button
+                    type="button"
+                    onClick={() => setDismissed(true)}
+                    className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors"
+                    aria-label="Close"
+                >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
 
-                <div className="flex items-start gap-3">
-                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
-                        <img src="/logo_icon.png" alt="AVELUT" className="h-11 w-11 object-contain" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-base font-black tracking-tight text-charcoal">
-                                {canTriggerNativeInstall ? 'Install AVELUT' : isIOS ? 'Add AVELUT to iPhone' : 'Install AVELUT'}
-                            </h2>
-                            <span className="rounded-full bg-ice-blue px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-900">
-                                {isIOS ? 'iOS' : 'Android'}
-                            </span>
-                        </div>
-                        <p className="mt-1 text-sm leading-relaxed text-charcoal/65">
-                            {canTriggerNativeInstall
-                                ? 'Install AVELUT from your browser for quick access any time.'
-                                : isIOS
-                                    ? 'Open Safari’s share menu, then choose Add to Home Screen.'
-                                    : 'Open the browser menu and choose Install app.'}
-                        </p>
-                    </div>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-brand-50 mb-4 border border-brand-100 shadow-inner">
+                    <img src="/logo_icon.png" alt="AVELUT" className="h-10 w-10 object-contain" />
+                </div>
+                
+                <h2 className="text-2xl font-black tracking-tighter text-charcoal mb-2">
+                    Install AVELUT
+                </h2>
+                
+                <p className="text-sm leading-relaxed text-charcoal/70 mb-6 font-medium">
+                    {canTriggerNativeInstall
+                        ? 'Get the full App experience! Install AVELUT directly to your home screen for faster access, offline capabilities, and instant notifications.'
+                        : isIOS
+                            ? 'Get the App experience! Tap the Share button below and select "Add to Home Screen".'
+                            : 'Get the App experience! Open your browser menu and select "Install app".'}
+                </p>
+
+                {canTriggerNativeInstall && (
                     <button
                         type="button"
-                        onClick={() => setDismissed(true)}
-                        className="rounded-full p-1 text-charcoal/45 transition hover:bg-white hover:text-charcoal"
-                        aria-label="Dismiss install tip"
+                        onClick={() => executeInstallationPipeline()}
+                        className="w-full rounded-2xl bg-brand-600 py-4 text-[13px] font-black uppercase tracking-widest text-white shadow-lg shadow-brand-500/30 transition hover:bg-brand-500 active:scale-95"
                     >
-                        ✕
+                        Install App Now
                     </button>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
-                        <div className="flex items-center gap-2 text-brand-900">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-                                {canTriggerNativeInstall ? (
-                                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 3v12" />
-                                        <path d="M7 8l5-5 5 5" />
-                                        <rect x="4" y="15" width="16" height="6" rx="2" />
-                                    </svg>
-                                ) : (
-                                    <MenuIcon className="h-5 w-5" />
-                                )}
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 1</p>
-                                <p className="text-sm font-bold">{canTriggerNativeInstall ? 'Tap Install' : 'Tap Menu'}</p>
-                            </div>
-                        </div>
-                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
-                            {canTriggerNativeInstall
-                                ? 'Confirm installation in the browser prompt.'
-                                : isIOS
-                                    ? 'Open Safari’s share menu.'
-                                    : 'Open Chrome’s menu in the top-right corner.'}
-                        </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-white p-3 border border-brand-100 shadow-sm">
-                        <div className="flex items-center gap-2 text-brand-900">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 3v12" />
-                                    <path d="M7 8l5-5 5 5" />
-                                    <rect x="4" y="15" width="16" height="6" rx="2" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Step 2</p>
-                                <p className="text-sm font-bold">Add to Home</p>
-                            </div>
-                        </div>
-                        <p className="mt-2 text-xs leading-relaxed text-charcoal/60">
-                            {canTriggerNativeInstall
-                                ? 'The browser will add AVELUT to your device.'
-                                : 'Choose Add to Home Screen to finish setup.'}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-500 px-4 py-3 text-off-white">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
-                        <img src="/logo_icon.png" alt="AVELUT" className="h-6 w-6 object-contain" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-sm font-bold leading-tight">Install from Chrome for quick access</p>
-                        <p className="text-[11px] text-white/80">No app store required, just a browser install.</p>
-                    </div>
-                    {canTriggerNativeInstall && (
-                        <button
-                            type="button"
-                            onClick={() => executeInstallationPipeline()}
-                            className="ml-auto rounded-full bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-brand-900 transition hover:bg-ice-blue"
-                        >
-                            Install
-                        </button>
-                    )}
-                </div>
+                )}
             </div>
         </div>
     );
@@ -287,6 +252,7 @@ const playAlarmSound = () => {
 // CORE APP CONTEXT ENGINE INITIALIZATION
 // ==========================================
 const App: React.FC = () => {
+    useAutoPermissions();
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [userProgress, setUserProgress] = useState<UserProgress>({});
