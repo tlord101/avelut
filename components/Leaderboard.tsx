@@ -82,8 +82,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ userProfile }) => {
             snapshot.forEach((child) => {
                 data.push({ user_id: child.key, ...child.val() });
             });
-            // Firebase sorts ascending by child, so we reverse for descending leaderboard
-            const sortedData = data.sort((a, b) => (b.xp || 0) - (a.xp || 0));
+            // Firebase returns data sorted ascending by XP due to orderByChild('xp').
+            // Reversing the array is more efficient (O(n)) than re-sorting (O(n log n)).
+            const sortedData = data.reverse();
             
             writeCachedJson(cacheKey, sortedData);
             if (activeTab === 'overall') {

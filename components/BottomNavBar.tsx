@@ -18,7 +18,7 @@ interface BottomNavBarProps {
   onCenterActionClick?: () => void;
 }
 
-export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemClick, isVisible, userProfile, items, onCenterActionClick }) => {
+export const BottomNavBar = React.memo<BottomNavBarProps>(({ activeItem, onItemClick, isVisible, userProfile, items, onCenterActionClick }) => {
   const baseNavItems = [
     { id: 'mobile_menu', icon: <MenuIcon />, label: 'Menu' },
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
@@ -218,4 +218,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeItem, onItemCl
       </div>
     </nav>
   );
-};
+});
+
+BottomNavBar.displayName = 'BottomNavBar';

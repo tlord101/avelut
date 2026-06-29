@@ -21,7 +21,7 @@ interface HeaderProps {
   onLogoutClick?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
+export const Header = React.memo<HeaderProps>(({
     currentPageLabel, 
     onNotificationsClick, 
     unreadCount = 0, 
@@ -177,4 +177,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
         </header>
     );
-};
+});
+
+Header.displayName = 'Header';
