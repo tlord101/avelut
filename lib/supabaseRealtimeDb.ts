@@ -471,13 +471,29 @@ async function loadPath(path: string): Promise<any> {
   if (parts[0] === 'users' && parts.length === 2) {
     const { data } = await supabase.from('profiles').select('*').eq('id', parts[1]).maybeSingle();
     if (!data) return null;
+    const credits = typeof data.ai_credits === 'number'
+      ? data.ai_credits
+      : (typeof data.ai_credits_balance === 'number' ? data.ai_credits_balance : 50);
     return {
       ...data,
-      isOnline: data.is_online,
+      uid: data.id,
+      id: data.id,
+      display_name: data.full_name || data.username || 'User',
+      full_name: data.full_name || data.username || '',
+      photo_url: data.avatar_url || '',
+      avatar_url: data.avatar_url || '',
+      isOnline: data.is_online ?? false,
+      is_online: data.is_online ?? false,
       lastSeen: data.last_seen ? new Date(data.last_seen).getTime() : null,
-      display_name: data.full_name,
-      photo_url: data.avatar_url,
-      notifications_enabled: data.notifications_enabled,
+      last_seen: data.last_seen ? new Date(data.last_seen).getTime() : null,
+      notifications_enabled: data.notifications_enabled ?? true,
+      ai_credits_balance: credits,
+      ai_credits: credits,
+      current_streak: data.streak ?? 0,
+      streak: data.streak ?? 0,
+      subscription_status: data.is_paid_subscriber ? 'semester' : (data.subscription_status || 'free'),
+      role: data.is_admin ? 'superadmin' : (data.role || 'user'),
+      is_admin: data.is_admin || false,
     };
   }
 
@@ -918,6 +934,45 @@ export function onValue(r: DbRef, callback: (snap: any) => void): Unsub {
     }
   }
 
+  if (parts[0] === 'users' && parts.length === 2) {
+    const userId = parts[1];
+    const chName = `profile:${userId}`;
+    let ch = channelByPath.get(chName);
+    if (!ch) {
+      ch = supabase
+        .channel(chName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+          async () => {
+            const fresh = await loadPath(path);
+            notify(path, fresh);
+          }
+        )
+        .subscribe();
+      channelByPath.set(chName, ch);
+    }
+  }
+
+  if (parts[0] === 'users' && parts.length === 1) {
+    const chName = 'profiles:all';
+    let ch = channelByPath.get(chName);
+    if (!ch) {
+      ch = supabase
+        .channel(chName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles' },
+          async () => {
+            const fresh = await loadPath(path);
+            notify(path, fresh);
+          }
+        )
+        .subscribe();
+      channelByPath.set(chName, ch);
+    }
+  }
+
   return () => {
     const set = listeners.get(path);
     if (set) {
@@ -925,6 +980,33 @@ export function onValue(r: DbRef, callback: (snap: any) => void): Unsub {
       if (set.size === 0) listeners.delete(path);
     }
   };
+}
+
+export function notifyUserCreditsUpdated(userId: string, newCredits: number) {
+  const path = `users/${userId}`;
+  const current = getLocalCache(path) || pathDataCache.get(path) || {};
+  const updated = {
+    ...current,
+    ai_credits: newCredits,
+    ai_credits_balance: newCredits,
+  };
+  setLocalCache(path, updated);
+  notify(path, updated);
+
+  const listPath = 'users';
+  const currentList = getLocalCache(listPath) || pathDataCache.get(listPath);
+  if (currentList && typeof currentList === 'object' && currentList[userId]) {
+    const updatedList = {
+      ...currentList,
+      [userId]: {
+        ...currentList[userId],
+        ai_credits: newCredits,
+        ai_credits_balance: newCredits,
+      },
+    };
+    setLocalCache(listPath, updatedList);
+    notify(listPath, updatedList);
+  }
 }
 
 export function off(r?: DbRef, _event?: string, callback?: (snap: any) => void) {

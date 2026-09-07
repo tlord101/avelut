@@ -36,10 +36,15 @@ export const StudyPartners: React.FC<StudyPartnersProps> = ({ userProfile, onNav
         const unsubUsers = onValue(usersRef, (snapshot) => {
             if (snapshot.exists()) {
                 const usersData = snapshot.val();
-                const usersList = Object.keys(usersData).map(uid => ({
-                    uid,
-                    ...usersData[uid]
-                })) as UserProfile[];
+                let usersList: UserProfile[] = [];
+                if (Array.isArray(usersData)) {
+                    usersList = usersData.filter(Boolean).map(u => ({ uid: u.uid || u.id, ...u }));
+                } else if (usersData && typeof usersData === 'object') {
+                    usersList = Object.entries(usersData).map(([uid, val]: [string, any]) => ({
+                        uid: val?.uid || val?.id || uid,
+                        ...val
+                    })) as UserProfile[];
+                }
                 setAllUsers(usersList);
                 writeCachedJson(`messenger_users_v2`, usersList);
             }

@@ -1141,7 +1141,7 @@ const App: React.FC = () => {
                     has_completed_tour: false,
                     is_activated: true,
                     subscription_status: 'free',
-                    ai_credits_balance: 30,
+                    ai_credits_balance: 50,
                 };
                 setUserProfile(defaultProfile);
                 userProfileRef.current = defaultProfile;
@@ -1194,8 +1194,8 @@ const App: React.FC = () => {
                     timezone: clientTimezone,
                     timezone_offset: clientTimezoneOffset,
                 };
-                if (typeof existingProfile.ai_credits_balance !== 'number') {
-                    nextProfile.ai_credits_balance = 30;
+                if (typeof existingProfile.ai_credits_balance !== 'number' && typeof existingProfile.ai_credits !== 'number') {
+                    nextProfile.ai_credits_balance = 50;
                 }
                 const hasProfileUpdates = Object.entries(nextProfile).some(([key, value]) => existingProfile[key] !== value && value);
                 if (hasProfileUpdates) {
@@ -1449,7 +1449,9 @@ const App: React.FC = () => {
             has_completed_tour: false,
             is_activated: true,
             subscription_status: 'free',
-            ai_credits_balance: typeof userProfile?.ai_credits_balance === 'number' ? userProfile.ai_credits_balance : 30,
+            ai_credits_balance: typeof userProfile?.ai_credits_balance === 'number'
+                ? userProfile.ai_credits_balance
+                : (typeof (userProfile as any)?.ai_credits === 'number' ? (userProfile as any).ai_credits : 50),
         };
         try {
             const userRef = dbRef(db, `users/${user.uid}`);

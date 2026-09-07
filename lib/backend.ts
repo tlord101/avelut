@@ -19,6 +19,7 @@ import {
   query,
   limitToLast,
   increment,
+  notifyUserCreditsUpdated,
   type DbRef,
 } from './supabaseRealtimeDb';
 import { supabase } from './supabaseClient';
@@ -229,6 +230,7 @@ export {
   limitToLast,
   limitToFirst,
   increment,
+  notifyUserCreditsUpdated,
   orderByChild,
   equalTo,
   orderByKey,

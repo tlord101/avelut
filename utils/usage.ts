@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import type { UserProfile, AppSettings } from '../types';
 import { DEFAULT_USAGE_SETTINGS, DEFAULT_APP_SETTINGS } from './appSettings';
 import { saveLocalCredits, recordLocalCreditDeduction } from '../services/creditsStorageService';
+import { notifyUserCreditsUpdated } from '../lib/supabaseRealtimeDb';
 
 const loadPaystackScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -170,10 +171,14 @@ export {
 } from './liveTutorialQuota';
 
 export const checkAICredits = (
-  userProfile: UserProfile,
-  cost: number,
+  userProfile?: UserProfile | null,
+  cost: number = 1,
   appSettings?: AppSettings | null
-) => {
+): { allowed: boolean; balance: number; cost: number } => {
+  if (!userProfile) {
+    return { allowed: false, balance: 0, cost };
+  }
+
   if (isExempt(userProfile)) {
     return { allowed: true, balance: Infinity, cost: 0 };
   }
@@ -184,13 +189,13 @@ export const checkAICredits = (
     return { allowed: true, balance: Infinity, cost: 0 };
   }
 
-  const usageSettings = appSettings?.usage_settings || DEFAULT_USAGE_SETTINGS;
-  const tiers = usageSettings?.tiers || (usageSettings as any)?.plans || DEFAULT_USAGE_SETTINGS.tiers;
-  const subStatus = userProfile?.subscription_status || 'free';
-  const planKey = (subStatus === 'pro' ? 'monthly' : subStatus) as string;
-  const allocation = (tiers as any)[planKey]?.credit_allocation ?? DEFAULT_USAGE_SETTINGS.tiers.free.credit_allocation;
+  // Strict balance resolution: prioritize ai_credits_balance, then ai_credits, fallback to 0
+  const balance = typeof userProfile.ai_credits_balance === 'number'
+    ? userProfile.ai_credits_balance
+    : (typeof (userProfile as any).ai_credits === 'number'
+        ? (userProfile as any).ai_credits
+        : 0);
 
-  const balance = userProfile?.ai_credits_balance ?? allocation;
   const allowed = balance >= cost;
 
   return { allowed, balance, cost };
@@ -208,8 +213,11 @@ export const deductAICredits = async (userId: string, cost: number, featureName:
         p_amount: cost,
       });
 
+      let updatedBalance: number | null = null;
+
       if (!rpcErr && rpcRes?.success) {
         if (typeof rpcRes.remaining_credits === 'number') {
+          updatedBalance = rpcRes.remaining_credits;
           saveLocalCredits(userId, rpcRes.remaining_credits, 'free').catch(console.warn);
         }
       } else {
@@ -225,8 +233,13 @@ export const deductAICredits = async (userId: string, cost: number, featureName:
             .from('profiles')
             .update({ ai_credits: newCredits, updated_at: new Date().toISOString() })
             .eq('id', userId);
+          updatedBalance = newCredits;
           saveLocalCredits(userId, newCredits, 'free').catch(console.warn);
         }
+      }
+
+      if (typeof updatedBalance === 'number') {
+        notifyUserCreditsUpdated(userId, updatedBalance);
       }
 
       void supabase.from('usage_records').insert({
