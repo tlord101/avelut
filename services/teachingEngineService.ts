@@ -265,51 +265,6 @@ export class TeachingEngineService {
     const takeaways = boardPlan.recommended_board_content || boardPlan.key_concepts || [boardPlan.teaching_objective || boardTitle];
     const safeTopic = this.currentStructure?.topic || 'Academic Concept';
 
-    const fallbackSvg = `
-<svg viewBox="0 0 500 300" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <marker id="fbArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38BDF8" />
-    </marker>
-    <marker id="fbArrowYellow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#FACC15" />
-    </marker>
-  </defs>
-
-  <!-- Outline Canvas Frame -->
-  <rect x="15" y="15" width="470" height="270" rx="12" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8,4"/>
-
-  <!-- Vector Line Coordinate Axes -->
-  <line x1="50" y1="240" x2="450" y2="240" stroke="#64748B" stroke-width="2" marker-end="url(#fbArrow)"/>
-  <line x1="50" y1="240" x2="50" y2="50" stroke="#64748B" stroke-width="2" marker-end="url(#fbArrow)"/>
-
-  <text x="450" y="260" fill="#94A3B8" font-size="12" font-weight="700" font-family="sans-serif">State / Time (t)</text>
-  <text x="25" y="45" fill="#94A3B8" font-size="12" font-weight="700" font-family="sans-serif">Magnitude (f)</text>
-
-  <!-- Outline Vector Curve (Line Drawing) -->
-  <path d="M 50 200 Q 150 70 250 140 T 430 80" fill="none" stroke="#38BDF8" stroke-width="3"/>
-
-  <!-- Leader Line 1 & Label -->
-  <line x1="150" y1="110" x2="190" y2="60" stroke="#FACC15" stroke-width="1.8" stroke-dasharray="3,3"/>
-  <circle cx="150" cy="110" r="5" fill="none" stroke="#FACC15" stroke-width="2"/>
-  <text x="195" y="55" fill="#FACC15" font-size="13" font-weight="800" font-family="sans-serif">Initial Phase Peak</text>
-
-  <!-- Leader Line 2 & Label -->
-  <line x1="250" y1="140" x2="290" y2="190" stroke="#34D399" stroke-width="1.8" stroke-dasharray="3,3"/>
-  <circle cx="250" cy="140" r="5" fill="none" stroke="#34D399" stroke-width="2"/>
-  <text x="295" y="200" fill="#34D399" font-size="13" font-weight="800" font-family="sans-serif">Equilibrium Point</text>
-
-  <!-- Vector Arrow Force Line -->
-  <line x1="250" y1="140" x2="380" y2="105" stroke="#F43F5E" stroke-width="2.5" marker-end="url(#fbArrowYellow)"/>
-  <text x="310" y="115" fill="#F8FAFC" font-size="12" font-weight="700" font-family="sans-serif">Vector Direction</text>
-
-  <!-- Diagram Title Label -->
-  <text x="250" y="36" text-anchor="middle" fill="#E2E8F0" font-size="15" font-weight="800" font-family="sans-serif">
-    LINE SCHEMATIC: ${boardTitle.toUpperCase()}
-  </text>
-</svg>
-`.trim();
-
     const actions: BoardAction[] = [
       {
         id: `act_title_${boardNum}`,
@@ -319,31 +274,21 @@ export class TeachingEngineService {
         metadata: { fontSize: '3xl', color: '#FFFFFF' },
         sync: { triggerImmediately: true },
       },
-      ...takeaways.slice(0, 3).map((kt, idx) => ({
+      ...takeaways.slice(0, 4).map((kt, idx) => ({
         id: `act_kt_${boardNum}_${idx}`,
         type: 'write' as const,
         content: `• ${kt}`,
-        position: { x: 18, y: 28 + idx * 12 },
-        metadata: { fontSize: 'xl' as const, color: '#F3F4F6' },
+        position: { x: 20, y: 30 + idx * 14 },
+        metadata: { fontSize: '2xl' as const, color: '#F3F4F6' },
         sync: { phrase: kt },
       })),
-      {
-        id: `act_draw_${boardNum}`,
-        type: 'draw',
-        position: { x: 50, y: 62 },
-        metadata: {
-          primitive: 'custom_svg',
-          svgContent: fallbackSvg,
-        },
-        sync: { phrase: boardTitle },
-      },
     ];
 
     return {
       board_id: `board_fb_${boardNum}`,
       board_number: boardNum,
       title: boardTitle,
-      speech: `Welcome to this board on ${boardTitle}. Let's break down the key mechanism step-by-step to understand how ${safeTopic} operates visually and logically.`,
+      speech: `Welcome to this board on ${boardTitle}. Let's explore the core principles of ${safeTopic} step-by-step.`,
       speech_beats: [
         {
           id: `beat_fb_1`,
@@ -351,15 +296,8 @@ export class TeachingEngineService {
           purpose: 'introduce title',
           board_actions: [actions[0]],
         },
-        {
-          id: `beat_fb_2`,
-          text: `Let's break down the key mechanism step-by-step`,
-          purpose: 'introduce diagram',
-          board_actions: [actions[actions.length - 1]],
-        },
       ],
       board_actions: normalizeBoardActions(actions),
-      svg_illustration: fallbackSvg,
     };
   }
 
