@@ -76,7 +76,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
                 notifications_enabled: true,
                 ai_credits_balance: data.ai_credits ?? 50,
                 is_admin: data.is_admin || false,
-                subscription_status: data.is_paid_subscriber ? 'semester' : (data.subscription_status || 'free'),
+                subscription_status: data.subscription_status || (data.is_paid_subscriber ? 'premium' : 'free'),
             };
             profileMemoryCache.set(uid, profile);
             profileMemoryCache.set(targetUid, profile);
@@ -130,7 +130,7 @@ export const subscribeUserProfile = (uid: string, callback: (profile: UserProfil
                             notifications_enabled: true,
                             ai_credits_balance: data.ai_credits ?? 50,
                             is_admin: data.is_admin || false,
-                            subscription_status: data.is_paid_subscriber ? 'semester' : (data.subscription_status || 'free'),
+                            subscription_status: data.subscription_status || (data.is_paid_subscriber ? 'premium' : 'free'),
                         };
                         profileMemoryCache.set(uid, profile);
                         try { writeCachedJson(`user_profile_${uid}`, profile); } catch {}

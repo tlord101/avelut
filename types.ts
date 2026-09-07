@@ -32,7 +32,7 @@ export interface UserProfile {
   };
   has_completed_tour?: boolean;
   is_activated?: boolean;
-  subscription_status?: 'none' | 'free' | 'weekly' | 'monthly' | 'semester' | 'basic' | 'pro' | 'personal_token' | 'premium';
+  subscription_status?: 'none' | 'free' | 'basic' | 'premium' | string;
   personal_api_key?: string;
   use_personal_token?: boolean;
   paystack_reference?: string;

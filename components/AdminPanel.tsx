@@ -878,7 +878,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setIsUsersLoading(false);
     };
 
-    const handleUpdateUserSubscription = async (uid: string, nextStatus: 'none' | 'free' | 'basic' | 'pro' | 'personal_token' | 'premium') => {
+    const handleUpdateUserSubscription = async (uid: string, nextStatus: 'none' | 'free' | 'basic' | 'premium') => {
         try {
             const userRef = dbRef(db, `users/${uid}`);
             await update(userRef, { subscription_status: nextStatus });
@@ -891,25 +891,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const handleAddUserCredits = async (uid: string) => {
-        const credits = window.prompt("Enter the number of additional AI credits to add:");
+        const credits = window.prompt("Enter the number of additional Visual Solver messages to add:");
         if (!credits || isNaN(Number(credits))) return;
-        const addAmount = Number(credits);
         try {
-            const userRef = dbRef(db, `users/${uid}`);
-            const snap = await get(userRef);
-            const currentCredits = snap.val()?.ai_credits_balance ?? snap.val()?.ai_credits ?? 0;
-            await update(userRef, { ai_credits_balance: currentCredits + addAmount });
-
-            // Also keep legacy usage_stats node in sync
-            try {
-                const userStatsRef = dbRef(db, `users/${uid}/usage_stats`);
-                const statsSnap = await get(userStatsRef);
-                const currentPurchased = statsSnap.val()?.additional_visual_messages_purchased || 0;
-                await update(userStatsRef, { additional_visual_messages_purchased: currentPurchased + addAmount });
-            } catch {}
-
+            const userStatsRef = dbRef(db, `users/${uid}/usage_stats`);
+            const snap = await get(userStatsRef);
+            const currentPurchased = snap.val()?.additional_visual_messages_purchased || 0;
+            await update(userStatsRef, { additional_visual_messages_purchased: currentPurchased + Number(credits) });
             addToast(`Successfully added ${credits} credits to user!`, "success");
-            void fetchUsers();
         } catch (error: any) {
             addToast(error.message || "Failed to add credits", "error");
         }

@@ -21,7 +21,9 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
-        const selectedPlan = searchParams.get('plan');
+        let selectedPlan = searchParams.get('plan');
+        if (selectedPlan === 'weekly') selectedPlan = 'basic';
+        if (selectedPlan === 'monthly' || selectedPlan === 'pro' || selectedPlan === 'semester') selectedPlan = 'premium';
         
         if (selectedPlan) {
             setTimeout(() => {
@@ -168,34 +170,37 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                     />
                 </div>
 
-                {/* 3 Subscription Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto pt-2">
+                {/* Subscription Cards (Basic & Premium) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto pt-2">
                     
-                    {/* 1. Weekly Plan */}
-                    <div id="plan-weekly" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
+                    {/* 1. Basic Plan */}
+                    <div id="plan-basic" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
                         <div className="space-y-4">
                             <div>
                                 <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                                    Flexible Term
+                                    Academic Essentials
                                 </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Weekly Plan</h3>
+                                <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">Basic Plan</h3>
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦1,200</span>
-                                <span className="text-xs font-bold text-[#64748B]">/ week</span>
+                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">
+                                    ₦{(tiers?.basic?.price_ngn ?? 1500).toLocaleString()}
+                                </span>
+                                <span className="text-xs font-bold text-[#64748B]">/ term</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
-                                Great for test preparation and focused weekly revision sessions.
+                                Great for test preparation, homework solving, and continuous daily revision.
                             </p>
 
                             <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
+                                <FeatureItem text={`${tiers?.basic?.credit_allocation ?? 500} AI credits included`} included highlight />
                                 <FeatureItem text="Unlimited Chat Tutorial per day" included />
-                                <FeatureItem text="1 Live Tutorial topic / day (7 topics per week)" included highlight />
-                                <FeatureItem text="Unlimited Camera Scans per day" included />
+                                <FeatureItem text="1 Live Tutorial topic / day (15 min)" included highlight />
+                                <FeatureItem text="Unlimited Camera Scans & Visual Problem Solver" included />
                                 <FeatureItem text="Unlimited Textbook Uploads" included />
-                                <FeatureItem text="3 Flashcard generations / day" included />
-                                <FeatureItem text="3 Quizzes / day" included />
+                                <FeatureItem text="Unlimited Flashcard generations & Quizzes" included />
+                                <FeatureItem text="Official Verified Student Badge (Blue)" included />
                                 <FeatureItem text="All content saved for Offline Access" included />
                             </div>
                         </div>
@@ -203,49 +208,52 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         <div className="pt-6">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('weekly', 1200, 500)}
-                                disabled={isProcessing || !email || currentStatus === 'weekly'}
+                                onClick={() => handlePurchasePlan('basic', tiers?.basic?.price_ngn ?? 1500, tiers?.basic?.credit_allocation ?? 500)}
+                                disabled={isProcessing || !email || currentStatus === 'basic' || currentStatus === 'weekly'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                                    currentStatus === 'weekly'
+                                    currentStatus === 'basic' || currentStatus === 'weekly'
                                         ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
                                         : 'bg-[#0066FF] hover:bg-slate-900 text-white'
                                 }`}
                             >
-                                {currentStatus === 'weekly' ? 'Current Plan' : 'Subscribe Weekly'}
+                                {currentStatus === 'basic' || currentStatus === 'weekly' ? 'Current Plan' : 'Subscribe Basic'}
                             </button>
                         </div>
                     </div>
 
-                    {/* 2. Monthly Plan (Featured) */}
-                    <div id="plan-monthly" className="bg-white border-2 border-[#0066FF] rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between relative transform md:-translate-y-2">
+                    {/* 2. Premium Plan (Featured) */}
+                    <div id="plan-premium" className="bg-white border-2 border-[#0066FF] rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between relative transform md:-translate-y-2">
                         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#0066FF] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
-                            Most Popular
+                            Most Popular • VIP
                         </div>
 
                         <div className="space-y-4">
                             <div>
                                 <span className="text-[11px] font-bold text-[#0066FF] uppercase tracking-wider block">
-                                    Standard Term
+                                    Full Academic Mastery
                                 </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Monthly Plan</h3>
+                                <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">Premium Plan</h3>
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦4,000</span>
+                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">
+                                    ₦{(tiers?.premium?.price_ngn ?? 4000).toLocaleString()}
+                                </span>
                                 <span className="text-xs font-bold text-[#64748B]">/ month</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
-                                Complete mastery package for active students studying multiple courses.
+                                Complete mastery package: priority AI processing, 2,500 credits, and VIP status.
                             </p>
 
                             <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="Unlimited Chats per day" included />
-                                <FeatureItem text="Max 3 Live Tutorial topics / day (15 per month)" included highlight />
-                                <FeatureItem text="50 credits deducted per Q&A question in Live Tutorial" included />
-                                <FeatureItem text="Unlimited Camera Scans per day" included />
-                                <FeatureItem text="Unlimited Textbook Uploads" included />
-                                <FeatureItem text="Unlimited Flashcards per day" included />
-                                <FeatureItem text="Unlimited Quizzes & Tests" included />
+                                <FeatureItem text="All Basic Plan features included" included />
+                                <FeatureItem text={`${tiers?.premium?.credit_allocation ?? 2500} AI credits included`} included highlight />
+                                <FeatureItem text="1 Live Tutorial topic / day included (30 per month)" included highlight />
+                                <FeatureItem text="Longer 30-min & 60-min tutorials unlocked via credits" included />
+                                <FeatureItem text="Priority AI tutor processing & fastest responses" included />
+                                <FeatureItem text="Unlimited Chats, Scans & Textbook Uploads" included />
+                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
+                                <FeatureItem text="Official VIP Gold Verification Badge" included />
                                 <FeatureItem text="All content saved for Offline Access" included />
                             </div>
                         </div>
@@ -253,65 +261,15 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         <div className="pt-6">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('monthly', 4000, 2500)}
-                                disabled={isProcessing || !email || currentStatus === 'monthly' || currentStatus === 'premium'}
+                                onClick={() => handlePurchasePlan('premium', tiers?.premium?.price_ngn ?? 4000, tiers?.premium?.credit_allocation ?? 2500)}
+                                disabled={isProcessing || !email || currentStatus === 'premium' || currentStatus === 'pro' || currentStatus === 'monthly' || currentStatus === 'semester'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-md active:scale-95 ${
-                                    currentStatus === 'monthly' || currentStatus === 'premium'
+                                    currentStatus === 'premium' || currentStatus === 'pro' || currentStatus === 'monthly' || currentStatus === 'semester'
                                         ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
                                         : 'bg-[#0066FF] hover:bg-slate-900 text-white'
                                 }`}
                             >
-                                {currentStatus === 'monthly' || currentStatus === 'premium' ? 'Current Plan' : 'Subscribe Monthly'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* 3. Semester Plan (Best Value) */}
-                    <div id="plan-semester" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
-                        <div className="absolute -top-3.5 right-6 px-3.5 py-1 bg-[#0F172A] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
-                            Best Value
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                                    Full Semester
-                                </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Semester Plan</h3>
-                            </div>
-
-                            <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦12,000</span>
-                                <span className="text-xs font-bold text-[#64748B]">/ semester</span>
-                            </div>
-                            <p className="text-xs text-[#64748B] leading-relaxed">
-                                Uninterrupted access for the entire semester. Maximum savings.
-                            </p>
-
-                            <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="All Monthly Plan features included" included />
-                                <FeatureItem text="Max 3 Live Tutorial topics / day (15 per month)" included highlight />
-                                <FeatureItem text="50 credits per Q&A question in Live Tutorial" included />
-                                <FeatureItem text="Unlimited Chats, Scans & Uploads" included />
-                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
-                                <FeatureItem text="Priority AI tutor processing" included />
-                                <FeatureItem text="All content saved Offline — incl. Live Tutorial" included />
-                                <FeatureItem text="Official Verification Student Badge" included />
-                            </div>
-                        </div>
-
-                        <div className="pt-6">
-                            <button
-                                type="button"
-                                onClick={() => handlePurchasePlan('semester', 12000, 8000)}
-                                disabled={isProcessing || !email || currentStatus === 'semester'}
-                                className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                                    currentStatus === 'semester'
-                                        ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
-                                        : 'bg-[#0F172A] hover:bg-slate-800 text-white'
-                                }`}
-                            >
-                                {currentStatus === 'semester' ? 'Current Plan' : 'Get Semester Access'}
+                                {currentStatus === 'premium' || currentStatus === 'pro' || currentStatus === 'monthly' || currentStatus === 'semester' ? 'Current Plan' : 'Subscribe Premium'}
                             </button>
                         </div>
                     </div>
@@ -371,7 +329,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#0066FF] bg-white/10 px-3 py-0.5 rounded-full inline-block">
                             Pay-As-You-Go Credits
                         </span>
-                        <h4 className="text-lg sm:text-xl font-black">Don't need a weekly subscription?</h4>
+                        <h4 className="text-lg sm:text-xl font-black">Don't need a recurring subscription?</h4>
                         <p className="text-xs text-slate-300 max-w-md">
                             Buy single Live Tutorial topic passes at <strong className="text-white">₦300 per topic</strong> or flashcard packs at <strong className="text-white">₦50 per flashcard</strong>.
                         </p>

@@ -15,7 +15,7 @@ interface UserControlViewProps {
 export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, refreshUsers, isUsersLoading, currentUserProfile, allDepartments = [] }) => {
     const { addToast } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'premium' | 'suspended'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'basic' | 'premium' | 'suspended'>('all');
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
     const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
     const [currentPage, setCurrentPage] = useState(1);
@@ -33,7 +33,8 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
         const matchesSearch = (user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                user.email?.toLowerCase().includes(searchQuery.toLowerCase()));
         
-        if (statusFilter === 'premium') return matchesSearch && user.subscription_status === 'premium';
+        if (statusFilter === 'basic') return matchesSearch && (user.subscription_status === 'basic' || user.subscription_status === 'weekly');
+        if (statusFilter === 'premium') return matchesSearch && (user.subscription_status === 'premium' || user.subscription_status === 'pro' || user.subscription_status === 'semester');
         if (statusFilter === 'suspended') return matchesSearch && user.status === 'suspended';
         return matchesSearch;
     });
@@ -170,6 +171,7 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
                         className="py-2.5 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all cursor-pointer"
                     >
                         <option value="all">All Users</option>
+                        <option value="basic">Basic</option>
                         <option value="premium">Premium</option>
                         <option value="suspended">Suspended</option>
                     </select>
@@ -250,26 +252,23 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
                                                     onChange={e => {
                                                         const newSub = e.target.value;
                                                         setEditSub(newSub);
-                                                        const planKey = (newSub === 'pro' || newSub === 'semester' || newSub === 'monthly' ? 'premium' : newSub) as 'free' | 'basic' | 'premium';
-                                                        const defaultCredits = DEFAULT_USAGE_SETTINGS.tiers[planKey]?.credit_allocation ?? 50;
+                                                        const planKey = (newSub === 'pro' || newSub === 'semester' ? 'premium' : newSub === 'weekly' ? 'basic' : newSub) as 'free' | 'basic' | 'premium';
+                                                        const defaultCredits = (DEFAULT_USAGE_SETTINGS.tiers as any)[planKey]?.credit_allocation ?? (planKey === 'premium' ? 2500 : planKey === 'basic' ? 500 : 50);
                                                         setEditCredits(defaultCredits);
                                                     }}
                                                     className="p-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm outline-none focus:border-amber-500"
                                                 >
                                                     <option value="free">Free</option>
                                                     <option value="basic">Basic</option>
-                                                    <option value="pro">Pro</option>
                                                     <option value="premium">Premium</option>
-                                                    <option value="semester">Semester</option>
-                                                    <option value="personal_token">Personal Token</option>
                                                 </select>
                                             ) : (
                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${
-                                                    user.subscription_status === 'premium' || user.subscription_status === 'pro' || user.subscription_status === 'semester' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' :
-                                                    user.subscription_status === 'basic' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30' :
+                                                    (user.subscription_status === 'premium' || user.subscription_status === 'pro' || user.subscription_status === 'semester') ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' :
+                                                    (user.subscription_status === 'basic' || user.subscription_status === 'weekly') ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' :
                                                     'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                                                 }`}>
-                                                    {user.subscription_status || 'Free'}
+                                                    {(user.subscription_status === 'pro' || user.subscription_status === 'semester') ? 'Premium' : (user.subscription_status === 'weekly' ? 'Basic' : (user.subscription_status || 'Free'))}
                                                 </span>
                                             )}
                                         </td>

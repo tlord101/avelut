@@ -151,14 +151,14 @@ export const AI_COSTS = {
 
 export const isExempt = (userProfile?: UserProfile | null): boolean => {
   if (!userProfile) return false;
-  return !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
+  return !!userProfile.is_admin;
 };
 
 export const isPaidSubscriber = (userProfile?: UserProfile | null): boolean => {
   if (!userProfile) return false;
   if (isExempt(userProfile)) return true;
   const status = userProfile.subscription_status;
-  return status === 'weekly' || status === 'monthly' || status === 'semester' || status === 'basic' || status === 'pro' || status === 'premium';
+  return status === 'basic' || status === 'premium' || status === 'weekly' || status === 'monthly' || status === 'semester' || status === 'pro';
 };
 
 /** Live tutorial access — minute pool + credits (see liveTutorialQuota.ts) */

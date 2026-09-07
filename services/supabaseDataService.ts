@@ -62,7 +62,7 @@ class SupabaseDataService {
         notifications_enabled: true,
         ai_credits_balance: data.ai_credits ?? 50,
         is_admin: data.is_admin || false,
-        subscription_status: data.is_paid_subscriber ? 'semester' : (data.subscription_status || 'free'),
+        subscription_status: data.subscription_status || (data.is_paid_subscriber ? 'premium' : 'free'),
       };
     } catch (err) {
       console.warn('[SupabaseDataService] Exception fetching profile:', err);
@@ -381,7 +381,7 @@ class SupabaseDataService {
         ai_credits_balance: d.ai_credits ?? 50,
         is_admin: d.is_admin || false,
         role: d.is_admin ? 'superadmin' : 'user',
-        subscription_status: d.is_paid_subscriber ? 'semester' : (d.subscription_status || 'free'),
+        subscription_status: d.subscription_status || (d.is_paid_subscriber ? 'premium' : 'free'),
         is_online: d.is_online || false,
         last_seen: d.last_seen ? new Date(d.last_seen).getTime() : undefined,
       })) as UserProfile[];

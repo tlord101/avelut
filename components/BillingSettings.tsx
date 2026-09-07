@@ -74,7 +74,7 @@ export const BillingSettingsScreen: React.FC<BillingSettingsProps> = ({ userProf
               </span>
             </div>
             <p className="text-xs sm:text-sm text-[#64748B] dark:text-slate-400 mt-2 max-w-md font-medium">
-              Use credits for Live Voice Tutorials (₦300/topic), flashcards (₦50/card), or subscribe to Weekly/Monthly plans for unlimited access.
+              Use credits for Live Voice Tutorials (₦300/topic), flashcards (₦50/card), or subscribe to Basic / Premium plans for unlimited access.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 w-full md:w-auto">
