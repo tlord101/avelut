@@ -293,9 +293,13 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
     window.location.protocol === 'file:'
   );
 
-  const endpoints = isNative
-    ? ['https://openrouter.ai/api/v1/chat/completions', 'https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat']
-    : ['https://openrouter.ai/api/v1/chat/completions', '/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat'];
+  const endpoints = apiKey
+    ? (isNative
+        ? ['https://openrouter.ai/api/v1/chat/completions', 'https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat']
+        : ['https://openrouter.ai/api/v1/chat/completions', '/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat'])
+    : (isNative
+        ? ['https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']
+        : ['/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']);
 
   const bodyPayload: any = {
     model,
@@ -374,9 +378,13 @@ async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings):
     window.location.protocol === 'file:'
   );
 
-  const endpoints = isNative
-    ? ['https://openrouter.ai/api/v1/chat/completions', 'https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat']
-    : ['https://openrouter.ai/api/v1/chat/completions', '/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat'];
+  const endpoints = apiKey
+    ? (isNative
+        ? ['https://openrouter.ai/api/v1/chat/completions', 'https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat']
+        : ['https://openrouter.ai/api/v1/chat/completions', '/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat'])
+    : (isNative
+        ? ['https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']
+        : ['/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']);
 
   const bodyPayload: any = {
     model,

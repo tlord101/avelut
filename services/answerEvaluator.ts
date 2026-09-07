@@ -16,6 +16,7 @@
 
 import type { QuestionType } from '../types/learningQuestion';
 import type { MisconceptionType } from './masteryModel';
+import { cleanAndParseJson } from '../utils/jsonUtils';
 
 // ── Evaluation result ───────────────────────────────────────────────────────
 
@@ -190,9 +191,7 @@ IMPORTANT: Be encouraging but honest. If the student is wrong, classify the erro
             ? result.text
             : result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-        const parsed = JSON.parse(
-            raw.replace(/```json/gi, '').replace(/```/g, '').trim()
-        );
+        const parsed = cleanAndParseJson<any>(raw, { fallback: {} });
 
         return {
             isCorrect: parsed.isCorrect ?? false,

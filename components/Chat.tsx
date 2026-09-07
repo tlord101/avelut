@@ -522,12 +522,22 @@ export const Chat: React.FC<ChatProps> = ({
 
       const aiMsgId = generateLocalId('msg');
 
-      // Append user message AND initial empty bot message for instant UI feedback
+      // Append user message (typing indicator is handled cleanly by single isLoading state)
       setMessages((prev) => [
-        ...prev,
+        ...prev.filter((m) => m.id !== aiMsgId),
         { id: userMsgId, text: currentInput, sender: 'user', timestamp: now },
-        { id: aiMsgId, text: '', sender: 'bot', timestamp: now + 1 },
       ]);
+
+      const updateOrAppendAiMessage = (text: string) => {
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === aiMsgId);
+          if (exists) {
+            return prev.map((m) => (m.id === aiMsgId ? { ...m, text } : m));
+          } else {
+            return [...prev, { id: aiMsgId, text, sender: 'bot', timestamp: now + 1 }];
+          }
+        });
+      };
 
       const messagesRef = dbRef(db, `chat_messages/${currentConvoId}`);
       try {
@@ -598,9 +608,7 @@ export const Chat: React.FC<ChatProps> = ({
       let responseText = cachedReply || '';
 
       if (responseText) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === aiMsgId ? { ...m, text: responseText } : m))
-        );
+        updateOrAppendAiMessage(responseText);
       } else {
         if (!ai) {
           addToast('Avelut AI is not configured in settings.', 'error');
@@ -614,9 +622,7 @@ export const Chat: React.FC<ChatProps> = ({
           for await (const chunk of responseStream) {
             const chunkText = getResponseText(chunk);
             responseText += chunkText;
-            setMessages((prev) =>
-              prev.map((m) => (m.id === aiMsgId ? { ...m, text: responseText } : m))
-            );
+            updateOrAppendAiMessage(responseText);
           }
         } catch (streamErr: any) {
           console.warn('Streaming failed or not supported, falling back to generateContent:', streamErr);
@@ -634,9 +640,7 @@ export const Chat: React.FC<ChatProps> = ({
           }
 
           responseText = (aiResult.data || '').trim();
-          setMessages((prev) =>
-            prev.map((m) => (m.id === aiMsgId ? { ...m, text: responseText } : m))
-          );
+          updateOrAppendAiMessage(responseText);
         }
 
         if (responseText) {
@@ -646,9 +650,7 @@ export const Chat: React.FC<ChatProps> = ({
 
       if (!responseText.trim()) {
         responseText = 'I apologize, but I could not generate a response. Please try again.';
-        setMessages((prev) =>
-          prev.map((m) => (m.id === aiMsgId ? { ...m, text: responseText } : m))
-        );
+        updateOrAppendAiMessage(responseText);
       }
 
       void saveLocalMessage({

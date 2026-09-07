@@ -127,6 +127,39 @@ const readImageAsDataUrl = async (input: File | Blob | string): Promise<{ dataUr
     }
 };
 
+const compressImageForSolver = (dataUrl: string, maxDim: number = 1024, quality: number = 0.82): Promise<{ dataUrl: string; mimeType: string }> => {
+    return new Promise((resolve) => {
+        if (!dataUrl) return resolve({ dataUrl: '', mimeType: 'image/jpeg' });
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                const compressedUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve({ dataUrl: compressedUrl, mimeType: 'image/jpeg' });
+                return;
+            }
+            resolve({ dataUrl, mimeType: 'image/jpeg' });
+        };
+        img.onerror = () => resolve({ dataUrl, mimeType: 'image/jpeg' });
+        img.src = dataUrl;
+    });
+};
+
 const sliceCanvasIntoBlobs = async (canvas: HTMLCanvasElement): Promise<Blob[]> => {
     if (canvas.height <= MAX_CAPTURE_SLICE_HEIGHT) {
         const blob = await canvasToBlob(canvas);
@@ -1059,12 +1092,16 @@ export const VisualSolver: React.FC<VisualSolverProps> = ({ userProfile, onStart
         
         try {
             const result = await attemptApiCall(async () => {
-                const { dataUrl: payloadDataUrl, mimeType } = await readImageAsDataUrl(targetImage);
+                const rawImage = await readImageAsDataUrl(targetImage);
+                const { dataUrl: payloadDataUrl, mimeType } = await compressImageForSolver(rawImage.dataUrl, 1024, 0.82);
                 const base64Data = payloadDataUrl.split(',')[1];
                 if (!base64Data) throw new Error("Could not extract image data.");
 
-                const basePrompt = `Analyze the problem or question in the image and provide the direct final answer with key formula/rationale.
-FORMATTING REQUIREMENT: Present everything vertically line-by-line. Never use horizontal tables. Put every equation on its own separate line ($$...$$). Be clear, direct, and concise.`;
+                const basePrompt = `First, examine and understand the content in the image (Math, Science, History, Biology, Language, Literature, Code, Diagram, or Multiple-Choice Quiz).
+Provide the direct, accurate answer or solution immediately.
+If it is a multiple-choice question, explicitly state the correct choice first (e.g., **Correct Answer: B - [Option Text]**), followed by a concise 1-2 sentence rationale.
+For math/formulas, place equations on separate lines ($$ ... $$).
+Never use horizontal tables. Present all information vertically line-by-line with clear bold headings.`;
                 const customInstruction = customPrompt ? ` ${customPrompt}` : '';
                 const promptText = `${basePrompt}${customInstruction}`;
         
@@ -1072,10 +1109,8 @@ FORMATTING REQUIREMENT: Present everything vertically line-by-line. Never use ho
                 const aiResult = await aiClient.models.generateContent({
                     model: aiModel,
                     config: {
-                        thinkingConfig: {
-                            thinkingLevel: 'HIGH',
-                        },
-                        temperature: 0.7,
+                        temperature: 0.3,
+                        maxOutputTokens: 1024,
                     },
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType } },
@@ -1124,19 +1159,21 @@ FORMATTING REQUIREMENT: Present everything vertically line-by-line. Never use ho
         
         try {
             const result = await attemptApiCall(async () => {
-                const { dataUrl: payloadDataUrl, mimeType } = await readImageAsDataUrl(targetImage);
+                const rawImage = await readImageAsDataUrl(targetImage);
+                const { dataUrl: payloadDataUrl, mimeType } = await compressImageForSolver(rawImage.dataUrl, 1024, 0.82);
                 const base64Data = payloadDataUrl.split(',')[1];
                 if (!base64Data) throw new Error("Could not extract image data.");
 
-                const basePrompt = `Answer the question or solve the problem shown in the image with step-by-step clarity.
+                const basePrompt = `First, examine and thoroughly understand the image content (e.g. Science, History, Biology, Literature, Mathematics, Programming, Economics, or Diagrams).
 
-CRITICAL FORMATTING & LAYOUT RULES:
-1. NEVER use horizontal tables (| col1 | col2 |). Present all breakdowns, explanations, and key findings VERTICALLY from top to bottom using bold item titles and bullet points.
-2. For mathematics and equations:
-   - Walk through the solution step-by-step line by line downwards.
-   - Place EVERY formula and equation on its own separate line using block LaTeX: $$ equation $$
-   - Never cram multiple equations or steps horizontally onto a single line.
-3. Use clear section headers (### Step 1: ...), concise explanations, and generous line spacing for effortless mobile readability.`;
+Analyze the problem or question and provide a clear, step-by-step solution:
+1. **Content Overview**: Identify what the question, passage, diagram, or problem is asking.
+2. **Direct Answer / Solution**: State the final answer clearly (for multiple-choice: **Correct Answer: B - [Option Text]**).
+3. **Step-by-Step Explanation**:
+   - Explain the core concepts, historical context, scientific principles, or reasoning line-by-line vertically.
+   - For mathematical equations, place EVERY formula on its own separate block line ($$ equation $$).
+   - For diagrams or code snippets, break down key components clearly.
+4. **Layout**: Never use horizontal tables. Use vertical lists with bold headers for mobile clarity.`;
                 const customInstruction = customPrompt ? ` ${customPrompt}` : '';
                 const promptText = `${basePrompt}${customInstruction}`;
         
@@ -1144,10 +1181,8 @@ CRITICAL FORMATTING & LAYOUT RULES:
                 const aiResult = await aiClient.models.generateContent({
                     model: aiModel,
                     config: {
-                        thinkingConfig: {
-                            thinkingLevel: 'HIGH',
-                        },
-                        temperature: 0.7,
+                        temperature: 0.3,
+                        maxOutputTokens: 1536,
                     },
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: base64Data, mimeType } },
@@ -1303,7 +1338,7 @@ CRITICAL FORMATTING & LAYOUT RULES:
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
         const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
         setScannedImage(imageDataUrl);
-        setTimeout(() => setCameraState('preview'), 500);
+        setTimeout(() => setCameraState('preview'), 100);
     }, [cropBox, addToast]);
 
     useEffect(() => {

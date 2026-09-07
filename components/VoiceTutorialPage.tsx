@@ -106,58 +106,32 @@ const readImageAsDataUrl = async (input: File | Blob | string): Promise<{ dataUr
     });
 };
 
+import { cleanAndParseJson } from '../utils/jsonUtils';
+
 /**
  * Robust JSON parser capable of handling LaTeX backslashes, unclosed quotes, and markdown code blocks.
  */
 export function robustParseJson<T = any>(raw: string): T {
-    if (!raw || typeof raw !== 'string') {
-        throw new Error('Empty JSON input');
-    }
-    let cleaned = raw.replace(/^```(?:json)?\s*/gi, '').replace(/\s*```$/gi, '').trim();
-    
-    const firstBrace = cleaned.search(/[\{\[]/);
-    const lastBrace = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-    }
+    const fallbackStructure = {
+        topicName: 'Academic Tutorial',
+        overview: 'Interactive Multi-Disciplinary Lesson',
+        boards: [
+            {
+                boardId: 'b_0',
+                conceptIdx: 0,
+                conceptName: 'Core Overview',
+                phaseTitle: 'Intuition & Key Concepts',
+                boardLines: ['Welcome to your interactive session.', 'Let us begin with the core concept.'],
+                speakerNarrative: 'Welcome! Today we will break down key concepts step by step.',
+                checkQuestion: 'Ready to continue?',
+                checkOptions: ['Yes, let us begin', 'Explain again'],
+                correctOptionIdx: 0,
+            },
+        ],
+    } as any;
 
-    try {
-        return JSON.parse(cleaned) as T;
-    } catch (_) {}
-
-    try {
-        let inString = false;
-        let isEscaped = false;
-        let out = '';
-        for (let i = 0; i < cleaned.length; i++) {
-            const ch = cleaned[i];
-            if (inString) {
-                if (isEscaped) {
-                    if (ch === '"' || ch === '\\' || ch === '/' || ch === 'b' || ch === 'f' || ch === 'n' || ch === 'r' || ch === 't' || ch === 'u') {
-                        out += '\\' + ch;
-                    } else {
-                        out += '\\\\' + ch;
-                    }
-                    isEscaped = false;
-                } else if (ch === '\\') {
-                    isEscaped = true;
-                } else if (ch === '"') {
-                    inString = false;
-                    out += ch;
-                } else {
-                    out += ch;
-                }
-            } else {
-                if (ch === '"') {
-                    inString = true;
-                    out += ch;
-                } else {
-                    out += ch;
-                }
-            }
-        }
-        return JSON.parse(out.replace(/,\s*([\}\]])/g, '$1')) as T;
-    } catch (_) {}
+    return cleanAndParseJson<T>(raw, { fallback: fallbackStructure as T });
+}
 
     return {
         topicName: 'Academic Tutorial',
