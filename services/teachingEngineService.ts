@@ -35,6 +35,33 @@ import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
 import { AppSettings, UserProfile } from '../types';
 
+function getLocalCacheKey(prefix: string, topic: string, keySuffix: string | number): string {
+  const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+  return `avelut_board_cache_${prefix}_${cleanTopic}_${keySuffix}`;
+}
+
+function getCachedBoardItem<T>(key: string): T | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      return JSON.parse(raw) as T;
+    }
+  } catch (e) {
+    console.warn('[BoardCache] Read error:', e);
+  }
+  return null;
+}
+
+function setCachedBoardItem<T>(key: string, data: T): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('[BoardCache] Write error:', e);
+  }
+}
+
 export interface TeachingEngineListener {
   onStructureLoaded?: (structure: TeachingStructure) => void;
   onBoardLoaded?: (performance: TeachingBoardPerformance) => void;
@@ -188,6 +215,16 @@ export class TeachingEngineService {
 
     let structure: TeachingStructure | null = null;
     const durationMode = params.durationMode || 30;
+    const structCacheKey = getLocalCacheKey('struct', params.topic, durationMode);
+
+    // Instant local storage cache lookup (0ms loading)
+    const cachedStruct = getCachedBoardItem<TeachingStructure>(structCacheKey);
+    if (cachedStruct && Array.isArray(cachedStruct.boards) && cachedStruct.boards.length > 0) {
+      this.currentStructure = cachedStruct;
+      this.currentBoardIndex = 0;
+      this.listeners.forEach((l) => l.onStructureLoaded?.(cachedStruct));
+      return cachedStruct;
+    }
 
     try {
       const ai = createAvelutAI(this.appSettings, this.userProfile);
@@ -201,7 +238,7 @@ export class TeachingEngineService {
 
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          const response = await ai.models.generateContent({
+          const responseStream = await ai.models.generateContentStream({
             model: this.appSettings.alibaba_model || 'qwen3.7-flash',
             contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
             config: {
@@ -210,7 +247,12 @@ export class TeachingEngineService {
             },
           });
 
-          const rawText = getResponseText(response);
+          let rawText = '';
+          for await (const chunk of responseStream) {
+            const chunkText = getResponseText(chunk);
+            rawText += chunkText;
+          }
+
           if (rawText && rawText.trim().length > 0) {
             structure = cleanAndParseJson<TeachingStructure>(rawText);
             if (structure && Array.isArray(structure.boards) && structure.boards.length > 0) {
@@ -231,6 +273,7 @@ export class TeachingEngineService {
       const userId = this.userProfile?.uid || 'anon';
       const topicKey = topicKeyFromTitle(params.topic, params.courseName);
       void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || '30min');
+      setCachedBoardItem(structCacheKey, structure);
 
       this.currentStructure = structure;
       this.currentBoardIndex = 0;
@@ -356,6 +399,19 @@ export class TeachingEngineService {
     this.currentBoardIndex = requestedIndex;
     const boardPlan: TeachingBoardPlan = this.currentStructure.boards[requestedIndex];
 
+    const boardNum = requestedIndex + 1;
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, boardNum);
+
+    // Instant local storage cache lookup (0ms board loading)
+    const cachedPerf = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
+    if (cachedPerf && (cachedPerf.title || cachedPerf.speech || cachedPerf.board_actions)) {
+      this.currentBoardPerformance = cachedPerf;
+      this.listeners.forEach((l) => l.onBoardLoaded?.(cachedPerf));
+      this.emitLegacySegment(cachedPerf);
+      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      return cachedPerf;
+    }
+
     try {
       const performance = await this.fetchSingleBoardFromAI(
         boardPlan,
@@ -430,7 +486,7 @@ export class TeachingEngineService {
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const response = await ai.models.generateContent({
+        const responseStream = await ai.models.generateContentStream({
           model: this.appSettings.alibaba_model || 'qwen3.7-flash',
           contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
           config: {
@@ -439,7 +495,12 @@ export class TeachingEngineService {
           },
         });
 
-        const rawText = getResponseText(response);
+        let rawText = '';
+        for await (const chunk of responseStream) {
+          const chunkText = getResponseText(chunk);
+          rawText += chunkText;
+        }
+
         if (rawText && rawText.trim().length > 0) {
           performance = cleanAndParseJson<TeachingBoardPerformance>(rawText);
           if (performance && (performance.title || performance.speech || performance.board_actions)) {
@@ -447,9 +508,9 @@ export class TeachingEngineService {
           }
         }
       } catch (attemptErr) {
-        console.warn(`[TeachingEngine] fetchSingleBoardFromAI attempt ${attempt} failed:`, attemptErr);
+        console.warn(`[TeachingEngine] Streaming board performance attempt ${attempt} failed:`, attemptErr);
       }
-      if (attempt < 3) await new Promise((res) => setTimeout(res, attempt * 400));
+      if (attempt < 3) await new Promise((res) => setTimeout(res, attempt * 300));
     }
 
     if (!performance) {
@@ -567,6 +628,10 @@ export class TeachingEngineService {
 
       performance.board_actions = [...(performance.board_actions || []), ...keyPointActions];
     }
+
+    const boardNum = boardPlan.board_number || 1;
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure!.topic, boardNum);
+    setCachedBoardItem(perfCacheKey, performance);
 
     return performance;
   }
