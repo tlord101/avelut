@@ -309,9 +309,6 @@ export class TeachingEngineService {
   </text>
 </svg>
 `.trim();
-  <text x="75" y="239" fill="#E2E8F0" font-size="12" font-family="sans-serif">${takeaways[0] ? takeaways[0].slice(0, 52) : boardTitle}</text>
-</svg>
-`.trim();
 
     const actions: BoardAction[] = [
       {
