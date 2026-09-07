@@ -28,6 +28,7 @@ import {
   buildStudentAnswerEvaluationPrompt,
 } from './teachingEnginePrompt';
 import { createAvelutAI, getResponseText } from '../utils/inference';
+import { saveTeachingStructureOnly, topicKeyFromTitle } from './liveTeachingProgressService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
@@ -199,6 +200,10 @@ export class TeachingEngineService {
       if (!structure.boards || !Array.isArray(structure.boards) || structure.boards.length === 0) {
         throw new Error('Invalid teaching structure: missing boards array');
       }
+
+      const userId = this.userProfile?.uid || 'anon';
+      const topicKey = topicKeyFromTitle(params.topic, params.courseName);
+      void saveTeachingStructureOnly(userId, topicKey, structure, this.durationMode || '30min');
 
       this.currentStructure = structure;
       this.currentBoardIndex = 0;

@@ -10,6 +10,7 @@ import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost, hasLiveTutorialAccess } from '../utils/usage';
 import { readCachedJson, writeCachedJson, clearCachedKey } from '../utils/cache';
 import { LimitExceededModal } from './LimitExceededModal';
+import { prefetchTopicTeachingStructure } from '../services/liveTeachingProgressService';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -104,9 +105,21 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  // Configure Main App Header for Course Chat Tutor
   // Check live tutorial access
   const liveAccess = hasLiveTutorialAccess(userProfile);
+
+  // Background prefetch for Live Tutorial teaching structure as soon as user enters topic
+  useEffect(() => {
+    if (topic?.topic_name) {
+      void prefetchTopicTeachingStructure({
+        topicTitle: topic.topic_name,
+        courseName: course?.course_name || course?.course_code,
+        userId: userProfile?.uid,
+        userProfile,
+        appSettings,
+      });
+    }
+  }, [topic?.topic_name, course?.course_name, course?.course_code, userProfile, appSettings]);
 
   const handleTriggerLiveTutorial = useCallback(() => {
     if (!liveAccess.allowed) {

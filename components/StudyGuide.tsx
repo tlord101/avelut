@@ -13,6 +13,7 @@ import VoiceTutorialPage, { VoiceTutorialSessionData } from './VoiceTutorialPage
 import CourseChatTutor from './CourseChatTutor';
 import MyNotebooks from './MyNotebooks';
 import { supabaseDataService } from '../services/supabaseDataService';
+import { prefetchTopicTeachingStructure } from '../services/liveTeachingProgressService';
 
 // --- UTILITIES ---
 const normalizeLevelValue = (value?: string): string => {
@@ -291,7 +292,18 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         setSelectedCourse(course);
         setTopicToOpen(topic);
         setTopicPickerCourse(null);
-    }, [topicVisits, userProfile?.uid]);
+
+        // Background prefetch for Live Tutorial teaching structure
+        if (topic?.topic_name) {
+            void prefetchTopicTeachingStructure({
+                topicTitle: topic.topic_name,
+                courseName: course.course_name || course.course_code,
+                userId: userProfile?.uid,
+                userProfile,
+                appSettings,
+            });
+        }
+    }, [topicVisits, userProfile, appSettings]);
 
     const touchStartX = useRef<number | null>(null);
     const touchEndX = useRef<number | null>(null);

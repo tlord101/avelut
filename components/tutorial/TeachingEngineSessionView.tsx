@@ -324,10 +324,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         completedBoardsSummary: completedTitlesRef.current,
       });
     } else {
-      const cachedStructure =
-        durationMode != null
-          ? getSavedTeachingStructure(resolvedUserId, topicKey, durationMode)
-          : null;
+      const cachedStructure = getSavedTeachingStructure(resolvedUserId, topicKey, durationMode);
       if (cachedStructure?.boards?.length) {
         engine.setStructure(cachedStructure);
         setStructure(cachedStructure);

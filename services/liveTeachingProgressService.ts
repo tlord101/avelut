@@ -54,15 +54,99 @@ export function getLiveTeachingProgress(
   return readCachedJson<LiveTeachingProgress | null>(progressKey(userId, topicKey), null);
 }
 
+export async function saveTeachingStructureOnly(
+  userId: string,
+  topicKey: string,
+  structure: TeachingStructure,
+  mode: LessonDurationMode = '30min'
+): Promise<void> {
+  const modesToSave: LessonDurationMode[] = [mode, '30min', '15min', '60min'];
+  for (const m of modesToSave) {
+    await writeCachedJson(
+      structureKey(userId, topicKey, m),
+      structure,
+      userId || 'anon'
+    );
+  }
+}
+
 export function getSavedTeachingStructure(
   userId: string,
   topicKey: string,
-  mode: LessonDurationMode
+  mode?: LessonDurationMode
 ): TeachingStructure | null {
-  return readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, mode), null);
+  if (mode) {
+    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, mode), null);
+    if (s && s.boards && s.boards.length > 0) return s;
+  }
+  const modes: LessonDurationMode[] = ['30min', '15min', '60min'];
+  for (const m of modes) {
+    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
+    if (s && s.boards && s.boards.length > 0) return s;
+  }
+  return null;
 }
 
 export function formatResumeLabel(p: LiveTeachingProgress): string {
   const part = p.chapterTitle ? `${p.chapterTitle} · ` : '';
   return `${part}Board ${p.boardIndex + 1}/${p.totalBoards} · ${p.durationMode} min mode`;
 }
+
+const activePrefetches = new Set<string>();
+
+/**
+ * Prefetch teaching structure in the background when a user selects/enters a topic.
+ * Saves the structure in localStorage so when the user clicks 'Live Tutorial',
+ * the board starts rendering immediately without waiting for structure planning.
+ */
+export async function prefetchTopicTeachingStructure(params: {
+  topicTitle: string;
+  courseName?: string;
+  syllabusContext?: string;
+  userId?: string;
+  userProfile?: any;
+  appSettings?: any;
+  durationMode?: LessonDurationMode;
+}): Promise<void> {
+  const topicTitle = params.topicTitle?.trim();
+  if (!topicTitle) return;
+
+  const resolvedUserId = params.userId || params.userProfile?.uid || 'anon';
+  const topicKey = topicKeyFromTitle(topicTitle, params.courseName);
+  const mode = params.durationMode || '30min';
+
+  // Check if structure is already cached
+  const existing = getSavedTeachingStructure(resolvedUserId, topicKey, mode);
+  if (existing && existing.boards && existing.boards.length > 0) {
+    return;
+  }
+
+  const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
+  if (activePrefetches.has(prefetchId)) return;
+  activePrefetches.add(prefetchId);
+
+  try {
+    const { TeachingEngineService } = await import('./teachingEngineService');
+    const engine = new TeachingEngineService({
+      appSettings: params.appSettings,
+      userProfile: params.userProfile,
+      durationMode: mode,
+    });
+
+    const structure = await engine.generateTeachingStructure({
+      topic: topicTitle,
+      courseName: params.courseName,
+      syllabusContext: params.syllabusContext,
+      durationMode: mode,
+    });
+
+    if (structure && structure.boards && structure.boards.length > 0) {
+      await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode);
+    }
+  } catch (err) {
+    console.warn('[prefetchTopicTeachingStructure] Background prefetch failed (non-critical):', err);
+  } finally {
+    activePrefetches.delete(prefetchId);
+  }
+}
+
