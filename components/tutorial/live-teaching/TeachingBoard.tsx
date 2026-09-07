@@ -20,17 +20,45 @@ const TypedText: React.FC<{
   className?: string;
   style?: React.CSSProperties;
   enabled?: boolean;
-}> = ({ text, className, style, enabled = true }) => {
-  const [shown, setShown] = useState(text);
+  speedMs?: number;
+}> = ({ text, className, style, enabled = true, speedMs = 26 }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTyping, setIsTyping] = useState(true);
 
   useEffect(() => {
-    if (!text) return;
-    setShown(text);
-  }, [text]);
+    if (!text) {
+      setDisplayedText('');
+      return;
+    }
+    if (!enabled) {
+      setDisplayedText(text);
+      setIsTyping(false);
+      return;
+    }
+
+    setDisplayedText('');
+    setIsTyping(true);
+    let index = 0;
+
+    const timer = setInterval(() => {
+      index++;
+      if (index <= text.length) {
+        setDisplayedText(text.slice(0, index));
+      } else {
+        setIsTyping(false);
+        clearInterval(timer);
+      }
+    }, speedMs);
+
+    return () => clearInterval(timer);
+  }, [text, enabled, speedMs]);
 
   return (
     <p className={className} style={style}>
-      {shown || text}
+      {displayedText}
+      {isTyping && (
+        <span className="inline-block w-2 h-5 ml-1 bg-[#38BDF8] shadow-[0_0_8px_#38BDF8] animate-pulse align-middle" />
+      )}
     </p>
   );
 };
