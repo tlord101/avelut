@@ -1096,7 +1096,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     };
 
     return (
-        <div className="flex-1 flex flex-col w-full h-full min-h-0 bg-slate-50/50 dark:bg-[#030712] overflow-hidden">
+        <div className="flex-1 flex flex-col w-full h-full min-h-0 bg-slate-50/50 dark:bg-[#000000] overflow-hidden text-slate-900 dark:text-slate-100">
             {/* Dual-Pane Tab Container with Smooth Horizontal Slide Transition */}
             <div
                 className="flex-1 min-h-0 w-full overflow-hidden relative"
@@ -1109,12 +1109,12 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     activeTab === 'courses' ? 'translate-x-0 opacity-100 z-10' : '-translate-x-full opacity-0 pointer-events-none z-0'
                 }`}>
                     {/* Top Roadmap Header */}
-                    <div className="flex-shrink-0 px-6 sm:px-10 py-6 sm:py-8 bg-white dark:bg-slate-950 border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+                    <div className="flex-shrink-0 px-6 sm:px-10 py-6 sm:py-8 bg-white dark:bg-[#0A0A0A] border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs">
                         <div className="max-w-4xl mx-auto flex flex-col items-center text-center">
                             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                                 Academic Study Guide
                             </h2>
-                            <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm max-w-md mt-1 font-medium">
+                            <p className="text-slate-600 dark:text-slate-200 text-xs sm:text-sm max-w-md mt-1 font-medium">
                                 Select any topic to start a step-by-step interactive lesson with voice and blackboard diagrams.
                             </p>
 

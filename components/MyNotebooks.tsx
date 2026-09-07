@@ -165,18 +165,18 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in pb-28 bg-transparent dark:bg-[#070B14] text-slate-900 dark:text-slate-100">
-      <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">
+    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in pb-28 bg-transparent dark:bg-[#000000] text-slate-900 dark:text-white">
+      <div className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-100 dark:bg-slate-800 text-black dark:text-slate-200 rounded-full text-[11px] font-bold tracking-wide uppercase border border-neutral-200/60 dark:border-slate-700">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-100 dark:bg-slate-800 text-black dark:text-white rounded-full text-[11px] font-bold tracking-wide uppercase border border-neutral-200/60 dark:border-slate-700">
               <i className="bi bi-book"></i>
               <span>Study Notes & Textbooks</span>
             </div>
             <h3 className="text-lg sm:text-xl font-black text-black dark:text-white tracking-tight">
               My Notebooks & Offline Materials
             </h3>
-            <p className="text-xs text-neutral-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-200 leading-relaxed">
               Upload any textbook, handout, or lecture note PDF (up to 200MB). Extracted completely on your device with 0 AI cost.
             </p>
           </div>
