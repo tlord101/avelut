@@ -45,11 +45,26 @@ export interface LiveWhiteboardCanvasProps {
   tutorPointer?: { x: number; y: number; active: boolean; color?: string } | null;
   activeFocusArea?: { x: number; y: number; w: number; h: number; color?: string } | null;
   isStudentDrawingEnabled?: boolean;
-  studentMode?: 'draw' | 'lasso' | 'none';
-  onStudentLassoSelect?: (selectedElementIds: string[], lassoBounds: { x: number; y: number; w: number; h: number }) => void;
   onStudentStrokeComplete?: (stroke: { points: Point2D[]; color: string; size: number }) => void;
   className?: string;
   gridStyle?: 'dots' | 'grid' | 'clean';
+}
+
+const svgImageCacheMap = new Map<string, HTMLImageElement>();
+
+function getSvgImage(id: string, svgContent: string): HTMLImageElement | null {
+  let img = svgImageCacheMap.get(id);
+  if (!img) {
+    img = new Image();
+    try {
+      const encoded = encodeURIComponent(svgContent);
+      img.src = `data:image/svg+xml;charset=utf-8,${encoded}`;
+      svgImageCacheMap.set(id, img);
+    } catch (_) {
+      return null;
+    }
+  }
+  return img;
 }
 
 export const LiveWhiteboardCanvas: React.FC<LiveWhiteboardCanvasProps> = ({
@@ -241,6 +256,121 @@ export const LiveWhiteboardCanvas: React.FC<LiveWhiteboardCanvasProps> = ({
           drawEraseWipeEffect(ctx, rect.width, rect.height, el.progress);
         } else if (el.type === 'focus') {
           drawPulsingFocusRing(ctx, el.x, el.y, el.w, el.h, elapsedSec, el.color);
+        } else if ((el as any).type === 'text' || (el as any).type === 'label') {
+          const liveEl = el as any;
+          ctx.save();
+          const rawX = liveEl.position?.x ?? 50;
+          const rawY = liveEl.position?.y ?? 50;
+          const pxX = (rawX / 100) * rect.width;
+          const pxY = (rawY / 100) * rect.height;
+
+          let fontSizePx = 18;
+          if (liveEl.fontSize === '3xl' || liveEl.fontSize === '2xl') fontSizePx = 24;
+          else if (liveEl.fontSize === 'xl') fontSizePx = 20;
+          else if (liveEl.fontSize === 'sm') fontSizePx = 14;
+
+          ctx.font = `600 ${fontSizePx}px "Inter", "Plus Jakarta Sans", system-ui, sans-serif`;
+          ctx.fillStyle = liveEl.color || '#0F172A';
+          ctx.textBaseline = 'top';
+
+          const textContent = liveEl.content || '';
+          const lines = textContent.split('\n');
+
+          lines.forEach((line, idx) => {
+            ctx.fillText(line, pxX, pxY + idx * (fontSizePx * 1.35));
+          });
+
+          if (liveEl.highlighted) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.35)';
+            const textWidth = ctx.measureText(lines[0] || '').width || 100;
+            ctx.fillRect(pxX - 4, pxY - 2, textWidth + 8, fontSizePx * 1.35);
+            ctx.restore();
+          }
+          if (liveEl.circled) {
+            const textWidth = ctx.measureText(lines[0] || '').width || 100;
+            drawOrganicCallout(ctx, pxX - 8, pxY - 4, textWidth + 16, fontSizePx * 1.4, liveEl.color || '#38BDF8');
+          }
+          if (liveEl.underlined) {
+            const textWidth = ctx.measureText(lines[0] || '').width || 100;
+            drawHandDrawnLine(ctx, pxX, pxY + fontSizePx + 2, pxX + textWidth, pxY + fontSizePx + 2, {
+              color: liveEl.color || '#38BDF8',
+              width: 2,
+            });
+          }
+          ctx.restore();
+        } else if ((el as any).type === 'formula') {
+          const liveEl = el as any;
+          ctx.save();
+          const rawX = liveEl.position?.x ?? 50;
+          const rawY = liveEl.position?.y ?? 50;
+          const pxX = (rawX / 100) * rect.width;
+          const pxY = (rawY / 100) * rect.height;
+
+          const formulaText = liveEl.latex || liveEl.content || '';
+
+          ctx.font = 'bold 22px "KaTeX_Main", "Times New Roman", serif';
+          ctx.fillStyle = liveEl.color || '#0066FF';
+          ctx.textBaseline = 'top';
+          ctx.fillText(formulaText, pxX, pxY);
+
+          if (liveEl.highlighted) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+            const textWidth = ctx.measureText(formulaText).width || 120;
+            ctx.fillRect(pxX - 6, pxY - 4, textWidth + 12, 32);
+            ctx.restore();
+          }
+          ctx.restore();
+        } else if ((el as any).type === 'svg') {
+          const liveEl = el as any;
+          if (liveEl.svgContent) {
+            const rawX = liveEl.position?.x ?? 50;
+            const rawY = liveEl.position?.y ?? 60;
+            const pxX = (rawX / 100) * rect.width;
+            const pxY = (rawY / 100) * rect.height;
+
+            const img = getSvgImage(liveEl.id, liveEl.svgContent);
+            if (img && img.complete && img.naturalWidth !== 0) {
+              const targetW = Math.min(rect.width * 0.65, 420);
+              const targetH = Math.min(rect.height * 0.55, 280);
+              ctx.drawImage(img, pxX - targetW / 2, pxY - targetH / 2, targetW, targetH);
+            }
+          }
+        } else if ((el as any).type === 'diagram') {
+          const liveEl = el as any;
+          const rawX = liveEl.position?.x ?? 50;
+          const rawY = liveEl.position?.y ?? 55;
+          const pxX = (rawX / 100) * rect.width;
+          const pxY = (rawY / 100) * rect.height;
+
+          const props = liveEl.diagramProps || {};
+          if (props.drawType === 'axes') {
+            drawCoordinateAxes(ctx, {
+              originX: pxX,
+              originY: pxY,
+              width: 180,
+              height: 140,
+              xLabel: props.xLabel || 'x',
+              yLabel: props.yLabel || 'y',
+              progress: liveEl.progress ?? 1.0,
+              color: liveEl.color,
+            });
+          } else if (props.drawType === 'arrow') {
+            drawAnnotatedArrow(
+              ctx,
+              { x: props.x1 ?? (pxX - 50), y: props.y1 ?? pxY },
+              { x: props.x2 ?? (pxX + 50), y: props.y2 ?? pxY },
+              props.label || liveEl.content || '',
+              liveEl.color || '#0066FF'
+            );
+          } else if (liveEl.content) {
+            ctx.save();
+            ctx.font = '600 18px "Inter", sans-serif';
+            ctx.fillStyle = liveEl.color || '#0066FF';
+            ctx.fillText(liveEl.content, pxX, pxY);
+            ctx.restore();
+          }
         }
       }
 
