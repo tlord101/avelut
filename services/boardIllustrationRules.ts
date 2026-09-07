@@ -11,8 +11,8 @@ export const ILLUSTRATION_COLORS = {
   white: '#FFFFFF',
 } as const;
 
-export const MAX_BOARD_TEXT_CHARS = 90;
-export const MAX_TEXT_ELEMENTS = 4;
+export const MAX_BOARD_TEXT_CHARS = 240;
+export const MAX_TEXT_ELEMENTS = 12;
 
 export interface LayoutClamp {
   x: number;
@@ -27,18 +27,9 @@ export function clampTitlePosition(x?: number, y?: number): LayoutClamp {
 }
 
 export function clampTextPosition(x?: number, y?: number): LayoutClamp {
-  const rawX = x ?? 22;
-  const rawY = y ?? 82;
-  const useLeft = rawX < 45;
-  if (useLeft) {
-    return {
-      x: Math.max(12, Math.min(38, rawX)),
-      y: Math.max(22, Math.min(88, rawY)),
-    };
-  }
   return {
-    x: Math.max(20, Math.min(80, rawX)),
-    y: Math.max(78, Math.min(92, rawY)),
+    x: Math.max(8, Math.min(92, x ?? 20)),
+    y: Math.max(15, Math.min(92, y ?? 35)),
   };
 }
 

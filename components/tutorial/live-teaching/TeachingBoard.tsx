@@ -211,8 +211,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0" />
 
       <div className="relative z-10 w-full h-full overflow-hidden">
-        {isAudioReady &&
-          elements.map((el) => {
+        {elements.map((el) => {
             const posX = Math.max(8, Math.min(92, el.position?.x ?? 50));
             const posY = Math.max(6, Math.min(94, el.position?.y ?? 50));
             const isHighlighted = activeHighlights.has(el.id);

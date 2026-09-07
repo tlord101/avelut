@@ -280,13 +280,23 @@ export function normalizeQwenModelName(model?: string, _hasImage: boolean = fals
   return model?.trim() || OPENROUTER_MODEL;
 }
 
+const FALLBACK_MODELS = [
+  'qwen/qwen3.7-flash',
+  'google/gemini-2.5-flash',
+  'qwen/qwen-2.5-72b-instruct',
+  'deepseek/deepseek-r1:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen-2.5-7b-instruct:free',
+];
+
 /**
- * Call OpenRouter endpoint with qwen/qwen3.7-flash (Non-Streaming)
+ * Call OpenRouter endpoint with model candidate fallbacks on 429 Rate Limits
  */
 async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promise<any> {
   const apiKey = getOpenRouterApiKey(appSettings);
   const { messages } = paramsToChatMessages(params);
-  const model = appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL;
+  const primaryModel = appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL;
+  const candidateModels = Array.from(new Set([primaryModel, ...FALLBACK_MODELS]));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -301,68 +311,77 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
         ? ['https://www.avelut.xyz/api/openrouter-chat', '/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']
         : ['/api/openrouter-chat', 'https://www.avelut.xyz/api/openrouter-chat', 'https://openrouter.ai/api/v1/chat/completions']);
 
-  const bodyPayload: any = {
-    model,
-    messages,
-    temperature: params?.config?.temperature ?? 0.7,
-    max_tokens: params?.config?.maxOutputTokens ?? 4096,
-  };
-
-  // Enable JSON mode if requested
-  if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
-    bodyPayload.response_format = { type: 'json_object' };
-  }
-
   let lastError: Error | null = null;
 
-  for (const endpoint of endpoints) {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://avelut.xyz',
-        'X-Title': 'Avelut AI',
-      };
-      if (apiKey) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-      }
+  for (const model of candidateModels) {
+    const bodyPayload: any = {
+      model,
+      messages,
+      temperature: params?.config?.temperature ?? 0.7,
+      max_tokens: params?.config?.maxOutputTokens ?? 4096,
+    };
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-      });
+    if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
+      bodyPayload.response_format = { type: 'json_object' };
+    }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
-      }
+    for (const endpoint of endpoints) {
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://avelut.xyz',
+          'X-Title': 'Avelut AI',
+        };
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
 
-      const data = await response.json();
-      const rawText = data?.choices?.[0]?.message?.content || '';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(bodyPayload),
+        });
 
-      return {
-        text: () => rawText,
-        candidates: [
-          {
-            content: {
-              parts: [{ text: rawText }],
-              role: 'model',
+        if (!response.ok) {
+          const errorText = await response.text();
+          const isRateLimit = response.status === 429 || errorText.includes('429') || errorText.toLowerCase().includes('rate limit') || errorText.toLowerCase().includes('too many requests');
+          if (isRateLimit) {
+            console.warn(`[OpenRouter] Rate limited on model ${model} (HTTP ${response.status}). Trying next fallback model...`);
+            throw new Error(`429_RATE_LIMIT: ${errorText}`);
+          }
+          throw new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        const rawText = data?.choices?.[0]?.message?.content || '';
+
+        return {
+          text: () => rawText,
+          candidates: [
+            {
+              content: {
+                parts: [{ text: rawText }],
+                role: 'model',
+              },
+              finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
             },
-            finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
+          ],
+          usageMetadata: {
+            promptTokenCount: data?.usage?.prompt_tokens || 0,
+            candidatesTokenCount: data?.usage?.completion_tokens || 0,
+            totalTokenCount: data?.usage?.total_tokens || 0,
           },
-        ],
-        usageMetadata: {
-          promptTokenCount: data?.usage?.prompt_tokens || 0,
-          candidatesTokenCount: data?.usage?.completion_tokens || 0,
-          totalTokenCount: data?.usage?.total_tokens || 0,
-        },
-      };
-    } catch (err: any) {
-      lastError = err;
+        };
+      } catch (err: any) {
+        lastError = err;
+        if (err?.message?.startsWith('429_RATE_LIMIT')) {
+          break; // Switch to next candidate model on 429
+        }
+      }
     }
   }
 
-  throw lastError || new Error('OpenRouter Qwen 3.7 Flash inference request failed');
+  throw lastError || new Error('All OpenRouter model candidates failed or rate limited');
 }
 
 /**

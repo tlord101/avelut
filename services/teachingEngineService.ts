@@ -587,6 +587,7 @@ export class TeachingEngineService {
     const totalWords = words.length || 1;
     const estTotalMs = Math.max(25000, (totalWords / wps) * 1000);
 
+    // Trigger all early candidates rapidly at start
     const earlyCandidates = actions.filter(
       (a) =>
         a.type === 'write' ||
@@ -596,16 +597,17 @@ export class TeachingEngineService {
         a.type === 'svg' ||
         a.sync?.triggerImmediately
     );
-    const early = earlyCandidates[0] || actions[0];
-    if (early && !triggeredIds.has(early.id)) {
-      const earlyTimer = setTimeout(() => {
-        if (this.isDestroyed || this.isPaused) return;
-        if (triggeredIds.has(early.id)) return;
-        triggeredIds.add(early.id);
-        this.listeners.forEach((l) => l.onBoardActionTriggered?.(early));
-      }, 280);
-      this.activeTimers.push(earlyTimer);
-    }
+    earlyCandidates.forEach((early, eIdx) => {
+      if (early && !triggeredIds.has(early.id)) {
+        const earlyTimer = setTimeout(() => {
+          if (this.isDestroyed || this.isPaused) return;
+          if (triggeredIds.has(early.id)) return;
+          triggeredIds.add(early.id);
+          this.listeners.forEach((l) => l.onBoardActionTriggered?.(early));
+        }, 100 + eIdx * 150);
+        this.activeTimers.push(earlyTimer);
+      }
+    });
 
     beats.forEach((beat, bIdx) => {
       const beatOffset = phraseWordOffset(speech, beat.text);
@@ -623,15 +625,22 @@ export class TeachingEngineService {
       if (offset >= 0) {
         delayMs = Math.floor((offset / wps) * 1000);
       } else {
-        delayMs = Math.floor(((aIdx + 1) / (actions.length + 1)) * estTotalMs * 0.85);
+        delayMs = Math.min(
+          Math.floor(((aIdx + 1) / (actions.length + 1)) * estTotalMs * 0.85),
+          300 + aIdx * 300
+        );
       }
+
+      // Ensure actions are rendered early (within 1.5-3s max) so text and illustrations display fully while voice speaks
+      const maxAllowedDelay = 600 + aIdx * 350;
+      const finalDelay = Math.min(delayMs, maxAllowedDelay);
 
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
         if (triggeredIds.has(action.id)) return;
         triggeredIds.add(action.id);
         this.listeners.forEach((l) => l.onBoardActionTriggered?.(action));
-      }, Math.max(300, delayMs));
+      }, Math.max(100, finalDelay));
       this.activeTimers.push(timer);
     });
   }

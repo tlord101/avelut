@@ -41,8 +41,8 @@ export interface TeachingEngineSessionViewProps {
   resumeInfo?: any;
 }
 
-/** Minimum reading pause duration (ms) after speech ends before auto-advancing */
-const KEY_POINT_PAUSE_MS = 5000;
+/** Minimum reading pause duration (ms) after speech ends before auto-advancing (at least 2 minutes per board) */
+const KEY_POINT_PAUSE_MS = 120000;
 
 export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps> = ({
   topicTitle,
