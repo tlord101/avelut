@@ -263,36 +263,91 @@ export class TeachingEngineService {
     const boardNum = boardPlan.board_number || this.currentBoardIndex + 1;
     const boardTitle = boardPlan.title || `Board ${boardNum}`;
     const takeaways = boardPlan.recommended_board_content || boardPlan.key_concepts || [boardPlan.teaching_objective || boardTitle];
+    const safeTopic = this.currentStructure?.topic || 'Academic Concept';
+
+    const fallbackSvg = `
+<svg viewBox="0 0 500 300" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fbBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0F172A" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#818CF8"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background Panel -->
+  <rect x="20" y="20" width="460" height="260" rx="16" fill="url(#fbBg)" stroke="#334155" stroke-width="2"/>
+
+  <!-- Header Banner -->
+  <rect x="40" y="40" width="420" height="36" rx="8" fill="#1E293B" stroke="#38BDF8" stroke-width="1.5"/>
+  <text x="250" y="63" text-anchor="middle" fill="#38BDF8" font-size="16" font-weight="800" font-family="sans-serif">
+    ${boardTitle.toUpperCase()}
+  </text>
+
+  <!-- Process / Concept Flow Nodes -->
+  <!-- Node 1 -->
+  <rect x="55" y="110" width="110" height="60" rx="10" fill="#0F172A" stroke="#38BDF8" stroke-width="2" filter="url(#glow)"/>
+  <text x="110" y="138" text-anchor="middle" fill="#F8FAFC" font-size="13" font-weight="700" font-family="sans-serif">Step 1: Input</text>
+  <text x="110" y="156" text-anchor="middle" fill="#94A3B8" font-size="11" font-family="sans-serif">Foundations</text>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 165 140 L 195 140" stroke="#FACC15" stroke-width="3" marker-end="url(#arrow)" stroke-dasharray="4,4"/>
+  <polygon points="195,135 205,140 195,145" fill="#FACC15"/>
+
+  <!-- Node 2 (Core) -->
+  <rect x="205" y="100" width="130" height="80" rx="12" fill="#1E293B" stroke="#34D399" stroke-width="2.5" filter="url(#glow)"/>
+  <text x="270" y="135" text-anchor="middle" fill="#34D399" font-size="14" font-weight="800" font-family="sans-serif">Core Mechanism</text>
+  <text x="270" y="156" text-anchor="middle" fill="#E2E8F0" font-size="11" font-family="sans-serif">${safeTopic.slice(0, 18)}</text>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M 335 140 L 365 140" stroke="#FACC15" stroke-width="3"/>
+  <polygon points="365,135 375,140 365,145" fill="#FACC15"/>
+
+  <!-- Node 3 -->
+  <rect x="375" y="110" width="80" height="60" rx="10" fill="#0F172A" stroke="#818CF8" stroke-width="2"/>
+  <text x="415" y="138" text-anchor="middle" fill="#F8FAFC" font-size="13" font-weight="700" font-family="sans-serif">Result</text>
+  <text x="415" y="156" text-anchor="middle" fill="#94A3B8" font-size="11" font-family="sans-serif">Output</text>
+
+  <!-- Bottom Key Takeaway Callout -->
+  <rect x="55" y="200" width="400" height="50" rx="10" fill="#0F172A" stroke="#334155" stroke-width="1.5"/>
+  <text x="75" y="222" fill="#FACC15" font-size="12" font-weight="800" font-family="sans-serif">KEY PRINCIPLE:</text>
+  <text x="75" y="239" fill="#E2E8F0" font-size="12" font-family="sans-serif">${takeaways[0] ? takeaways[0].slice(0, 52) : boardTitle}</text>
+</svg>
+`.trim();
 
     const actions: BoardAction[] = [
       {
         id: `act_title_${boardNum}`,
         type: 'write',
         content: boardTitle,
-        position: { x: 50, y: 12 },
-        metadata: { fontSize: '2xl', color: '#38BDF8' },
+        position: { x: 50, y: 10 },
+        metadata: { fontSize: '3xl', color: '#FFFFFF' },
         sync: { triggerImmediately: true },
       },
-      ...takeaways.slice(0, 4).map((kt, idx) => ({
+      ...takeaways.slice(0, 3).map((kt, idx) => ({
         id: `act_kt_${boardNum}_${idx}`,
         type: 'write' as const,
         content: `• ${kt}`,
-        position: { x: 18, y: 30 + idx * 14 },
+        position: { x: 18, y: 28 + idx * 12 },
         metadata: { fontSize: 'xl' as const, color: '#F3F4F6' },
+        sync: { phrase: kt },
       })),
       {
         id: `act_draw_${boardNum}`,
         type: 'draw',
-        position: { x: 62, y: 55 },
+        position: { x: 50, y: 62 },
         metadata: {
-          drawType: 'circle',
-          cx: 50,
-          cy: 50,
-          r: 20,
-          label: boardTitle,
-          color: '#38BDF8',
-          strokeWidth: 2.8,
+          primitive: 'custom_svg',
+          svgContent: fallbackSvg,
         },
+        sync: { phrase: boardTitle },
       },
     ];
 
@@ -300,9 +355,23 @@ export class TeachingEngineService {
       board_id: `board_fb_${boardNum}`,
       board_number: boardNum,
       title: boardTitle,
-      speech: `Let's focus on ${boardTitle}. Here is the core visual structure and key points for this concept.`,
-      speech_beats: [],
+      speech: `Welcome to this board on ${boardTitle}. Let's break down the key mechanism step-by-step to understand how ${safeTopic} operates visually and logically.`,
+      speech_beats: [
+        {
+          id: `beat_fb_1`,
+          text: `Welcome to this board on ${boardTitle}.`,
+          purpose: 'introduce title',
+          board_actions: [actions[0]],
+        },
+        {
+          id: `beat_fb_2`,
+          text: `Let's break down the key mechanism step-by-step`,
+          purpose: 'introduce diagram',
+          board_actions: [actions[actions.length - 1]],
+        },
+      ],
       board_actions: normalizeBoardActions(actions),
+      svg_illustration: fallbackSvg,
     };
   }
 
@@ -495,17 +564,38 @@ export class TeachingEngineService {
       }
     }
 
-    if (!performance.board_actions.length && performance.title) {
-      performance.board_actions = [
-        {
-          id: `title_auto_${performance.board_number}`,
-          type: 'write',
-          content: performance.title,
-          position: { x: 50, y: 12 },
-          metadata: { fontSize: '2xl', color: '#38BDF8' },
-          sync: { triggerImmediately: true },
-        },
-      ];
+    // Guarantee explicit Title Action on every board performance
+    const resolvedTitle = performance.title || boardPlan.title || `Board ${performance.board_number}`;
+    const hasTitleAction = (performance.board_actions || []).some(
+      (a) =>
+        (a.type === 'write' || a.type === 'text') &&
+        ((a.position?.y ?? 50) <= 16 || a.id?.includes('title') || a.content === resolvedTitle)
+    );
+
+    if (!hasTitleAction) {
+      const titleAction: BoardAction = {
+        id: `act_title_${performance.board_number}`,
+        type: 'write',
+        content: resolvedTitle,
+        position: { x: 50, y: 10 },
+        metadata: { fontSize: '3xl', color: '#FFFFFF' },
+        sync: { triggerImmediately: true },
+      };
+      performance.board_actions = [titleAction, ...(performance.board_actions || [])];
+    } else {
+      performance.board_actions = (performance.board_actions || []).map((a) => {
+        if (
+          (a.type === 'write' || a.type === 'text') &&
+          ((a.position?.y ?? 50) <= 16 || a.id?.includes('title') || a.content === resolvedTitle)
+        ) {
+          return {
+            ...a,
+            position: { x: 50, y: 10 },
+            sync: { ...(a.sync || {}), triggerImmediately: true },
+          };
+        }
+        return a;
+      });
     }
 
     return performance;
@@ -652,31 +742,33 @@ export class TeachingEngineService {
     const totalWords = words.length || 1;
     const estTotalMs = Math.max(25000, (totalWords / wps) * 1000);
 
-    // Trigger all early candidates rapidly at start
-    const earlyCandidates = actions.filter(
+    // 1) Title Action MUST trigger immediately at lecture start (t = 50ms)
+    const immediateTitleCandidates = actions.filter(
       (a) =>
-        a.type === 'write' ||
-        a.type === 'text' ||
-        a.type === 'draw' ||
-        a.type === 'illustration' ||
-        a.type === 'svg' ||
-        a.sync?.triggerImmediately
+        a.sync?.triggerImmediately ||
+        a.id?.includes('title') ||
+        ((a.position?.y ?? 50) <= 16 && (a.type === 'write' || a.type === 'text'))
     );
-    earlyCandidates.forEach((early, eIdx) => {
-      if (early && !triggeredIds.has(early.id)) {
-        const earlyTimer = setTimeout(() => {
+    immediateTitleCandidates.forEach((titleAct, idx) => {
+      if (titleAct && !triggeredIds.has(titleAct.id)) {
+        const timer = setTimeout(() => {
           if (this.isDestroyed || this.isPaused) return;
-          if (triggeredIds.has(early.id)) return;
-          triggeredIds.add(early.id);
-          this.listeners.forEach((l) => l.onBoardActionTriggered?.(early));
-        }, 100 + eIdx * 150);
-        this.activeTimers.push(earlyTimer);
+          if (triggeredIds.has(titleAct.id)) return;
+          triggeredIds.add(titleAct.id);
+          this.listeners.forEach((l) => l.onBoardActionTriggered?.(titleAct));
+        }, 50 + idx * 50);
+        this.activeTimers.push(timer);
       }
     });
 
+    // 2) Schedule speech_beats tied to exact spoken timestamps or progressive pacing
     beats.forEach((beat, bIdx) => {
       const beatOffset = phraseWordOffset(speech, beat.text);
-      const delayMs = beatOffset >= 0 ? Math.floor((beatOffset / wps) * 1000) : Math.floor((bIdx / beats.length) * estTotalMs);
+      const delayMs =
+        beatOffset >= 0
+          ? Math.floor((beatOffset / wps) * 1000)
+          : Math.floor(((bIdx + 1) / (beats.length + 1)) * estTotalMs);
+
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
         this.listeners.forEach((l) => l.onBeatTriggered?.(beat));
@@ -688,32 +780,36 @@ export class TeachingEngineService {
             }
           });
         }
-      }, Math.max(200, delayMs));
+      }, Math.max(150, delayMs));
       this.activeTimers.push(timer);
     });
 
-    actions.forEach((action, aIdx) => {
+    // 3) Progressive pacing for remaining actions (drawings, SVG, formulas, bullets)
+    const remainingActions = actions.filter(
+      (a) =>
+        !triggeredIds.has(a.id) &&
+        !a.sync?.triggerImmediately &&
+        !a.id?.includes('title') &&
+        ((a.position?.y ?? 50) > 16 || a.type !== 'write')
+    );
+
+    remainingActions.forEach((action, aIdx) => {
       let delayMs = 0;
       const offset = phraseWordOffset(speech, action.sync?.phrase);
       if (offset >= 0) {
         delayMs = Math.floor((offset / wps) * 1000);
       } else {
-        delayMs = Math.min(
-          Math.floor(((aIdx + 1) / (actions.length + 1)) * estTotalMs * 0.85),
-          300 + aIdx * 300
-        );
+        // Space non-immediate actions across speech duration so elements reveal as the voice speaks
+        const stepFraction = (aIdx + 1) / (remainingActions.length + 1);
+        delayMs = Math.floor(estTotalMs * 0.12 + stepFraction * estTotalMs * 0.72);
       }
-
-      // Ensure actions are rendered early (within 1.5-3s max) so text and illustrations display fully while voice speaks
-      const maxAllowedDelay = 600 + aIdx * 350;
-      const finalDelay = Math.min(delayMs, maxAllowedDelay);
 
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
         if (triggeredIds.has(action.id)) return;
         triggeredIds.add(action.id);
         this.listeners.forEach((l) => l.onBoardActionTriggered?.(action));
-      }, Math.max(100, finalDelay));
+      }, Math.max(200, delayMs));
       this.activeTimers.push(timer);
     });
   }

@@ -202,9 +202,11 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
             const isHighlighted = activeHighlights.has(el.id);
             const isCircled = activeCircles.has(el.id);
             const isUnderlined = activeUnderlines.has(el.id);
-            const isTitle = el.type === 'text' && posY <= 16;
+            const isTitle =
+              (el.type === 'text' || el.type === 'write') &&
+              (posY <= 16 || el.id?.includes('title'));
             const isKeyPoint =
-              el.type === 'text' &&
+              (el.type === 'text' || el.type === 'write') &&
               !isTitle &&
               ((el.content || '').trim().startsWith('•') ||
                 (el.content || '').trim().startsWith('-') ||
