@@ -668,20 +668,23 @@ export class TeachingEngineService {
     const totalWords = words.length || 1;
     const estTotalMs = Math.max(25000, (totalWords / wps) * 1000);
 
-    // 1) Title Action MUST trigger immediately at lecture start (t = 50ms)
-    const immediateTitleCandidates = actions.filter(
+    // 1) Title Action & Full Illustration Action MUST trigger immediately at lecture start (t = 50ms)
+    const immediateCandidates = actions.filter(
       (a) =>
         a.sync?.triggerImmediately ||
         a.id?.includes('title') ||
+        a.type === 'draw' ||
+        a.type === 'illustration' ||
+        a.type === 'svg' ||
         ((a.position?.y ?? 50) <= 16 && (a.type === 'write' || a.type === 'text'))
     );
-    immediateTitleCandidates.forEach((titleAct, idx) => {
-      if (titleAct && !triggeredIds.has(titleAct.id)) {
+    immediateCandidates.forEach((act, idx) => {
+      if (act && !triggeredIds.has(act.id)) {
         const timer = setTimeout(() => {
           if (this.isDestroyed || this.isPaused) return;
-          if (triggeredIds.has(titleAct.id)) return;
-          triggeredIds.add(titleAct.id);
-          this.listeners.forEach((l) => l.onBoardActionTriggered?.(titleAct));
+          if (triggeredIds.has(act.id)) return;
+          triggeredIds.add(act.id);
+          this.listeners.forEach((l) => l.onBoardActionTriggered?.(act));
         }, 50 + idx * 50);
         this.activeTimers.push(timer);
       }
@@ -710,24 +713,24 @@ export class TeachingEngineService {
       this.activeTimers.push(timer);
     });
 
-    // 3) Progressive pacing for remaining actions (drawings, SVG, formulas, bullets)
-    const remainingActions = actions.filter(
+    // 3) Live action sequential reveals for keyword points, formulas, and key sentences
+    const remainingTextActions = actions.filter(
       (a) =>
         !triggeredIds.has(a.id) &&
         !a.sync?.triggerImmediately &&
         !a.id?.includes('title') &&
-        ((a.position?.y ?? 50) > 16 || a.type !== 'write')
+        ((a.position?.y ?? 50) > 16 || (a.type === 'write' || a.type === 'text'))
     );
 
-    remainingActions.forEach((action, aIdx) => {
+    remainingTextActions.forEach((action, aIdx) => {
       let delayMs = 0;
       const offset = phraseWordOffset(speech, action.sync?.phrase);
       if (offset >= 0) {
         delayMs = Math.floor((offset / wps) * 1000);
       } else {
-        // Space non-immediate actions across speech duration so elements reveal as the voice speaks
-        const stepFraction = (aIdx + 1) / (remainingActions.length + 1);
-        delayMs = Math.floor(estTotalMs * 0.12 + stepFraction * estTotalMs * 0.72);
+        // Space keyword points across the spoken lecture
+        const stepFraction = (aIdx + 1) / (remainingTextActions.length + 1);
+        delayMs = Math.floor(estTotalMs * 0.15 + stepFraction * estTotalMs * 0.70);
       }
 
       const timer = setTimeout(() => {

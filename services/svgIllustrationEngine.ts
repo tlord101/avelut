@@ -117,33 +117,10 @@ const INJECTED_SVG_DEFS = `
 
     <!-- Scoped Drawing Animation -->
     <style>
-      @keyframes strokeDraw {
-        from { stroke-dashoffset: 1200; }
-        to { stroke-dashoffset: 0; }
-      }
-      @keyframes fadeInObject {
-        from { opacity: 0; transform: translateY(4px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .chalk-scene-bg {
-        animation: fadeInObject 0.4s ease-out forwards;
-      }
-      .chalk-main-object path, .chalk-main-object line, .chalk-main-object polyline {
-        stroke-dasharray: 1200;
-        stroke-dashoffset: 1200;
-        animation: strokeDraw 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-      }
-      .chalk-object-details {
-        animation: fadeInObject 0.6s ease-out 0.3s forwards;
-        opacity: 0;
-      }
-      .chalk-vectors {
-        animation: fadeInObject 0.5s ease-out 0.6s forwards;
-        opacity: 0;
-      }
-      .chalk-labels {
-        animation: fadeInObject 0.5s ease-out 0.8s forwards;
-        opacity: 0;
+    <!-- Instant Crisp Rendering (No Hand Drawing Animation) -->
+    <style>
+      .chalk-scene-bg, .chalk-main-object, .chalk-object-details, .chalk-vectors, .chalk-labels {
+        opacity: 1;
       }
     </style>
   </defs>
