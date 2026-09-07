@@ -27,6 +27,15 @@ import { deductAICredits, getFeatureCost, checkAICredits, isPaidSubscriber, isEx
 import { TeachingEngineSessionView } from './tutorial/TeachingEngineSessionView';
 import { safeJsonParse } from '../lib/safeJsonParse';
 
+import { LessonDurationModal, type LessonDurationMode } from './tutorial/LessonDurationModal';
+import {
+    getLiveTeachingProgress,
+    topicKeyFromTitle,
+    formatResumeLabel,
+    type LiveTeachingProgress,
+} from '../services/liveTeachingProgressService';
+import { TeachingEngineService } from '../services/teachingEngineService';
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_BOARD_LINES = 6;
 
@@ -143,22 +152,95 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     onBack,
     setCustomHeaderConfig,
 }) => {
+    const { settings: hookAppSettings } = useAppSettings();
+    const resolvedAppSettings = propAppSettings || hookAppSettings;
+
     // ── Live Teaching Whiteboard Architecture ──
     const topicTitle = initialSessionData?.topic?.topic_name || initialSessionData?.customPrompt || 'Live Tutorial';
     const courseName = initialSessionData?.course?.course_name || 'Academic Topic';
     const syllabusContext = initialSessionData?.syllabusContext;
 
+    const [selectedDurationMode, setSelectedDurationMode] = useState<LessonDurationMode | null>(null);
+    const [isDurationModalOpen, setIsDurationModalOpen] = useState<boolean>(true);
+    const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
+    const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
+
+    // Check for existing progress to allow 1-click session resuming
+    useEffect(() => {
+        const userId = userProfile?.uid || 'anon';
+        const topicKey = topicKeyFromTitle(topicTitle, courseName);
+        const progress = getLiveTeachingProgress(userId, topicKey);
+        if (progress && !progress.isCompleted && progress.boardIndex > 0) {
+            setResumeProgress(progress);
+        } else {
+            setResumeProgress(null);
+        }
+    }, [userProfile?.uid, topicTitle, courseName]);
+
+    // Background prefetch all 3 duration modes (15m, 30m, 60m) into localStorage immediately
+    useEffect(() => {
+        if (!topicTitle) return;
+        const engine = new TeachingEngineService(resolvedAppSettings, userProfile || null);
+        void engine.prefetchAllDurationStructures({
+            topic: topicTitle,
+            courseName,
+            syllabusContext,
+            studentName: userProfile?.display_name || 'Student',
+        });
+    }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile]);
+
+    const handleConfirmDuration = (mode: LessonDurationMode) => {
+        setSelectedDurationMode(mode);
+        setStartBoardIndex(0);
+        setIsDurationModalOpen(false);
+    };
+
+    const handleResumeSession = () => {
+        if (resumeProgress) {
+            setSelectedDurationMode(resumeProgress.durationMode);
+            setStartBoardIndex(resumeProgress.boardIndex);
+            setIsDurationModalOpen(false);
+        }
+    };
+
+    const handleCloseModal = () => {
+        setIsDurationModalOpen(false);
+        if (!selectedDurationMode) {
+            if (onBack) onBack();
+            else setSelectedDurationMode(30);
+        }
+    };
+
     return (
-        <TeachingEngineSessionView
-            topicTitle={topicTitle}
-            courseName={courseName}
-            syllabusContext={syllabusContext}
-            userId={userProfile?.uid}
-            userProfile={userProfile}
-            appSettings={propAppSettings}
-            onClose={onBack}
-            setCustomHeaderConfig={setCustomHeaderConfig}
-        />
+        <div className="relative w-full h-full">
+            <LessonDurationModal
+                isOpen={isDurationModalOpen}
+                topicTitle={topicTitle}
+                onClose={handleCloseModal}
+                onConfirm={handleConfirmDuration}
+                initialMode={selectedDurationMode || 30}
+                resumeAvailable={Boolean(resumeProgress)}
+                resumeLabel={resumeProgress ? formatResumeLabel(resumeProgress) : undefined}
+                onResume={handleResumeSession}
+                userProfile={userProfile}
+                appSettings={resolvedAppSettings}
+            />
+
+            {selectedDurationMode && (
+                <TeachingEngineSessionView
+                    topicTitle={topicTitle}
+                    courseName={courseName}
+                    syllabusContext={syllabusContext}
+                    userId={userProfile?.uid}
+                    userProfile={userProfile}
+                    appSettings={resolvedAppSettings}
+                    durationMode={selectedDurationMode}
+                    startBoardIndex={startBoardIndex}
+                    onClose={onBack}
+                    setCustomHeaderConfig={setCustomHeaderConfig}
+                />
+            )}
+        </div>
     );
 };
 

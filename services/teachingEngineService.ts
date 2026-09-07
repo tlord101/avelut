@@ -199,6 +199,36 @@ export class TeachingEngineService {
   }
 
   /**
+   * Background prefetch topic teaching structures for all 3 duration modes (15m, 30m, 60m).
+   * Saves each generated structure in localStorage so selecting any duration mode returns instantly.
+   */
+  public async prefetchAllDurationStructures(params: {
+    topic: string;
+    courseName?: string;
+    syllabusContext?: string;
+    studentName?: string;
+  }): Promise<void> {
+    const modes: (15 | 30 | 60)[] = [15, 30, 60];
+    const prefetchPromises = modes.map(async (mode) => {
+      const structCacheKey = getLocalCacheKey('struct', params.topic, mode);
+      const cached = getCachedBoardItem<TeachingStructure>(structCacheKey);
+      if (cached && Array.isArray(cached.boards) && cached.boards.length > 0) {
+        return; // Already cached in localStorage
+      }
+      try {
+        await this.generateTeachingStructure({
+          ...params,
+          durationMode: mode,
+          isPrefetch: true,
+        });
+      } catch (err) {
+        console.warn(`[TeachingEngine] Background prefetch failed for duration mode ${mode}:`, err);
+      }
+    });
+    await Promise.allSettled(prefetchPromises);
+  }
+
+  /**
    * REQUEST 1: Generate Teaching Structure for Topic
    */
   public async generateTeachingStructure(params: {
@@ -207,11 +237,14 @@ export class TeachingEngineService {
     syllabusContext?: string;
     studentName?: string;
     durationMode?: any;
+    isPrefetch?: boolean;
   }): Promise<TeachingStructure | null> {
-    this.setRuntimeState('PREPARING');
-    this.currentSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    this.prefetchedBoardPerformance = null;
-    this.prefetchedBoardIndex = null;
+    if (!params.isPrefetch) {
+      this.setRuntimeState('PREPARING');
+      this.currentSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      this.prefetchedBoardPerformance = null;
+      this.prefetchedBoardIndex = null;
+    }
 
     let structure: TeachingStructure | null = null;
     const durationMode = params.durationMode || 30;
@@ -220,9 +253,11 @@ export class TeachingEngineService {
     // Instant local storage cache lookup (0ms loading)
     const cachedStruct = getCachedBoardItem<TeachingStructure>(structCacheKey);
     if (cachedStruct && Array.isArray(cachedStruct.boards) && cachedStruct.boards.length > 0) {
-      this.currentStructure = cachedStruct;
-      this.currentBoardIndex = 0;
-      this.listeners.forEach((l) => l.onStructureLoaded?.(cachedStruct));
+      if (!params.isPrefetch) {
+        this.currentStructure = cachedStruct;
+        this.currentBoardIndex = 0;
+        this.listeners.forEach((l) => l.onStructureLoaded?.(cachedStruct));
+      }
       return cachedStruct;
     }
 
@@ -275,16 +310,20 @@ export class TeachingEngineService {
       void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || '30min');
       setCachedBoardItem(structCacheKey, structure);
 
-      this.currentStructure = structure;
-      this.currentBoardIndex = 0;
-      this.listeners.forEach((l) => l.onStructureLoaded?.(structure!));
+      if (!params.isPrefetch) {
+        this.currentStructure = structure;
+        this.currentBoardIndex = 0;
+        this.listeners.forEach((l) => l.onStructureLoaded?.(structure!));
+      }
       return structure;
     } catch (err: any) {
       console.error('[TeachingEngine] Error generating structure:', err);
       const fallback = this.buildFallbackTeachingStructure(params.topic, durationMode);
-      this.currentStructure = fallback;
-      this.currentBoardIndex = 0;
-      this.listeners.forEach((l) => l.onStructureLoaded?.(fallback));
+      if (!params.isPrefetch) {
+        this.currentStructure = fallback;
+        this.currentBoardIndex = 0;
+        this.listeners.forEach((l) => l.onStructureLoaded?.(fallback));
+      }
       return fallback;
     }
   }

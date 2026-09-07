@@ -73,11 +73,14 @@ SEMANTIC CLASS DEFINITIONS FOR <defs><style>:
 .text-muted { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 8px; fill: #94a3b8; }
 .text-title { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #38bdf8; font-weight: 600; letter-spacing: 0.5px; }
 
-CORE DESIGN RULES FOR LIVE BOARD ILLUSTRATIONS:
-1) MANDATORY SVG DIAGRAM: Every live tutorial board MUST produce a valid, detailed technical outline SVG diagram in the \`svg_illustration\` field matching this exact prompt template.
-2) COLOR PALETTE & CONTRAST: Use a restrained professional palette with semantic classes (.fill-accent, .fill-subtle, .path-accent, .path-structural, .path-dashed). On dark chalkboard themes, use bright contrast colors (#FFFFFF, #38BDF8, #E2E8F0, #FACC15).
-3) LINE WEIGHTS: Thin, deliberate strokes (stroke-width: 1.5 to 2) with semantic CSS classes for styling.
-4) TYPOGRAPHY & ALIGNMENT: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit coordinate attributes (x, y, cx, cy) to ensure exact alignment and clean layout.
-5) SCALABILITY: Always include a viewBox (viewBox="0 0 400 200") and set width="100%" height="100%" so it renders responsively on all device screens.
-6) TITLE & ACTION SYNC: Every board MUST begin with an explicit "write" title action at x: 50, y: 10 with "sync": { "triggerImmediately": true }.
+CORE PEDAGOGICAL & VISUAL ALIGNMENT RULES:
+1) ILLUSTRATION DERIVED FROM SPEECH & BOARD TEXTS: The technical SVG diagram MUST be specifically created to illustrate the exact concepts, entity relationships, physical/abstract mechanisms, and key points spoken in the speech narrative of THIS board. Do NOT generate generic diagrams!
+2) MANDATORY SVG DIAGRAM: Every live tutorial board MUST produce a valid, detailed technical outline SVG diagram in the \`svg_illustration\` field matching this exact prompt template.
+3) BOARD LAYOUT & VERTICAL ORDERING:
+   - Title: Centered at Top (x: 50, y: 8).
+   - Bullets / Key Points: Placed on the left side, descending vertically downwards (x: 18, y: 24, y: 38, y: 52, y: 66).
+   - SVG Technical Diagram: Placed on the middle-right or lower zone (x: 65, y: 55 or x: 50, y: 68) so that text bullets and the SVG diagram NEVER overlap or crowd each other.
+4) COLOR PALETTE & CONTRAST: Use a restrained professional palette with semantic classes (.fill-accent, .fill-subtle, .path-accent, .path-structural, .path-dashed). On dark chalkboard themes, use bright high-contrast colors (#FFFFFF, #38BDF8, #E2E8F0, #FACC15).
+5) LINE WEIGHTS & RESPONSIVENESS: Thin, deliberate strokes (stroke-width: 1.5 to 2) with viewBox="0 0 400 200" and width="100%" height="100%" for crisp responsiveness.
 `.trim();
+
