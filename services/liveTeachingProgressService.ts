@@ -156,6 +156,8 @@ export async function prefetchTopicTeachingStructure(params: {
     } finally {
       activePrefetches.delete(prefetchId);
     }
+    // Small delay between background prefetch calls to prevent OpenRouter RPM rate limit bursts
+    await new Promise((res) => setTimeout(res, 500));
   }
 }
 
