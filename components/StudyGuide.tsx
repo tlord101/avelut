@@ -251,6 +251,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 // --- MAIN CONTENT ---
 const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgress, onNavigate, setCustomHeaderConfig }) => {
+    const { settings: appSettings } = useAppSettings();
+    const { addToast } = useToast();
+
     const [courses, setCourses] = useState<Course[]>(() => {
         const key = `avelut_courses_${userProfile?.uid || 'anon'}`;
         return readCachedJson<Course[]>(key, []);
@@ -422,9 +425,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         semester: (userProfile?.default_semester_tab || 'second') as 'all' | 'first' | 'second',
     }));
 
-    const { addToast } = useToast();
     const { uploadTextbook, uploadProgress, isUploadingCourseKey } = useSharedTextbookUpload();
-    const { settings: appSettings } = useAppSettings();
 
     const [showLimitModal, setShowLimitModal] = useState(false);
     const [limitModalData, setLimitModalData] = useState({ balance: 0, cost: 0 });
