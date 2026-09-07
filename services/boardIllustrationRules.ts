@@ -57,9 +57,10 @@ export function truncateBoardText(content: string, max = MAX_BOARD_TEXT_CHARS): 
 /** Shared strict block for structure + single-board prompts */
 export const ILLUSTRATION_FIRST_PROMPT_BLOCK = `
 BOARD PRIORITY & ILLUSTRATION STYLE (STRICT):
-1) MANDATORY STYLE: LINE DRAWINGS, OUTLINE DRAWINGS & SVGs WITH LABELS:
-   - All illustrations MUST be vector line drawings / outline drawings consisting of stroke paths (<path>, <line>, <circle>, <polyline>) with stroke outlines (stroke="#38BDF8", stroke-width="2.5") and transparent or minimal fills (fill="none").
-   - EVERY line drawing / outline drawing MUST have explicit text labels (<text>) and callout lines/arrows (<marker>) clearly labeling every component, axis, node, force vector, or structural part.
+1) MANDATORY STYLE: THIN CRISP LINE DRAWINGS & OUTLINE SVGs WITH LABELS:
+   - All illustrations MUST be vector line drawings / outline drawings consisting of stroke paths (<path>, <line>, <circle>, <polyline>) with thin stroke outlines (stroke="#38BDF8", stroke-width="2" to "2.5") and transparent or minimal fills (fill="none").
+   - NEVER output fat thick 10px+ stroke bars or crude unannotated shapes.
+   - EVERY line drawing MUST have explicit, legible text labels (<text font-size="14" font-weight="700">) and callout arrows (<marker>) clearly labeling every component, axis, node, force vector, or structural part.
    - DO NOT create solid filled blocks or unannotated shapes. Use clean, elegant line art / outline drawings with clear academic labels.
 2) MANDATORY TITLE: Every board MUST begin with an explicit "write" action for the title at x: 50, y: 10 with "sync": { "triggerImmediately": true } and "fontSize": "3xl".
 3) SPEECH-TIMED BOARD ACTION MAPPING:

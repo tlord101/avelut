@@ -35,7 +35,7 @@ const TypedText: React.FC<{
   );
 };
 
-/** Progressive stroke animation for pure LLM path commands (coords 0–100 → viewBox 0 0 100 100) */
+/** Progressive stroke animation for pure LLM path commands (coords 0–100 → viewBox 0 0 600 400 for crisp 2px lines) */
 const ProgressivePathDraw: React.FC<{
   drawType: string;
   d?: string;
@@ -68,9 +68,23 @@ const ProgressivePathDraw: React.FC<{
   progress,
 }) => {
   const p = Math.max(0.02, Math.min(1, progress ?? 1));
+  const scaleX = 6;
+  const scaleY = 4;
+
+  const sx1 = (x1 ?? 20) * scaleX;
+  const sy1 = (y1 ?? 50) * scaleY;
+  const sx2 = (x2 ?? 80) * scaleX;
+  const sy2 = (y2 ?? 50) * scaleY;
+  const scx = (cx ?? 50) * scaleX;
+  const scy = (cy ?? 50) * scaleY;
+  const sr = (r ?? 12) * scaleY;
+
+  // Thin crisp stroke width (2px in 600x400 space)
+  const thinStrokeWidth = Math.min(strokeWidth || 2.2, 3);
+
   const common = {
     stroke: color,
-    strokeWidth: strokeWidth || 2.5,
+    strokeWidth: thinStrokeWidth,
     fill: fill || 'none',
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
@@ -79,35 +93,35 @@ const ProgressivePathDraw: React.FC<{
     strokeDashoffset: 1 - p,
   };
 
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  const ah = 4;
-  const ax = x2 - ah * Math.cos(angle - 0.4);
-  const ay = y2 - ah * Math.sin(angle - 0.4);
-  const bx = x2 - ah * Math.cos(angle + 0.4);
-  const by = y2 - ah * Math.sin(angle + 0.4);
+  const angle = Math.atan2(sy2 - sy1, sx2 - sx1);
+  const ah = 10;
+  const ax = sx2 - ah * Math.cos(angle - 0.4);
+  const ay = sy2 - ah * Math.sin(angle - 0.4);
+  const bx = sx2 - ah * Math.cos(angle + 0.4);
+  const by = sy2 - ah * Math.sin(angle + 0.4);
 
   return (
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 600 400"
       className="w-full max-w-[560px] h-auto max-h-[300px] sm:max-h-[380px] overflow-visible drop-shadow-md"
       preserveAspectRatio="xMidYMid meet"
     >
       {drawType === 'path' && d && <path d={d} {...common} />}
-      {drawType === 'line' && <line x1={x1} y1={y1} x2={x2} y2={y2} {...common} />}
-      {drawType === 'circle' && <circle cx={cx} cy={cy} r={r} {...common} />}
+      {drawType === 'line' && <line x1={sx1} y1={sy1} x2={sx2} y2={sy2} {...common} />}
+      {drawType === 'circle' && <circle cx={scx} cy={scy} r={sr} {...common} />}
       {drawType === 'arrow' && (
         <>
-          <line x1={x1} y1={y1} x2={x2} y2={y2} {...common} />
-          <polygon points={`${x2},${y2} ${ax},${ay} ${bx},${by}`} fill={color} opacity={p} />
+          <line x1={sx1} y1={sy1} x2={sx2} y2={sy2} {...common} />
+          <polygon points={`${sx2},${sy2} ${ax},${ay} ${bx},${by}`} fill={color} opacity={p} />
         </>
       )}
       {label && (
         <text
-          x={drawType === 'circle' ? cx : (x1 + x2) / 2}
-          y={(drawType === 'circle' ? cy : (y1 + y2) / 2) - 5}
+          x={drawType === 'circle' ? scx : (sx1 + sx2) / 2}
+          y={(drawType === 'circle' ? scy : (sy1 + sy2) / 2) - 14}
           textAnchor="middle"
           fill={color}
-          fontSize="5.5"
+          fontSize="15"
           fontWeight={700}
           opacity={p}
           style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
