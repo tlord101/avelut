@@ -129,16 +129,14 @@ MANDATORY PERFORMANCE REQUIREMENTS:
 - Explain step-by-step with deep pedagogical clarity; do NOT just read board text verbatim.
 ${profile.boardExtra}
 
-2. MANDATORY LINE DRAWINGS & OUTLINE DRAWINGS WITH LABELS (required):
-- All illustrations MUST be line drawings, outline drawings, or vector SVGs with stroke paths (stroke="#38BDF8", fill="none") and transparent/stroke outlines.
-- EVERY line drawing / outline drawing MUST contain clear text labels (<text>) and callout lines/arrows pointing to every component, axis, node, or vector.
-- Title at top center; line drawing in center band; bullets or formulas on margins.
-- NO unannotated shapes or solid filled blocks. Use clean, elegant line art with explicit labels.
+2. MASTER SVG TECHNICAL OUTLINE ILLUSTRATION (required):
+"Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes (no heavy fills, use light or dashed outlines for structural elements), distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styles."
 
-3. PATH & SVG DRAWING LANGUAGE:
-board_actions type "draw" or "svg_illustration":
-- Provide clean SVG line drawings with <path stroke="..." fill="none"> and <text font-size="..."> labels.
-- Or board_actions "draw" metadata with drawType ("path"|"line"|"circle"|"arrow"), label, and strokeWidth.
+CORE DESIGN RULES:
+- Color Palette: Restrained, professional palette (dark slate #2c3e50 / #0F172A for outlines, muted red #EF4444 / blue #38BDF8 / emerald #34D399 for focal nodes, gray dashed lines #64748B for structure).
+- Line Weights: Thin, deliberate strokes (stroke-width: 1.5 to 2) with CSS classes for easy manipulation.
+- Typography: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates for precise label placement.
+- Scalability: Always include a viewBox (e.g. viewBox="0 0 400 200") and set width="100%" height="100%" so it behaves responsively.
 
 4. SPEECH BEATS (3-6 typical):
 - Attach draws to beats so the figure builds while you talk.

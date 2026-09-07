@@ -56,19 +56,14 @@ export function truncateBoardText(content: string, max = MAX_BOARD_TEXT_CHARS): 
 
 /** Shared strict block for structure + single-board prompts */
 export const ILLUSTRATION_FIRST_PROMPT_BLOCK = `
-BOARD PRIORITY & ILLUSTRATION STYLE (STRICT):
-1) MANDATORY STYLE: THIN CRISP LINE DRAWINGS & OUTLINE SVGs WITH LABELS:
-   - All illustrations MUST be vector line drawings / outline drawings consisting of stroke paths (<path>, <line>, <circle>, <polyline>) with thin stroke outlines (stroke="#38BDF8", stroke-width="2" to "2.5") and transparent or minimal fills (fill="none").
-   - NEVER output fat thick 10px+ stroke bars or crude unannotated shapes.
-   - EVERY line drawing MUST have explicit, legible text labels (<text font-size="14" font-weight="700">) and callout arrows (<marker>) clearly labeling every component, axis, node, force vector, or structural part.
-   - DO NOT create solid filled blocks or unannotated shapes. Use clean, elegant line art / outline drawings with clear academic labels.
-2) MANDATORY TITLE: Every board MUST begin with an explicit "write" action for the title at x: 50, y: 10 with "sync": { "triggerImmediately": true } and "fontSize": "3xl".
-3) SPEECH-TIMED BOARD ACTION MAPPING:
-   - Elements MUST be revealed in sync with speech via "speech_beats" or "sync": { "phrase": "spoken phrase" }.
-   - As the lecturer mentions a phrase in speech, that specific line drawing stroke or label is revealed on the board.
-4) Layout zones (0-100 coords):
-   - Title: y 6-12, x ~50 (top center - persistent)
-   - Line Drawing Figure: x 28-72, y 35-70 (center band - main line drawing)
-   - Formulas / Bullets: x 12-35 (left margin) or y 75-88 (bottom margin)
-5) Colors on dark chalkboard: #E2E8F0 chalk line, #38BDF8 accent line, #FACC15 label text, #34D399 highlight line.
+MASTER SVG ILLUSTRATION INSTRUCTION:
+"Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes (no heavy fills, use light or dashed outlines for structural elements), distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styles."
+
+CORE DESIGN RULES:
+1) COLOR PALETTE: Restrained, professional palette (dark slate #2c3e50 / #0F172A for outlines, muted blue #38BDF8, red #EF4444, emerald #34D399 for focal nodes, gray dashed lines #64748B for structural lines).
+2) LINE WEIGHTS: Thin, deliberate strokes (stroke-width="1.5" to "2") with semantic classes for styling.
+3) TYPOGRAPHY: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates for precise label placement.
+4) SCALABILITY & VIEWBOX: Always include a viewBox (viewBox="0 0 400 200") and set width="100%" height="100%" so it behaves responsively.
+5) MANDATORY TITLE: Every board MUST begin with an explicit "write" action for the title at x: 50, y: 10 with "sync": { "triggerImmediately": true } and "fontSize": "3xl".
+6) SPEECH-TIMED KEYWORD REVEALS: Keyword text points reveal sequentially in sync with speech beats, while the full SVG illustration displays immediately in the bottom half zone (y: 55-88).
 `.trim();

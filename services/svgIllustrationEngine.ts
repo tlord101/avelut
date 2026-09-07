@@ -14,31 +14,16 @@ import katex from 'katex';
  */
 export const SVG_REALISTIC_ILLUSTRATION_SYSTEM_PROMPT = `
 ================================================================================
-AVELUT UNIVERSAL VECTOR ILLUSTRATION SYSTEM (ACADEMIC LINE DRAWING ENGINE)
+AVELUT UNIVERSAL VECTOR ILLUSTRATION SYSTEM (TECHNICAL OUTLINE SVG ENGINE)
 ================================================================================
-When generating a visual illustration (diagramSvg), you must draw a COMPLETE, RECOGNIZABLE VECTOR LINE DRAWING WITH LABELS from scratch in valid SVG.
+MASTER PROMPT INSTRUCTION:
+"Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes (no heavy fills, use light or dashed outlines for structural elements), distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styles."
 
-CORE MANDATE: LINE DRAWINGS, OUTLINE DRAWINGS & SVGs WITH EXPLICIT LABELS
-- STYLE: Vector line drawings / outline drawings using clean stroke geometry (<path>, <line>, <circle>, <polyline>) with stroke outlines (stroke-width="2" to "3") and transparent or minimal fill (fill="none").
-- MANDATORY LABELS: EVERY line drawing MUST contain legible text labels (<text>) and callout arrows (<marker>) labeling every part, axis, vector, node, or component.
-- DOMAIN LINE DRAWINGS:
-  * STEM / PHYSICS: Vector line drawings of physical systems (pulley line schematics, lens ray tracing lines, force vector arrows F_net, circuit line schematics with labeled resistors & batteries).
-  * BIOLOGY / MEDICINE: Outline line drawings of anatomical structures & cell membranes with leader lines and text labels.
-  * CHEMISTRY: Line drawings of glassware, molecular bond line structures, reaction energy curves with labeled activation energy E_a.
-  * ECONOMICS / MATHEMATICS: Crisp line coordinate axes with function curves, labeled equilibrium points (P*, Q*), and angle arc labels.
-  * COMPUTER SCIENCE: Vector line flowcharts, network node line diagrams, and memory layout line boxes with labeled data blocks.
-
-CANVAS & VIEWBOX SPECIFICATIONS:
-- Root element: <svg viewBox="0 0 800 480" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-- High-contrast academic stroke palette:
-  * Outlines & Line Structures: #38BDF8 (Cyan Outline), #E2E8F0 (Chalk Line), #1E293B (Navy Line)
-  * Active Vectors & Curves: #34D399 (Emerald Line), #0066FF (Bright Blue Line)
-  * Highlights & Forces: #FACC15 (Yellow Label & Arrow), #EF4444 (Coral Line)
-  * Fills: fill="none" (pure line drawing) or fill="none" with subtle stroke highlights.
-
-VECTOR ARROWS & LABELS:
-- All directional lines must use: marker-end="url(#arrow-blue)", marker-end="url(#arrow-navy)", marker-end="url(#arrow-green)", marker-end="url(#arrow-red)", or marker-end="url(#arrow-amber)".
-- Include clear text labels (<text font-size="14" font-weight="700">) pointing to each line drawing part with leader lines.
+CORE DESIGN RULES:
+1. COLOR PALETTE: Restrained, professional palette (dark slate #2c3e50 / #0F172A for outlines, muted red #EF4444 / blue #38BDF8 / emerald #34D399 for focal nodes, gray dashed lines #64748B for structural lines).
+2. LINE WEIGHTS: Thin, deliberate strokes (stroke-width="1.5" to "2") with semantic classes for styling.
+3. TYPOGRAPHY: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates for precise label placement.
+4. SCALABILITY: Always include a viewBox (viewBox="0 0 400 200") and set width="100%" height="100%" so it behaves responsively.
 `;
 
 /**
