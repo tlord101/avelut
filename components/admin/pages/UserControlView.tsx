@@ -250,21 +250,23 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
                                                     onChange={e => {
                                                         const newSub = e.target.value;
                                                         setEditSub(newSub);
-                                                        const planKey = (newSub === 'pro' ? 'premium' : newSub) as 'free' | 'basic' | 'premium';
-                                                        const defaultCredits = DEFAULT_USAGE_SETTINGS.tiers[planKey]?.credit_allocation ?? 30;
+                                                        const planKey = (newSub === 'pro' || newSub === 'semester' || newSub === 'monthly' ? 'premium' : newSub) as 'free' | 'basic' | 'premium';
+                                                        const defaultCredits = DEFAULT_USAGE_SETTINGS.tiers[planKey]?.credit_allocation ?? 50;
                                                         setEditCredits(defaultCredits);
                                                     }}
                                                     className="p-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm outline-none focus:border-amber-500"
                                                 >
                                                     <option value="free">Free</option>
                                                     <option value="basic">Basic</option>
+                                                    <option value="pro">Pro</option>
                                                     <option value="premium">Premium</option>
+                                                    <option value="semester">Semester</option>
                                                     <option value="personal_token">Personal Token</option>
                                                 </select>
                                             ) : (
                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${
-                                                    user.subscription_status === 'premium' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' :
-                                                    user.subscription_status === 'basic' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700' :
+                                                    user.subscription_status === 'premium' || user.subscription_status === 'pro' || user.subscription_status === 'semester' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' :
+                                                    user.subscription_status === 'basic' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30' :
                                                     'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                                                 }`}>
                                                     {user.subscription_status || 'Free'}
