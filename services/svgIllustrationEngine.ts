@@ -14,41 +14,31 @@ import katex from 'katex';
  */
 export const SVG_REALISTIC_ILLUSTRATION_SYSTEM_PROMPT = `
 ================================================================================
-AVELUT UNIVERSAL VECTOR ILLUSTRATION SYSTEM (ACADEMIC SVG ENGINE)
+AVELUT UNIVERSAL VECTOR ILLUSTRATION SYSTEM (ACADEMIC LINE DRAWING ENGINE)
 ================================================================================
-When generating a visual illustration (diagramSvg), you must draw a COMPLETE, REALISTIC, HIGHLY RECOGNIZABLE vector illustration from scratch in valid SVG.
+When generating a visual illustration (diagramSvg), you must draw a COMPLETE, RECOGNIZABLE VECTOR LINE DRAWING WITH LABELS from scratch in valid SVG.
 
-CORE MANDATE: REAL RECOGNIZABLE OBJECTS & STRUCTURES ACROSS ALL DISCIPLINES — NEVER PRIMITIVE PLACEHOLDER SHAPES
-- STEM / PHYSICS: Draw realistic physical systems (realistic car chassis with wheels & headlights, biconvex glass lens with ray paths, taut pulleys with grooved wheels, coiled springs with masses, circuits with switches, batteries and resistors).
-- BIOLOGY / MEDICINE: Draw realistic anatomical cross-sections (human heart with 4 chambers & branching arteries, cell membrane bilayer with protein channels and mitochondria, neuron synapse with neurotransmitter vesicles).
-- CHEMISTRY: Draw volumetric lab glassware with liquid meniscus, calibrated graduation marks, molecular orbitals, reaction coordinate energy curves.
-- ECONOMICS / BUSINESS: Draw precise coordinate axes with demand/supply curves, equilibrium price/quantity points, consumer/producer surplus regions, organizational process flowcharts.
-- COMPUTER SCIENCE: Draw binary tree data structures, memory block layouts, network topology nodes with packet flow arrows, CPU register/ALU pipeline diagrams.
-- LAW / SOCIAL SCIENCES: Draw constitutional branch separation structures, appellate court jurisdiction pyramids, decision logic flowcharts with labeled condition branches.
-- LITERATURE / PHILOSOPHY / HISTORY: Draw chronological timeline markers with era callouts, dialectical conceptual tension maps, thematic relationship networks.
-- MATHEMATICS: Draw crisp coordinate grids, Bézier function curves, geometric polygons with angle arcs $\\theta$ and right-angle squares, colored integral area shading.
+CORE MANDATE: LINE DRAWINGS, OUTLINE DRAWINGS & SVGs WITH EXPLICIT LABELS
+- STYLE: Vector line drawings / outline drawings using clean stroke geometry (<path>, <line>, <circle>, <polyline>) with stroke outlines (stroke-width="2" to "3") and transparent or minimal fill (fill="none").
+- MANDATORY LABELS: EVERY line drawing MUST contain legible text labels (<text>) and callout arrows (<marker>) labeling every part, axis, vector, node, or component.
+- DOMAIN LINE DRAWINGS:
+  * STEM / PHYSICS: Vector line drawings of physical systems (pulley line schematics, lens ray tracing lines, force vector arrows F_net, circuit line schematics with labeled resistors & batteries).
+  * BIOLOGY / MEDICINE: Outline line drawings of anatomical structures & cell membranes with leader lines and text labels.
+  * CHEMISTRY: Line drawings of glassware, molecular bond line structures, reaction energy curves with labeled activation energy E_a.
+  * ECONOMICS / MATHEMATICS: Crisp line coordinate axes with function curves, labeled equilibrium points (P*, Q*), and angle arc labels.
+  * COMPUTER SCIENCE: Vector line flowcharts, network node line diagrams, and memory layout line boxes with labeled data blocks.
 
 CANVAS & VIEWBOX SPECIFICATIONS:
 - Root element: <svg viewBox="0 0 800 480" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-- Optimized for Avelut Warm Off-White / Pure White Canvas (#F6F6F3 / #FFFFFF).
-- Use high-contrast, premium academic color palette:
-  * Primary Outlines & Structures: #0F172A (Deep Navy), #1E293B, #002D62 (Educational Blue)
-  * Active Highlights & Paths: #0066FF (Avelut Bright Blue), #0284C7 (Sky Blue)
-  * Success, Growth & Target Flow: #10B981 (Emerald Green), #059669
-  * Forces, Friction, Risks & Conflicts: #EF4444 (Coral Red), #DC2626
-  * Givens, Dimensions, Balances & Angles: #D97706 (Amber Gold), #F59E0B
-  * Theory, Potentials, Logic & Connections: #7C3AED (Violet), #6366F1
-  * Fills & Shading: Subtle translucent tints (e.g. fill="url(#grad-blue-soft)", fill="#EFF6FF", fill="#F1F5F9", fill="#ECFDF5", opacity="0.4")
+- High-contrast academic stroke palette:
+  * Outlines & Line Structures: #38BDF8 (Cyan Outline), #E2E8F0 (Chalk Line), #1E293B (Navy Line)
+  * Active Vectors & Curves: #34D399 (Emerald Line), #0066FF (Bright Blue Line)
+  * Highlights & Forces: #FACC15 (Yellow Label & Arrow), #EF4444 (Coral Line)
+  * Fills: fill="none" (pure line drawing) or fill="none" with subtle stroke highlights.
 
-VECTOR ARROWS & ANNOTATIONS:
-- All directional, flow, and vector arrows must use: marker-end="url(#arrow-blue)", marker-end="url(#arrow-navy)", marker-end="url(#arrow-green)", marker-end="url(#arrow-red)", or marker-end="url(#arrow-amber)".
-- Format text and math labels in standard LaTeX notation ($F_{\\text{net}}$, $v_f$, $\\Delta H$, $P_0$, $Q^*$, $\\theta$) or crisp clean text.
-- Group elements with semantic classes for progressive drawing:
-  * class="chalk-scene-bg" for axes, ground, background frames.
-  * class="chalk-main-object" for primary bodies (cells, components, curves, flowcharts).
-  * class="chalk-object-details" for internal textures, graduation marks, sub-branches.
-  * class="chalk-vectors" for flow arrows, force vectors, connection lines.
-  * class="chalk-labels" for text callouts, LaTeX variable tags, annotations.
+VECTOR ARROWS & LABELS:
+- All directional lines must use: marker-end="url(#arrow-blue)", marker-end="url(#arrow-navy)", marker-end="url(#arrow-green)", marker-end="url(#arrow-red)", or marker-end="url(#arrow-amber)".
+- Include clear text labels (<text font-size="14" font-weight="700">) pointing to each line drawing part with leader lines.
 `;
 
 /**

@@ -268,56 +268,47 @@ export class TeachingEngineService {
     const fallbackSvg = `
 <svg viewBox="0 0 500 300" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="fbBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1E293B" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#0F172A" stop-opacity="0.95"/>
-    </linearGradient>
-    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#38BDF8"/>
-      <stop offset="100%" stop-color="#818CF8"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="4" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+    <marker id="fbArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38BDF8" />
+    </marker>
+    <marker id="fbArrowYellow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#FACC15" />
+    </marker>
   </defs>
 
-  <!-- Background Panel -->
-  <rect x="20" y="20" width="460" height="260" rx="16" fill="url(#fbBg)" stroke="#334155" stroke-width="2"/>
+  <!-- Outline Canvas Frame -->
+  <rect x="15" y="15" width="470" height="270" rx="12" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8,4"/>
 
-  <!-- Header Banner -->
-  <rect x="40" y="40" width="420" height="36" rx="8" fill="#1E293B" stroke="#38BDF8" stroke-width="1.5"/>
-  <text x="250" y="63" text-anchor="middle" fill="#38BDF8" font-size="16" font-weight="800" font-family="sans-serif">
-    ${boardTitle.toUpperCase()}
+  <!-- Vector Line Coordinate Axes -->
+  <line x1="50" y1="240" x2="450" y2="240" stroke="#64748B" stroke-width="2" marker-end="url(#fbArrow)"/>
+  <line x1="50" y1="240" x2="50" y2="50" stroke="#64748B" stroke-width="2" marker-end="url(#fbArrow)"/>
+
+  <text x="450" y="260" fill="#94A3B8" font-size="12" font-weight="700" font-family="sans-serif">State / Time (t)</text>
+  <text x="25" y="45" fill="#94A3B8" font-size="12" font-weight="700" font-family="sans-serif">Magnitude (f)</text>
+
+  <!-- Outline Vector Curve (Line Drawing) -->
+  <path d="M 50 200 Q 150 70 250 140 T 430 80" fill="none" stroke="#38BDF8" stroke-width="3"/>
+
+  <!-- Leader Line 1 & Label -->
+  <line x1="150" y1="110" x2="190" y2="60" stroke="#FACC15" stroke-width="1.8" stroke-dasharray="3,3"/>
+  <circle cx="150" cy="110" r="5" fill="none" stroke="#FACC15" stroke-width="2"/>
+  <text x="195" y="55" fill="#FACC15" font-size="13" font-weight="800" font-family="sans-serif">Initial Phase Peak</text>
+
+  <!-- Leader Line 2 & Label -->
+  <line x1="250" y1="140" x2="290" y2="190" stroke="#34D399" stroke-width="1.8" stroke-dasharray="3,3"/>
+  <circle cx="250" cy="140" r="5" fill="none" stroke="#34D399" stroke-width="2"/>
+  <text x="295" y="200" fill="#34D399" font-size="13" font-weight="800" font-family="sans-serif">Equilibrium Point</text>
+
+  <!-- Vector Arrow Force Line -->
+  <line x1="250" y1="140" x2="380" y2="105" stroke="#F43F5E" stroke-width="2.5" marker-end="url(#fbArrowYellow)"/>
+  <text x="310" y="115" fill="#F8FAFC" font-size="12" font-weight="700" font-family="sans-serif">Vector Direction</text>
+
+  <!-- Diagram Title Label -->
+  <text x="250" y="36" text-anchor="middle" fill="#E2E8F0" font-size="15" font-weight="800" font-family="sans-serif">
+    LINE SCHEMATIC: ${boardTitle.toUpperCase()}
   </text>
-
-  <!-- Process / Concept Flow Nodes -->
-  <!-- Node 1 -->
-  <rect x="55" y="110" width="110" height="60" rx="10" fill="#0F172A" stroke="#38BDF8" stroke-width="2" filter="url(#glow)"/>
-  <text x="110" y="138" text-anchor="middle" fill="#F8FAFC" font-size="13" font-weight="700" font-family="sans-serif">Step 1: Input</text>
-  <text x="110" y="156" text-anchor="middle" fill="#94A3B8" font-size="11" font-family="sans-serif">Foundations</text>
-
-  <!-- Arrow 1 -> 2 -->
-  <path d="M 165 140 L 195 140" stroke="#FACC15" stroke-width="3" marker-end="url(#arrow)" stroke-dasharray="4,4"/>
-  <polygon points="195,135 205,140 195,145" fill="#FACC15"/>
-
-  <!-- Node 2 (Core) -->
-  <rect x="205" y="100" width="130" height="80" rx="12" fill="#1E293B" stroke="#34D399" stroke-width="2.5" filter="url(#glow)"/>
-  <text x="270" y="135" text-anchor="middle" fill="#34D399" font-size="14" font-weight="800" font-family="sans-serif">Core Mechanism</text>
-  <text x="270" y="156" text-anchor="middle" fill="#E2E8F0" font-size="11" font-family="sans-serif">${safeTopic.slice(0, 18)}</text>
-
-  <!-- Arrow 2 -> 3 -->
-  <path d="M 335 140 L 365 140" stroke="#FACC15" stroke-width="3"/>
-  <polygon points="365,135 375,140 365,145" fill="#FACC15"/>
-
-  <!-- Node 3 -->
-  <rect x="375" y="110" width="80" height="60" rx="10" fill="#0F172A" stroke="#818CF8" stroke-width="2"/>
-  <text x="415" y="138" text-anchor="middle" fill="#F8FAFC" font-size="13" font-weight="700" font-family="sans-serif">Result</text>
-  <text x="415" y="156" text-anchor="middle" fill="#94A3B8" font-size="11" font-family="sans-serif">Output</text>
-
-  <!-- Bottom Key Takeaway Callout -->
-  <rect x="55" y="200" width="400" height="50" rx="10" fill="#0F172A" stroke="#334155" stroke-width="1.5"/>
-  <text x="75" y="222" fill="#FACC15" font-size="12" font-weight="800" font-family="sans-serif">KEY PRINCIPLE:</text>
+</svg>
+`.trim();
   <text x="75" y="239" fill="#E2E8F0" font-size="12" font-family="sans-serif">${takeaways[0] ? takeaways[0].slice(0, 52) : boardTitle}</text>
 </svg>
 `.trim();

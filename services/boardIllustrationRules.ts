@@ -56,18 +56,18 @@ export function truncateBoardText(content: string, max = MAX_BOARD_TEXT_CHARS): 
 
 /** Shared strict block for structure + single-board prompts */
 export const ILLUSTRATION_FIRST_PROMPT_BLOCK = `
-BOARD PRIORITY (STRICT - illustration-first):
-1) ILLUSTRATION is the main content. Compose with path/line/circle/arrow draws (2-5 progressive strokes).
-2) TEXT is secondary only: one short title (top), at most 3 short bullets (left or bottom margin), OR one formula near the figure.
-3) NEVER paragraph walls of text. If muted, the figure alone must still show the idea.
-4) ONE main visual idea per board. Build it beat-by-beat with speech.
-5) Layout zones (0-100 coords):
-   - Title: y 6-12, x ~50
-   - Figure: x 28-72, y 38-72 (CENTER - largest visual)
-   - Formula: near figure, y 18-40
-   - Bullets: left x 12-35 OR bottom y 78-90
-6) Progressive timing: Beat1 speak -> DRAW base; Beat2 speak -> DRAW arrow; Beat3 -> HIGHLIGHT or label.
-7) Colors on dark board: #E2E8F0 chalk, #38BDF8 accent, #FACC15 labels.
-8) No predefined primitives. Optional svg_illustration only if paths cannot express the scene.
-9) fontSize: titles 2xl or 3xl, bullets xl or 2xl, formulas 3xl.
+BOARD PRIORITY & ILLUSTRATION STYLE (STRICT):
+1) MANDATORY STYLE: LINE DRAWINGS, OUTLINE DRAWINGS & SVGs WITH LABELS:
+   - All illustrations MUST be vector line drawings / outline drawings consisting of stroke paths (<path>, <line>, <circle>, <polyline>) with stroke outlines (stroke="#38BDF8", stroke-width="2.5") and transparent or minimal fills (fill="none").
+   - EVERY line drawing / outline drawing MUST have explicit text labels (<text>) and callout lines/arrows (<marker>) clearly labeling every component, axis, node, force vector, or structural part.
+   - DO NOT create solid filled blocks or unannotated shapes. Use clean, elegant line art / outline drawings with clear academic labels.
+2) MANDATORY TITLE: Every board MUST begin with an explicit "write" action for the title at x: 50, y: 10 with "sync": { "triggerImmediately": true } and "fontSize": "3xl".
+3) SPEECH-TIMED BOARD ACTION MAPPING:
+   - Elements MUST be revealed in sync with speech via "speech_beats" or "sync": { "phrase": "spoken phrase" }.
+   - As the lecturer mentions a phrase in speech, that specific line drawing stroke or label is revealed on the board.
+4) Layout zones (0-100 coords):
+   - Title: y 6-12, x ~50 (top center - persistent)
+   - Line Drawing Figure: x 28-72, y 35-70 (center band - main line drawing)
+   - Formulas / Bullets: x 12-35 (left margin) or y 75-88 (bottom margin)
+5) Colors on dark chalkboard: #E2E8F0 chalk line, #38BDF8 accent line, #FACC15 label text, #34D399 highlight line.
 `.trim();

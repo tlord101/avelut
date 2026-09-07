@@ -129,28 +129,16 @@ MANDATORY PERFORMANCE REQUIREMENTS:
 - Explain step-by-step with deep pedagogical clarity; do NOT just read board text verbatim.
 ${profile.boardExtra}
 
-2. ILLUSTRATION-FIRST BOARD (required):
-- At least 2 progressive draw actions (path/line/circle/arrow) when visual_purpose is non-empty.
-- Prefer DRAW in early speech_beats, then optional short title/bullets/formula.
-- Title at top only; bullets left or bottom; figure CENTER.
-- LARGE fonts: titles "2xl"|"3xl", body "xl"|"2xl", formulas "3xl".
-- NO predefined primitives.
+2. MANDATORY LINE DRAWINGS & OUTLINE DRAWINGS WITH LABELS (required):
+- All illustrations MUST be line drawings, outline drawings, or vector SVGs with stroke paths (stroke="#38BDF8", fill="none") and transparent/stroke outlines.
+- EVERY line drawing / outline drawing MUST contain clear text labels (<text>) and callout lines/arrows pointing to every component, axis, node, or vector.
+- Title at top center; line drawing in center band; bullets or formulas on margins.
+- NO unannotated shapes or solid filled blocks. Use clean, elegant line art with explicit labels.
 
-3. PATH DRAWING LANGUAGE:
-board_actions type "draw" with metadata:
-{
-  "drawType": "path" | "line" | "circle" | "arrow",
-  "d": "M30 40 L70 40 L70 70 L30 70 Z",
-  "x1","y1","x2","y2": numbers,
-  "cx","cy","r": numbers,
-  "label": "optional short",
-  "color": "#38BDF8",
-  "strokeWidth": 2.8,
-  "durationMs": 800,
-  "fill": "optional"
-}
-position for draws: { "x": 50, "y": 55 } (center band).
-Optional svg_illustration only if paths cannot express the scene.
+3. PATH & SVG DRAWING LANGUAGE:
+board_actions type "draw" or "svg_illustration":
+- Provide clean SVG line drawings with <path stroke="..." fill="none"> and <text font-size="..."> labels.
+- Or board_actions "draw" metadata with drawType ("path"|"line"|"circle"|"arrow"), label, and strokeWidth.
 
 4. SPEECH BEATS (3-6 typical):
 - Attach draws to beats so the figure builds while you talk.
