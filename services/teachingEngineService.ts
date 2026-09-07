@@ -664,11 +664,7 @@ export class TeachingEngineService {
     triggeredIds: Set<string>,
     wps: number
   ) {
-    const words = speech.split(/\s+/).filter(Boolean);
-    const totalWords = words.length || 1;
-    const estTotalMs = Math.max(25000, (totalWords / wps) * 1000);
-
-    // 1) Title Action & Full Illustration Action MUST trigger immediately at lecture start (t = 50ms)
+    // 1) Title Action & Full SVG Illustration Action MUST trigger immediately at lecture start (t = 50ms)
     const immediateCandidates = actions.filter(
       (a) =>
         a.sync?.triggerImmediately ||
@@ -676,6 +672,7 @@ export class TeachingEngineService {
         a.type === 'draw' ||
         a.type === 'illustration' ||
         a.type === 'svg' ||
+        Boolean(a.metadata?.svgContent) ||
         ((a.position?.y ?? 50) <= 16 && (a.type === 'write' || a.type === 'text'))
     );
     immediateCandidates.forEach((act, idx) => {
@@ -690,13 +687,13 @@ export class TeachingEngineService {
       }
     });
 
-    // 2) Schedule speech_beats tied to exact spoken timestamps or progressive pacing
+    // 2) Schedule speech_beats tied to spoken phrase or predictable early timestamps
     beats.forEach((beat, bIdx) => {
       const beatOffset = phraseWordOffset(speech, beat.text);
       const delayMs =
         beatOffset >= 0
-          ? Math.floor((beatOffset / wps) * 1000)
-          : Math.floor(((bIdx + 1) / (beats.length + 1)) * estTotalMs);
+          ? Math.min(Math.floor((beatOffset / wps) * 1000), 12000)
+          : Math.min(1500 + bIdx * 2500, 12000);
 
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
@@ -713,24 +710,23 @@ export class TeachingEngineService {
       this.activeTimers.push(timer);
     });
 
-    // 3) Live action sequential reveals for keyword points, formulas, and key sentences
+    // 3) Fast, predictable timestamp pacing for keyword points, formulas, definitions and key sentences
     const remainingTextActions = actions.filter(
       (a) =>
         !triggeredIds.has(a.id) &&
         !a.sync?.triggerImmediately &&
         !a.id?.includes('title') &&
-        ((a.position?.y ?? 50) > 16 || (a.type === 'write' || a.type === 'text'))
+        ((a.position?.y ?? 50) > 16 || a.type === 'write' || a.type === 'text')
     );
 
     remainingTextActions.forEach((action, aIdx) => {
       let delayMs = 0;
       const offset = phraseWordOffset(speech, action.sync?.phrase);
       if (offset >= 0) {
-        delayMs = Math.floor((offset / wps) * 1000);
+        delayMs = Math.min(Math.floor((offset / wps) * 1000), 12000);
       } else {
-        // Space keyword points across the spoken lecture
-        const stepFraction = (aIdx + 1) / (remainingTextActions.length + 1);
-        delayMs = Math.floor(estTotalMs * 0.15 + stepFraction * estTotalMs * 0.70);
+        // Predictable early timestamps: Keyword 1 at 1.8s, Keyword 2 at 4.5s, Keyword 3 at 7.5s, Keyword 4 at 10.5s
+        delayMs = Math.min(1800 + aIdx * 2700, 12000);
       }
 
       const timer = setTimeout(() => {

@@ -229,7 +229,10 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
             const diagramWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 480;
             const diagramHeight = typeof window !== 'undefined' && window.innerWidth < 640 ? 220 : 320;
 
-            const safeSvg = el.type === 'svg' || el.svgContent ? sanitizeSvg(el.svgContent) : null;
+            const safeSvg =
+              el.type === 'svg' || el.type === 'draw' || el.svgContent || (el as any).metadata?.svgContent
+                ? sanitizeSvg(el.svgContent || (el as any).metadata?.svgContent)
+                : null;
             const drawType = el.diagramProps?.drawType as string | undefined;
 
             return (
@@ -249,7 +252,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                         : '80%',
                 }}
               >
-                {(el.type === 'svg' || safeSvg) && safeSvg && (
+                {(el.type === 'svg' || el.type === 'draw' || safeSvg) && safeSvg && (
                   <div className="relative flex flex-col items-center justify-center w-full max-h-[280px] sm:max-h-[380px] md:max-h-[440px]">
                     <div
                       className="w-full h-full flex items-center justify-center text-slate-100 [&_svg]:max-w-full [&_svg]:max-h-[280px] sm:[&_svg]:max-h-[380px] md:[&_svg]:max-h-[440px] [&_svg]:w-auto [&_svg]:h-auto drop-shadow-md"
@@ -345,7 +348,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                   </span>
                 )}
 
-                {el.type === 'text' && !el.latex && (
+                {(el.type === 'text' || el.type === 'write') && !el.latex && (
                   <div className={`relative px-1 ${isKeyPoint ? 'text-left' : 'text-center'} max-w-full`}>
                     <TypedText
                       text={el.content || ''}

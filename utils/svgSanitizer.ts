@@ -54,13 +54,12 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
       if (!svgEl.hasAttribute('width')) svgEl.setAttribute('width', '100%');
       if (!svgEl.hasAttribute('height')) svgEl.setAttribute('height', '100%');
 
-      // Remove forbidden tags
+      // Remove forbidden tags (keep foreignobject for KaTeX labels in SVG)
       const forbiddenTags = [
         'script',
         'iframe',
         'object',
         'embed',
-        'foreignobject',
         'link',
         'style',
         'base',
@@ -73,7 +72,7 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
         }
       });
 
-      // Recursively sanitize attributes on all elements
+      // Recursively sanitize attributes on all elements and fix dark chalkboard stroke/fill colors
       const allNodes = doc.getElementsByTagName('*');
       for (let i = 0; i < allNodes.length; i++) {
         const node = allNodes[i];
@@ -95,6 +94,14 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
           ) {
             attrsToRemove.push(attr.name);
           }
+
+          // Transform dark navy / dark slate / black stroke & fill colors into high-contrast chalk colors
+          if (attrName === 'stroke' && (attrVal === '#0f172a' || attrVal === '#2c3e50' || attrVal === '#1e293b' || attrVal === '#000' || attrVal === '#000000' || attrVal === 'black')) {
+            node.setAttribute(attr.name, '#38BDF8');
+          }
+          if (attrName === 'fill' && (attrVal === '#0f172a' || attrVal === '#2c3e50' || attrVal === '#000' || attrVal === '#000000' || attrVal === 'black')) {
+            node.setAttribute(attr.name, '#E2E8F0');
+          }
         }
 
         attrsToRemove.forEach((attrName) => node.removeAttribute(attrName));
@@ -111,8 +118,6 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
   cleanSvg = cleanSvg
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/\son\w+="[^"]*"/gi, '')
     .replace(/\son\w+='[^']*'/gi, '')
     .replace(/href="javascript:[^"]*"/gi, '')

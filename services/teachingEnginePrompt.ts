@@ -133,9 +133,9 @@ ${profile.boardExtra}
 "Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes (no heavy fills, use light or dashed outlines for structural elements), distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styles."
 
 CORE DESIGN RULES:
-- Color Palette: Restrained, professional palette (dark slate #2c3e50 / #0F172A for outlines, muted red #EF4444 / blue #38BDF8 / emerald #34D399 for focal nodes, gray dashed lines #64748B for structure).
+- Color Palette: Restrained, high-contrast chalkboard palette (bright cyan #38BDF8, crisp white #FFFFFF / #E2E8F0 for main outlines & text, amber #FACC15, emerald #34D399 for focal nodes, light slate #94A3B8 for structure). NEVER use dark navy #0F172A or dark slate #2c3e50 for strokes or text on the dark board!
 - Line Weights: Thin, deliberate strokes (stroke-width: 1.5 to 2) with CSS classes for easy manipulation.
-- Typography: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates for precise label placement.
+- Typography: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates and bright fills (fill="#FFFFFF" or fill="#38BDF8").
 - Scalability: Always include a viewBox (e.g. viewBox="0 0 400 200") and set width="100%" height="100%" so it behaves responsively.
 
 4. SPEECH BEATS (3-6 typical):
