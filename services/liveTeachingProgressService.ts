@@ -23,8 +23,15 @@ function progressKey(userId: string, topicKey: string): string {
   return `live_teach_progress_v1_${userId || 'anon'}_${topicKey}`;
 }
 
-function structureKey(userId: string, topicKey: string, mode: LessonDurationMode): string {
-  return `live_teach_structure_v1_${userId || 'anon'}_${topicKey}_${mode}`;
+function normalizeModeKey(mode?: LessonDurationMode | string): LessonDurationMode {
+  if (mode === 15 || mode === '15' || mode === '15min') return 15;
+  if (mode === 60 || mode === '60' || mode === '60min') return 60;
+  return 30;
+}
+
+function structureKey(userId: string, topicKey: string, mode: LessonDurationMode | string): string {
+  const norm = normalizeModeKey(mode);
+  return `live_teach_structure_v1_${userId || 'anon'}_${topicKey}_${norm}min`;
 }
 
 export function topicKeyFromTitle(topicTitle: string, courseName?: string): string {
@@ -58,48 +65,34 @@ export async function saveTeachingStructureOnly(
   userId: string,
   topicKey: string,
   structure: TeachingStructure,
-  mode: LessonDurationMode = '30min'
+  mode: LessonDurationMode = 30
 ): Promise<void> {
-  const modesToSave: LessonDurationMode[] = [mode, '30min', '15min', '60min'];
-  for (const m of modesToSave) {
-    await writeCachedJson(
-      structureKey(userId, topicKey, m),
-      structure,
-      userId || 'anon'
-    );
-  }
+  const norm = normalizeModeKey(mode);
+  await writeCachedJson(
+    structureKey(userId, topicKey, norm),
+    structure,
+    userId || 'anon'
+  );
 }
 
 export function getSavedTeachingStructure(
   userId: string,
   topicKey: string,
-  mode?: LessonDurationMode
+  mode?: LessonDurationMode | string
 ): TeachingStructure | null {
-  let found: TeachingStructure | null = null;
-  if (mode) {
-    found = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, mode), null);
+  const targetMode = mode ? normalizeModeKey(mode) : undefined;
+  if (targetMode) {
+    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, targetMode), null);
+    if (s && s.boards && s.boards.length > 0) return s;
   }
-  if (!found || !found.boards || found.boards.length === 0) {
-    const modes: LessonDurationMode[] = ['30min', '15min', '60min'];
-    for (const m of modes) {
-      const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
-      if (s && s.boards && s.boards.length > 0) {
-        found = s;
-        break;
-      }
-    }
-  }
-  if (!found || !found.boards || found.boards.length === 0) return null;
 
-  // Adapt structure board count based on requested duration mode
-  if (mode === '15min' && found.boards.length > 3) {
-    return {
-      ...found,
-      totalEstimatedDurationMinutes: 15,
-      boards: found.boards.slice(0, 3),
-    };
+  // Fallback to any pre-cached duration mode if exact target mode is not yet generated
+  const fallbackModes: LessonDurationMode[] = [30, 15, 60];
+  for (const m of fallbackModes) {
+    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
+    if (s && s.boards && s.boards.length > 0) return s;
   }
-  return found;
+  return null;
 }
 
 export function formatResumeLabel(p: LiveTeachingProgress): string {
@@ -110,9 +103,9 @@ export function formatResumeLabel(p: LiveTeachingProgress): string {
 const activePrefetches = new Set<string>();
 
 /**
- * Prefetch teaching structure in the background when a user selects/enters a topic.
- * Saves the structure in localStorage so when the user clicks 'Live Tutorial',
- * the board starts rendering immediately without waiting for structure planning.
+ * Prefetch teaching structures in the background when a user selects/enters a topic.
+ * Generates distinct AI structures for all duration modes (15 min, 30 min, 60 min)
+ * so that whichever duration the user selects, the exact tailored AI structure is ready.
  */
 export async function prefetchTopicTeachingStructure(params: {
   topicTitle: string;
@@ -121,47 +114,48 @@ export async function prefetchTopicTeachingStructure(params: {
   userId?: string;
   userProfile?: any;
   appSettings?: any;
-  durationMode?: LessonDurationMode;
 }): Promise<void> {
   const topicTitle = params.topicTitle?.trim();
   if (!topicTitle) return;
 
   const resolvedUserId = params.userId || params.userProfile?.uid || 'anon';
   const topicKey = topicKeyFromTitle(topicTitle, params.courseName);
-  const mode = params.durationMode || '30min';
+  const durationModes: LessonDurationMode[] = [15, 30, 60];
 
-  // Check if structure is already cached
-  const existing = getSavedTeachingStructure(resolvedUserId, topicKey, mode);
-  if (existing && existing.boards && existing.boards.length > 0) {
-    return;
-  }
-
-  const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
-  if (activePrefetches.has(prefetchId)) return;
-  activePrefetches.add(prefetchId);
-
-  try {
-    const { TeachingEngineService } = await import('./teachingEngineService');
-    const engine = new TeachingEngineService({
-      appSettings: params.appSettings,
-      userProfile: params.userProfile,
-      durationMode: mode,
-    });
-
-    const structure = await engine.generateTeachingStructure({
-      topic: topicTitle,
-      courseName: params.courseName,
-      syllabusContext: params.syllabusContext,
-      durationMode: mode,
-    });
-
-    if (structure && structure.boards && structure.boards.length > 0) {
-      await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode);
+  for (const mode of durationModes) {
+    const modeKey = structureKey(resolvedUserId, topicKey, mode);
+    const existing = readCachedJson<TeachingStructure | null>(modeKey, null);
+    if (existing && existing.boards && existing.boards.length > 0) {
+      continue; // Skip if exact mode is already pre-cached
     }
-  } catch (err) {
-    console.warn('[prefetchTopicTeachingStructure] Background prefetch failed (non-critical):', err);
-  } finally {
-    activePrefetches.delete(prefetchId);
+
+    const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
+    if (activePrefetches.has(prefetchId)) continue;
+    activePrefetches.add(prefetchId);
+
+    try {
+      const { TeachingEngineService } = await import('./teachingEngineService');
+      const engine = new TeachingEngineService({
+        appSettings: params.appSettings,
+        userProfile: params.userProfile,
+        durationMode: mode,
+      });
+
+      const structure = await engine.generateTeachingStructure({
+        topic: topicTitle,
+        courseName: params.courseName,
+        syllabusContext: params.syllabusContext,
+        durationMode: mode,
+      });
+
+      if (structure && structure.boards && structure.boards.length > 0) {
+        await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode);
+      }
+    } catch (err) {
+      console.warn(`[prefetchTopicTeachingStructure] Background prefetch failed for mode ${mode}m (non-critical):`, err);
+    } finally {
+      activePrefetches.delete(prefetchId);
+    }
   }
 }
 
