@@ -19,33 +19,18 @@ const TypedText: React.FC<{
   text: string;
   className?: string;
   style?: React.CSSProperties;
-  enabled: boolean;
-}> = ({ text, className, style, enabled }) => {
-  const [shown, setShown] = useState(enabled ? '' : text);
+  enabled?: boolean;
+}> = ({ text, className, style, enabled = true }) => {
+  const [shown, setShown] = useState(text);
 
   useEffect(() => {
-    if (!enabled) {
-      setShown(text);
-      return;
-    }
-    setShown('');
     if (!text) return;
-    let i = 0;
-    const msPerChar = Math.max(14, Math.min(32, 900 / Math.max(1, text.length)));
-    const id = window.setInterval(() => {
-      i += 1;
-      setShown(text.slice(0, i));
-      if (i >= text.length) window.clearInterval(id);
-    }, msPerChar);
-    return () => window.clearInterval(id);
-  }, [text, enabled]);
+    setShown(text);
+  }, [text]);
 
   return (
     <p className={className} style={style}>
-      {shown}
-      {enabled && shown.length < text.length && (
-        <span className="inline-block w-[3px] h-[1em] ml-0.5 align-middle bg-[#38BDF8] animate-pulse" />
-      )}
+      {shown || text}
     </p>
   );
 };

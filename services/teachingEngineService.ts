@@ -262,7 +262,7 @@ export class TeachingEngineService {
   private buildFallbackBoardPerformance(boardPlan: TeachingBoardPlan): TeachingBoardPerformance {
     const boardNum = boardPlan.board_number || this.currentBoardIndex + 1;
     const boardTitle = boardPlan.title || `Board ${boardNum}`;
-    const takeaways = boardPlan.key_takeaways || [boardTitle];
+    const takeaways = boardPlan.recommended_board_content || boardPlan.key_concepts || [boardPlan.teaching_objective || boardTitle];
 
     const actions: BoardAction[] = [
       {
@@ -273,20 +273,34 @@ export class TeachingEngineService {
         metadata: { fontSize: '2xl', color: '#38BDF8' },
         sync: { triggerImmediately: true },
       },
-      ...takeaways.map((kt, idx) => ({
+      ...takeaways.slice(0, 4).map((kt, idx) => ({
         id: `act_kt_${boardNum}_${idx}`,
         type: 'write' as const,
         content: `• ${kt}`,
-        position: { x: 18, y: 32 + idx * 14 },
+        position: { x: 18, y: 30 + idx * 14 },
         metadata: { fontSize: 'xl' as const, color: '#F3F4F6' },
       })),
+      {
+        id: `act_draw_${boardNum}`,
+        type: 'draw',
+        position: { x: 62, y: 55 },
+        metadata: {
+          drawType: 'circle',
+          cx: 50,
+          cy: 50,
+          r: 20,
+          label: boardTitle,
+          color: '#38BDF8',
+          strokeWidth: 2.8,
+        },
+      },
     ];
 
     return {
       board_id: `board_fb_${boardNum}`,
       board_number: boardNum,
       title: boardTitle,
-      speech: `Let's focus on ${boardTitle}. Here are the main key points for this board.`,
+      speech: `Let's focus on ${boardTitle}. Here is the core visual structure and key points for this concept.`,
       speech_beats: [],
       board_actions: normalizeBoardActions(actions),
     };
@@ -379,7 +393,6 @@ export class TeachingEngineService {
       }
     } catch (err) {
       console.warn('[TeachingEngine] Background prefetch failed for board', nextIndex, err);
-      // Non-blocking fallback; normal loadBoardPerformance will fetch cleanly
     }
   }
 
@@ -435,7 +448,28 @@ export class TeachingEngineService {
       performance.svg_illustration = sanitizeSvg(performance.svg_illustration);
     }
 
-    performance.board_actions = normalizeBoardActions(performance.board_actions);
+    // Collect and merge all board_actions from speech_beats into performance.board_actions
+    const combinedActions: BoardAction[] = [...(performance.board_actions || [])];
+    const existingIds = new Set(combinedActions.map((a) => a.id).filter(Boolean));
+
+    if (Array.isArray(performance.speech_beats)) {
+      for (const beat of performance.speech_beats) {
+        if (Array.isArray(beat.board_actions)) {
+          for (const act of beat.board_actions) {
+            if (act && act.type) {
+              const actId = act.id || `act_beat_${Math.random().toString(36).substring(2, 6)}`;
+              act.id = actId;
+              if (!existingIds.has(actId)) {
+                existingIds.add(actId);
+                combinedActions.push(act);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    performance.board_actions = normalizeBoardActions(combinedActions);
     if (performance.speech_beats?.length) {
       performance.speech_beats = performance.speech_beats.map((b) => ({
         ...b,
@@ -646,6 +680,14 @@ export class TeachingEngineService {
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
         this.listeners.forEach((l) => l.onBeatTriggered?.(beat));
+        if (Array.isArray(beat.board_actions)) {
+          beat.board_actions.forEach((act) => {
+            if (act && !triggeredIds.has(act.id)) {
+              triggeredIds.add(act.id);
+              this.listeners.forEach((l) => l.onBoardActionTriggered?.(act));
+            }
+          });
+        }
       }, Math.max(200, delayMs));
       this.activeTimers.push(timer);
     });
