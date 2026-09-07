@@ -25,6 +25,7 @@ import { unifiedVoiceRouter, unifiedTts } from '../services/voice/UnifiedVoiceRo
 import { sanitizeAndValidateSvg, SVG_REALISTIC_ILLUSTRATION_SYSTEM_PROMPT } from '../services/svgIllustrationEngine';
 import { deductAICredits, getFeatureCost, checkAICredits, isPaidSubscriber, isExempt } from '../utils/usage';
 import { TeachingEngineSessionView } from './tutorial/TeachingEngineSessionView';
+import { safeJsonParse } from '../lib/safeJsonParse';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_BOARD_LINES = 6;
@@ -131,23 +132,6 @@ export function robustParseJson<T = any>(raw: string): T {
     } as any;
 
     return cleanAndParseJson<T>(raw, { fallback: fallbackStructure as T });
-}
-
-    return {
-        topicName: 'Academic Tutorial',
-        overview: 'Interactive Multi-Disciplinary Lesson',
-        boards: [
-            {
-                boardId: 'b_0',
-                conceptIdx: 0,
-                conceptName: 'Core Overview',
-                phaseTitle: 'Intuition & Key Concepts',
-                boardLines: ['**Academic Topic Overview**', 'Interactive Voice Lesson'],
-                spokenExplanation: 'Welcome to this interactive tutorial. Let us explore the core concepts step by step.',
-            }
-        ],
-        overallSummary: 'Topic completed.',
-    } as any as T;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

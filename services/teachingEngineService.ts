@@ -27,6 +27,7 @@ import { cleanAndParseJson } from '../utils/jsonUtils';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
 import { AppSettings, UserProfile } from '../types';
+import { safeJsonParse } from '../lib/safeJsonParse';
 
 export interface TeachingEngineListener {
   onStructureLoaded?: (structure: TeachingStructure) => void;
@@ -538,11 +539,7 @@ export class TeachingEngineService {
         config: { responseMimeType: 'application/json', temperature: 0.25 },
       });
       const rawText = getResponseText(response);
-      const cleaned = (rawText || '').replace(/```(?:json)?\s*/gi, '').replace(/\s*```$/gi, '').trim();
-      const firstBrace = cleaned.indexOf('{');
-      const lastBrace = cleaned.lastIndexOf('}');
-      const jsonStr = firstBrace !== -1 && lastBrace !== -1 ? cleaned.substring(firstBrace, lastBrace + 1) : cleaned;
-      const finalTest: FinalTest = JSON.parse(jsonStr);
+      const finalTest: FinalTest = safeJsonParse<FinalTest>(rawText);
       this.listeners.forEach((l) => l.onFinalTestGenerated?.(finalTest));
       return finalTest;
     } catch (err) {
@@ -580,8 +577,7 @@ export class TeachingEngineService {
         config: { responseMimeType: 'application/json', temperature: 0.3 },
       });
       const rawText = getResponseText(response);
-      const cleaned = (rawText || '').replace(/```(?:json)?\s*/gi, '').replace(/\s*```$/gi, '').trim();
-      const result = JSON.parse(cleaned);
+      const result = safeJsonParse(rawText);
       if (result.spokenAnswer) {
         const actions: BoardAction[] = Array.isArray(result.boardActions) ? result.boardActions : [];
         const triggered = new Set<string>();
