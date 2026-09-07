@@ -207,7 +207,7 @@ export class TeachingEngineService {
 
       if (!structure || !structure.boards || !Array.isArray(structure.boards) || structure.boards.length === 0) {
         console.warn('[TeachingEngine] AI structure generation failed after 3 attempts, creating fallback structure');
-        structure = buildFallbackTeachingStructure(params.topic, this.durationMode);
+        structure = this.buildFallbackTeachingStructure(params.topic, this.durationMode);
       }
 
       const userId = this.userProfile?.uid || 'anon';
@@ -220,13 +220,44 @@ export class TeachingEngineService {
       return structure;
     } catch (err: any) {
       console.error('[TeachingEngine] Error generating structure:', err);
-      const fallback = buildFallbackTeachingStructure(params.topic, this.durationMode);
+      const fallback = this.buildFallbackTeachingStructure(params.topic, this.durationMode);
       this.currentStructure = fallback;
       this.currentBoardIndex = 0;
       this.listeners.forEach((l) => l.onStructureLoaded?.(fallback));
       return fallback;
     }
   }
+
+  private buildFallbackTeachingStructure(topic: string, mode?: any): TeachingStructure {
+  const durationMinutes = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
+  const boardCount = Math.max(5, Math.round(durationMinutes / 2));
+  const boards: TeachingBoardPlan[] = [];
+
+  for (let i = 1; i <= boardCount; i++) {
+    boards.push({
+      board_id: `board_${i}`,
+      board_number: i,
+      title: i === 1 ? `Introduction to ${topic}` : i === boardCount ? `Summary & Key Takeaways` : `${topic} - Core Concept ${i - 1}`,
+      teaching_objective: `Master key concept ${i} for ${topic}`,
+      what_student_should_understand: `Understanding aspect ${i} of ${topic}`,
+      why_this_board_exists: `Build foundational mastery of ${topic}`,
+      visual_purpose: `Diagram and key formula for ${topic}`,
+      recommended_board_content: [`${topic} Core Point ${i}`],
+      interaction_required: false,
+      question_required: false,
+      question_type: null,
+      estimated_duration_seconds: 120,
+    });
+  }
+
+  return {
+    topic,
+    teaching_strategy: `Paced ~2-minute per board live lecture for ${durationMinutes}m mode`,
+    learning_goal: `Master core principles and applications of ${topic}`,
+    duration_minutes: durationMinutes,
+    boards,
+  };
+}
 
   private buildFallbackBoardPerformance(boardPlan: TeachingBoardPlan): TeachingBoardPerformance {
     const boardNum = boardPlan.board_number || this.currentBoardIndex + 1;

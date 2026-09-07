@@ -73,7 +73,7 @@ JSON OUTPUT SCHEMA:
       "interaction_required": boolean,
       "question_required": boolean,
       "question_type": "recall" | "understanding" | "prediction" | "calculation" | "application" | null,
-      "estimated_duration_seconds": 60
+      "estimated_duration_seconds": 120
     }
   ]
 }`;
@@ -103,7 +103,7 @@ export function buildSingleBoardPrompt(params: {
 DURATION MODE: ${durationMode} minutes
 TONE: ${profile.toneRules}
 PACING: ${profile.pacingRules}
-SPEECH LENGTH: ${profile.speechWordRange}
+TARGET SPEECH LENGTH: ${profile.speechWordRange} (~2 minutes of active speech)
 
 LESSON CONTEXT:
 Learning Goal: ${fullStructure.learning_goal}
@@ -122,10 +122,11 @@ ${ILLUSTRATION_FIRST_PROMPT_BLOCK}
 
 MANDATORY PERFORMANCE REQUIREMENTS:
 
-1. LECTURER SPEECH:
-- Natural speech (${profile.speechWordRange}).
+1. LECTURER SPEECH (~2 MINUTES OF TEACHING SPEECH PER BOARD):
+- Natural, rich teaching speech (${profile.speechWordRange}).
+- MUST last about 2 minutes of spoken teaching instruction (~200 to 280 words). Do NOT generate short 30-second speech snippets!
 - Address ${name} when appropriate.
-- Explain step-by-step; do NOT read board text verbatim.
+- Explain step-by-step with deep pedagogical clarity; do NOT just read board text verbatim.
 ${profile.boardExtra}
 
 2. ILLUSTRATION-FIRST BOARD (required):
