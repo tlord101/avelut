@@ -165,18 +165,18 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in pb-28 bg-white">
-      <div className="bg-white border border-neutral-200 rounded-3xl p-6 sm:p-7 shadow-xs">
+    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in pb-28 bg-transparent dark:bg-[#070B14] text-slate-900 dark:text-slate-100">
+      <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-100 text-black rounded-full text-[11px] font-bold tracking-wide uppercase">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-100 dark:bg-slate-800 text-black dark:text-slate-200 rounded-full text-[11px] font-bold tracking-wide uppercase border border-neutral-200/60 dark:border-slate-700">
               <i className="bi bi-book"></i>
               <span>Study Notes & Textbooks</span>
             </div>
-            <h3 className="text-lg sm:text-xl font-black text-black tracking-tight">
+            <h3 className="text-lg sm:text-xl font-black text-black dark:text-white tracking-tight">
               My Notebooks & Offline Materials
             </h3>
-            <p className="text-xs text-neutral-500 leading-relaxed">
+            <p className="text-xs text-neutral-500 dark:text-slate-400 leading-relaxed">
               Upload any textbook, handout, or lecture note PDF (up to 200MB). Extracted completely on your device with 0 AI cost.
             </p>
           </div>
@@ -184,9 +184,9 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isExtracting}
-            className="w-full sm:w-auto px-5 py-3.5 bg-neutral-100 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 text-black rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-2xs disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-3.5 bg-neutral-100 dark:bg-slate-800 hover:bg-neutral-50 dark:hover:bg-slate-750 border border-neutral-200 dark:border-slate-700 hover:border-neutral-300 dark:hover:border-slate-600 text-black dark:text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-2xs disabled:opacity-50"
           >
-            <i className="bi bi-cloud-arrow-up text-base text-black"></i>
+            <i className="bi bi-cloud-arrow-up text-base text-black dark:text-white"></i>
             <span>{isExtracting ? 'Extracting Text...' : 'Upload PDF Material'}</span>
           </button>
 
@@ -200,16 +200,16 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
         </div>
 
         {isExtracting && extractProgress && (
-          <div className="mt-4 pt-4 border-t border-neutral-200 space-y-2 animate-fade-in">
-            <div className="flex items-center justify-between text-xs font-bold text-black">
+          <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-slate-800 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between text-xs font-bold text-black dark:text-white">
               <span>{extractProgress.message || 'Extracting text & segmenting chapters...'}</span>
               <span>
                 {extractProgress.current} / {extractProgress.total} Pages ({extractProgress.percent}%)
               </span>
             </div>
-            <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden border border-neutral-200">
+            <div className="w-full bg-neutral-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-neutral-200 dark:border-slate-700">
               <div
-                className="bg-black h-2 rounded-full transition-all duration-300"
+                className="bg-black dark:bg-amber-400 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${extractProgress.percent}%` }}
               />
             </div>
@@ -224,9 +224,9 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             placeholder="Search your uploaded materials..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border border-neutral-200 rounded-2xl py-3 pl-11 pr-4 text-xs font-medium text-black placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400 transition-colors"
+            className="w-full bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-xs font-medium text-black dark:text-white placeholder:text-neutral-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-neutral-400 dark:focus:border-slate-600 transition-colors"
           />
-          <i className="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 text-xs"></i>
+          <i className="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-slate-400 text-xs"></i>
         </div>
       )}
 
@@ -234,7 +234,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-white border border-neutral-200 rounded-2xl animate-pulse" />
+              <div key={i} className="h-20 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl animate-pulse" />
             ))}
           </div>
         ) : filteredNotebooks.length > 0 ? (
@@ -242,17 +242,17 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             <div
               key={nb.id}
               onClick={() => setSelectedNotebook(nb)}
-              className="w-full flex items-center justify-between p-4 sm:p-5 bg-white border border-neutral-200 rounded-2xl hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer group shadow-2xs gap-3"
+              className="w-full flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl hover:bg-neutral-50 dark:hover:bg-slate-800/80 hover:border-neutral-300 dark:hover:border-slate-700 transition-all cursor-pointer group shadow-2xs gap-3"
             >
               <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-2xl bg-neutral-100 border border-neutral-200 flex items-center justify-center text-black text-lg shrink-0 group-hover:bg-neutral-900 group-hover:text-white transition-colors">
+                <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 flex items-center justify-center text-black dark:text-slate-200 text-lg shrink-0 group-hover:bg-neutral-900 dark:group-hover:bg-slate-700 group-hover:text-white transition-colors">
                   <i className="bi bi-journal-text"></i>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-sm font-bold text-black truncate group-hover:text-black transition-colors">
+                  <h4 className="text-sm font-bold text-black dark:text-white truncate group-hover:text-black dark:group-hover:text-white transition-colors">
                     {nb.title}
                   </h4>
-                  <div className="flex items-center gap-2 mt-0.5 text-xs text-neutral-500">
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-neutral-500 dark:text-slate-400">
                     <span>
                       {nb.chapter_count} {nb.chapter_count === 1 ? 'Chapter' : 'Chapters'}
                     </span>
@@ -268,29 +268,29 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
                 <button
                   type="button"
                   onClick={(e) => handleDeleteNotebook(nb.id, nb.title, e)}
-                  className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 text-neutral-500 hover:text-black flex items-center justify-center transition-all cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-slate-800 hover:bg-neutral-50 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700 hover:border-neutral-300 dark:hover:border-slate-600 text-neutral-500 dark:text-slate-400 hover:text-black dark:hover:text-white flex items-center justify-center transition-all cursor-pointer"
                   title="Delete Notebook"
                 >
                   <i className="bi bi-trash text-xs"></i>
                 </button>
-                <div className="w-8 h-8 rounded-full bg-neutral-100 border border-neutral-200 flex items-center justify-center text-black group-hover:bg-neutral-900 group-hover:text-white transition-all">
+                <div className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 flex items-center justify-center text-black dark:text-slate-300 group-hover:bg-neutral-900 dark:group-hover:bg-slate-700 group-hover:text-white transition-all">
                   <i className="bi bi-chevron-right text-xs"></i>
                 </div>
               </div>
             </div>
           ))
         ) : (
-          <div className="bg-white border border-neutral-200 rounded-3xl p-10 text-center space-y-3">
-            <div className="w-14 h-14 rounded-full bg-neutral-100 border border-neutral-200 flex items-center justify-center text-black text-2xl mx-auto">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-3xl p-10 text-center space-y-3">
+            <div className="w-14 h-14 rounded-full bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 flex items-center justify-center text-black dark:text-slate-300 text-2xl mx-auto">
               <i className="bi bi-folder2-open"></i>
             </div>
-            <h4 className="text-base font-bold text-black">No Notebooks Added Yet</h4>
-            <p className="text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed">
+            <h4 className="text-base font-bold text-black dark:text-white">No Notebooks Added Yet</h4>
+            <p className="text-xs text-neutral-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
               Upload any PDF textbook or course material to generate custom flashcards, quizzes, voice tutorials, and Socratic chats.
             </p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-5 py-2.5 bg-black hover:bg-neutral-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 mt-2"
+              className="px-5 py-2.5 bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-black text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 mt-2"
             >
               <i className="bi bi-cloud-arrow-up"></i>
               <span>Upload Your First PDF</span>

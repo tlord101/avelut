@@ -5,11 +5,11 @@ import React from 'react';
  */
 export const Playground: React.FC = () => {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] bg-white px-6 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center mb-5">
+    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] bg-transparent dark:bg-[#070B14] px-6 text-center text-slate-900 dark:text-slate-100">
+      <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-slate-800/80 border border-neutral-200/80 dark:border-slate-800 flex items-center justify-center mb-5">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="w-7 h-7 text-black"
+          className="w-7 h-7 text-black dark:text-white"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -22,8 +22,8 @@ export const Playground: React.FC = () => {
           />
         </svg>
       </div>
-      <h1 className="text-2xl font-bold text-black tracking-tight">Playground</h1>
-      <p className="mt-2 text-sm text-neutral-500 max-w-sm font-medium">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Playground</h1>
+      <p className="mt-2 text-sm text-neutral-500 dark:text-slate-400 max-w-sm font-medium">
         Coming soon — generate CBT tests and practice past questions.
       </p>
     </div>

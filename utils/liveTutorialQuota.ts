@@ -40,14 +40,14 @@ export interface LiveTutorialStartDecision {
 
 function isExempt(userProfile?: UserProfile | null): boolean {
   if (!userProfile) return false;
-  return !!userProfile.is_admin;
+  return !!(userProfile.is_admin || userProfile.use_personal_token || userProfile.subscription_status === 'personal_token');
 }
 
 function isPaidSubscriber(userProfile?: UserProfile | null): boolean {
   if (!userProfile) return false;
   if (isExempt(userProfile)) return true;
   const status = userProfile.subscription_status;
-  return status === 'basic' || status === 'premium' || status === 'weekly' || status === 'monthly' || status === 'semester' || status === 'pro';
+  return status === 'weekly' || status === 'monthly' || status === 'semester' || status === 'basic' || status === 'pro' || status === 'premium';
 }
 
 function monthKey(d = new Date()): string {
@@ -69,10 +69,11 @@ function storageKey(uid: string): string {
 
 function resolveTierKey(userProfile?: UserProfile | null): string {
   if (!userProfile) return 'free';
-  if (isExempt(userProfile)) return 'premium';
+  if (isExempt(userProfile)) return 'monthly';
   const status = (userProfile.subscription_status || 'free').toLowerCase();
-  if (status === 'premium' || status === 'pro' || status === 'monthly' || status === 'semester') return 'premium';
-  if (status === 'basic' || status === 'weekly') return 'basic';
+  if (status === 'pro' || status === 'premium') return 'monthly';
+  if (status === 'basic') return 'weekly';
+  if (status === 'weekly' || status === 'monthly' || status === 'semester' || status === 'free') return status;
   return 'free';
 }
 

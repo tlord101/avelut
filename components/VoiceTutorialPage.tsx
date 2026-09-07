@@ -195,6 +195,9 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             topicTitle={topicTitle}
             courseName={courseName}
             syllabusContext={syllabusContext}
+            userId={userProfile?.uid}
+            userProfile={userProfile}
+            appSettings={propAppSettings}
             onClose={onBack}
             setCustomHeaderConfig={setCustomHeaderConfig}
         />
@@ -1451,6 +1454,9 @@ At the very end say exactly: "Now, let us continue our lesson."`;
                 topicTitle={sessionData?.topic?.topic_name || sessionData?.customPrompt || 'Live Tutorial'}
                 courseName={sessionData?.course?.course_name || 'Academic Topic'}
                 syllabusContext={sessionData?.syllabusContext}
+                userId={userProfile?.uid}
+                userProfile={userProfile}
+                appSettings={propAppSettings}
                 onClose={handleGoBack}
             />
         );

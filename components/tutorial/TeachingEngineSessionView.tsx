@@ -25,6 +25,8 @@ import {
   formatResumeLabel,
 } from '../../services/liveTeachingProgressService';
 
+import type { UserProfile, AppSettings } from '../../types';
+
 export interface TeachingEngineSessionViewProps {
   topicTitle: string;
   courseName?: string;
@@ -32,6 +34,8 @@ export interface TeachingEngineSessionViewProps {
   initialVoice?: string;
   initialDurationMode?: LessonDurationMode;
   userId?: string;
+  userProfile?: UserProfile;
+  appSettings?: AppSettings;
   onClose?: () => void;
   setCustomHeaderConfig?: (config: any) => void;
 }
@@ -45,10 +49,13 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   initialVoice = 'Altair',
   initialDurationMode,
   userId = 'anon',
+  userProfile,
+  appSettings: propAppSettings,
   onClose,
   setCustomHeaderConfig,
 }) => {
-  const { settings: appSettings } = useAppSettings();
+  const { settings: hookAppSettings } = useAppSettings();
+  const appSettings = propAppSettings || hookAppSettings;
   const { addToast } = useToast();
 
   const [currentVoice, setCurrentVoice] = useState<string>(initialVoice);
@@ -533,6 +540,8 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           resumeAvailable={Boolean(resumeInfo)}
           resumeLabel={resumeInfo ? formatResumeLabel(resumeInfo) : undefined}
           onResume={handleResume}
+          userProfile={userProfile}
+          appSettings={appSettings}
         />
       </div>
     );

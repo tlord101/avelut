@@ -238,11 +238,17 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       `TOPIC OVERVIEW: "${topic.topic_context || topic.start_point || 'Core principles of ' + topic.topic_name}"`,
       '',
       'TASK: Begin the first bite-sized step of teaching this topic to the student.',
-      '1. Welcome the student warmly in 1 short sentence.',
-      '2. Give an intuitive real-world Nigerian analogy introducing the topic (e.g. POS charges, Danfo bus speeds, NEPA power vs. generator fuel, market prices, recharge cards).',
-      '3. Conclude with 1 engaging question asking if they are ready to explore the core principle.',
-      '4. Keep under 120 words. Format math formulas with LaTeX ($...$). Do not use any emojis.',
-      '5. Provide your response directly without internal reasoning monologues.',
+      'MANDATORY TEACHING CONSTRAINTS:',
+      '1. STRICTLY BITE-SIZED: Keep total response under 80-110 words. Teach only ONE introductory micro-concept. Never dump paragraphs of text.',
+      '2. INTERACTIVE CHECK: Conclude with 1 simple, engaging check question or thought prompt to test the student before proceeding.',
+      '3. TYPOGRAPHIC HIERARCHY (Strictly Follow):',
+      '   - Use a clear ### Subheading for the concept title.',
+      '   - Use **bold** for key concepts, essential terms, and definitions.',
+      '   - Use *italics* for emphasis or subtle terminology.',
+      '   - Use clean bullet points (- ) when listing items (max 2 bullets).',
+      '   - Format all math, formulas, and symbols with LaTeX ($...$ inline, $$...$$ block).',
+      '4. ANALOGY: Use an intuitive everyday Nigerian analogy (e.g. POS charges, Danfo bus speeds, NEPA power vs. generator, market prices).',
+      '5. Provide your response directly. Do not use emojis or internal reasoning monologues.',
     ].join('\n');
 
     const aiParams = {
@@ -256,7 +262,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       config: {
         systemInstruction: socraticSystemPrompt,
         temperature: 0.35,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 400,
       },
     };
 
@@ -393,13 +399,16 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       `TOPIC OVERVIEW: "${topic.topic_context || topic.start_point || 'Core principles of ' + topic.topic_name}"`,
       '',
       'CRITICAL SOCRATIC TEACHING RULES:',
-      '1. STEP-BY-STEP PROGRESSION: Teach one small, bite-sized step at a time. Never dump entire textbook chapters or long walls of text.',
-      '2. CHECK FOR UNDERSTANDING: Conclude your explanation with a quick question, thought experiment, or check-for-understanding to keep the student actively thinking.',
-      '3. RELATABLE REAL-WORLD EXAMPLES: When giving examples, use familiar everyday Nigerian scenarios (e.g. POS charges, market trade, Danfo speeds, NEPA light vs. generator fuel, boiling kettle/jollof rice, recharge cards).',
-      '4. MATH & FORMULAS: Render all equations, formulas, and math variables cleanly using LaTeX ($...$ inline or $$...$$ block).',
-      '5. TABLES & HEADINGS: Use clear markdown headings (##, ###), bold text for emphasis, and structured markdown tables when comparing concepts.',
-      '6. CONCISE: Keep explanations punchy, friendly, and digestible (< 180 words per reply unless student requests a full worked problem).',
-      '7. DIRECT RESPONSE: Provide your response directly. Do not output internal monologues or emojis.',
+      '1. STRICTLY BITE-SIZED: Teach in small, digestible bits. Never dump long textbook text walls or multi-paragraph lectures. Target 80-120 words per response (max 150 words only if working through a calculation step).',
+      '2. INTERACTIVE TEACHING LOOP: Teach ONE micro-step at a time, then ALWAYS end with 1 quick check question, challenge, or thought experiment to keep the student actively responding before moving forward.',
+      '3. TYPOGRAPHIC HIERARCHY (Strictly Observe):',
+      '   - Use ### Subheadings to organize sections or concept names.',
+      '   - Use **bold** for crucial terms, definitions, and core rules.',
+      '   - Use *italics* for emphasis, technical jargon, or variable names in text.',
+      '   - Use concise bullet points (- ) when listing items.',
+      '   - Format all math, equations, and variables with LaTeX ($...$ inline or $$...$$ block).',
+      '4. PRACTICAL EXAMPLES: Use relatable Nigerian real-world scenarios when illustrating ideas (e.g. POS transactions, Danfo speeds, NEPA light vs. generator, market trade, boiling kettle/jollof rice).',
+      '5. DIRECT RESPONSE: Provide your response directly without meta commentary, internal monologues, or emojis.',
     ].join('\n');
 
     // Build multi-turn history from previous messages (last 8 completed messages)
@@ -429,7 +438,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       config: {
         systemInstruction: socraticSystemPrompt,
         temperature: 0.35,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 450,
       },
     };
 
@@ -594,7 +603,10 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     ),
     p: ({ node, ...props }: any) => <p className="mb-3 last:mb-0 leading-[1.75]" {...props} />,
     strong: ({ node, ...props }: any) => (
-      <strong className={isUser ? 'font-bold text-white' : 'font-semibold text-[#0F172A] dark:text-white'} {...props} />
+      <strong className={isUser ? 'font-black text-white' : 'font-black text-[#0F172A] dark:text-white'} {...props} />
+    ),
+    em: ({ node, ...props }: any) => (
+      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-slate-300'} {...props} />
     ),
     code: ({ node, inline, ...props }: any) =>
       inline ? (

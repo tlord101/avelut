@@ -207,26 +207,29 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
 
       const prompt = `You are an expert, precise, and encouraging academic tutor helping a student understand their textbook material: "${chapter.title}" from "${notebook.title}".
 
-CRITICAL TUTORING & MATERIAL GROUNDING RULES:
+CRITICAL TUTORING & BITE-SIZED TEACHING RULES:
+1. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 80-120 words per response). Do NOT dump long textbook passages or multi-page walls of text. Teach in bits.
+2. INTERACTIVE TEACHING LOOP: Teach ONE key idea or micro-concept at a time. ALWAYS conclude your response with 1 quick check question, challenge, or thought prompt to test the student's understanding before proceeding.
+3. TYPOGRAPHIC HIERARCHY (Strictly Observe):
+   - Use ### Subheadings for the concept or section title.
+   - Use **bold** for key concepts, essential definitions, and core principles.
+   - Use *italics* for emphasis or specialized terminology.
+   - Use clean bullet points (- ) when listing 2-3 points.
+   - Format all math, formulas, and variables using LaTeX ($...$ inline or $$...$$ block).
 ${isGroundingAvailable
-  ? `- STRICT GROUNDING: You MUST base your explanations, definitions, key formulas, examples, and answers directly on the provided TEXTBOOK EXCERPT below.
-- ACCURACY & FIDELITY: Stick closely to the author's terms, equations, notations, and explanations in the excerpt. Do not contradict or hallucinate beyond what is taught in this chapter.
-- DIRECT CITATION: When explaining concepts, reference and cite the specific points, figures, or rules mentioned in the excerpt.
-- EXTENDING WITH CONTEXT: If the student asks a question not explicitly covered in the excerpt, clearly explain what the chapter states first, then briefly bridge the gap using standard academic principles of "${chapter.title}".`
-  : `- SUBJECT CONTEXT: You are teaching the material of "${chapter.title}" from "${notebook.title}". Explain concepts clearly, accurately, and step-by-step.`
+  ? `4. TEXTBOOK GROUNDING: Base your explanations, definitions, and examples strictly on the TEXTBOOK EXCERPT below. Stick closely to the author's terms, equations, and notations.`
+  : `4. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately and step-by-step.`
 }
-- BE DIRECT & CONCISE: Answer the student's question directly without unnecessary filler, boilerplate, or repeating the question back to them.
-- GREETINGS: If the student sends a casual greeting (like "hi" or "hello"), reply warmly, simply, and naturally (e.g. "Hello! What can I help you understand in ${chapter.title}?").
-- COLOR & MATH FORMATTING: Format all math, formulas, and variables with LaTeX ($...$ inline or $$...$$ block). Use clean markdown formatting without table structures or step badge prefixes.
+5. GREETINGS: If the student sends a casual greeting (like "hi" or "hello"), reply warmly and concisely (e.g. "Hello! What concept in ${chapter.title} would you like to master today?").
 
 BOOK: ${notebook.title}
 CHAPTER: ${chapter.title}
 PAGES: ${chapter.startPage} to ${chapter.endPage}
 
-${isGroundingAvailable ? `TEXTBOOK EXCERPT (EXTRACTED FROM PAGES ${chapter.startPage}-${chapter.endPage}):\n${excerptToUse.slice(0, 16000)}` : `(No raw text excerpt available for this chapter)`}
+${isGroundingAvailable ? `TEXTBOOK EXCERPT (EXTRACTED FROM PAGES ${chapter.startPage}-${chapter.endPage}):\n${excerptToUse.slice(0, 14000)}` : `(No raw text excerpt available for this chapter)`}
 
 CONVERSATION HISTORY:
-${nextMessagesWithUser.map((m) => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n')}
+${nextMessagesWithUser.slice(-6).map((m) => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n')}
 
 STUDENT'S QUESTION:
 ${messageText}`;
@@ -247,6 +250,7 @@ ${messageText}`;
         contents: prompt,
         config: {
           temperature: 0.3,
+          maxOutputTokens: 450,
         },
       });
 
@@ -343,7 +347,10 @@ ${messageText}`;
     ),
     p: ({ node, ...props }: any) => <p className="mb-4 last:mb-0 text-[17px] sm:text-[18px] leading-relaxed text-[#0F172A] dark:text-slate-100" {...props} />,
     strong: ({ node, ...props }: any) => (
-      <strong className={isUser ? 'font-bold text-white' : 'font-bold text-[#0F172A] dark:text-white'} {...props} />
+      <strong className={isUser ? 'font-black text-white' : 'font-black text-[#0F172A] dark:text-white'} {...props} />
+    ),
+    em: ({ node, ...props }: any) => (
+      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-slate-300'} {...props} />
     ),
     code: ({ node, inline, ...props }: any) =>
       inline ? (

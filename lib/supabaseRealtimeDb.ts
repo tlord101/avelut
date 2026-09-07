@@ -469,13 +469,22 @@ async function loadPath(path: string): Promise<any> {
   }
 
   if (parts[0] === 'users' && parts.length === 2) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', parts[1]).maybeSingle();
+    const userId = parts[1];
+    const client = supabaseAdmin || supabase;
+    const [{ data }, { data: metaRow }] = await Promise.all([
+      client.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      client.from('app_kv').select('value').eq('key', `user_meta/${userId}`).maybeSingle(),
+    ]);
     if (!data) return null;
+    const meta = (metaRow?.value && typeof metaRow.value === 'object') ? metaRow.value : {};
     const credits = typeof data.ai_credits === 'number'
       ? data.ai_credits
       : (typeof data.ai_credits_balance === 'number' ? data.ai_credits_balance : 50);
+    const subStatus = meta.subscription_status || data.subscription_status || (data.is_paid_subscriber ? 'premium' : 'free');
+    const userRole = meta.role || (data.is_admin ? 'superadmin' : (data.role || 'user'));
     return {
       ...data,
+      ...meta,
       uid: data.id,
       id: data.id,
       display_name: data.full_name || data.username || 'User',
@@ -491,17 +500,31 @@ async function loadPath(path: string): Promise<any> {
       ai_credits: credits,
       current_streak: data.streak ?? 0,
       streak: data.streak ?? 0,
-      subscription_status: data.subscription_status || (data.is_paid_subscriber ? 'premium' : 'free'),
-      role: data.is_admin ? 'superadmin' : (data.role || 'user'),
-      is_admin: data.is_admin || false,
+      subscription_status: subStatus,
+      role: userRole,
+      is_admin: data.is_admin || userRole === 'superadmin',
     };
   }
 
   if (parts[0] === 'users' && parts.length === 1) {
     const client = supabaseAdmin || supabase;
-    const { data } = await client.from('profiles').select('*').limit(500);
+    const [{ data }, { data: metaRows }] = await Promise.all([
+      client.from('profiles').select('*').limit(500),
+      client.from('app_kv').select('key, value').like('key', 'user_meta/%').limit(500),
+    ]);
+    const metaMap: Record<string, any> = {};
+    (metaRows || []).forEach((row: any) => {
+      const uId = row.key.replace('user_meta/', '');
+      if (row.value && typeof row.value === 'object') {
+        metaMap[uId] = row.value;
+      }
+    });
+
     const map: Record<string, any> = {};
     (data || []).forEach((row: any) => {
+      const meta = metaMap[row.id] || {};
+      const subStatus = meta.subscription_status || row.subscription_status || (row.is_paid_subscriber ? 'premium' : 'free');
+      const userRole = meta.role || (row.is_admin ? 'superadmin' : (row.role || 'user'));
       map[row.id] = {
         uid: row.id,
         id: row.id,
@@ -524,9 +547,12 @@ async function loadPath(path: string): Promise<any> {
         current_streak: row.streak || 0,
         streak: row.streak || 0,
         ai_credits_balance: row.ai_credits ?? 50,
-        is_admin: row.is_admin || false,
-        role: row.is_admin ? 'superadmin' : 'user',
-        subscription_status: row.subscription_status || (row.is_paid_subscriber ? 'premium' : 'free'),
+        ai_credits: row.ai_credits ?? 50,
+        is_admin: row.is_admin || userRole === 'superadmin',
+        role: userRole,
+        subscription_status: subStatus,
+        status: meta.status || row.status || 'active',
+        admin_department_ids: meta.admin_department_ids || row.admin_department_ids || null,
       };
     });
     return map;
@@ -1318,6 +1344,23 @@ export async function set(r: DbRef, value: any): Promise<void> {
 
   if (parts[0] === 'users' && parts.length === 2) {
     const userId = parts[1];
+    if (value === null) {
+      try {
+        const client = supabaseAdmin || supabase;
+        await client.from('profiles').delete().eq('id', userId);
+        await client.from('app_kv').delete().eq('key', `user_meta/${userId}`);
+      } catch (e) {
+        console.warn('[supabaseRealtimeDb] delete profile error', e);
+      }
+      setLocalCache(r.path, null);
+      notify(r.path, null);
+      const currentUsers = (await loadPath('users')) || {};
+      delete currentUsers[userId];
+      setLocalCache('users', currentUsers);
+      notify('users', currentUsers);
+      return;
+    }
+
     const patch: any = {};
     if ('isOnline' in value || 'is_online' in value) patch.is_online = value.isOnline ?? value.is_online;
     if ('lastSeen' in value || 'last_seen' in value) {
@@ -1337,18 +1380,55 @@ export async function set(r: DbRef, value: any): Promise<void> {
     if ('department_name' in value || 'departmentName' in value) patch.department_name = value.department_name ?? value.departmentName;
     if ('level' in value) patch.level = value.level;
     if ('current_streak' in value || 'streak' in value) patch.streak = value.streak ?? value.current_streak;
-    if ('ai_credits_balance' in value || 'ai_credits' in value) patch.ai_credits = value.ai_credits ?? value.ai_credits_balance;
+    if ('xp' in value) patch.xp = value.xp;
+    if ('is_admin' in value) patch.is_admin = value.is_admin;
+    if ('ai_credits_balance' in value || 'ai_credits' in value) {
+      patch.ai_credits = value.ai_credits ?? value.ai_credits_balance;
+    }
+    if ('subscription_status' in value) {
+      patch.is_paid_subscriber = value.subscription_status !== 'free' && value.subscription_status !== 'none';
+      if (patch.ai_credits === undefined) {
+        if (value.subscription_status === 'premium' || value.subscription_status === 'pro' || value.subscription_status === 'semester') {
+          patch.ai_credits = 2500;
+        } else if (value.subscription_status === 'basic' || value.subscription_status === 'weekly') {
+          patch.ai_credits = 500;
+        }
+      }
+    }
     if ('fcm_token' in value || 'fcmToken' in value) patch.fcm_token = value.fcm_token ?? value.fcmToken;
     patch.updated_at = new Date().toISOString();
 
     try {
       const client = supabaseAdmin || supabase;
-      await client.from('profiles').update(patch).eq('id', userId);
+      if (Object.keys(patch).length > 1) {
+        await client.from('profiles').update(patch).eq('id', userId);
+      }
+      const metaToSave: any = {};
+      if ('subscription_status' in value) metaToSave.subscription_status = value.subscription_status;
+      if ('role' in value) metaToSave.role = value.role;
+      if ('status' in value) metaToSave.status = value.status;
+      if ('admin_department_ids' in value) metaToSave.admin_department_ids = value.admin_department_ids;
+      if (Object.keys(metaToSave).length > 0) {
+        await client.from('app_kv').upsert({
+          key: `user_meta/${userId}`,
+          value: metaToSave,
+          updated_at: new Date().toISOString(),
+        });
+      }
     } catch (e) {
       console.warn('[supabaseRealtimeDb] update profile error', e);
     }
-    setLocalCache(r.path, { ...(getLocalCache(r.path) || {}), ...value });
-    notify(r.path, await loadPath(r.path));
+    if (patch.ai_credits !== undefined) {
+      notifyUserCreditsUpdated(userId, patch.ai_credits);
+    }
+    const finalVal = { 
+      ...(getLocalCache(r.path) || {}), 
+      ...value, 
+      ...(patch.ai_credits !== undefined ? { ai_credits_balance: patch.ai_credits, ai_credits: patch.ai_credits } : {}) 
+    };
+    setLocalCache(r.path, finalVal);
+    notify(r.path, finalVal);
+    notify('users', await loadPath('users'));
     return;
   }
 
@@ -1768,39 +1848,8 @@ export async function update(r: DbRef, values: Record<string, any>): Promise<voi
 
 
   if (parts[0] === 'users' && parts.length === 2) {
-    const userId = parts[1];
-    const patch: any = {};
-    if ('isOnline' in values || 'is_online' in values) patch.is_online = values.isOnline ?? values.is_online;
-    if ('lastSeen' in values || 'last_seen' in values) {
-      const ls = values.lastSeen ?? values.last_seen;
-      patch.last_seen = typeof ls === 'number' ? new Date(ls).toISOString() : ls;
-    }
-    if ('display_name' in values || 'displayName' in values || 'full_name' in values) {
-      patch.full_name = values.full_name ?? values.display_name ?? values.displayName;
-    }
-    if ('photo_url' in values || 'photoURL' in values || 'avatar_url' in values) {
-      patch.avatar_url = values.avatar_url ?? values.photo_url ?? values.photoURL;
-    }
-    if ('school_id' in values || 'schoolId' in values) patch.school_id = values.school_id ?? values.schoolId;
-    if ('school_name' in values || 'schoolName' in values) patch.school_name = values.school_name ?? values.schoolName;
-    if ('college_id' in values || 'collegeId' in values) patch.college_id = values.college_id ?? values.collegeId;
-    if ('department_id' in values || 'departmentId' in values) patch.department_id = values.department_id ?? values.departmentId;
-    if ('department_name' in values || 'departmentName' in values) patch.department_name = values.department_name ?? values.departmentName;
-    if ('level' in values) patch.level = values.level;
-    if ('current_streak' in values || 'streak' in values) patch.streak = values.streak ?? values.current_streak;
-    if ('ai_credits_balance' in values || 'ai_credits' in values) patch.ai_credits = values.ai_credits ?? values.ai_credits_balance;
-    if ('fcm_token' in values || 'fcmToken' in values) patch.fcm_token = values.fcm_token ?? values.fcmToken;
-    patch.updated_at = new Date().toISOString();
-
-    if (Object.keys(patch).length > 1) {
-      try {
-        await supabase.from('profiles').update(patch).eq('id', userId);
-      } catch (e) {
-        console.warn('[supabaseRealtimeDb] update profile error', e);
-      }
-    }
-    setLocalCache(r.path, { ...(getLocalCache(r.path) || {}), ...values });
-    notify(r.path, await loadPath(r.path));
+    const current = (await loadPath(r.path)) || getLocalCache(r.path) || {};
+    await set(r, { ...current, ...values });
     return;
   }
 

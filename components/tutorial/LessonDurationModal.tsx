@@ -68,14 +68,27 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 }) => {
   const [selected, setSelected] = useState<LessonDurationMode>(initialMode);
 
+  const effectiveProfile = useMemo(() => {
+    if (userProfile && (userProfile.uid || userProfile.id)) return userProfile;
+    if (typeof window !== 'undefined') {
+      const winProf = (window as any).__userProfile;
+      if (winProf && (winProf.uid || winProf.id)) return winProf;
+      try {
+        const cached = localStorage.getItem('avelut_user_profile') || localStorage.getItem('user_profile');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return userProfile;
+  }, [userProfile]);
+
   const pool = useMemo(
-    () => getLiveMinutesRemaining(userProfile, appSettings),
-    [userProfile, appSettings]
+    () => getLiveMinutesRemaining(effectiveProfile, appSettings),
+    [effectiveProfile, appSettings]
   );
 
   const decision = useMemo(
-    () => evaluateLiveTutorialStart(userProfile, selected as LiveDurationMinutes, appSettings),
-    [userProfile, selected, appSettings]
+    () => evaluateLiveTutorialStart(effectiveProfile, selected as LiveDurationMinutes, appSettings),
+    [effectiveProfile, selected, appSettings]
   );
 
   if (!isOpen) return null;
@@ -146,7 +159,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
           {LESSON_DURATION_OPTIONS.map((opt) => {
             const isSelected = selected === opt.minutes;
             const optDecision = evaluateLiveTutorialStart(
-              userProfile,
+              effectiveProfile,
               opt.minutes as LiveDurationMinutes,
               appSettings
             );
