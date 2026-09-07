@@ -75,16 +75,31 @@ export function getSavedTeachingStructure(
   topicKey: string,
   mode?: LessonDurationMode
 ): TeachingStructure | null {
+  let found: TeachingStructure | null = null;
   if (mode) {
-    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, mode), null);
-    if (s && s.boards && s.boards.length > 0) return s;
+    found = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, mode), null);
   }
-  const modes: LessonDurationMode[] = ['30min', '15min', '60min'];
-  for (const m of modes) {
-    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
-    if (s && s.boards && s.boards.length > 0) return s;
+  if (!found || !found.boards || found.boards.length === 0) {
+    const modes: LessonDurationMode[] = ['30min', '15min', '60min'];
+    for (const m of modes) {
+      const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
+      if (s && s.boards && s.boards.length > 0) {
+        found = s;
+        break;
+      }
+    }
   }
-  return null;
+  if (!found || !found.boards || found.boards.length === 0) return null;
+
+  // Adapt structure board count based on requested duration mode
+  if (mode === '15min' && found.boards.length > 3) {
+    return {
+      ...found,
+      totalEstimatedDurationMinutes: 15,
+      boards: found.boards.slice(0, 3),
+    };
+  }
+  return found;
 }
 
 export function formatResumeLabel(p: LiveTeachingProgress): string {
