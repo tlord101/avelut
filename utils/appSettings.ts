@@ -183,12 +183,12 @@ export const DEFAULT_USAGE_SETTINGS = {
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  primary_ai_provider: 'openrouter',
+  primary_ai_provider: 'alibaba_qwen',
   openrouter_api_key: '',
   openrouter_model: 'qwen/qwen3.7-flash',
   openrouter_base_url: 'https://openrouter.ai/api/v1',
   alibaba_api_key: '',
-  alibaba_base_url: 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+  alibaba_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
   alibaba_model: 'qwen3.7-flash',
   active_voice_provider: 'grok',
   studyguide_voice_provider: 'grok',

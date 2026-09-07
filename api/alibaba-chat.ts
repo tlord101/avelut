@@ -57,20 +57,11 @@ export async function POST(req: Request) {
       Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
     );
 
-    let model = 'qwen-plus';
+    let model = 'qwen3.7-flash';
     if (hasImage) {
       model = 'qwen-vl-plus';
     } else if (body.model) {
-      const lower = String(body.model).toLowerCase().trim();
-      if (lower.includes('turbo') || lower.includes('lite') || lower.includes('flash')) {
-        model = 'qwen-turbo';
-      } else if (lower.includes('max') || lower.includes('pro')) {
-        model = 'qwen-max';
-      } else if (lower === 'qwen-plus' || lower === 'qwen-turbo' || lower === 'qwen-max' || lower === 'qwen-vl-plus' || lower === 'qwen-vl-max') {
-        model = lower;
-      } else {
-        model = 'qwen-plus';
-      }
+      model = String(body.model).trim();
     }
 
     const payload: any = {

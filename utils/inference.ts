@@ -524,26 +524,250 @@ async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings):
 }
 
 /**
- * Centralized client factory that instantiates the OpenRouter Qwen 3.7 Flash AI client.
- * Provides high-speed flagship reasoning with qwen/qwen3.7-flash and SSE streaming across all features.
+ * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with candidate model fallbacks
+ */
+async function callAlibabaQwen(params: any, appSettings: AppSettings): Promise<any> {
+  const apiKey = getAlibabaApiKey(appSettings);
+  const { messages } = paramsToChatMessages(params);
+  const primaryModel = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
+  const candidateModels = Array.from(new Set([primaryModel, 'qwen-max', 'qwen-plus', 'qwen-turbo']));
+
+  const isNative = typeof window !== 'undefined' && (
+    (window as any).Capacitor?.isNativePlatform?.() ||
+    window.location.protocol === 'file:'
+  );
+
+  const endpoints = apiKey
+    ? (isNative
+        ? ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
+        : ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
+    : (isNative
+        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
+        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+
+  let lastError: Error | null = null;
+
+  for (const model of candidateModels) {
+    const bodyPayload: any = {
+      model,
+      messages,
+      temperature: params?.config?.temperature ?? 0.7,
+      max_tokens: params?.config?.maxOutputTokens ?? 4096,
+    };
+
+    if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
+      bodyPayload.response_format = { type: 'json_object' };
+    }
+
+    for (const endpoint of endpoints) {
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-DashScope-WorkSpace': 'ws-o3v6mh0i8y9tqdfx',
+        };
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(bodyPayload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Alibaba Qwen Direct HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        const rawText = data?.choices?.[0]?.message?.content || '';
+
+        return {
+          text: () => rawText,
+          candidates: [
+            {
+              content: {
+                parts: [{ text: rawText }],
+                role: 'model',
+              },
+              finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: data?.usage?.prompt_tokens || 0,
+            candidatesTokenCount: data?.usage?.completion_tokens || 0,
+            totalTokenCount: data?.usage?.total_tokens || 0,
+          },
+        };
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+  }
+
+  console.warn('[Alibaba Direct API] Direct call failed or key missing, attempting OpenRouter fallback:', lastError?.message);
+  return await callOpenRouterQwen(params, appSettings);
+}
+
+/**
+ * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with SSE Streaming
+ */
+async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): AsyncGenerator<any, void, unknown> {
+  const apiKey = getAlibabaApiKey(appSettings);
+  const { messages } = paramsToChatMessages(params);
+  const model = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
+
+  const isNative = typeof window !== 'undefined' && (
+    (window as any).Capacitor?.isNativePlatform?.() ||
+    window.location.protocol === 'file:'
+  );
+
+  const endpoints = apiKey
+    ? (isNative
+        ? ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
+        : ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
+    : (isNative
+        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
+        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+
+  const bodyPayload: any = {
+    model,
+    messages,
+    stream: true,
+    stream_options: { include_usage: true },
+    temperature: params?.config?.temperature ?? 0.7,
+    max_tokens: params?.config?.maxOutputTokens ?? 4096,
+  };
+
+  if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
+    bodyPayload.response_format = { type: 'json_object' };
+  }
+
+  let response: Response | null = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-DashScope-WorkSpace': 'ws-o3v6mh0i8y9tqdfx',
+      };
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload),
+      });
+
+      if (response.ok && response.body) {
+        break;
+      } else {
+        response = null;
+      }
+    } catch (_) {
+      response = null;
+    }
+  }
+
+  if (!response || !response.body) {
+    const fallbackResult = await callAlibabaQwen(params, appSettings);
+    yield fallbackResult;
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) continue;
+        if (trimmed === 'data: [DONE]') return;
+
+        if (trimmed.startsWith('data:')) {
+          const jsonStr = trimmed.slice(5).trim();
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed?.choices?.[0]?.delta;
+            let deltaText = delta?.content || '';
+            let finishReason = parsed?.choices?.[0]?.finish_reason || null;
+            const usage = parsed?.usage || parsed?.response?.usage;
+
+            if (deltaText || finishReason || usage) {
+              yield {
+                text: () => deltaText,
+                candidates: [
+                  {
+                    content: {
+                      parts: [{ text: deltaText }],
+                      role: 'model',
+                    },
+                    finishReason,
+                  },
+                ],
+                usageMetadata: usage ? {
+                  promptTokenCount: usage.prompt_tokens || 0,
+                  candidatesTokenCount: usage.completion_tokens || 0,
+                  totalTokenCount: usage.total_tokens || 0,
+                } : undefined,
+              };
+            }
+          } catch {
+            // Ignore JSON parse errors on partial chunks
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Centralized client factory that instantiates the Alibaba Qwen 3.7 Flash AI client.
+ * Direct Alibaba Cloud DashScope API with fallback support.
  */
 export const createAvelutAI = (
   appSettings: AppSettings,
   userProfile?: UserProfile | null
 ): any => {
+  const provider = appSettings?.primary_ai_provider || 'alibaba_qwen';
+
   return {
     models: {
       generateContent: async (params: any) => {
-        return await callOpenRouterQwen(params, appSettings);
+        if (provider === 'openrouter') {
+          return await callOpenRouterQwen(params, appSettings);
+        }
+        return await callAlibabaQwen(params, appSettings);
       },
       generateContentStream: async (params: any) => {
-        const streamGen = callOpenRouterQwenStream(params, appSettings);
-        const asyncIterable = {
+        if (provider === 'openrouter') {
+          const streamGen = callOpenRouterQwenStream(params, appSettings);
+          return {
+            [Symbol.asyncIterator]: () => streamGen,
+            stream: streamGen,
+            response: Promise.resolve(null),
+          };
+        }
+        const streamGen = callAlibabaQwenStream(params, appSettings);
+        return {
           [Symbol.asyncIterator]: () => streamGen,
           stream: streamGen,
           response: Promise.resolve(null),
         };
-        return asyncIterable;
       },
       generateImages: async () => {
         throw new Error('Image generation is not supported on this model endpoint.');
@@ -551,7 +775,10 @@ export const createAvelutAI = (
     },
     interactions: {
       create: async (params: any) => {
-        return await callOpenRouterQwen(params, appSettings);
+        if (provider === 'openrouter') {
+          return await callOpenRouterQwen(params, appSettings);
+        }
+        return await callAlibabaQwen(params, appSettings);
       },
     },
   };
