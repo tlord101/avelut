@@ -156,27 +156,33 @@ JSON OUTPUT SCHEMA:
       "purpose": "introduce figure",
       "mannerism": "attention",
       "pauseAfterMs": 1200,
-      "board_actions": [
-        {
-          "id": "draw_base",
-          "type": "draw",
-          "position": { "x": 50, "y": 55 },
-          "sync": { "phrase": "..." },
-          "metadata": {
-            "drawType": "path",
-            "d": "M30 40 L70 40 L70 70 L30 70 Z",
-            "color": "#E2E8F0",
-            "strokeWidth": 2.8,
-            "durationMs": 900
-          }
-        }
-      ],
-      "visual_actions": [],
-      "focus_target": null
+  "board_actions": [
+    {
+      "id": "title_${currentBoardPlan.board_number}",
+      "type": "write",
+      "content": "${currentBoardPlan.title}",
+      "position": { "x": 50, "y": 10 },
+      "metadata": { "fontSize": "3xl", "color": "#FFFFFF" },
+      "sync": { "triggerImmediately": true }
+    },
+    {
+      "id": "kt_1",
+      "type": "write",
+      "content": "• First key concept takeaway",
+      "position": { "x": 20, "y": 30 },
+      "metadata": { "fontSize": "2xl", "color": "#E2E8F0" },
+      "sync": { "phrase": "First key concept takeaway" }
+    },
+    {
+      "id": "kt_2",
+      "type": "write",
+      "content": "• Second key concept takeaway",
+      "position": { "x": 20, "y": 44 },
+      "metadata": { "fontSize": "2xl", "color": "#E2E8F0" },
+      "sync": { "phrase": "Second key concept takeaway" }
     }
   ],
-  "board_actions": [],
-  "svg_illustration": null,
+  "svg_illustration": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 200\" width=\"100%\" height=\"100%\"><defs><style>.bg{fill:transparent;}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:1;}.path-structural{stroke:#cbd5e1;stroke-width:1.5;fill:none;}.path-accent{stroke:#38bdf8;stroke-width:2;fill:none;}.fill-node{fill:#0f172a;stroke:#38bdf8;stroke-width:2;}.fill-accent{fill:rgba(56,189,248,0.18);stroke:#38bdf8;stroke-width:1.5;}.text-label{font-family:sans-serif;font-size:10px;fill:#ffffff;}.text-muted{font-family:sans-serif;font-size:8px;fill:#94a3b8;}.text-title{font-family:sans-serif;font-size:11px;fill:#38bdf8;font-weight:bold;}</style></defs><!-- Precise coordinate nodes, lines, and text labels --></svg>",
   "question": ${currentBoardPlan.question_required
     ? `{
     "id": "q_board_${currentBoardPlan.board_number}",

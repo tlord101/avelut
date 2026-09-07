@@ -541,6 +541,32 @@ export class TeachingEngineService {
         return a;
       });
     }
+    // Guarantee explicit Key Takeaway / Bullet Point Actions on every board
+    const hasKeyPointText = (performance.board_actions || []).some(
+      (a) =>
+        (a.type === 'write' || a.type === 'text') &&
+        (a.position?.y ?? 50) > 16 &&
+        !a.id?.includes('title') &&
+        a.content !== resolvedTitle
+    );
+
+    if (!hasKeyPointText) {
+      const takeaways =
+        boardPlan.recommended_board_content ||
+        boardPlan.key_concepts ||
+        [boardPlan.teaching_objective || resolvedTitle];
+
+      const keyPointActions: BoardAction[] = takeaways.slice(0, 3).map((kt, idx) => ({
+        id: `act_kt_guarantee_${performance.board_number}_${idx}`,
+        type: 'write' as const,
+        content: kt.trim().startsWith('•') || kt.trim().startsWith('-') ? kt : `• ${kt}`,
+        position: { x: 20, y: 30 + idx * 14 },
+        metadata: { fontSize: '2xl' as const, color: '#E2E8F0' },
+        sync: { phrase: kt },
+      }));
+
+      performance.board_actions = [...(performance.board_actions || []), ...keyPointActions];
+    }
 
     return performance;
   }
