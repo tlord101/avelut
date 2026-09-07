@@ -58,9 +58,26 @@ function phraseWordOffset(speech: string, phrase: string | undefined): number {
   if (!phrase) return -1;
   const speechLower = speech.toLowerCase();
   const phraseLower = phrase.toLowerCase().trim();
+  if (!phraseLower) return -1;
+
+  // 1. Exact phrase substring match
   const charIdx = speechLower.indexOf(phraseLower);
-  if (charIdx === -1) return -1;
-  return speechLower.slice(0, charIdx).trim().split(/\s+/).filter(Boolean).length;
+  if (charIdx !== -1) {
+    return speechLower.slice(0, charIdx).trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  // 2. Significant keyword match (find first significant word from phrase in speech)
+  const cleanPhrase = phraseLower.replace(/[^a-z0-9\s]/g, ' ');
+  const keywords = cleanPhrase.split(/\s+/).filter((w) => w.length >= 4);
+
+  for (const kw of keywords) {
+    const idx = speechLower.indexOf(kw);
+    if (idx !== -1) {
+      return speechLower.slice(0, idx).trim().split(/\s+/).filter(Boolean).length;
+    }
+  }
+
+  return -1;
 }
 
 export class TeachingEngineService {
@@ -170,6 +187,7 @@ export class TeachingEngineService {
     this.prefetchedBoardIndex = null;
 
     let structure: TeachingStructure | null = null;
+    const durationMode = params.durationMode || 30;
 
     try {
       const ai = createAvelutAI(this.appSettings, this.userProfile);
@@ -207,12 +225,12 @@ export class TeachingEngineService {
 
       if (!structure || !structure.boards || !Array.isArray(structure.boards) || structure.boards.length === 0) {
         console.warn('[TeachingEngine] AI structure generation failed after 3 attempts, creating fallback structure');
-        structure = this.buildFallbackTeachingStructure(params.topic, this.durationMode);
+        structure = this.buildFallbackTeachingStructure(params.topic, durationMode);
       }
 
       const userId = this.userProfile?.uid || 'anon';
       const topicKey = topicKeyFromTitle(params.topic, params.courseName);
-      void saveTeachingStructureOnly(userId, topicKey, structure, this.durationMode || '30min');
+      void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || '30min');
 
       this.currentStructure = structure;
       this.currentBoardIndex = 0;
@@ -220,7 +238,7 @@ export class TeachingEngineService {
       return structure;
     } catch (err: any) {
       console.error('[TeachingEngine] Error generating structure:', err);
-      const fallback = this.buildFallbackTeachingStructure(params.topic, this.durationMode);
+      const fallback = this.buildFallbackTeachingStructure(params.topic, durationMode);
       this.currentStructure = fallback;
       this.currentBoardIndex = 0;
       this.listeners.forEach((l) => l.onStructureLoaded?.(fallback));
@@ -229,35 +247,35 @@ export class TeachingEngineService {
   }
 
   private buildFallbackTeachingStructure(topic: string, mode?: any): TeachingStructure {
-  const durationMinutes = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
-  const boardCount = Math.max(5, Math.round(durationMinutes / 2));
-  const boards: TeachingBoardPlan[] = [];
+    const durationMinutes = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
+    const boardCount = Math.max(5, Math.round(durationMinutes / 2));
+    const boards: TeachingBoardPlan[] = [];
 
-  for (let i = 1; i <= boardCount; i++) {
-    boards.push({
-      board_id: `board_${i}`,
-      board_number: i,
-      title: i === 1 ? `Introduction to ${topic}` : i === boardCount ? `Summary & Key Takeaways` : `${topic} - Core Concept ${i - 1}`,
-      teaching_objective: `Master key concept ${i} for ${topic}`,
-      what_student_should_understand: `Understanding aspect ${i} of ${topic}`,
-      why_this_board_exists: `Build foundational mastery of ${topic}`,
-      visual_purpose: `Diagram and key formula for ${topic}`,
-      recommended_board_content: [`${topic} Core Point ${i}`],
-      interaction_required: false,
-      question_required: false,
-      question_type: null,
-      estimated_duration_seconds: 120,
-    });
+    for (let i = 1; i <= boardCount; i++) {
+      boards.push({
+        board_id: `board_${i}`,
+        board_number: i,
+        title: i === 1 ? `Introduction to ${topic}` : i === boardCount ? `Summary & Key Takeaways` : `${topic} - Core Concept ${i - 1}`,
+        teaching_objective: `Master key concept ${i} for ${topic}`,
+        what_student_should_understand: `Understanding aspect ${i} of ${topic}`,
+        why_this_board_exists: `Build foundational mastery of ${topic}`,
+        visual_purpose: `Diagram and key formula for ${topic}`,
+        recommended_board_content: [`${topic} Core Point ${i}`],
+        interaction_required: false,
+        question_required: false,
+        question_type: null,
+        estimated_duration_seconds: 120,
+      });
+    }
+
+    return {
+      topic,
+      teaching_strategy: `Paced ~2-minute per board live lecture for ${durationMinutes}m mode`,
+      learning_goal: `Master core principles and applications of ${topic}`,
+      duration_minutes: durationMinutes,
+      boards,
+    };
   }
-
-  return {
-    topic,
-    teaching_strategy: `Paced ~2-minute per board live lecture for ${durationMinutes}m mode`,
-    learning_goal: `Master core principles and applications of ${topic}`,
-    duration_minutes: durationMinutes,
-    boards,
-  };
-}
 
   private buildFallbackBoardPerformance(boardPlan: TeachingBoardPlan): TeachingBoardPerformance {
     const boardNum = boardPlan.board_number || this.currentBoardIndex + 1;
@@ -279,7 +297,7 @@ export class TeachingEngineService {
         type: 'write' as const,
         content: `• ${kt}`,
         position: { x: 20, y: 30 + idx * 14 },
-        metadata: { fontSize: '2xl' as const, color: '#F3F4F6' },
+        metadata: { fontSize: '2xl' as const, color: '#E2E8F0' },
         sync: { phrase: kt },
       })),
     ];
@@ -664,6 +682,11 @@ export class TeachingEngineService {
     triggeredIds: Set<string>,
     wps: number
   ) {
+    const words = speech.split(/\s+/).filter(Boolean);
+    const totalWords = Math.max(1, words.length);
+    // Estimated total duration of this board's lecture audio in milliseconds
+    const estTotalMs = Math.max(25000, Math.floor((totalWords / wps) * 1000));
+
     // 1) Title Action & Full SVG Illustration Action MUST trigger immediately at lecture start (t = 50ms)
     const immediateCandidates = actions.filter(
       (a) =>
@@ -687,13 +710,13 @@ export class TeachingEngineService {
       }
     });
 
-    // 2) Schedule speech_beats tied to spoken phrase or predictable early timestamps
+    // 2) Schedule speech_beats tied to spoken phrase timestamp across overall voice duration
     beats.forEach((beat, bIdx) => {
       const beatOffset = phraseWordOffset(speech, beat.text);
       const delayMs =
         beatOffset >= 0
-          ? Math.min(Math.floor((beatOffset / wps) * 1000), 12000)
-          : Math.min(1500 + bIdx * 2500, 12000);
+          ? Math.floor((beatOffset / totalWords) * estTotalMs)
+          : Math.floor(((bIdx + 1) / (beats.length + 1)) * estTotalMs);
 
       const timer = setTimeout(() => {
         if (this.isDestroyed || this.isPaused) return;
@@ -710,7 +733,7 @@ export class TeachingEngineService {
       this.activeTimers.push(timer);
     });
 
-    // 3) Fast, predictable timestamp pacing for keyword points, formulas, definitions and key sentences
+    // 3) Dynamically calculated timestamps for keywords based on spoken voice script
     const remainingTextActions = actions.filter(
       (a) =>
         !triggeredIds.has(a.id) &&
@@ -721,12 +744,16 @@ export class TeachingEngineService {
 
     remainingTextActions.forEach((action, aIdx) => {
       let delayMs = 0;
-      const offset = phraseWordOffset(speech, action.sync?.phrase);
+      const targetPhrase = action.sync?.phrase || action.content || '';
+      const offset = phraseWordOffset(speech, targetPhrase);
+
       if (offset >= 0) {
-        delayMs = Math.min(Math.floor((offset / wps) * 1000), 12000);
+        // Exact or keyword match: calculate exact timestamp in the voice script
+        delayMs = Math.floor((offset / totalWords) * estTotalMs);
       } else {
-        // Predictable early timestamps: Keyword 1 at 1.8s, Keyword 2 at 4.5s, Keyword 3 at 7.5s, Keyword 4 at 10.5s
-        delayMs = Math.min(1800 + aIdx * 2700, 12000);
+        // Proportional placement across 15% to 85% of the overall speech duration
+        const stepFraction = (aIdx + 1) / (remainingTextActions.length + 1);
+        delayMs = Math.floor(estTotalMs * 0.15 + stepFraction * estTotalMs * 0.70);
       }
 
       const timer = setTimeout(() => {
