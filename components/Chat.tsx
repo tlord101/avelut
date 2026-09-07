@@ -25,6 +25,7 @@ import 'katex/dist/katex.min.css';
 import { formatLatexMath } from '../utils/latexFormatter';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
+import { CodeBlock } from './CodeBlock';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
 
@@ -552,16 +553,12 @@ export const Chat: React.FC<ChatProps> = ({
 
       update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
-      // Build prompt based on mode — clean versatile general AI assistant, no unsolicited department blurt-out
+      // Build clean, responsive system instruction for Avelut AI
       const baseSystemInstruction = [
-        'You are Avelut, a versatile, smart, helpful, and friendly AI assistant.',
-        'You can help with any topic: everyday conversation, answering questions, writing, coding, math, science, and learning.',
-        '',
+        'You are Avelut, a smart, versatile, helpful, and friendly AI assistant.',
+        'You can assist with any topic: everyday conversation, writing, coding, math, science, and general learning.',
         'Guidelines:',
-        '- Keep responses natural, direct, helpful, and straightforward like ChatGPT.',
-        '- Do not use any emojis, emoji symbols, or decorative icons in your responses under any circumstances.',
-        '- If the user sends a simple greeting (such as "hi", "hello", "hey", "how are you", "good morning"), respond with a simple, friendly, brief reply (e.g. "Hello! How can I help you today?").',
-        '- NEVER mention the user\'s department, school, college, or academic level unless the user specifically asks a question about their department, courses, or academic studies.',
+        '- Keep responses natural, direct, clear, and helpful.',
         '- When formatting equations or mathematical expressions, use standard LaTeX ($...$ for inline, $$...$$ for blocks).',
       ].join('\n');
 
@@ -569,14 +566,14 @@ export const Chat: React.FC<ChatProps> = ({
       if (selectedMode === 'fast') {
         modeInstruction = '\nProvide a brief, direct, and concise response.';
       } else if (selectedMode === 'deep') {
-        modeInstruction = '\nProvide a detailed, step-by-step thorough explanation with examples.';
+        modeInstruction = '\nProvide a detailed, step-by-step thorough explanation with clear examples.';
       } else if (selectedMode === 'exam') {
-        modeInstruction = '\nFormat response as practice exam questions with explanation and key takeaways.';
+        modeInstruction = '\nFormat response as practice exam questions with explanations and key takeaways.';
       }
 
       let optionalContext = '';
       if (selectedMode === 'context' && userProfile.department_id) {
-        optionalContext = `\n[Optional Student Background - ONLY use if the user specifically asks a question about their academic curriculum or department. NEVER mention this for greetings or general questions: Department: ${userProfile.department_id}, Level: ${userProfile.level || ''}]`;
+        optionalContext = `\n[Student Background Context - Department: ${userProfile.department_id}, Level: ${userProfile.level || ''}]`;
       }
 
       const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}${optionalContext}`;
@@ -727,9 +724,9 @@ export const Chat: React.FC<ChatProps> = ({
                     </div>
                   </div>
                 ) : (
-                  /* AI responses: no bubble, no border, full content width like ChatGPT */
-                  <div className="w-full min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                  /* AI responses: invisible container spanning viewport content width so text doesn't spread out */
+                  <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 select-none">
                       <div className="w-7 h-7 rounded-full bg-neutral-100 dark:bg-white/10 flex items-center justify-center p-1 shrink-0">
                         <img src="/logo_icon.png" alt="Avelut" className="w-full h-full object-contain" />
                       </div>
@@ -740,7 +737,7 @@ export const Chat: React.FC<ChatProps> = ({
                         {timeAgo(msg.timestamp)}
                       </span>
                     </div>
-                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0] prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-p:leading-[1.75] prose-headings:my-4 prose-headings:font-bold prose-headings:tracking-tight prose-pre:my-3">
+                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0] prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-p:leading-[1.75] prose-headings:my-4 prose-headings:font-bold prose-headings:tracking-tight prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0">
                       {!msg.text ? (
                         <div className="flex items-center gap-1.5 py-1">
                           <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce" />
@@ -751,6 +748,32 @@ export const Chat: React.FC<ChatProps> = ({
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
+                          components={{
+                            code({ node, inline, className, children, ...props }: any) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const codeString = String(children || '').replace(/\n$/, '');
+                              
+                              if (!inline && (match || codeString.includes('\n'))) {
+                                return (
+                                  <CodeBlock
+                                    language={match ? match[1] : 'code'}
+                                    value={codeString}
+                                  />
+                                );
+                              }
+                              return (
+                                <code
+                                  className="bg-neutral-100 dark:bg-neutral-800 text-[#0066FF] dark:text-[#38bdf8] font-mono px-1.5 py-0.5 rounded text-[13px] font-medium"
+                                  {...props}
+                                >
+                                  {children}
+                                </code>
+                              );
+                            },
+                            pre({ children }) {
+                              return <>{children}</>;
+                            },
+                          }}
                         >
                           {formatLatexMath(msg.text)}
                         </ReactMarkdown>

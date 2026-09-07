@@ -54,14 +54,13 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
       if (!svgEl.hasAttribute('width')) svgEl.setAttribute('width', '100%');
       if (!svgEl.hasAttribute('height')) svgEl.setAttribute('height', '100%');
 
-      // Remove forbidden tags (keep foreignobject for KaTeX labels in SVG)
+      // Remove forbidden security tags (preserve <style> for SVG semantic classes and foreignobject for labels)
       const forbiddenTags = [
         'script',
         'iframe',
         'object',
         'embed',
         'link',
-        'style',
         'base',
       ];
 
@@ -71,6 +70,17 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
           elements[0].parentNode?.removeChild(elements[0]);
         }
       });
+
+      // Sanitize inner text of <style> elements (remove @import and external url() references)
+      const styleElements = doc.getElementsByTagName('style');
+      for (let i = 0; i < styleElements.length; i++) {
+        let cssText = styleElements[i].textContent || '';
+        cssText = cssText
+          .replace(/@import\s+[^;]+;/gi, '')
+          .replace(/url\s*\(\s*['"]?https?:\/\/[^'"]+['"]?\s*\)/gi, 'none')
+          .replace(/url\s*\(\s*['"]?javascript:[^'"]+['"]?\s*\)/gi, 'none');
+        styleElements[i].textContent = cssText;
+      }
 
       // Recursively sanitize attributes on all elements and fix dark chalkboard stroke/fill colors
       const allNodes = doc.getElementsByTagName('*');
@@ -95,7 +105,7 @@ export function sanitizeSvg(svgString: string | null | undefined): string | null
             attrsToRemove.push(attr.name);
           }
 
-          // Transform dark navy / dark slate / black stroke & fill colors into high-contrast chalk colors
+          // Transform dark navy / dark slate / black stroke & fill colors into high-contrast chalk colors on dark canvas
           if (attrName === 'stroke' && (attrVal === '#0f172a' || attrVal === '#2c3e50' || attrVal === '#1e293b' || attrVal === '#000' || attrVal === '#000000' || attrVal === 'black')) {
             node.setAttribute(attr.name, '#38BDF8');
           }

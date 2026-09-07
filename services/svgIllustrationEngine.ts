@@ -17,12 +17,25 @@ export const SVG_REALISTIC_ILLUSTRATION_SYSTEM_PROMPT = `
 AVELUT UNIVERSAL VECTOR ILLUSTRATION SYSTEM (TECHNICAL OUTLINE SVG ENGINE)
 ================================================================================
 MASTER PROMPT INSTRUCTION:
-"Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent background, crisp bright strokes (no heavy dark fills, use light or dashed outlines for structural elements), distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styles."
+"Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes with light or dashed outlines for structural paths, distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styling, thin strokes (stroke-width: 1.5 to 2), and a restrained professional color palette. Position all elements with precise coordinate attributes (x, y, cx, cy) to ensure exact alignment and complete responsiveness."
 
-CORE DESIGN RULES FOR DARK CHALKBOARD CANVAS (#0F172A):
-1. COLOR PALETTE: ALWAYS use high-contrast bright chalk colors (bright cyan #38BDF8, crisp white #FFFFFF / #E2E8F0 for outlines & labels, amber #FACC15, emerald #34D399 for focal nodes, light slate #94A3B8 for structural lines). DO NOT use dark navy #0F172A or dark slate #2c3e50 for strokes or text fills on the dark chalkboard!
+SEMANTIC CLASS DEFINITIONS FOR <defs><style>:
+.bg { fill: transparent; }
+.grid-line { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+.path-structural { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
+.path-dashed { stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 4, 3; fill: none; }
+.path-accent { stroke: #38bdf8; stroke-width: 2; fill: none; }
+.fill-node { fill: #0f172a; stroke: #38bdf8; stroke-width: 2; }
+.fill-accent { fill: rgba(56, 189, 248, 0.18); stroke: #38bdf8; stroke-width: 1.5; }
+.fill-subtle { fill: rgba(255, 255, 255, 0.06); stroke: #94a3b8; stroke-width: 1.5; }
+.text-label { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 10px; fill: #ffffff; font-weight: 500; }
+.text-muted { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 8px; fill: #94a3b8; }
+.text-title { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #38bdf8; font-weight: 600; letter-spacing: 0.5px; }
+
+CORE DESIGN RULES:
+1. COLOR PALETTE: Restrained professional palette with semantic classes (.fill-accent, .fill-subtle, .path-accent, .path-structural, .path-dashed).
 2. LINE WEIGHTS: Thin, deliberate strokes (stroke-width="1.5" to "2") with semantic classes for styling.
-3. TYPOGRAPHY: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates and bright text fills (fill="#FFFFFF" or fill="#38BDF8").
+3. TYPOGRAPHY: Rely on system sans-serif fonts (-apple-system, sans-serif) with explicit x and y coordinates and crisp label styling.
 4. SCALABILITY: Always include a viewBox (viewBox="0 0 400 200") and set width="100%" height="100%" so it behaves responsively.
 `;
 
