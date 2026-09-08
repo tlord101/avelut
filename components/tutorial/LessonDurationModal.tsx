@@ -315,44 +315,16 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={() => {
-              if (prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)) return;
-              onConfirm(selected);
-            }}
-            disabled={prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)}
+            onClick={() => onConfirm(selected)}
             type="button"
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-transform shadow-md ${
-              prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)
-                ? 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
-                : 'bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer'
-            }`}
+            className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-transform shadow-md bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer"
           >
             <span>
-              {(() => {
-                let startLabel = 'Start lesson';
-                const selStatus = prefetchStatuses[selected]?.state;
-                const selReady = isReadyToStart(selected);
-                if (selStatus === 'prefetching' && !selReady) {
-                  startLabel = 'Generating…';
-                } else if (selStatus === 'idle') {
-                  startLabel = 'Generate & Start';
-                } else if (selStatus === 'failed' && !selReady) {
-                  startLabel = 'Retry & Start';
-                }
-                
-                if (decision.payment === 'credits') {
-                  if (startLabel === 'Start lesson') {
-                    return `Start · ${decision.creditCost} credits`;
-                  } else {
-                    return `${startLabel} · ${decision.creditCost} credits`;
-                  }
-                }
-                return startLabel;
-              })()}
+              {decision.payment === 'credits'
+                ? `Start · ${decision.creditCost} credits`
+                : 'Start lesson'}
             </span>
-            {!(prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)) && (
-              <i className="bi bi-arrow-right"></i>
-            )}
+            <i className="bi bi-arrow-right"></i>
           </button>
         </div>
       </div>

@@ -208,7 +208,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         });
     }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile, addToast]);
 
-    const handleConfirmDuration = async (mode: LessonDurationMode) => {
+    const handleConfirmDuration = (mode: LessonDurationMode) => {
         // 1. Evaluate if user can start
         const decision = evaluateLiveTutorialStart(userProfile, mode as LiveDurationMinutes, resolvedAppSettings);
         
@@ -224,36 +224,36 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             return;
         }
         
-        // 2. Commit usage (deduct minutes from pool)
-        try {
-            await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
-            
-            // 3. Deduct credits if payment is 'credits'
-            if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
-                await deductAICredits(userProfile.uid, decision.creditCost, 'Live Tutorial Session', resolvedAppSettings);
-            }
-            
-            logTeachingEvent({
-                type: 'session_start',
-                topic: topicTitle,
-                duration: mode,
-                metadata: { payment: decision.payment, creditCost: decision.creditCost },
-            });
-        } catch (err: any) {
-            addToast(err?.message || 'Failed to start session. Please try again.', 'error');
-            logTeachingEvent({
-                type: 'credit_fail',
-                topic: topicTitle,
-                duration: mode,
-                error: err?.message,
-            });
-            return;
-        }
-        
-        // 4. Mount the session
+        // 2. CLOSE MODAL IMMEDIATELY AND DISPLAY BOARD
+        setIsDurationModalOpen(false);
         setSelectedDurationMode(mode);
         setStartBoardIndex(0);
-        setIsDurationModalOpen(false);
+
+        // 3. Process background usage commitment & logging asynchronously
+        void (async () => {
+            try {
+                await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
+                
+                if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
+                    await deductAICredits(userProfile.uid, decision.creditCost, 'Live Tutorial Session', resolvedAppSettings);
+                }
+                
+                logTeachingEvent({
+                    type: 'session_start',
+                    topic: topicTitle,
+                    duration: mode,
+                    metadata: { payment: decision.payment, creditCost: decision.creditCost },
+                });
+            } catch (err: any) {
+                addToast?.(err?.message || 'Failed to process session start.', 'error');
+                logTeachingEvent({
+                    type: 'credit_fail',
+                    topic: topicTitle,
+                    duration: mode,
+                    error: err?.message,
+                });
+            }
+        })();
     };
 
     const handleResumeSession = () => {

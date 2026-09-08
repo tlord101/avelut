@@ -186,6 +186,15 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     const topicKey = topicKeyFromTitle(topicTitle, courseName);
     const resolvedUserId = userId || userProfile?.uid || 'anon';
 
+    // Render initial Board 1 Title Heading immediately on canvas mount with blinking cursor
+    manager.applyAction({
+      id: 'act_title_0_initial',
+      type: 'write',
+      content: topicTitle,
+      position: { x: 50, y: 10 },
+      metadata: { fontSize: '3xl', color: '#FFFFFF' },
+    });
+
     const unsubscribe = engine.subscribe({
       onStructureLoaded: (struct) => {
         setStructure(struct);
