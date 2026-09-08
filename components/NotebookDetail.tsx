@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { UserProfile, Topic, Course } from '../types';
 import type { Notebook, NotebookChapter } from '../services/notebookStorageService';
@@ -113,6 +113,27 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
     };
   }, [activeMode, setCustomHeaderConfig, onBack, notebook.title]);
 
+  // Stable voice session so duration modal is not reset on parent re-renders
+  // (must stay above early returns to satisfy Rules of Hooks)
+  const memoizedVoiceSession = useMemo<VoiceTutorialSessionData | null>(() => {
+    if (activeMode !== 'voice' || !selectedChapter) return null;
+    return {
+      course: {
+        course_id: notebook.id,
+        course_name: notebook.title,
+        level: 'General',
+        topics: [],
+      },
+      topic: {
+        topic_id: selectedChapter.id,
+        topic_name: selectedChapter.title,
+        topic_context: chapterFullContent.slice(0, 5000),
+      },
+      syllabusContext: `NOTEBOOK TEXTBOOK SOURCE: "${notebook.title}". CHAPTER: "${selectedChapter.title}".`,
+      customPrompt: `Speak as a personalized tutor teaching directly from the student's notebook. Naturally reference their notes throughout (e.g. "Looking at this chapter of your note...", "From this part of your note...", "As outlined in chapter ${selectedChapter.title}...").`,
+    };
+  }, [activeMode, selectedChapter, notebook.id, notebook.title, chapterFullContent]);
+
   // 1. Render Active Mode: Quiz
   if (activeMode === 'quiz' && selectedChapter) {
     return (
@@ -156,32 +177,12 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
   }
 
   // 4. Render Active Mode: Voice & Visual Tutorial
-  if (activeMode === 'voice' && selectedChapter) {
-    const syntheticCourse: Course = {
-      course_id: notebook.id,
-      course_name: notebook.title,
-      level: 'General',
-      topics: [],
-    };
-
-    const syntheticTopic: Topic = {
-      topic_id: selectedChapter.id,
-      topic_name: selectedChapter.title,
-      topic_context: chapterFullContent.slice(0, 5000),
-    };
-
-    const voiceSession: VoiceTutorialSessionData = {
-      course: syntheticCourse,
-      topic: syntheticTopic,
-      syllabusContext: `NOTEBOOK TEXTBOOK SOURCE: "${notebook.title}". CHAPTER: "${selectedChapter.title}".`,
-      customPrompt: `Speak as a personalized tutor teaching directly from the student's notebook. Naturally reference their notes throughout (e.g. "Looking at this chapter of your note...", "From this part of your note...", "As outlined in chapter ${selectedChapter.title}...").`,
-    };
-
+  if (activeMode === 'voice' && selectedChapter && memoizedVoiceSession) {
     return (
       <VoiceTutorialPage
         userProfile={userProfile}
         appSettings={appSettings}
-        initialSessionData={voiceSession}
+        initialSessionData={memoizedVoiceSession}
         onBack={() => {
           setActiveMode('none');
           if (setCustomHeaderConfig) setCustomHeaderConfig(null);
