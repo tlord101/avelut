@@ -415,8 +415,11 @@ class GrokVoiceEngine {
 
         try {
           await audioEl.play();
-        } catch (playErr) {
-          // Autoplay policy or user interaction restriction handling
+        } catch (playErr: any) {
+          if (playErr?.name === 'AbortError' || playErr?.message?.includes('interrupted by a call to pause')) {
+            // Audio play promise aborted by user pause/supersede — expected browser audio behavior
+            return;
+          }
           console.warn('[GrokVoiceEngine] audioEl.play() initial attempt error:', playErr);
           if (!isStopped && this.activeSessionId === sessionId) {
             options.onError?.(playErr);

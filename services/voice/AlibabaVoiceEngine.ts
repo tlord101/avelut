@@ -288,7 +288,16 @@ class AlibabaVoiceEngine {
           options.onError?.(new Error(`Alibaba Audio playback error: ${e}`));
         };
 
-        await audioEl.play();
+        try {
+          await audioEl.play();
+        } catch (playErr: any) {
+          if (playErr?.name === 'AbortError' || playErr?.message?.includes('interrupted by a call to pause')) {
+            return;
+          }
+          if (sessionId === this.activeSessionId) {
+            options.onError?.(playErr);
+          }
+        }
       } catch (err: any) {
         if (sessionId === this.activeSessionId) {
           options.onError?.(err);
