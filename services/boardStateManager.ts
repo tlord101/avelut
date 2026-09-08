@@ -218,15 +218,14 @@ export class BoardStateManager {
         const rawSvg =
           action.metadata?.svgContent ||
           (typeof action.content === 'string' && action.content.includes('<svg') ? action.content : null);
-        const cleanSvg = sanitizeSvg(rawSvg);
 
-        if (cleanSvg) {
+        if (rawSvg) {
           const svgEl: LiveBoardElement = {
             id: action.id || actionId,
             groupId: action.groupId,
             persistence: 'temporary',
             type: 'svg',
-            svgContent: cleanSvg,
+            svgContent: rawSvg,
             primitive: 'custom_svg',
             position: pos,
             progress: 1.0,

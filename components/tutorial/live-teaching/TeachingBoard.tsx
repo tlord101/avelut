@@ -270,8 +270,8 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                   left: `${posX}%`,
                   top: `${posY}%`,
                   transform: isKeyPoint ? 'translate(0, -50%)' : 'translate(-50%, -50%)',
-                  width: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '95%' : '88%',
-                  maxWidth: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '95%' : '88%',
+                  width: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '96%' : '90%',
+                  maxWidth: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '96%' : '90%',
                 }}
               >
                 {rawSvg && (
@@ -308,7 +308,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                   </div>
                 )}
 
-                {el.type === 'diagram' && drawType && !safeSvg && (
+                {el.type === 'diagram' && drawType && !rawSvg && (
                   <div className="relative flex flex-col items-center justify-center w-full">
                     <ProgressivePathDraw
                       drawType={drawType}
@@ -325,26 +325,6 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                       strokeWidth={el.diagramProps?.strokeWidth || 2.5}
                       fill={el.diagramProps?.fill}
                       progress={el.progress ?? 1}
-                    />
-                    {isCircled && (
-                      <div className="absolute inset-0 rounded-xl ring-2 ring-[#38BDF8]/60 pointer-events-none" />
-                    )}
-                  </div>
-                )}
-
-                {el.type === 'diagram' && !drawType && !safeSvg && (
-                  <div className="relative flex flex-col items-center justify-center w-full">
-                    <BoardDiagramPrimitives
-                      type={el.primitive || 'concept_map'}
-                      diagram={el.diagram}
-                      width={diagramWidth}
-                      height={diagramHeight}
-                      progress={el.progress ?? 1.0}
-                      color={el.color || '#38BDF8'}
-                      activeHighlights={activeHighlights}
-                      activeCircles={activeCircles}
-                      activeUnderlines={activeUnderlines}
-                      metadata={el.diagramProps}
                     />
                     {isCircled && (
                       <div className="absolute inset-0 rounded-xl ring-2 ring-[#38BDF8]/60 pointer-events-none" />

@@ -557,8 +557,11 @@ export class TeachingEngineService {
       performance = this.buildFallbackBoardPerformance(boardPlan);
     }
 
-    if (performance.svg_illustration) {
-      performance.svg_illustration = sanitizeSvg(performance.svg_illustration);
+    if (performance.svg_illustration && typeof performance.svg_illustration === 'string') {
+      let raw = performance.svg_illustration.trim();
+      raw = raw.replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/```$/i, '').trim();
+      const match = raw.match(/<svg[\s\S]*?<\/svg>/i);
+      performance.svg_illustration = match ? match[0] : raw;
     }
 
     // Collect and merge all board_actions from speech_beats into performance.board_actions
