@@ -176,8 +176,12 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
 
   const handleNextBoardRef = useRef(handleNextBoard);
   handleNextBoardRef.current = handleNextBoard;
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
+    if (!isReadyToStart || isInitializedRef.current) return;
+    isInitializedRef.current = true;
+    
     const engine = new TeachingEngineService(resolvedAppSettings, userProfile || null, currentVoice);
     engineRef.current = engine;
     const manager = boardManagerRef.current;
@@ -186,24 +190,15 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     const topicKey = topicKeyFromTitle(topicTitle, courseName);
     const resolvedUserId = userId || userProfile?.uid || 'anon';
 
-    // Render initial Board 1 Title Heading immediately on canvas mount with blinking cursor
-    manager.applyAction({
-      id: 'act_title_0_initial',
-      type: 'write',
-      content: topicTitle,
-      position: { x: 50, y: 10 },
-      metadata: { fontSize: '3xl', color: '#FFFFFF' },
-    });
-
     const unsubscribe = engine.subscribe({
       onStructureLoaded: (struct) => {
         setStructure(struct);
         if (struct.boards && struct.boards.length > 0) {
           setTotalBoards(struct.boards.length);
-          setStatusMessage(`Writing Board 1 of ${struct.boards.length}…`);
+          setStatusMessage(`Writing Board ${startBoardIndexRef.current + 1} of ${struct.boards.length}…`);
 
           // Immediately render Title Heading for Board 1 on the canvas
-          const b1Title = struct.boards[0]?.title || topicTitle;
+          const b1Title = struct.boards[startBoardIndexRef.current]?.title || topicTitle;
           manager.applyAction({
             id: 'act_title_1_init',
             type: 'write',
@@ -218,14 +213,14 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
               topicTitle,
               courseName,
               durationMode,
-              boardIndex: 0,
+              boardIndex: startBoardIndexRef.current,
               totalBoards: struct.boards.length,
               structure: struct,
               isCompleted: false,
             });
           }
           engine.loadBoardPerformance({
-            boardIndex: 0,
+            boardIndex: startBoardIndexRef.current,
             completedBoardsSummary: [],
           });
         }
@@ -371,23 +366,6 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       },
     });
 
-    return () => {
-      if (autoContinueTimerRef.current) clearTimeout(autoContinueTimerRef.current);
-      unsubscribe();
-      engine.destroy();
-      unifiedVoiceRouter.stopAll();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicTitle, courseName, syllabusContext, durationMode]);
-
-  useEffect(() => {
-    if (!isReadyToStart || !engineRef.current) return;
-    
-    const engine = engineRef.current;
-    const manager = boardManagerRef.current;
-    const topicKey = topicKeyFromTitle(topicTitle, courseName);
-    const resolvedUserId = userId || userProfile?.uid || 'anon';
-
     if (startBoardIndexRef.current > 0 && resumeInfo?.structure) {
       engine.setStructure(resumeInfo.structure);
       setStructure(resumeInfo.structure);
@@ -428,6 +406,13 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       }
     }
 
+    return () => {
+      if (autoContinueTimerRef.current) clearTimeout(autoContinueTimerRef.current);
+      unsubscribe();
+      engine.destroy();
+      unifiedVoiceRouter.stopAll();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReadyToStart, topicTitle, courseName, syllabusContext, durationMode, resumeInfo, userId, userProfile]);
 
   const handleCloseSession = useCallback(() => {

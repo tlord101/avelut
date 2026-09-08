@@ -628,6 +628,9 @@ export class TeachingEngineService {
       }
 
       this.currentBoardPerformance = performance;
+      if (performance) {
+        setCachedBoardItem(perfCacheKey, performance);
+      }
       this.listeners.forEach((l) => l.onBoardLoaded?.(performance));
       this.emitLegacySegment(performance);
 
