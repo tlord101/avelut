@@ -32,6 +32,7 @@ import {
     getLiveTeachingProgress,
     topicKeyFromTitle,
     formatResumeLabel,
+    prefetchTopicTeachingStructure,
     type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
 import { TeachingEngineService } from '../services/teachingEngineService';
@@ -185,15 +186,16 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         }
     }, [userProfile?.uid, topicTitle, courseName]);
 
-    // Background prefetch all 3 duration modes (15m, 30m, 60m) into localStorage immediately
+    // Background prefetch all 3 duration modes (15m, 30m, 60m) into localStorage & Supabase DB immediately
     useEffect(() => {
         if (!topicTitle) return;
-        const engine = new TeachingEngineService(resolvedAppSettings, userProfile || null);
-        void engine.prefetchAllDurationStructures({
-            topic: topicTitle,
+        void prefetchTopicTeachingStructure({
+            topicTitle,
             courseName,
             syllabusContext,
-            studentName: userProfile?.display_name || 'Student',
+            userId: userProfile?.uid,
+            userProfile,
+            appSettings: resolvedAppSettings,
         });
     }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile]);
 

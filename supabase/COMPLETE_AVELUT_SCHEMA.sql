@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     streak INTEGER DEFAULT 0,
     last_active_date DATE DEFAULT CURRENT_DATE,
     ai_credits INTEGER DEFAULT 50,
+    live_tutorial_minutes INTEGER DEFAULT 120,
     is_admin BOOLEAN DEFAULT FALSE,
     is_paid_subscriber BOOLEAN DEFAULT FALSE,
     fcm_token TEXT,
@@ -38,9 +39,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure presence columns exist if table was previously created
+-- Ensure presence and quota columns exist if table was previously created
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS live_tutorial_minutes INTEGER DEFAULT 120;
 
 -- Trigger to automatically create profile on auth signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()

@@ -50,3 +50,6 @@ CREATE POLICY "Allow public insert/update on user_topic_views"
 ON public.user_topic_views FOR ALL 
 USING (true) 
 WITH CHECK (true);
+
+-- 3. Ensure live_tutorial_minutes column exists on profiles table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS live_tutorial_minutes INTEGER DEFAULT 120;
