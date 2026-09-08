@@ -261,6 +261,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                     type: 'session_start',
                     topic: topicTitle,
                     duration: mode,
+                    userId: userProfile?.uid,
                     metadata: { payment: decision.payment, creditCost: decision.creditCost },
                 });
             } catch (err: any) {
@@ -273,6 +274,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                     type: 'credit_fail',
                     topic: topicTitle,
                     duration: mode,
+                    userId: userProfile?.uid,
                     error: err?.message,
                 });
             }

@@ -39,14 +39,18 @@ let flushInterval: ReturnType<typeof setInterval> | null = null;
 const FLUSH_INTERVAL_MS = 30000;
 
 function getUserId(passedUserId?: string): string {
-  if (passedUserId) {
+  if (passedUserId && passedUserId !== 'anon' && passedUserId !== 'anonymous') {
     return passedUserId;
   }
   try {
-    const profileStr = localStorage.getItem('avelut_user_profile');
-    if (profileStr) {
-      const profile = JSON.parse(profileStr);
-      return profile.id || profile.user_id || profile.uid || 'anonymous';
+    const keys = ['avelut_user_profile', 'user_profile', 'avelut_user', 'sb-auth-token', 'firebase:authUser'];
+    for (const k of keys) {
+      const raw = localStorage.getItem(k);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const uid = parsed?.uid || parsed?.id || parsed?.user_id || parsed?.user?.id;
+        if (uid) return uid;
+      }
     }
   } catch (e) {
     // ignore
