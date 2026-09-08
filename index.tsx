@@ -19,6 +19,18 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
+// Suppress third-party Chrome extension script crashes (e.g. reportAllChanges / startTime on undefined entries)
+window.addEventListener('error', (event) => {
+  if (
+    event.message &&
+    (event.message.includes('reportAllChanges') ||
+      (event.message.includes('startTime') && (event.filename?.includes('VM') || !event.filename)))
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}, true);
+
 
 declare var __firebase_config: any;
 

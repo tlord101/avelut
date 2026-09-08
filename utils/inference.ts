@@ -538,13 +538,15 @@ async function callAlibabaQwen(params: any, appSettings: AppSettings): Promise<a
     window.location.protocol === 'file:'
   );
 
+  const workspaceEndpoint = 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
+
   const endpoints = apiKey
     ? (isNative
-        ? ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-        : ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
+        ? [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
+        : [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
     : (isNative
-        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
-        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
+        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
 
   let lastError: Error | null = null;
 
@@ -624,13 +626,15 @@ async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): As
     window.location.protocol === 'file:'
   );
 
+  const workspaceEndpoint = 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
+
   const endpoints = apiKey
     ? (isNative
-        ? ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-        : ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
+        ? [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
+        : [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
     : (isNative
-        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
-        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
+        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
 
   const bodyPayload: any = {
     model,
@@ -657,19 +661,21 @@ async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): As
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      response = await fetch(endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(bodyPayload),
       });
 
-      if (response.ok && response.body) {
+      if (res.ok && res.body) {
+        response = res;
         break;
       } else {
-        response = null;
+        const errText = await res.text().catch(() => '');
+        console.warn(`[Alibaba SSE] Endpoint ${endpoint} returned HTTP ${res.status}:`, errText);
       }
-    } catch (_) {
-      response = null;
+    } catch (err: any) {
+      console.warn(`[Alibaba SSE] Endpoint ${endpoint} fetch error:`, err?.message);
     }
   }
 
