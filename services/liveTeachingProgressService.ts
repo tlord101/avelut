@@ -43,12 +43,66 @@ export function topicKeyFromTitle(topicTitle: string, courseName?: string): stri
 
 const inFlightStructurePromises = new Map<string, Promise<TeachingStructure | null>>();
 
-export function isTopicStructureFetching(userId: string, topicKey: string, mode?: LessonDurationMode | number): boolean {
-  const norm = mode ? normalizeModeKey(mode) : null;
-  if (norm) {
-    return inFlightStructurePromises.has(`${userId || 'anon'}_${topicKey}_${norm}`);
+interface PrefetchLockInfo {
+  startedAt: number;
+  topicTitle: string;
+  courseName?: string;
+  status: 'generating' | 'completed' | 'failed';
+}
+
+function prefetchLockKey(userId: string, topicKey: string): string {
+  return `avelut_prefetch_lock_v1_${userId || 'anon'}_${topicKey}`;
+}
+
+export function setPrefetchLock(userId: string, topicKey: string, status: 'generating' | 'completed' | 'failed', topicTitle = '', courseName = ''): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const lock: PrefetchLockInfo = {
+      startedAt: Date.now(),
+      topicTitle,
+      courseName,
+      status,
+    };
+    localStorage.setItem(prefetchLockKey(userId, topicKey), JSON.stringify(lock));
+  } catch {}
+}
+
+export function getPrefetchLock(userId: string, topicKey: string): PrefetchLockInfo | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(prefetchLockKey(userId, topicKey));
+    if (!raw) return null;
+    const lock: PrefetchLockInfo = JSON.parse(raw);
+    // Lock expires after 3 minutes (180,000 ms)
+    if (Date.now() - lock.startedAt > 180000) {
+      localStorage.removeItem(prefetchLockKey(userId, topicKey));
+      return null;
+    }
+    return lock;
+  } catch {
+    return null;
   }
-  return [15, 30, 60].some((m) => inFlightStructurePromises.has(`${userId || 'anon'}_${topicKey}_${m}`));
+}
+
+export function isTopicStructureFetching(userId: string, topicKey: string, mode?: LessonDurationMode | number): boolean {
+  const resolvedUserId = userId || 'anon';
+  const norm = mode ? normalizeModeKey(mode) : null;
+
+  // 1. Check in-memory map
+  if (norm && inFlightStructurePromises.has(`${resolvedUserId}_${topicKey}_${norm}`)) {
+    return true;
+  }
+  if (!norm && [15, 30, 60].some((m) => inFlightStructurePromises.has(`${resolvedUserId}_${topicKey}_${m}`))) {
+    return true;
+  }
+
+  // 2. Check persistent localStorage lock across app exit / tab switch / route navigation
+  const lock = getPrefetchLock(resolvedUserId, topicKey);
+  if (lock && lock.status === 'generating') {
+    return true;
+  }
+
+  return false;
 }
 
 export async function saveLiveTeachingProgress(
@@ -144,6 +198,7 @@ const activePrefetches = new Set<string>();
  * Prefetch teaching structures in the background when a user selects/enters a topic.
  * Performs ONE SINGLE AI API CALL to generate distinct structures for all 3 duration modes
  * (15 min, 30 min, 60 min) simultaneously, saving them to local cache and Supabase DB.
+ * Uses persistent localStorage lock so generation state survives app exits & tab switches.
  */
 export async function prefetchTopicTeachingStructure(params: {
   topicTitle: string;
@@ -181,12 +236,16 @@ export async function prefetchTopicTeachingStructure(params: {
     missingModes.push(mode);
   }
 
-  if (missingModes.length === 0) return; // All 3 modes ready!
+  if (missingModes.length === 0) {
+    setPrefetchLock(resolvedUserId, topicKey, 'completed', topicTitle, params.courseName);
+    return; // All 3 modes ready!
+  }
 
   // Register in-flight promises for missing modes under a SINGLE unified request
   const unifiedPrefetchId = `unified_${resolvedUserId}_${topicKey}`;
   if (activePrefetches.has(unifiedPrefetchId)) return;
   activePrefetches.add(unifiedPrefetchId);
+  setPrefetchLock(resolvedUserId, topicKey, 'generating', topicTitle, params.courseName);
 
   let resolvePromise: (val: any) => void;
   const singleUnifiedPromise = new Promise<any>((res) => { resolvePromise = res; });
@@ -213,15 +272,19 @@ export async function prefetchTopicTeachingStructure(params: {
     });
 
     // Save whichever duration mode structures returned
+    let savedAny = false;
     for (const m of [15, 30, 60] as LessonDurationMode[]) {
       const struct = result[m];
       if (struct && struct.boards && struct.boards.length > 0) {
         await saveTeachingStructureOnly(resolvedUserId, topicKey, struct, m, params.courseName);
+        savedAny = true;
       }
     }
+    setPrefetchLock(resolvedUserId, topicKey, savedAny ? 'completed' : 'failed', topicTitle, params.courseName);
     resolvePromise!(result);
   } catch (err) {
     console.warn('[prefetchTopicTeachingStructure] Single-call unified prefetch failed:', err);
+    setPrefetchLock(resolvedUserId, topicKey, 'failed', topicTitle, params.courseName);
     resolvePromise!(null);
   } finally {
     activePrefetches.delete(unifiedPrefetchId);

@@ -340,6 +340,7 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
           method: 'POST',
           headers,
           body: JSON.stringify(bodyPayload),
+          keepalive: true,
         });
 
         if (!response.ok) {
