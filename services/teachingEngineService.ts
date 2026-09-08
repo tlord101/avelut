@@ -139,6 +139,7 @@ export class TeachingEngineService {
   private prefetchedBoardPerformance: TeachingBoardPerformance | null = null;
   private prefetchedBoardIndex: number | null = null;
   private currentSessionId: string = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  private inFlightBoardPromises = new Map<string, Promise<TeachingBoardPerformance | null>>();
 
   constructor(appSettings: AppSettings, userProfile: UserProfile | null = null, voice: string = 'Altair') {
     this.appSettings = appSettings;
@@ -616,42 +617,54 @@ export class TeachingEngineService {
       return cachedPerf;
     }
 
-    try {
-      const performance = await this.fetchSingleBoardFromAI(
-        boardPlan,
-        params.studentName,
-        params.completedBoardsSummary
-      );
-
-      if (this.currentSessionId !== sessionTag || this.isDestroyed) {
-        return null;
-      }
-
-      this.currentBoardPerformance = performance;
-      if (performance) {
-        setCachedBoardItem(perfCacheKey, performance);
-      }
-      this.listeners.forEach((l) => l.onBoardLoaded?.(performance));
-      this.emitLegacySegment(performance);
-
-      // Trigger background prefetch for Board N+1
-      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
-
-      return performance;
-    } catch (err: any) {
-      console.error('[TeachingEngine] Error loading board performance:', err);
-      logTeachingEvent({
-        type: 'session_error',
-        topic: this.currentStructure?.topic || 'unknown',
-        error: err?.message,
-        metadata: { boardIndex: requestedIndex },
-      });
-      const fallback = this.buildFallbackBoardPerformance(boardPlan);
-      this.currentBoardPerformance = fallback;
-      this.listeners.forEach((l) => l.onBoardLoaded?.(fallback));
-      this.emitLegacySegment(fallback);
-      return fallback;
+    const inFlightKey = `${sessionTag}_board_${requestedIndex}`;
+    if (this.inFlightBoardPromises.has(inFlightKey)) {
+      return await this.inFlightBoardPromises.get(inFlightKey)!;
     }
+
+    const fetchPromise = (async () => {
+      try {
+        const performance = await this.fetchSingleBoardFromAI(
+          boardPlan,
+          params.studentName,
+          params.completedBoardsSummary
+        );
+
+        if (this.currentSessionId !== sessionTag || this.isDestroyed) {
+          return null;
+        }
+
+        this.currentBoardPerformance = performance;
+        if (performance) {
+          setCachedBoardItem(perfCacheKey, performance);
+        }
+        this.listeners.forEach((l) => l.onBoardLoaded?.(performance));
+        this.emitLegacySegment(performance);
+
+        // Trigger background prefetch for Board N+1
+        this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+
+        return performance;
+      } catch (err: any) {
+        console.error('[TeachingEngine] Error loading board performance:', err);
+        logTeachingEvent({
+          type: 'session_error',
+          topic: this.currentStructure?.topic || 'unknown',
+          error: err?.message,
+          metadata: { boardIndex: requestedIndex },
+        });
+        const fallback = this.buildFallbackBoardPerformance(boardPlan);
+        this.currentBoardPerformance = fallback;
+        this.listeners.forEach((l) => l.onBoardLoaded?.(fallback));
+        this.emitLegacySegment(fallback);
+        return fallback;
+      } finally {
+        this.inFlightBoardPromises.delete(inFlightKey);
+      }
+    })();
+
+    this.inFlightBoardPromises.set(inFlightKey, fetchPromise);
+    return await fetchPromise;
   }
 
   /**

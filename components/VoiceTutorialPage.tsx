@@ -35,7 +35,6 @@ import {
     getLiveTeachingProgress,
     topicKeyFromTitle,
     formatResumeLabel,
-    prefetchTopicTeachingStructure,
     type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
 import { TeachingEngineService } from '../services/teachingEngineService';
@@ -211,22 +210,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         }
     }, [userProfile?.uid, topicTitle, courseName]);
 
-    // Background prefetch all 3 duration modes (15m, 30m, 60m) into localStorage & Supabase DB immediately
-    useEffect(() => {
-        if (!topicTitle) return;
-        void prefetchTopicTeachingStructure({
-            topicTitle,
-            courseName,
-            syllabusContext,
-            userId: userProfile?.uid,
-            userProfile,
-            appSettings: resolvedAppSettings,
-        }).catch(() => {
-            addToast?.('AI lesson preparation failed. You can still start manually.', 'warning');
-        });
-        // Intentionally omit userProfile / resolvedAppSettings object identity to avoid re-prefetch storms
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [topicTitle, courseName, syllabusContext, userProfile?.uid]);
+
 
     const handleConfirmDuration = (mode: LessonDurationMode) => {
         // 1. Evaluate if user can start
