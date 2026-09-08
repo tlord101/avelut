@@ -54,23 +54,21 @@ function getUserId(passedUserId?: string): string {
   return 'anonymous';
 }
 
+let isTableMissing = false;
+
 export async function flushTeachingEvents(): Promise<void> {
-  if (eventQueue.length === 0) {
+  if (eventQueue.length === 0 || isTableMissing) {
     return;
   }
 
-  // Double check that data service is available if user meant to check it
   if (!supabaseDataService) {
-    console.warn('[TeachingEvent] supabaseDataService not available');
     return;
   }
 
   const eventsToFlush = [...eventQueue];
-  eventQueue = [];
 
   try {
     if (!isSupabaseConfigured || !supabase) {
-      console.warn('[TeachingEvent] Supabase client not configured for flushing');
       return;
     }
 
@@ -88,10 +86,25 @@ export async function flushTeachingEvents(): Promise<void> {
     );
 
     if (error) {
-      console.error('[TeachingEvent] Failed to flush events to Supabase:', error);
+      if (error.code === 'PGRST205' || (error.message && error.message.includes('Could not find the table'))) {
+        // Table 'teaching_events' does not exist in DB schema cache; disable DB flushing cleanly
+        isTableMissing = true;
+        if (flushInterval) {
+          clearInterval(flushInterval);
+          flushInterval = null;
+        }
+        eventQueue = [];
+      } else {
+        console.warn('[TeachingEvent] Could not insert events:', error.message || error);
+        // Put events back in queue for retry if temporary network error
+        eventQueue = [...eventsToFlush, ...eventQueue].slice(0, 100);
+      }
+    } else {
+      // Clear flushed events on success
+      eventQueue = eventQueue.filter((ev) => !eventsToFlush.includes(ev));
     }
   } catch (err) {
-    console.error('[TeachingEvent] Exception while flushing events:', err);
+    // Quiet exception handling
   }
 }
 
