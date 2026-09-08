@@ -3,7 +3,6 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { LiveBoardElement } from '../../../types/teachingScript';
 import { BoardDiagramPrimitives } from './BoardDiagramPrimitives';
-import { sanitizeSvg } from '../../../utils/svgSanitizer';
 
 export interface TeachingBoardProps {
   elements: LiveBoardElement[];
@@ -239,28 +238,28 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
 
       <div className="relative z-10 w-full h-full overflow-hidden">
         {elements.map((el) => {
-            const posX = Math.max(8, Math.min(92, el.position?.x ?? 50));
-            const posY = Math.max(6, Math.min(94, el.position?.y ?? 50));
+            const isSvg = el.type === 'svg' || el.type === 'draw' || Boolean(el.svgContent) || Boolean((el as any).metadata?.svgContent);
+            const rawSvg = isSvg
+              ? el.svgContent || (el as any).metadata?.svgContent || (typeof el.content === 'string' && el.content.includes('<svg') ? el.content : null)
+              : null;
+
+            const isTitle =
+              (el.type === 'text' || el.type === 'write') &&
+              (el.position?.y <= 16 || el.id?.includes('title'));
+            const isKeyPoint = (el.type === 'text' || el.type === 'write') && !isTitle;
+
+            const posX = isTitle || isSvg ? 50 : 5;
+            const posY = isSvg
+              ? Math.max(68, el.position?.y ?? 72)
+              : Math.max(6, Math.min(94, el.position?.y ?? 50));
+
             const isHighlighted = activeHighlights.has(el.id);
             const isCircled = activeCircles.has(el.id);
             const isUnderlined = activeUnderlines.has(el.id);
-            const isTitle =
-              (el.type === 'text' || el.type === 'write') &&
-              (posY <= 16 || el.id?.includes('title'));
-            const isKeyPoint =
-              (el.type === 'text' || el.type === 'write') &&
-              !isTitle &&
-              ((el.content || '').trim().startsWith('•') ||
-                (el.content || '').trim().startsWith('-') ||
-                posX < 38);
 
-            const diagramWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 480;
-            const diagramHeight = typeof window !== 'undefined' && window.innerWidth < 640 ? 220 : 320;
+            const diagramWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 340 : 500;
+            const diagramHeight = typeof window !== 'undefined' && window.innerWidth < 640 ? 200 : 280;
 
-            const safeSvg =
-              el.type === 'svg' || el.type === 'draw' || el.svgContent || (el as any).metadata?.svgContent
-                ? sanitizeSvg(el.svgContent || (el as any).metadata?.svgContent)
-                : null;
             const drawType = el.diagramProps?.drawType as string | undefined;
 
             return (
@@ -271,20 +270,15 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                   left: `${posX}%`,
                   top: `${posY}%`,
                   transform: isKeyPoint ? 'translate(0, -50%)' : 'translate(-50%, -50%)',
-                  maxWidth: isTitle
-                    ? '92%'
-                    : isKeyPoint
-                      ? '50%'
-                      : el.type === 'diagram' || el.type === 'svg'
-                        ? '88%'
-                        : '80%',
+                  width: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '95%' : '88%',
+                  maxWidth: isTitle ? '96%' : isKeyPoint ? '92%' : isSvg ? '95%' : '88%',
                 }}
               >
-                {(el.type === 'svg' || el.type === 'draw' || safeSvg) && safeSvg && (
-                  <div className="relative flex flex-col items-center justify-center w-full max-h-[280px] sm:max-h-[380px] md:max-h-[440px]">
+                {rawSvg && (
+                  <div className="relative flex flex-col items-center justify-center w-full max-h-[220px] sm:max-h-[300px] md:max-h-[360px]">
                     <div
-                      className="w-full h-full flex items-center justify-center text-slate-100 [&_svg]:max-w-full [&_svg]:max-h-[280px] sm:[&_svg]:max-h-[380px] md:[&_svg]:max-h-[440px] [&_svg]:w-auto [&_svg]:h-auto drop-shadow-md"
-                      dangerouslySetInnerHTML={{ __html: safeSvg }}
+                      className="w-full h-full flex items-center justify-center text-slate-100 [&_svg]:max-w-full [&_svg]:max-h-[220px] sm:[&_svg]:max-h-[300px] md:[&_svg]:max-h-[360px] [&_svg]:w-auto [&_svg]:h-auto drop-shadow-md"
+                      dangerouslySetInnerHTML={{ __html: rawSvg }}
                     />
                     {isCircled && (
                       <div className="absolute inset-0 rounded-2xl ring-4 ring-[#38BDF8]/70 pointer-events-none animate-pulse" />

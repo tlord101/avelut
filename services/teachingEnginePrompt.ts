@@ -161,7 +161,7 @@ JSON OUTPUT SCHEMA:
       "id": "title_${currentBoardPlan.board_number}",
       "type": "write",
       "content": "${currentBoardPlan.title}",
-      "position": { "x": 50, "y": 10 },
+      "position": { "x": 50, "y": 8 },
       "metadata": { "fontSize": "3xl", "color": "#FFFFFF" },
       "sync": { "triggerImmediately": true }
     },
@@ -169,7 +169,7 @@ JSON OUTPUT SCHEMA:
       "id": "kt_1",
       "type": "write",
       "content": "• First key concept takeaway",
-      "position": { "x": 20, "y": 30 },
+      "position": { "x": 5, "y": 24 },
       "metadata": { "fontSize": "2xl", "color": "#E2E8F0" },
       "sync": { "phrase": "First key concept takeaway" }
     },
@@ -177,7 +177,7 @@ JSON OUTPUT SCHEMA:
       "id": "kt_2",
       "type": "write",
       "content": "• Second key concept takeaway",
-      "position": { "x": 20, "y": 44 },
+      "position": { "x": 5, "y": 38 },
       "metadata": { "fontSize": "2xl", "color": "#E2E8F0" },
       "sync": { "phrase": "Second key concept takeaway" }
     }

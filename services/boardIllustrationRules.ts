@@ -22,30 +22,30 @@ export interface LayoutClamp {
 
 export function clampTitlePosition(x?: number, y?: number): LayoutClamp {
   return {
-    x: Math.max(15, Math.min(85, x ?? 50)),
-    y: Math.max(6, Math.min(14, y ?? 10)),
+    x: 50,
+    y: Math.max(6, Math.min(12, y ?? 8)),
   };
 }
 
 export function clampTextPosition(x?: number, y?: number): LayoutClamp {
   return {
-    x: Math.max(8, Math.min(92, x ?? 20)),
-    y: Math.max(15, Math.min(92, y ?? 35)),
+    x: 5,
+    y: Math.max(18, Math.min(64, y ?? 24)),
   };
 }
 
 export function clampFormulaPosition(x?: number, y?: number): LayoutClamp {
   return {
-    x: Math.max(20, Math.min(80, x ?? 50)),
-    y: Math.max(18, Math.min(42, y ?? 28)),
+    x: 50,
+    y: Math.max(16, Math.min(36, y ?? 24)),
   };
 }
 
-/** Main illustration owns the center of the board */
+/** Main illustration positioned at lower side / bottom of the board */
 export function clampIllustrationPosition(x?: number, y?: number): LayoutClamp {
   return {
-    x: Math.max(28, Math.min(72, x ?? 50)),
-    y: Math.max(38, Math.min(72, y ?? 55)),
+    x: 50,
+    y: Math.max(68, Math.min(85, y ?? 72)),
   };
 }
 
