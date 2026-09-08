@@ -1,0 +1,39 @@
+--- a/components/VoiceTutorialPage.tsx
++++ b/components/VoiceTutorialPage.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useEffect, useRef, useCallback } from 'react';
++import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+ import { readCachedJson, writeCachedJson } from '../utils/cache';
+ import { createAvelutAI, getResponseText } from '../utils/inference';
+ import { useAppSettings } from '../hooks/useAppSettings';
+@@ -173,13 +173,31 @@
+     const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
+     const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
+ 
+-    // Reset duration mode & progress whenever topic or initialSessionData changes
++    // Stable identity for the current topic. Do NOT depend on initialSessionData object
++    // identity — parents often rebuild that object every render, which used to re-open
++    // the duration modal and remount the session (double Alibaba/speech + double charge).
++    const sessionIdentity = useMemo(() => {
++        const topicId = initialSessionData?.topic?.topic_id || '';
++        const courseId = initialSessionData?.course?.course_id || '';
++        return `${courseId}::${topicId}::${topicTitle}::${courseName}`;
++    }, [
++        initialSessionData?.topic?.topic_id,
++        initialSessionData?.course?.course_id,
++        topicTitle,
++        courseName,
++    ]);
++
++    // One-shot guard so Start cannot charge credits / commit pool more than once per topic session.
++    const startCommittedRef = useRef<string | null>(null);
++
++    // Reset duration mode & progress only when the *topic* actually changes
+     useEffect(() => {
+         setSelectedDurationMode(null);
+         setStartBoardIndex(0);
+         setResumeProgress(null);
+         setIsDurationModalOpen(true);
+-    }, [topicTitle, courseName, initialSessionData]);
++        startCommittedRef.current = null;
++    }, [sessionIdentity]);
