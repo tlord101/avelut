@@ -668,7 +668,7 @@ export class TeachingEngineService {
   }
 
   /**
-   * Prefetch Board N+1 in the background without blocking active board playback
+   * Prefetch Board N+1 in the background without blocking active board playback (Disabled: strictly on-demand fetching)
    */
   private async prefetchNextBoard(
     nextIndex: number,
@@ -676,44 +676,8 @@ export class TeachingEngineService {
     completedSummary?: string[],
     sessionTag?: string
   ) {
-    if (!this.currentStructure || !this.currentStructure.boards[nextIndex]) return;
-    if (this.currentSessionId !== sessionTag) return;
-
-    const mode = this.currentStructure.duration_minutes || 30;
-    const boardNum = nextIndex + 1;
-    const boardPlan = this.currentStructure.boards[nextIndex];
-    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, `${mode}_${boardNum}`);
-
-    const cached = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
-    if (cached) {
-      this.prefetchedBoardPerformance = cached;
-      this.prefetchedBoardIndex = nextIndex;
-      if (cached.speech) {
-        unifiedVoiceRouter.prefetchSpeech(cached.speech.trim(), {
-          appSettings: this.appSettings,
-          voice: this.voice,
-          cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${boardNum}_${this.voice}`,
-        });
-      }
-      return;
-    }
-
-    try {
-      const perf = await this.fetchSingleBoardFromAI(boardPlan, studentName, completedSummary);
-      if (this.currentSessionId === sessionTag && !this.isDestroyed) {
-        this.prefetchedBoardPerformance = perf;
-        this.prefetchedBoardIndex = nextIndex;
-        if (perf?.speech) {
-          unifiedVoiceRouter.prefetchSpeech(perf.speech.trim(), {
-            appSettings: this.appSettings,
-            voice: this.voice,
-            cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${boardNum}_${this.voice}`,
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('[TeachingEngine] Background prefetch failed for board', nextIndex, err);
-    }
+    // Disabled background prefetching as requested: boards load strictly on-demand when advancing
+    return;
   }
 
   private async fetchSingleBoardFromAI(
