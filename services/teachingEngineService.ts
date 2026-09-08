@@ -30,7 +30,7 @@ import {
 } from './teachingEnginePrompt';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { cleanAndParseJson } from '../utils/jsonUtils';
-import { saveTeachingStructureOnly, topicKeyFromTitle } from './liveTeachingProgressService';
+import { saveTeachingStructureOnly, topicKeyFromTitle, ensureTargetBoardCount, isValidStructureForDuration } from './liveTeachingProgressService';
 import { supabaseDataService } from './supabaseDataService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
@@ -388,25 +388,27 @@ export class TeachingEngineService {
 
     // 1. Instant local storage cache lookup (0ms loading)
     const cachedStruct = getCachedBoardItem<TeachingStructure>(structCacheKey);
-    if (cachedStruct && Array.isArray(cachedStruct.boards) && cachedStruct.boards.length > 0) {
+    if (cachedStruct && isValidStructureForDuration(cachedStruct, durationMode)) {
+      const validStruct = ensureTargetBoardCount(cachedStruct, durationMode);
       if (!params.isPrefetch) {
-        this.currentStructure = cachedStruct;
+        this.currentStructure = validStruct;
         this.currentBoardIndex = 0;
-        this.listeners.forEach((l) => l.onStructureLoaded?.(cachedStruct));
+        this.listeners.forEach((l) => l.onStructureLoaded?.(validStruct));
       }
-      return cachedStruct;
+      return validStruct;
     }
 
     // 2. Check Supabase database for pre-generated topic structure (shared across users)
     const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(params.topic, params.courseName, durationMode);
-    if (dbStruct && Array.isArray(dbStruct.boards) && dbStruct.boards.length > 0) {
-      setCachedBoardItem(structCacheKey, dbStruct);
+    if (dbStruct && isValidStructureForDuration(dbStruct, durationMode)) {
+      const validDbStruct = ensureTargetBoardCount(dbStruct, durationMode);
+      setCachedBoardItem(structCacheKey, validDbStruct);
       if (!params.isPrefetch) {
-        this.currentStructure = dbStruct;
+        this.currentStructure = validDbStruct;
         this.currentBoardIndex = 0;
-        this.listeners.forEach((l) => l.onStructureLoaded?.(dbStruct));
+        this.listeners.forEach((l) => l.onStructureLoaded?.(validDbStruct));
       }
-      return dbStruct;
+      return validDbStruct;
     }
 
     try {
@@ -459,6 +461,8 @@ export class TeachingEngineService {
         });
       }
 
+      structure = ensureTargetBoardCount(structure, durationMode);
+
       const userId = this.userProfile?.uid || 'anon';
       const topicKey = topicKeyFromTitle(params.topic, params.courseName);
       void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || 30, params.courseName);
@@ -472,7 +476,7 @@ export class TeachingEngineService {
       return structure;
     } catch (err: any) {
       console.error('[TeachingEngine] Error generating structure:', err);
-      const fallback = this.buildFallbackTeachingStructure(params.topic, durationMode);
+      const fallback = ensureTargetBoardCount(this.buildFallbackTeachingStructure(params.topic, durationMode), durationMode);
       if (!params.isPrefetch) {
         this.currentStructure = fallback;
         this.currentBoardIndex = 0;
@@ -953,7 +957,7 @@ export class TeachingEngineService {
           this.listeners.forEach((l) => l.onAudioPlaybackStateChanged?.(true));
           this.scheduleTimeline(speechText, actions, beats, triggeredActionIds, wps);
         }
-      }, 1800);
+      }, 400);
       this.activeTimers.push(safety);
     } catch (err: any) {
       console.warn('[TeachingEngine] Speech playback fallback:', err);

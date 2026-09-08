@@ -196,6 +196,69 @@ export async function saveTeachingStructureOnly(
   }
 }
 
+export function isValidStructureForDuration(struct: TeachingStructure | null, mode?: any): boolean {
+  if (!struct || !Array.isArray(struct.boards) || struct.boards.length === 0) return false;
+  const duration = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
+  const minRequired = duration === 15 ? 6 : duration === 60 ? 20 : 10;
+  return struct.boards.length >= minRequired;
+}
+
+export function ensureTargetBoardCount(struct: TeachingStructure, mode?: any): TeachingStructure {
+  const duration = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
+  const targetCount = duration === 15 ? 8 : duration === 60 ? 30 : 15;
+  if (!struct.boards) struct.boards = [];
+
+  struct.duration_minutes = duration as any;
+
+  if (struct.boards.length >= targetCount) {
+    struct.boards = struct.boards.slice(0, targetCount);
+    struct.boards.forEach((b, idx) => {
+      b.board_number = idx + 1;
+      b.board_id = `board_${idx + 1}`;
+    });
+    return struct;
+  }
+
+  const existingCount = struct.boards.length;
+  const missing = targetCount - existingCount;
+
+  for (let i = 1; i <= missing; i++) {
+    const boardNum = existingCount + i;
+    const isLast = boardNum === targetCount;
+    const isMid = boardNum % 3 === 0;
+
+    struct.boards.push({
+      board_id: `board_${boardNum}`,
+      board_number: boardNum,
+      title: isLast
+        ? `Summary & Key Takeaways`
+        : isMid
+        ? `${struct.topic || 'Lesson'} - Concept Check & Review ${i}`
+        : `${struct.topic || 'Lesson'} - Core Application ${i}`,
+      chapter: struct.boards[existingCount - 1]?.chapter || undefined,
+      step_type: isLast ? 'summary' : isMid ? 'question' : 'concept',
+      teaching_objective: `Master concept step ${boardNum} for ${struct.topic || 'topic'}`,
+      what_student_should_understand: `Deepen mastery of aspect ${boardNum}`,
+      why_this_board_exists: `Ensure complete coverage for ${duration}-minute lesson`,
+      prerequisite_knowledge: [],
+      key_concepts: [`${struct.topic || 'Core'} Point ${boardNum}`],
+      visual_purpose: `Diagram and step-by-step visual breakdown`,
+      recommended_board_content: [`${struct.topic || 'Core'} Point ${boardNum}`],
+      interaction_required: isMid,
+      question_required: isMid,
+      question_type: isMid ? 'understanding' : null,
+      estimated_duration_seconds: 120,
+    });
+  }
+
+  struct.boards.forEach((b, idx) => {
+    b.board_number = idx + 1;
+    b.board_id = `board_${idx + 1}`;
+  });
+
+  return struct;
+}
+
 export function getSavedTeachingStructure(
   userId: string,
   topicKey: string,
@@ -204,7 +267,9 @@ export function getSavedTeachingStructure(
   const targetMode = mode ? normalizeModeKey(mode) : undefined;
   if (targetMode) {
     const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, targetMode), null);
-    if (s && s.boards && s.boards.length > 0) return s;
+    if (s && isValidStructureForDuration(s, targetMode)) {
+      return ensureTargetBoardCount(s, targetMode);
+    }
     return null;
   }
   return null;
@@ -221,13 +286,14 @@ export async function getSavedTeachingStructureAsync(
 
   // 1. Check local cache first (0ms)
   const local = getSavedTeachingStructure(userId, topicKey, norm);
-  if (local && local.boards && local.boards.length > 0) return local;
+  if (local) return local;
 
   // 2. Check Supabase DB for pre-generated topic structure by any user
   const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, courseName, norm);
-  if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
-    await saveTeachingStructureOnly(userId, topicKey, dbStruct, norm, courseName);
-    return dbStruct;
+  if (dbStruct && isValidStructureForDuration(dbStruct, norm)) {
+    const prepared = ensureTargetBoardCount(dbStruct, norm);
+    await saveTeachingStructureOnly(userId, topicKey, prepared, norm, courseName);
+    return prepared;
   }
   return null;
 }

@@ -32,13 +32,16 @@ export function buildTeachingStructurePrompt(params: {
   const resolvedName = studentName || 'Student';
   const profile = getDurationProfile(durationMode);
 
+  const expectedCount = durationMode === 15 ? 8 : durationMode === 60 ? 30 : 15;
+
   return `Prepare a pedagogical Teaching Structure for the topic: "${topic}"
 ${courseName ? `Course: ${courseName}\n` : ''}${syllabusContext ? `Syllabus/Context: ${syllabusContext}\n` : ''}Student Name: ${resolvedName}
 TARGET DURATION MODE: ${durationMode} minutes
 
 You are an expert university professor planning a live lesson for ~${durationMode} minutes of content.
 
-BOARD COUNT: ${profile.boardCountHint}
+MANDATORY BOARD COUNT: You MUST generate EXACTLY ${expectedCount} boards (from board_1 to board_${expectedCount}) inside the "boards" array. Generating only 3, 4, or 5 boards is STRICTLY PROHIBITED.
+${profile.boardCountHint}
 
 Every board MUST have a concrete visual_purpose describing what will be DRAWN (not written).
 Prefer illustration-heavy boards. Text-only boards only for pure definitions when no figure helps.
