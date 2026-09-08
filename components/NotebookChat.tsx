@@ -189,7 +189,10 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
     setIsLoading(true);
 
     try {
-      const ai = createAvelutAI(appSettings, userProfile);
+      const ai = createAvelutAI(appSettings, userProfile, {
+        endpointPreference: 'openai_compatible_first',
+        feature: 'study_guide_chat',
+      });
       if (!ai) throw new Error('AI is not configured. Please check App Controls.');
 
       let excerptToUse = (activeContent || chapterContent || '').trim();

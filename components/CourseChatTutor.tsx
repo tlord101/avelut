@@ -219,7 +219,10 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   }, []);
 
   const initFirstBiteSizedStep = async () => {
-    const ai = createAvelutAI(appSettings, userProfile);
+    const ai = createAvelutAI(appSettings, userProfile, {
+      endpointPreference: 'openai_compatible_first',
+      feature: 'study_guide_chat',
+    });
     if (!ai) return;
 
     setIsSending(true);
@@ -331,7 +334,10 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       return;
     }
 
-    const ai = createAvelutAI(appSettings, userProfile);
+    const ai = createAvelutAI(appSettings, userProfile, {
+      endpointPreference: 'openai_compatible_first',
+      feature: 'study_guide_chat',
+    });
     if (!ai) {
       addToast('AI service is not configured.', 'error');
       return;

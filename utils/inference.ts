@@ -524,10 +524,79 @@ async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings):
   }
 }
 
+export interface AvelutAIOptions {
+  endpointPreference?: 'openai_compatible_first' | 'default';
+  feature?: string;
+}
+
+/**
+ * Resolves the prioritized list of endpoints for Alibaba / Qwen inference.
+ * For Study Guide chat / CourseChatTutor, prioritizes the OpenAI-compatible workspace
+ * endpoint from env/settings and the app proxy over the public DashScope path.
+ */
+function resolveAlibabaEndpoints(
+  appSettings: AppSettings,
+  apiKey: string,
+  isNative: boolean,
+  options?: AvelutAIOptions
+): string[] {
+  let customBase = appSettings?.alibaba_base_url?.trim() || '';
+  if (customBase.includes('dashscope.aliyuncs.com') || customBase.includes('dashscope-intl.aliyuncs.com')) {
+    customBase = '';
+  }
+
+  let envBase = '';
+  try {
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv) {
+      envBase = metaEnv.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || metaEnv.ALIBABA_OPENAI_COMPATIBLE_URL || '';
+    }
+  } catch (_) {}
+  if (!envBase && typeof process !== 'undefined' && process?.env) {
+    envBase = process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || process.env.ALIBABA_OPENAI_COMPATIBLE_URL || '';
+  }
+
+  const baseToUse = customBase || envBase || 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1';
+  const workspaceEndpoint = baseToUse.endsWith('/chat/completions')
+    ? baseToUse
+    : `${baseToUse.replace(/\/+$/, '')}/chat/completions`;
+
+  const proxyEndpoints = isNative
+    ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
+    : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
+
+  const publicEndpoints = [
+    'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  ];
+
+  const preferOpenAi =
+    options?.endpointPreference === 'openai_compatible_first' || options?.feature === 'study_guide_chat';
+
+  if (preferOpenAi) {
+    // For Study Guide chat: OpenAI-compatible workspace/proxy first; public DashScope last
+    return apiKey
+      ? [workspaceEndpoint, ...proxyEndpoints, ...publicEndpoints]
+      : [...proxyEndpoints, workspaceEndpoint, ...publicEndpoints];
+  }
+
+  return apiKey
+    ? (isNative
+        ? [workspaceEndpoint, ...publicEndpoints, ...proxyEndpoints]
+        : [workspaceEndpoint, ...publicEndpoints, ...proxyEndpoints])
+    : (isNative
+        ? [...proxyEndpoints, workspaceEndpoint, ...publicEndpoints]
+        : [...proxyEndpoints, workspaceEndpoint, ...publicEndpoints]);
+}
+
 /**
  * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with candidate model fallbacks
  */
-async function callAlibabaQwen(params: any, appSettings: AppSettings): Promise<any> {
+async function callAlibabaQwen(
+  params: any,
+  appSettings: AppSettings,
+  options?: AvelutAIOptions
+): Promise<any> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages } = paramsToChatMessages(params);
   const primaryModel = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
@@ -538,15 +607,7 @@ async function callAlibabaQwen(params: any, appSettings: AppSettings): Promise<a
     window.location.protocol === 'file:'
   );
 
-  const workspaceEndpoint = 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
-
-  const endpoints = apiKey
-    ? (isNative
-        ? [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-        : [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
-    : (isNative
-        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
-        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+  const endpoints = resolveAlibabaEndpoints(appSettings, apiKey, isNative, options);
 
   let lastError: Error | null = null;
 
@@ -616,7 +677,11 @@ async function callAlibabaQwen(params: any, appSettings: AppSettings): Promise<a
 /**
  * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with SSE Streaming
  */
-async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): AsyncGenerator<any, void, unknown> {
+async function* callAlibabaQwenStream(
+  params: any,
+  appSettings: AppSettings,
+  options?: AvelutAIOptions
+): AsyncGenerator<any, void, unknown> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages } = paramsToChatMessages(params);
   const model = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
@@ -626,15 +691,7 @@ async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): As
     window.location.protocol === 'file:'
   );
 
-  const workspaceEndpoint = 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
-
-  const endpoints = apiKey
-    ? (isNative
-        ? [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-        : [workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', '/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'])
-    : (isNative
-        ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']
-        : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat', workspaceEndpoint, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions']);
+  const endpoints = resolveAlibabaEndpoints(appSettings, apiKey, isNative, options);
 
   const bodyPayload: any = {
     model,
@@ -748,7 +805,8 @@ async function* callAlibabaQwenStream(params: any, appSettings: AppSettings): As
  */
 export const createAvelutAI = (
   appSettings: AppSettings,
-  userProfile?: UserProfile | null
+  userProfile?: UserProfile | null,
+  options?: AvelutAIOptions
 ): any => {
   const provider = appSettings?.primary_ai_provider || 'alibaba_qwen';
 
@@ -758,7 +816,7 @@ export const createAvelutAI = (
         if (provider === 'openrouter') {
           return await callOpenRouterQwen(params, appSettings);
         }
-        return await callAlibabaQwen(params, appSettings);
+        return await callAlibabaQwen(params, appSettings, options);
       },
       generateContentStream: async (params: any) => {
         if (provider === 'openrouter') {
@@ -769,7 +827,7 @@ export const createAvelutAI = (
             response: Promise.resolve(null),
           };
         }
-        const streamGen = callAlibabaQwenStream(params, appSettings);
+        const streamGen = callAlibabaQwenStream(params, appSettings, options);
         return {
           [Symbol.asyncIterator]: () => streamGen,
           stream: streamGen,
@@ -785,7 +843,7 @@ export const createAvelutAI = (
         if (provider === 'openrouter') {
           return await callOpenRouterQwen(params, appSettings);
         }
-        return await callAlibabaQwen(params, appSettings);
+        return await callAlibabaQwen(params, appSettings, options);
       },
     },
   };

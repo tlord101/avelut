@@ -38,6 +38,13 @@ import {
     type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
 import { TeachingEngineService } from '../services/teachingEngineService';
+import {
+    lessonPrepService,
+    buildPrepKey,
+    isPrepBilled,
+    markPrepBilled,
+    requestNotificationPermission,
+} from '../services/lessonPrepService';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_BOARD_LINES = 6;
@@ -212,10 +219,22 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 
 
 
-    const handleConfirmDuration = (mode: LessonDurationMode) => {
+    // Listen for background lesson readiness to notify user and offer immediate open
+    useEffect(() => {
+        const onLessonReady = (e: any) => {
+            const detail = e.detail;
+            if (detail && detail.topicTitle === topicTitle) {
+                addToast(`Your ${detail.durationMode}-min lesson on "${topicTitle}" is ready! Tap Open lesson in the modal.`, 'success');
+            }
+        };
+        window.addEventListener('avelut:lesson-ready', onLessonReady);
+        return () => window.removeEventListener('avelut:lesson-ready', onLessonReady);
+    }, [topicTitle, addToast]);
+
+    const handlePrepareLesson = (mode: LessonDurationMode) => {
         // 1. Evaluate if user can start
         const decision = evaluateLiveTutorialStart(userProfile, mode as LiveDurationMinutes, resolvedAppSettings);
-        
+
         if (!decision.allowed) {
             // Show insufficient credits modal
             setCreditCheckData({
@@ -227,64 +246,71 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             setShowCreditsModal(true);
             return;
         }
-        
-        // 2. CLOSE MODAL IMMEDIATELY AND DISPLAY BOARD
+
+        // 2. Request notification permission once on user action
+        requestNotificationPermission();
+
+        // 3. Process usage commitment & deduct credits ONCE on Prepare (guarded by userId + topic + duration)
+        const resolvedUserId = userProfile?.uid || 'anon';
+        const topicKey = topicKeyFromTitle(topicTitle, courseName);
+        const prepKey = buildPrepKey(resolvedUserId, topicKey, mode);
+
+        if (!isPrepBilled(prepKey)) {
+            markPrepBilled(prepKey);
+            void (async () => {
+                try {
+                    if (!userProfile) return;
+                    await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
+
+                    if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
+                        const result = await deductAICredits(
+                            userProfile.uid,
+                            decision.creditCost,
+                            'Live Tutorial Session Prep',
+                            resolvedAppSettings
+                        );
+                        if (result && result.success === false) {
+                            addToast?.(result.error || 'Could not sync credits to server. Balance may be out of date.', 'warning');
+                        }
+                    }
+
+                    logTeachingEvent({
+                        type: 'session_start',
+                        topic: topicTitle,
+                        duration: mode,
+                        userId: userProfile?.uid,
+                        metadata: { payment: decision.payment, creditCost: decision.creditCost, phase: 'prep' },
+                    });
+                } catch (err: any) {
+                    console.error('[VoiceTutorialPage] Credit deduction failed:', err);
+                }
+            })();
+        }
+
+        // 4. Start background preparation in durable singleton service
+        void lessonPrepService.startPrep({
+            userId: resolvedUserId,
+            topicTitle,
+            courseName,
+            syllabusContext,
+            durationMode: mode,
+            userProfile,
+            appSettings: resolvedAppSettings,
+        });
+
+        addToast('Preparing lesson in background. You can leave this page anytime — we’ll notify you when ready!', 'info');
+    };
+
+    const handleOpenLesson = (mode: LessonDurationMode) => {
+        // Open lesson does NOT deduct credits again — billing happened on Prepare
         setIsDurationModalOpen(false);
         setSelectedDurationMode(mode);
         setStartBoardIndex(0);
-
-        // 3. Process background usage commitment & logging asynchronously (once per sessionIdentity)
-        const commitKey = `${sessionIdentity}::${mode}`;
-        if (startCommittedRef.current === commitKey) {
-            return;
-        }
-        startCommittedRef.current = commitKey;
-
-        void (async () => {
-            try {
-                if (!userProfile) return;
-                await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
-                
-                if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
-                    const result = await deductAICredits(
-                        userProfile.uid,
-                        decision.creditCost,
-                        'Live Tutorial Session',
-                        resolvedAppSettings
-                    );
-                    if (result && result.success === false) {
-                        addToast?.(result.error || 'Could not sync credits to server. Balance may be out of date.', 'warning');
-                    }
-                }
-                
-                logTeachingEvent({
-                    type: 'session_start',
-                    topic: topicTitle,
-                    duration: mode,
-                    userId: userProfile?.uid,
-                    metadata: { payment: decision.payment, creditCost: decision.creditCost },
-                });
-            } catch (err: any) {
-                // Allow a retry if the charge failed hard
-                if (startCommittedRef.current === commitKey) {
-                    startCommittedRef.current = null;
-                }
-                addToast?.(err?.message || 'Failed to process session start.', 'error');
-                logTeachingEvent({
-                    type: 'credit_fail',
-                    topic: topicTitle,
-                    duration: mode,
-                    userId: userProfile?.uid,
-                    error: err?.message,
-                });
-            }
-        })();
     };
 
     const handleResumeSession = () => {
         if (resumeProgress) {
-            // Resume does not re-charge; mark committed so accidental Start cannot double-bill
-            startCommittedRef.current = `${sessionIdentity}::${resumeProgress.durationMode}`;
+            // Resume does not re-charge
             setSelectedDurationMode(resumeProgress.durationMode);
             setStartBoardIndex(resumeProgress.boardIndex);
             setIsDurationModalOpen(false);
@@ -305,8 +331,11 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                 isOpen={isDurationModalOpen}
                 topicTitle={topicTitle}
                 courseName={courseName}
+                syllabusContext={syllabusContext}
                 onClose={handleCloseModal}
-                onConfirm={handleConfirmDuration}
+                onConfirm={handleOpenLesson}
+                onPrepare={handlePrepareLesson}
+                onOpen={handleOpenLesson}
                 initialMode={selectedDurationMode || 30}
                 resumeAvailable={Boolean(resumeProgress)}
                 resumeLabel={resumeProgress ? formatResumeLabel(resumeProgress) : undefined}
@@ -325,7 +354,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                 onBuyCredits={() => { setShowCreditsModal(false); onNavigate?.('billing'); }}
                 onTryShorter={(shorterMode) => {
                     setShowCreditsModal(false);
-                    handleConfirmDuration(shorterMode);
+                    handlePrepareLesson(shorterMode);
                 }}
                 affordableModes={([15, 30, 60] as const).filter(m =>
                     evaluateLiveTutorialStart(userProfile, m as LiveDurationMinutes, resolvedAppSettings).allowed

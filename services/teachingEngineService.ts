@@ -38,12 +38,12 @@ import { normalizeBoardActions } from './boardActionNormalize';
 import { AppSettings, UserProfile } from '../types';
 import { logTeachingEvent } from './teachingEventLogger';
 
-function getLocalCacheKey(prefix: string, topic: string, keySuffix: string | number): string {
+export function getLocalCacheKey(prefix: string, topic: string, keySuffix: string | number): string {
   const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
   return `avelut_board_cache_${prefix}_${cleanTopic}_${keySuffix}`;
 }
 
-function getCachedBoardItem<T>(key: string): T | null {
+export function getCachedBoardItem<T>(key: string): T | null {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
     const raw = localStorage.getItem(key);
@@ -56,7 +56,7 @@ function getCachedBoardItem<T>(key: string): T | null {
   return null;
 }
 
-function setCachedBoardItem<T>(key: string, data: T): void {
+export function setCachedBoardItem<T>(key: string, data: T): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
     localStorage.setItem(key, JSON.stringify(data));
@@ -140,6 +140,7 @@ export class TeachingEngineService {
   private prefetchedBoardIndex: number | null = null;
   private currentSessionId: string = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   private inFlightBoardPromises = new Map<string, Promise<TeachingBoardPerformance | null>>();
+  private isPrefetchingNextBoard = false;
 
   constructor(appSettings: AppSettings, userProfile: UserProfile | null = null, voice: string = 'Altair') {
     this.appSettings = appSettings;
@@ -672,16 +673,69 @@ export class TeachingEngineService {
   }
 
   /**
-   * Prefetch Board N+1 in the background without blocking active board playback (Disabled: strictly on-demand fetching)
+   * Prefetch Board N+1 in the background without blocking active board playback.
+   * Throttled to only run one background job at a time, triggered after Board N audio has started.
    */
   private async prefetchNextBoard(
     nextIndex: number,
     studentName?: string,
     completedSummary?: string[],
     sessionTag?: string
-  ) {
-    // Disabled background prefetching as requested: boards load strictly on-demand when advancing
-    return;
+  ): Promise<void> {
+    if (this.isPrefetchingNextBoard) return;
+    if (!this.currentStructure || !this.currentStructure.boards || nextIndex >= this.currentStructure.boards.length) {
+      return;
+    }
+    if (this.isDestroyed || (sessionTag && this.currentSessionId !== sessionTag)) {
+      return;
+    }
+
+    const nextBoardPlan = this.currentStructure.boards[nextIndex];
+    if (!nextBoardPlan) return;
+
+    const mode = this.currentStructure.duration_minutes || 30;
+    const nextBoardNum = nextIndex + 1;
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, `${mode}_${nextBoardNum}`);
+
+    // If Board N+1 is already cached, make sure its audio is prefetched and stage it
+    const existing = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
+    if (existing && (existing.title || existing.speech || existing.board_actions)) {
+      this.prefetchedBoardPerformance = existing;
+      this.prefetchedBoardIndex = nextIndex;
+      if (existing.speech) {
+        unifiedVoiceRouter.prefetchSpeech(existing.speech.trim(), {
+          appSettings: this.appSettings,
+          voice: this.voice,
+          cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${nextBoardNum}_${this.voice}`,
+        });
+      }
+      return;
+    }
+
+    this.isPrefetchingNextBoard = true;
+    try {
+      const perf = await this.fetchSingleBoardFromAI(nextBoardPlan, studentName, completedSummary);
+      if (this.isDestroyed || (sessionTag && this.currentSessionId !== sessionTag)) {
+        return;
+      }
+      if (perf) {
+        setCachedBoardItem(perfCacheKey, perf);
+        this.prefetchedBoardPerformance = perf;
+        this.prefetchedBoardIndex = nextIndex;
+
+        if (perf.speech) {
+          unifiedVoiceRouter.prefetchSpeech(perf.speech.trim(), {
+            appSettings: this.appSettings,
+            voice: this.voice,
+            cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${nextBoardNum}_${this.voice}`,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`[TeachingEngine] Background prefetch for Board ${nextIndex + 1} failed:`, err);
+    } finally {
+      this.isPrefetchingNextBoard = false;
+    }
   }
 
   private async fetchSingleBoardFromAI(
@@ -922,6 +976,14 @@ export class TeachingEngineService {
           this.setRuntimeState('SPEAKING');
           this.listeners.forEach((l) => l.onAudioPlaybackStateChanged?.(true));
           this.scheduleTimeline(speechText, actions, beats, triggeredActionIds, wps);
+
+          // While Board N is playing audio, background-prep Board N+1 (AI + TTS)
+          void this.prefetchNextBoard(
+            this.currentBoardIndex + 1,
+            this.userProfile?.display_name || 'Student',
+            [],
+            this.currentSessionId
+          );
         },
         onEnd: () => {
           if (this.isPaused) return;

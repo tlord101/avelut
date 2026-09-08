@@ -1,11 +1,12 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { UserProfile, AppSettings } from '../../types';
 import {
   evaluateLiveTutorialStart,
   getLiveMinutesRemaining,
   type LiveDurationMinutes,
 } from '../../utils/liveTutorialQuota';
-import { useStructurePrefetch } from '../../hooks/useStructurePrefetch';
+import { useLessonPrep } from '../../hooks/useLessonPrep';
+import { requestNotificationPermission } from '../../services/lessonPrepService';
 
 export type LessonDurationMode = 15 | 30 | 60;
 
@@ -50,8 +51,11 @@ export interface LessonDurationModalProps {
   isOpen: boolean;
   topicTitle?: string;
   courseName?: string;
+  syllabusContext?: string;
   onClose: () => void;
-  onConfirm: (mode: LessonDurationMode) => void;
+  onConfirm?: (mode: LessonDurationMode) => void;
+  onPrepare?: (mode: LessonDurationMode) => void;
+  onOpen?: (mode: LessonDurationMode) => void;
   initialMode?: LessonDurationMode;
   resumeAvailable?: boolean;
   resumeLabel?: string;
@@ -64,8 +68,11 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   isOpen,
   topicTitle = 'Live Tutorial',
   courseName,
+  syllabusContext,
   onClose,
   onConfirm,
+  onPrepare,
+  onOpen,
   initialMode = 15,
   resumeAvailable = false,
   resumeLabel,
@@ -93,28 +100,44 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
     [effectiveProfile, appSettings]
   );
 
-  const decision = useMemo(
-    () => evaluateLiveTutorialStart(effectiveProfile, selected as LiveDurationMinutes, appSettings),
-    [effectiveProfile, selected, appSettings]
-  );
-
-  const { 
-    statuses: prefetchStatuses, 
-    isAnyPrefetching, 
-    isAnyFailed, 
-    retry, 
-    isReadyToStart 
-  } = useStructurePrefetch({ 
-    topicTitle, 
-    courseName, 
-    userId: effectiveProfile?.uid, 
-    userProfile: effectiveProfile, 
-    appSettings 
+  const { statuses: prepStatuses, isAnyPreparing, startPrep } = useLessonPrep({
+    topicTitle,
+    courseName,
+    syllabusContext,
+    userId: effectiveProfile?.uid,
+    userProfile: effectiveProfile,
+    appSettings,
   });
 
   if (!isOpen) return null;
 
   const periodLabel = pool.period === 'week' ? 'this week' : 'this month';
+
+  const handleActionClick = (e: React.MouseEvent, mode: LessonDurationMode, state: string) => {
+    e.stopPropagation();
+    setSelected(mode);
+
+    if (state === 'ready') {
+      if (onOpen) onOpen(mode);
+      else if (onConfirm) onConfirm(mode);
+      return;
+    }
+
+    if (state === 'preparing') {
+      // Already preparing — do nothing or show toast
+      return;
+    }
+
+    // Request notification permission once on user tap
+    requestNotificationPermission();
+
+    // Trigger Prepare / Retry
+    if (onPrepare) {
+      onPrepare(mode);
+    } else {
+      void startPrep(mode);
+    }
+  };
 
   return (
     <div
@@ -125,14 +148,15 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
         onClick={(e) => e.stopPropagation()}
         className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[84vh] sm:max-h-[88vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-8 sm:mb-0"
       >
+        {/* Header */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
               <i className="bi bi-clock-history text-lg"></i>
             </div>
             <div>
-              <h2 className="text-base font-bold text-black dark:text-white">How long should this lesson be?</h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Each board takes ~2 minutes of teaching speech</p>
+              <h2 className="text-base font-bold text-black dark:text-white">Choose Lesson Duration</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Prepare in background &bull; Open when ready</p>
             </div>
           </div>
           <button
@@ -144,6 +168,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
           </button>
         </div>
 
+        {/* Topic & Minutes Balance Banner */}
         <div className="px-5 py-2.5 bg-white dark:bg-[#0A0A0A] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block">Topic</span>
@@ -158,45 +183,41 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
           </div>
         </div>
 
-        {/* Global prefetch status banner across 15m, 30m, 60m */}
-        {isAnyPrefetching && (
-          <div className="px-5 py-2 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-semibold text-black dark:text-white">
+        {/* Reassuring notice while any prep is running */}
+        {isAnyPreparing && (
+          <div className="px-5 py-2.5 bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-900/50 flex items-center justify-between text-xs text-sky-900 dark:text-sky-200">
             <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 border-2 border-black dark:border-white border-t-transparent rounded-full animate-spin shrink-0"></div>
-              <span>Preparing AI structures (15m, 30m, 60m)…</span>
+              <div className="w-3.5 h-3.5 border-2 border-sky-600 dark:border-sky-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+              <span className="font-semibold">Preparing lesson in background. You can leave anytime!</span>
             </div>
-            <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-normal shrink-0">Background caching</span>
+            <span className="text-[10px] text-sky-600 dark:text-sky-400 font-medium shrink-0">~2–4 min</span>
           </div>
         )}
 
-        {isAnyFailed && (
-          <div className="px-5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 flex flex-col sm:flex-row sm:items-center gap-2 justify-between text-xs font-medium text-amber-900 dark:text-amber-200">
-            <div className="flex items-center gap-2">
-              <i className="bi bi-exclamation-triangle text-amber-600 dark:text-amber-500 text-sm"></i>
-              <span>⚠ AI structure generation failed for some durations. You can retry or start with a fallback structure.</span>
-            </div>
-          </div>
-        )}
-
+        {/* Resume Previous Progress Option */}
         {resumeAvailable && onResume && (
           <div className="px-5 pt-3">
             <button
               type="button"
               onClick={onResume}
-              className="w-full p-3 sm:p-4 rounded-2xl border-2 border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-left hover:border-black dark:hover:border-white transition-all"
+              className="w-full p-3 sm:p-4 rounded-2xl border-2 border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-left hover:border-black dark:hover:border-white transition-all shadow-sm"
             >
-              <div className="flex items-center gap-2">
-                <i className="bi bi-play-circle text-black dark:text-white text-lg"></i>
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-black dark:text-white">Continue where you left off</p>
-                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{resumeLabel || 'Resume saved lecture progress'}</p>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
+                  <i className="bi bi-play-circle text-lg"></i>
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-bold text-black dark:text-white">Continue where you left off</p>
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">{resumeLabel || 'Resume saved lecture progress'}</p>
+                </div>
+                <i className="bi bi-chevron-right text-neutral-400"></i>
               </div>
             </button>
           </div>
         )}
 
-        <div className="p-4 sm:p-5 space-y-2.5 max-h-[38vh] sm:max-h-[46vh] overflow-y-auto">
+        {/* Duration Options with Dedicated Actions */}
+        <div className="p-4 sm:p-5 space-y-3 max-h-[46vh] sm:max-h-[52vh] overflow-y-auto">
           {LESSON_DURATION_OPTIONS.map((opt) => {
             const isSelected = selected === opt.minutes;
             const optDecision = evaluateLiveTutorialStart(
@@ -205,126 +226,188 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
               appSettings
             );
             const canAfford = optDecision.allowed;
-            const priceLabel =
+            const prepStatus = prepStatuses[opt.minutes];
+            const state = prepStatus?.state || 'idle';
+
+            const priceBadge =
               optDecision.payment === 'included'
-                ? `Included · uses ${opt.minutes} min balance`
+                ? `Included (${opt.minutes}m balance)`
                 : optDecision.payment === 'credits'
                   ? `${optDecision.creditCost} credits`
                   : optDecision.message;
 
-            const status = prefetchStatuses[opt.minutes];
-
             return (
               <div
                 key={opt.minutes}
-                onClick={() => canAfford && setSelected(opt.minutes)}
-                className={`p-3.5 rounded-2xl border-2 transition-all ${
-                  !canAfford
-                    ? 'border-neutral-100 dark:border-neutral-900 bg-neutral-50 dark:bg-neutral-900/50 opacity-60 cursor-not-allowed'
-                    : isSelected
-                      ? 'border-black dark:border-white bg-neutral-50 dark:bg-neutral-900 shadow-sm cursor-pointer'
-                      : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0A0A0A] hover:border-neutral-400 dark:hover:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-900/80 cursor-pointer'
+                onClick={() => setSelected(opt.minutes)}
+                className={`p-4 rounded-2xl border-2 transition-all flex flex-col gap-3 ${
+                  !canAfford && state !== 'ready'
+                    ? 'border-neutral-200 dark:border-neutral-800/60 bg-neutral-50 dark:bg-neutral-900/40 opacity-75'
+                    : state === 'ready'
+                      ? 'border-emerald-500/80 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm'
+                      : state === 'preparing'
+                        ? 'border-sky-500/70 bg-sky-50/30 dark:bg-sky-950/20'
+                        : isSelected
+                          ? 'border-black dark:border-white bg-neutral-50 dark:bg-neutral-900 shadow-sm'
+                          : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0A0A0A] hover:border-neutral-300 dark:hover:border-neutral-700'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
-                      isSelected && canAfford
-                        ? 'bg-black text-white dark:bg-white dark:text-black'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-neutral-200 dark:border-neutral-700'
-                    }`}
-                  >
-                    <i className={`bi ${opt.icon} text-base`}></i>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
-                      <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md">
-                        {opt.subtitle} ({opt.boardsCount} boards)
-                      </span>
-
-                      {/* Dynamic Structure Ready / Generating badge per duration mode */}
-                      {status?.state === 'ready' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
-                          <i className="bi bi-check-circle-fill text-emerald-600 dark:text-emerald-400"></i> Structure Ready
-                        </span>
-                      ) : status?.state === 'prefetching' ? (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 px-2 py-0.5 rounded-md animate-pulse">
-                          <div className="w-2.5 h-2.5 border-2 border-black dark:border-white border-t-transparent rounded-full animate-spin"></div>
-                          Generating AI structure…
-                        </span>
-                      ) : status?.state === 'failed' ? (
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-800 dark:text-red-300 bg-red-100/80 dark:bg-red-950/60 border border-red-300 dark:border-red-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-exclamation-circle-fill text-red-600 dark:text-red-400"></i> Failed
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              retry(opt.minutes);
-                            }}
-                            className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 px-2 py-0.5 rounded border border-neutral-200 dark:border-neutral-700 transition-colors"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 px-2 py-0.5 rounded-md">
-                          <i className="bi bi-cpu text-neutral-400"></i> Will generate on start
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] sm:text-xs text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">{opt.description}</p>
-                    <p
-                      className={`text-[10px] font-semibold mt-1 ${
-                        optDecision.payment === 'included'
-                          ? 'text-neutral-700 dark:text-neutral-300'
-                          : optDecision.payment === 'credits'
-                            ? 'text-black dark:text-white'
-                            : 'text-neutral-400'
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                        state === 'ready'
+                          ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black'
+                          : state === 'preparing'
+                            ? 'bg-sky-600 text-white dark:bg-sky-400 dark:text-black'
+                            : isSelected && canAfford
+                              ? 'bg-black text-white dark:bg-white dark:text-black'
+                              : 'bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-neutral-200 dark:border-neutral-700'
                       }`}
                     >
-                      {priceLabel}
-                    </p>
+                      <i className={`bi ${opt.icon} text-base`}></i>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
+                        <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md">
+                          {opt.subtitle} ({opt.boardsCount} boards)
+                        </span>
+
+                        {/* State badges */}
+                        {state === 'ready' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+                            <i className="bi bi-check-circle-fill text-emerald-600 dark:text-emerald-400"></i> Ready
+                          </span>
+                        )}
+                        {state === 'preparing' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-800 dark:text-sky-300 bg-sky-100 dark:bg-sky-950/80 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-md animate-pulse">
+                            <i className="bi bi-hourglass-split"></i> Preparing
+                          </span>
+                        )}
+                        {state === 'failed' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-800 dark:text-red-300 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 px-2 py-0.5 rounded-md">
+                            <i className="bi bi-exclamation-circle-fill text-red-600 dark:text-red-400"></i> Failed
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] sm:text-xs text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
+                        {opt.description}
+                      </p>
+
+                      <p className="text-[10px] font-bold mt-1 text-neutral-600 dark:text-neutral-300">
+                        {priceBadge}
+                      </p>
+                    </div>
                   </div>
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
-                      isSelected && canAfford
-                        ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black'
-                        : 'border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900'
-                    }`}
-                  >
-                    {isSelected && canAfford && <i className="bi bi-check text-xs font-bold"></i>}
+
+                  {/* Primary Action Button Per Duration Row */}
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    {state === 'ready' ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleActionClick(e, opt.minutes, 'ready')}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white cursor-pointer"
+                      >
+                        <i className="bi bi-play-fill text-base"></i>
+                        <span>Open lesson</span>
+                      </button>
+                    ) : state === 'preparing' ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 cursor-not-allowed"
+                      >
+                        <div className="w-3 h-3 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span>Preparing…</span>
+                      </button>
+                    ) : state === 'failed' ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleActionClick(e, opt.minutes, 'failed')}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-red-600 hover:bg-red-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
+                      >
+                        <i className="bi bi-arrow-counterclockwise"></i>
+                        <span>Retry prepare</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!canAfford}
+                        onClick={(e) => canAfford && handleActionClick(e, opt.minutes, 'idle')}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm ${
+                          canAfford
+                            ? 'bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer'
+                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Prepare lesson</span>
+                        <i className="bi bi-arrow-right text-xs"></i>
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Progress Details When Preparing */}
+                {state === 'preparing' && (
+                  <div className="bg-sky-50/80 dark:bg-sky-950/50 border border-sky-200/80 dark:border-sky-900/60 rounded-xl p-2.5 text-xs text-sky-900 dark:text-sky-200 space-y-1.5 animate-fade-in">
+                    <div className="flex items-center justify-between text-[11px] font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
+                        {prepStatus?.message || '1/3 Planning lesson structure…'}
+                      </span>
+                      <span className="text-[10px] text-sky-600 dark:text-sky-400">
+                        {prepStatus?.etaMinutes || '~2–4 min'}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-sky-200 dark:bg-sky-900 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-sky-600 dark:bg-sky-400 h-1.5 rounded-full transition-all duration-500"
+                        style={{
+                          width:
+                            prepStatus?.step === 3
+                              ? '90%'
+                              : prepStatus?.step === 2
+                                ? '60%'
+                                : '30%',
+                        }}
+                      ></div>
+                    </div>
+
+                    <p className="text-[10px] text-sky-700 dark:text-sky-300/80 leading-relaxed">
+                      &bull; This usually takes about 2–4 minutes.<br />
+                      &bull; You can leave this page and keep using the app.<br />
+                      &bull; We’ll notify you when this lesson is ready.
+                    </p>
+                  </div>
+                )}
+
+                {/* Failed Error Message */}
+                {state === 'failed' && prepStatus?.error && (
+                  <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">
+                    {prepStatus.error}
+                  </p>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div className="px-5 pb-1">
-          <p className="text-[10px] sm:text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">{decision.message}</p>
-        </div>
-
+        {/* Footer (No global Start lesson button) */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+            Lessons run automatically after preparation finishes.
+          </p>
           <button
             onClick={onClose}
             type="button"
-            className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 text-xs font-bold text-neutral-500 dark:text-neutral-300 transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 transition-colors"
           >
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(selected)}
-            type="button"
-            className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-transform shadow-md bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer"
-          >
-            <span>
-              {decision.payment === 'credits'
-                ? `Start · ${decision.creditCost} credits`
-                : 'Start lesson'}
-            </span>
-            <i className="bi bi-arrow-right"></i>
+            Close
           </button>
         </div>
       </div>

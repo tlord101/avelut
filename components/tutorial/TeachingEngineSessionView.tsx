@@ -26,6 +26,8 @@ import {
 } from '../../services/liveTeachingProgressService';
 import { logTeachingEvent } from '../../services/teachingEventLogger';
 import type { LessonDurationMode } from './LessonDurationModal';
+import { lessonPrepService, buildPrepKey } from '../../services/lessonPrepService';
+import { getCachedStructure } from '../../services/structurePrefetchService';
 
 export interface TeachingEngineSessionViewProps {
   topicTitle: string;
@@ -178,17 +180,24 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   handleNextBoardRef.current = handleNextBoard;
   const isInitializedRef = useRef(false);
 
+  const userProfileRef = useRef(userProfile);
+  userProfileRef.current = userProfile;
+  const appSettingsRef = useRef(resolvedAppSettings);
+  appSettingsRef.current = resolvedAppSettings;
+  const resumeInfoRef = useRef(resumeInfo);
+  resumeInfoRef.current = resumeInfo;
+
   useEffect(() => {
     if (!isReadyToStart || isInitializedRef.current) return;
     isInitializedRef.current = true;
     
-    const engine = new TeachingEngineService(resolvedAppSettings, userProfile || null, currentVoice);
+    const engine = new TeachingEngineService(appSettingsRef.current, userProfileRef.current || null, currentVoice);
     engineRef.current = engine;
     const manager = boardManagerRef.current;
     isLoadingBoardRef.current = true;
 
     const topicKey = topicKeyFromTitle(topicTitle, courseName);
-    const resolvedUserId = userId || userProfile?.uid || 'anon';
+    const resolvedUserId = userId || userProfileRef.current?.uid || 'anon';
 
     const unsubscribe = engine.subscribe({
       onStructureLoaded: (struct) => {
@@ -377,7 +386,17 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         completedBoardsSummary: completedTitlesRef.current,
       });
     } else {
-      const cachedStructure = getSavedTeachingStructure(resolvedUserId, topicKey, durationMode);
+      let cachedStructure = getSavedTeachingStructure(resolvedUserId, topicKey, durationMode);
+      if (!cachedStructure?.boards?.length && durationMode) {
+        const prepKey = buildPrepKey(resolvedUserId, topicKey, durationMode);
+        const payload = lessonPrepService.getReadyPayload(prepKey);
+        if (payload?.structure?.boards?.length) {
+          cachedStructure = payload.structure;
+        } else {
+          cachedStructure = getCachedStructure(topicKey, durationMode, resolvedUserId);
+        }
+      }
+
       if (cachedStructure?.boards?.length) {
         engine.setStructure(cachedStructure);
         setStructure(cachedStructure);
@@ -411,9 +430,10 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       unsubscribe();
       engine.destroy();
       unifiedVoiceRouter.stopAll();
+      isInitializedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReadyToStart, topicTitle, courseName, syllabusContext, durationMode, resumeInfo, userId, userProfile]);
+  }, [isReadyToStart, topicTitle, courseName, syllabusContext, durationMode, startBoardIndex, userId]);
 
   const handleCloseSession = useCallback(() => {
     if (autoContinueTimerRef.current) {
@@ -575,19 +595,28 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       <main className="flex-1 relative flex flex-col min-h-0 w-full overflow-hidden p-1.5 sm:p-3">
         {/* Render Final Test View or Board View */}
         {!isReadyToStart ? (
-          <div className="w-full h-full bg-[#000000] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 flex flex-col items-center justify-center animate-pulse relative">
+          <div className="w-full h-full bg-[#000000] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 flex flex-col items-center justify-center animate-fade-in relative">
             <h2 className="absolute top-8 text-xl sm:text-2xl font-bold text-white text-center px-4">{topicTitle}</h2>
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
-              <p className="text-slate-300 font-medium text-sm sm:text-base">Preparing your lesson…</p>
-              <p className="text-slate-500 text-xs sm:text-sm">Usually takes 15-30 seconds</p>
+            <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+              <div className="w-10 h-10 border-4 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
+              <div className="space-y-1.5">
+                <p className="text-white font-bold text-base sm:text-lg">Preparing your live lesson…</p>
+                <p className="text-slate-300 text-xs sm:text-sm">
+                  {statusMessage || 'Planning lesson structure & generating Board 1 speech…'}
+                </p>
+              </div>
+              <div className="bg-[#111111] border border-[#222222] rounded-2xl p-3.5 text-xs text-slate-400 space-y-1.5 text-left w-full shadow-lg">
+                <p>&bull; This usually takes about 2–4 minutes.</p>
+                <p>&bull; You can leave this page and keep using the app.</p>
+                <p>&bull; We’ll notify you as soon as this lesson is ready.</p>
+              </div>
             </div>
             {onClose && (
               <button
                 onClick={onClose}
                 className="absolute bottom-8 px-6 py-2.5 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] text-slate-300 font-bold text-sm transition-colors cursor-pointer"
               >
-                Cancel
+                Back to Lessons
               </button>
             )}
           </div>
