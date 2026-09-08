@@ -24,6 +24,7 @@ import {
   saveLiveTeachingProgress,
   formatResumeLabel,
 } from '../../services/liveTeachingProgressService';
+import { logTeachingEvent } from '../../services/teachingEventLogger';
 import type { LessonDurationMode } from './LessonDurationModal';
 
 export interface TeachingEngineSessionViewProps {
@@ -39,6 +40,7 @@ export interface TeachingEngineSessionViewProps {
   durationMode?: LessonDurationMode;
   startBoardIndex?: number;
   resumeInfo?: any;
+  isReadyToStart?: boolean;
 }
 
 /** Post-speech reading pause duration (ms) before auto-advancing (speech itself lasts ~2 mins per board) */
@@ -57,6 +59,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   durationMode,
   startBoardIndex = 0,
   resumeInfo,
+  isReadyToStart = true,
 }) => {
   const { settings: hookAppSettings } = useAppSettings();
   const resolvedAppSettings = propAppSettings || hookAppSettings;
@@ -94,6 +97,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [evaluationFeedback, setEvaluationFeedback] = useState<StudentAnswerEvaluation | null>(null);
   const [completedBoardTitles, setCompletedBoardTitles] = useState<string[]>([]);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // Final Test State
   const [finalTest, setFinalTest] = useState<FinalTest | null>(null);
@@ -346,10 +350,34 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       },
       onError: (err) => {
         console.error('[TeachingEngineView] Error:', err);
+        addToast(err?.message || 'An error occurred during the lesson.', 'error');
+        setSessionError(err?.message || 'An error occurred during the lesson.');
         isLoadingBoardRef.current = false;
         setIsLoading(false);
+        logTeachingEvent({
+          type: 'session_error',
+          topic: topicTitle,
+          error: err?.message,
+        });
       },
     });
+
+    return () => {
+      if (autoContinueTimerRef.current) clearTimeout(autoContinueTimerRef.current);
+      unsubscribe();
+      engine.destroy();
+      unifiedVoiceRouter.stopAll();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topicTitle, courseName, syllabusContext, durationMode]);
+
+  useEffect(() => {
+    if (!isReadyToStart || !engineRef.current) return;
+    
+    const engine = engineRef.current;
+    const manager = boardManagerRef.current;
+    const topicKey = topicKeyFromTitle(topicTitle, courseName);
+    const resolvedUserId = userId || userProfile?.uid || 'anon';
 
     if (startBoardIndexRef.current > 0 && resumeInfo?.structure) {
       engine.setStructure(resumeInfo.structure);
@@ -391,14 +419,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       }
     }
 
-    return () => {
-      if (autoContinueTimerRef.current) clearTimeout(autoContinueTimerRef.current);
-      unsubscribe();
-      engine.destroy();
-      unifiedVoiceRouter.stopAll();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicTitle, courseName, syllabusContext, durationMode]);
+  }, [isReadyToStart, topicTitle, courseName, syllabusContext, durationMode, resumeInfo, userId, userProfile]);
 
   const handleCloseSession = useCallback(() => {
     if (autoContinueTimerRef.current) {
@@ -559,7 +580,24 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     <div className="flex flex-col h-full w-full bg-[#000000] text-white select-none overflow-hidden relative">
       <main className="flex-1 relative flex flex-col min-h-0 w-full overflow-hidden p-1.5 sm:p-3">
         {/* Render Final Test View or Board View */}
-        {finalTest ? (
+        {!isReadyToStart ? (
+          <div className="w-full h-full bg-[#000000] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 flex flex-col items-center justify-center animate-pulse relative">
+            <h2 className="absolute top-8 text-xl sm:text-2xl font-bold text-white text-center px-4">{topicTitle}</h2>
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-300 font-medium text-sm sm:text-base">Preparing your lesson…</p>
+              <p className="text-slate-500 text-xs sm:text-sm">Usually takes 15-30 seconds</p>
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="absolute bottom-8 px-6 py-2.5 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] text-slate-300 font-bold text-sm transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        ) : finalTest ? (
           <div className="w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
             <div className="max-w-2xl w-full flex flex-col gap-6">
               <div className="text-center border-b border-[#222222] pb-4">
@@ -656,15 +694,29 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             </div>
           </div>
         ) : (
-          <TeachingBoard
-            elements={boardElements}
-            activeHighlights={activeHighlights}
-            activeCircles={activeCircles}
-            activeUnderlines={activeUnderlines}
-            tutorPointer={tutorPointer}
-            isAudioReady={isAudioReady}
-            isWaitingForVoice={isWaitingForVoice}
-          />
+          <>
+            {sessionError && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-md w-[90%] max-w-lg shadow-lg">
+                <i className="bi bi-exclamation-triangle-fill text-red-500 text-lg shrink-0"></i>
+                <p className="text-sm text-red-200 font-medium leading-snug flex-1">{sessionError}</p>
+                <button
+                  onClick={() => setSessionError(null)}
+                  className="w-6 h-6 rounded-full bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-400 transition-colors shrink-0 cursor-pointer"
+                >
+                  <i className="bi bi-x-lg text-xs"></i>
+                </button>
+              </div>
+            )}
+            <TeachingBoard
+              elements={boardElements}
+              activeHighlights={activeHighlights}
+              activeCircles={activeCircles}
+              activeUnderlines={activeUnderlines}
+              tutorPointer={tutorPointer}
+              isAudioReady={isAudioReady}
+              isWaitingForVoice={isWaitingForVoice}
+            />
+          </>
         )}
 
         {/* Sleek Non-Blocking Loading Badge for Initial Board Performance Fetching */}

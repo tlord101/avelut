@@ -29,6 +29,7 @@ export type AuthUser = {
   email?: string | null;
   displayName?: string | null;
   photoURL?: string | null;
+  delete?: () => Promise<void>;
 };
 
 // Aliased for seamless migration
@@ -102,20 +103,21 @@ export type FirebaseStorage = { app: { name: string } };
 
 const storage: FirebaseStorage = { app: { name: 'supabase-storage' } };
 
-function storageRef(_storage: any, path: string) {
-  return { fullPath: path, toString: () => path };
+function storageRef(_storageOrPath?: any, path?: string) {
+  const safePath = typeof _storageOrPath === 'string' ? _storageOrPath : (typeof path === 'string' ? path : '');
+  return { fullPath: safePath, path: safePath, toString: () => safePath };
 }
 
-async function uploadBytes(pathRef: { fullPath: string } | string, blob: Blob) {
-  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || String(pathRef);
+async function uploadBytes(pathRef: { fullPath?: string; path?: string } | string, blob: Blob) {
+  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || pathRef.path || String(pathRef);
   const { error } = await supabase.storage.from('uploads').upload(path, blob, { upsert: true });
   if (error) throw error;
-  return { metadata: { fullPath: path }, ref: typeof pathRef === 'string' ? { fullPath: path } : pathRef };
+  return { metadata: { fullPath: path }, ref: typeof pathRef === 'string' ? { fullPath: path, path } : pathRef };
 }
 
-function uploadBytesResumable(pathRef: { fullPath: string } | string, blob: Blob) {
+function uploadBytesResumable(pathRef: { fullPath?: string; path?: string } | string, blob: Blob) {
   const listeners: Record<string, Function[]> = { state_changed: [] };
-  const targetRef = typeof pathRef === 'string' ? { fullPath: pathRef } : pathRef;
+  const targetRef = typeof pathRef === 'string' ? { fullPath: pathRef, path: pathRef } : pathRef;
   const task: any = {
     on(event: string, next?: any, _err?: any, complete?: any) {
       if (event === 'state_changed' && next) listeners.state_changed.push(next);
@@ -137,14 +139,14 @@ function uploadBytesResumable(pathRef: { fullPath: string } | string, blob: Blob
   return task;
 }
 
-async function getDownloadURL(pathRef: { fullPath: string } | string) {
-  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || String(pathRef);
+async function getDownloadURL(pathRef: { fullPath?: string; path?: string } | string) {
+  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || pathRef.path || String(pathRef);
   const { data } = supabase.storage.from('uploads').getPublicUrl(path);
   return data.publicUrl;
 }
 
-async function deleteObject(pathRef: { fullPath: string } | string) {
-  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || String(pathRef);
+async function deleteObject(pathRef: { fullPath?: string; path?: string } | string) {
+  const path = typeof pathRef === 'string' ? pathRef : pathRef.fullPath || pathRef.path || String(pathRef);
   await supabase.storage.from('uploads').remove([path]);
 }
 

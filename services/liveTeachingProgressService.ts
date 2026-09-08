@@ -5,6 +5,7 @@ import { readCachedJson, writeCachedJson } from '../utils/cache';
 import type { LessonDurationMode } from '../components/tutorial/LessonDurationModal';
 import type { TeachingStructure, TeachingBoardPerformance } from '../types/teachingScript';
 import { supabaseDataService } from './supabaseDataService';
+import { logTeachingEvent } from './teachingEventLogger';
 
 export interface LiveTeachingProgress {
   topicKey: string;
@@ -45,6 +46,7 @@ const inFlightStructurePromises = new Map<string, Promise<TeachingStructure | nu
 
 interface PrefetchLockInfo {
   startedAt: number;
+  lastHeartbeat: number;
   topicTitle: string;
   courseName?: string;
   status: 'generating' | 'completed' | 'failed';
@@ -59,6 +61,7 @@ export function setPrefetchLock(userId: string, topicKey: string, status: 'gener
   try {
     const lock: PrefetchLockInfo = {
       startedAt: Date.now(),
+      lastHeartbeat: Date.now(),
       topicTitle,
       courseName,
       status,
@@ -75,14 +78,54 @@ export function getPrefetchLock(userId: string, topicKey: string): PrefetchLockI
     const lock: PrefetchLockInfo = JSON.parse(raw);
     if (!lock || typeof lock !== 'object') return null;
     const startedAt = typeof lock.startedAt === 'number' ? lock.startedAt : Date.now();
-    // Lock expires after 3 minutes (180,000 ms)
-    if (Date.now() - startedAt > 180000) {
+    const lastHeartbeat = typeof lock.lastHeartbeat === 'number' ? lock.lastHeartbeat : startedAt;
+    
+    if (Date.now() - lastHeartbeat > 45000) {
       localStorage.removeItem(prefetchLockKey(userId, topicKey));
       return null;
     }
-    return { ...lock, startedAt };
+
+    // Lock expires after 5 minutes (300,000 ms)
+    if (Date.now() - startedAt > 300000) {
+      localStorage.removeItem(prefetchLockKey(userId, topicKey));
+      return null;
+    }
+    return { ...lock, startedAt, lastHeartbeat };
   } catch {
     return null;
+  }
+}
+
+export function updatePrefetchHeartbeat(userId: string, topicKey: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(prefetchLockKey(userId, topicKey));
+    if (!raw) return;
+    const lock: PrefetchLockInfo = JSON.parse(raw);
+    if (lock && typeof lock === 'object' && lock.status === 'generating') {
+      lock.lastHeartbeat = Date.now();
+      localStorage.setItem(prefetchLockKey(userId, topicKey), JSON.stringify(lock));
+    }
+  } catch {}
+}
+
+const heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+export function startPrefetchHeartbeatTimer(userId: string, topicKey: string): void {
+  const timerKey = `${userId}_${topicKey}`;
+  if (heartbeatTimers.has(timerKey)) return;
+  const timer = setInterval(() => {
+    updatePrefetchHeartbeat(userId, topicKey);
+  }, 15000);
+  heartbeatTimers.set(timerKey, timer);
+}
+
+export function stopPrefetchHeartbeatTimer(userId: string, topicKey: string): void {
+  const timerKey = `${userId}_${topicKey}`;
+  const timer = heartbeatTimers.get(timerKey);
+  if (timer) {
+    clearInterval(timer);
+    heartbeatTimers.delete(timerKey);
   }
 }
 
@@ -272,6 +315,13 @@ export async function prefetchTopicTeachingStructure(params: {
   if (activePrefetches.has(unifiedPrefetchId)) return;
   activePrefetches.add(unifiedPrefetchId);
   setPrefetchLock(resolvedUserId, topicKey, 'generating', topicTitle, params.courseName);
+  startPrefetchHeartbeatTimer(resolvedUserId, topicKey);
+
+  logTeachingEvent('prefetch_start', {
+    topic: topicTitle,
+    courseName: params.courseName,
+    durations: missingModes
+  });
 
   let resolvePromise: (val: any) => void;
   const singleUnifiedPromise = new Promise<any>((res) => { resolvePromise = res; });
@@ -290,12 +340,18 @@ export async function prefetchTopicTeachingStructure(params: {
     );
 
     // Make ONE SINGLE AI API call for all 3 duration structures
-    const result = await engine.generateUnifiedAllTeachingStructures({
+    const generatePromise = engine.generateUnifiedAllTeachingStructures({
       topic: topicTitle,
       courseName: params.courseName,
       syllabusContext: params.syllabusContext,
       studentName: params.userProfile?.display_name || 'Student',
     });
+
+    const timeoutPromise = new Promise<any>((_, reject) => {
+      setTimeout(() => reject(new Error('Prefetch timeout after 90 seconds')), 90000);
+    });
+
+    const result = await Promise.race([generatePromise, timeoutPromise]);
 
     // Save whichever duration mode structures returned and pre-fetch Board 0
     let savedAny = false;
@@ -310,12 +366,32 @@ export async function prefetchTopicTeachingStructure(params: {
       }
     }
     setPrefetchLock(resolvedUserId, topicKey, savedAny ? 'completed' : 'failed', topicTitle, params.courseName);
+    
+    if (savedAny) {
+      logTeachingEvent('prefetch_complete', {
+        topic: topicTitle,
+        courseName: params.courseName,
+      });
+    } else {
+      logTeachingEvent('prefetch_fail', {
+        topic: topicTitle,
+        courseName: params.courseName,
+        reason: 'No valid structures returned'
+      });
+    }
+    
     resolvePromise!(result);
   } catch (err) {
     console.warn('[prefetchTopicTeachingStructure] Single-call unified prefetch failed:', err);
     setPrefetchLock(resolvedUserId, topicKey, 'failed', topicTitle, params.courseName);
+    logTeachingEvent('prefetch_fail', {
+      topic: topicTitle,
+      courseName: params.courseName,
+      error: err instanceof Error ? err.message : String(err)
+    });
     resolvePromise!(null);
   } finally {
+    stopPrefetchHeartbeatTimer(resolvedUserId, topicKey);
     activePrefetches.delete(unifiedPrefetchId);
     for (const mode of missingModes) {
       const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;

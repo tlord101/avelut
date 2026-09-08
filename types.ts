@@ -39,6 +39,7 @@ export interface UserProfile {
   selected_free_course_id?: string;
   fcm_token?: string;
   default_semester_tab?: string;
+  ai_credits?: number;
   ai_credits_balance?: number;
   blocked_users?: Record<string, boolean>;
   cover_photo?: string;
@@ -291,7 +292,7 @@ export interface AppSettings {
   grok_voice_id?: string;
   upload_center_uploads_enabled?: boolean;
   coming_soon_enabled?: boolean;
-  paystack_public_key: string;
+  paystack_public_key?: string;
   custom_user_limit_rpm?: number;
   custom_user_limit_tpm?: number;
   usage_settings?: UsageSettings;
@@ -382,12 +383,14 @@ export interface PrivateChat {
 
 
 // Type for the new Toast Notification System
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastMessage {
   id: string;
   type: ToastType;
   message: string;
+  duration?: number;
+  action?: { label: string; onClick: () => void };
 }
 
 export interface EmailConfig {

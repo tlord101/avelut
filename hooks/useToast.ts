@@ -7,7 +7,7 @@ import { Toast } from '../components/Toast';
 import { usePortalRoot } from '../utils/portal';
 
 interface ToastContextType {
-  addToast: (message: string, type: ToastType) => void;
+  addToast: (message: string, type?: ToastType, duration?: number, action?: { label: string; onClick: () => void }) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -40,24 +40,32 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const portalRoot = usePortalRoot('avelut-toast-root');
 
-  const addToast = useCallback(async (message: string, type: ToastType = 'info') => {
+  const addToast = useCallback(async (message: string, type: ToastType = 'info', duration?: number, action?: { label: string; onClick: () => void }) => {
     triggerHapticFeedback(type);
+
+    const defaultDurations = {
+      success: 4000,
+      info: 4000,
+      warning: 5000,
+      error: 6000
+    };
+    const finalDuration = duration || defaultDurations[type];
 
     if (Capacitor.isNativePlatform()) {
       try {
         await CapacitorToast.show({
           text: message,
-          duration: 'short',
+          duration: finalDuration > 4000 ? 'long' : 'short',
           position: 'bottom',
         });
       } catch (e) {
         console.warn("Toast plugin failed, falling back to React toast:", e);
         const id = Date.now().toString() + Math.random().toString(36).substring(7);
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => [...prev, { id, message, type, duration: finalDuration, action }]);
       }
     } else {
       const id = Date.now().toString() + Math.random().toString(36).substring(7);
-      setToasts(prev => [...prev, { id, message, type }]);
+      setToasts(prev => [...prev, { id, message, type, duration: finalDuration, action }]);
     }
   }, []);
 
@@ -69,11 +77,13 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     children,
     portalRoot
       ? createPortal(
-          React.createElement('div', { className: "fixed top-4 left-4 right-4 md:left-auto md:right-4 z-50 space-y-3 max-w-sm pointer-events-none mx-auto md:mx-0" },
+          React.createElement('div', { className: "fixed top-5 left-0 right-0 z-[9999] flex flex-col items-center gap-2 pointer-events-none px-4" },
             toasts.map((toast) => React.createElement(Toast, {
               key: toast.id,
               message: toast.message,
               type: toast.type,
+              duration: toast.duration,
+              action: toast.action,
               onDismiss: () => removeToast(toast.id)
             }))
           ),

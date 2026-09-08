@@ -36,6 +36,7 @@ import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
 import { AppSettings, UserProfile } from '../types';
+import { logTeachingEvent } from './teachingEventLogger';
 
 function getLocalCacheKey(prefix: string, topic: string, keySuffix: string | number): string {
   const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
@@ -220,12 +221,34 @@ export class TeachingEngineService {
     studentName?: string;
   }): Promise<{ 15: TeachingStructure | null; 30: TeachingStructure | null; 60: TeachingStructure | null }> {
     const defaultResult = { 15: null, 30: null, 60: null };
+    const startTime = Date.now();
     try {
       const ai = createAvelutAI(this.appSettings, this.userProfile);
       if (!ai) return defaultResult;
 
       const prompt = buildUnifiedTeachingStructuresPrompt(params);
-      const rawResponse = await ai.chat(prompt, TEACHING_DIRECTOR_SYSTEM_PROMPT);
+
+      // Race the AI call against a 90-second timeout
+      const aiPromise = ai.chat(prompt, TEACHING_DIRECTOR_SYSTEM_PROMPT);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('UNIFIED_TIMEOUT')), 90_000)
+      );
+
+      let rawResponse: string;
+      try {
+        rawResponse = await Promise.race([aiPromise, timeoutPromise]);
+      } catch (raceErr: any) {
+        if (raceErr?.message === 'UNIFIED_TIMEOUT') {
+          logTeachingEvent({
+            type: 'prefetch_timeout',
+            topic: params.topic,
+            latencyMs: Date.now() - startTime,
+            metadata: { call: 'generateUnifiedAllTeachingStructures' },
+          });
+        }
+        throw raceErr;
+      }
+
       const parsed = cleanAndParseJson<any>(rawResponse);
 
       if (!parsed) return defaultResult;
@@ -245,9 +268,22 @@ export class TeachingEngineService {
           ? parsed.mode_60
           : null;
 
+      logTeachingEvent({
+        type: 'prefetch_complete',
+        topic: params.topic,
+        latencyMs: Date.now() - startTime,
+        metadata: { modes: { 15: !!s15, 30: !!s30, 60: !!s60 } },
+      });
+
       return { 15: s15, 30: s30, 60: s60 };
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[TeachingEngineService] Unified 1-call prefetch failed:', err);
+      logTeachingEvent({
+        type: 'prefetch_fail',
+        topic: params.topic,
+        error: err?.message,
+        latencyMs: Date.now() - startTime,
+      });
       return defaultResult;
     }
   }
@@ -414,6 +450,12 @@ export class TeachingEngineService {
       if (!structure || !structure.boards || !Array.isArray(structure.boards) || structure.boards.length === 0) {
         console.warn('[TeachingEngine] AI structure generation failed after 3 attempts, creating fallback structure');
         structure = this.buildFallbackTeachingStructure(params.topic, durationMode);
+        logTeachingEvent({
+          type: 'fallback_used',
+          topic: params.topic,
+          duration: typeof durationMode === 'number' ? durationMode : undefined,
+          metadata: { reason: 'all_attempts_failed' },
+        });
       }
 
       const userId = this.userProfile?.uid || 'anon';
@@ -449,7 +491,7 @@ export class TeachingEngineService {
       boards.push({
         board_id: `board_${i}`,
         board_number: i,
-        step_type: 'core_concept',
+        step_type: 'concept',
         prerequisite_knowledge: [],
         key_concepts: [`${topic} Core Point ${i}`],
         title: i === 1 ? `Introduction to ${topic}` : i === boardCount ? `Summary & Key Takeaways` : `${topic} - Core Concept ${i - 1}`,
@@ -595,6 +637,12 @@ export class TeachingEngineService {
       return performance;
     } catch (err: any) {
       console.error('[TeachingEngine] Error loading board performance:', err);
+      logTeachingEvent({
+        type: 'session_error',
+        topic: this.currentStructure?.topic || 'unknown',
+        error: err?.message,
+        metadata: { boardIndex: requestedIndex },
+      });
       const fallback = this.buildFallbackBoardPerformance(boardPlan);
       this.currentBoardPerformance = fallback;
       this.listeners.forEach((l) => l.onBoardLoaded?.(fallback));

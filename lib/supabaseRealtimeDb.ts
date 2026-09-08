@@ -95,8 +95,14 @@ function parsePath(pathOrRef: any): string[] {
   return rawPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
 }
 
-export function ref(_db: unknown, path: string): DbRef {
-  const safePath = typeof path === 'string' ? path.replace(/^\/+|\/+$/g, '') : '';
+export function ref(dbOrPath?: unknown, path?: string | null): DbRef {
+  let safePath = '';
+  if (typeof dbOrPath === 'string') {
+    safePath = dbOrPath;
+  } else if (typeof path === 'string') {
+    safePath = path;
+  }
+  safePath = safePath.replace(/^\/+|\/+$/g, '');
   return { path: safePath };
 }
 
@@ -802,7 +808,12 @@ export async function get(r: DbRef) {
   return makeSnap(value);
 }
 
-export function onValue(r: DbRef, callback: (snap: any) => void): Unsub {
+export function onValue(
+  r: DbRef,
+  callback: (snap: any) => void,
+  _cancelCallbackOrOptions?: any,
+  _options?: any
+): Unsub {
   const path = r.path;
 
   if (path === '.info/connected' || path.startsWith('.info/')) {

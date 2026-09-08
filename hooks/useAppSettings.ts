@@ -24,20 +24,22 @@ function initRealtimeSubscription() {
   isInitialized = true;
 
   // 1. Initial Fetch
-  supabase
-    .from('app_settings')
-    .select('value_json')
-    .eq('key', 'global')
-    .maybeSingle()
-    .then(({ data, error }) => {
+  void (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value_json')
+        .eq('key', 'global')
+        .maybeSingle();
+
       if (!error && data?.value_json) {
         const normalized = normalizeAppSettings(data.value_json);
         notifyListeners(normalized);
       }
-    })
-    .catch((err) => {
+    } catch (err) {
       console.warn('[AppSettings] Initial fetch error:', err);
-    });
+    }
+  })();
 
   // 2. Realtime Channel Subscription (Single Global Channel)
   try {

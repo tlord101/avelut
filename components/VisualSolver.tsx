@@ -272,6 +272,12 @@ const TutorialDisplay: React.FC<TutorialDisplayProps> = ({ scannedImage, tutoria
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isSending, setIsSending] = useState(false);
+
+    const filteredPartners = useMemo(() => {
+        return allUsers.filter(u => 
+            (u.display_name || u.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [allUsers, searchQuery]);
     const [dragOffsetY, setDragOffsetY] = useState(0);
     const [isClosing, setIsClosing] = useState(false);
 

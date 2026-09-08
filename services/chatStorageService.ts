@@ -185,7 +185,7 @@ export async function renameLocalConversation(conversationId: string, newTitle: 
 /**
  * Delete a conversation and all its messages locally in SQLite (soft delete).
  */
-export async function deleteLocalConversation(conversationId: string, userId: string): Promise<void> {
+export async function deleteLocalConversation(conversationId: string, userId?: string): Promise<void> {
   // Soft delete locally
   await runStatement(
     `UPDATE conversations SET is_deleted = 1, sync_status = 'pending' WHERE id = ?`,

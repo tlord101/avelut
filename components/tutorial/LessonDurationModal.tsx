@@ -5,11 +5,7 @@ import {
   getLiveMinutesRemaining,
   type LiveDurationMinutes,
 } from '../../utils/liveTutorialQuota';
-import {
-  isTopicStructureFetching,
-  topicKeyFromTitle,
-  getSavedTeachingStructure,
-} from '../../services/liveTeachingProgressService';
+import { useStructurePrefetch } from '../../hooks/useStructurePrefetch';
 
 export type LessonDurationMode = 15 | 30 | 60;
 
@@ -78,19 +74,9 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   appSettings,
 }) => {
   const [selected, setSelected] = useState<LessonDurationMode>(initialMode);
-  const [prefetchTick, setPrefetchTick] = useState(0);
-
-  // Poll prefetch status every 500ms while modal is open so UI updates live
-  useEffect(() => {
-    if (!isOpen) return;
-    const interval = setInterval(() => {
-      setPrefetchTick((t) => t + 1);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isOpen]);
 
   const effectiveProfile = useMemo(() => {
-    if (userProfile && (userProfile.uid || userProfile.id)) return userProfile;
+    if (userProfile && (userProfile.uid || (userProfile as any).id)) return userProfile;
     if (typeof window !== 'undefined') {
       const winProf = (window as any).__userProfile;
       if (winProf && (winProf.uid || winProf.id)) return winProf;
@@ -112,22 +98,19 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
     [effectiveProfile, selected, appSettings]
   );
 
-  const structureStatuses = useMemo(() => {
-    const userId = effectiveProfile?.uid || 'anon';
-    const topicKey = topicKeyFromTitle(topicTitle, courseName);
-
-    return ([15, 30, 60] as LessonDurationMode[]).reduce((acc, mode) => {
-      const isReady = Boolean(getSavedTeachingStructure(userId, topicKey, mode));
-      const isFetching = isTopicStructureFetching(userId, topicKey, mode);
-      acc[mode] = { isReady, isFetching };
-      return acc;
-    }, {} as Record<LessonDurationMode, { isReady: boolean; isFetching: boolean }>);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveProfile, topicTitle, prefetchTick]);
-
-  const isAnyFetching = useMemo(() => {
-    return Object.values(structureStatuses).some((s) => s.isFetching);
-  }, [structureStatuses]);
+  const { 
+    statuses: prefetchStatuses, 
+    isAnyPrefetching, 
+    isAnyFailed, 
+    retry, 
+    isReadyToStart 
+  } = useStructurePrefetch({ 
+    topicTitle, 
+    courseName, 
+    userId: effectiveProfile?.uid, 
+    userProfile: effectiveProfile, 
+    appSettings 
+  });
 
   if (!isOpen) return null;
 
@@ -136,7 +119,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-24 sm:pb-4 animate-fade-in"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[env(safe-area-inset-bottom,1.5rem)] sm:pb-4 animate-fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -176,13 +159,22 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
         </div>
 
         {/* Global prefetch status banner across 15m, 30m, 60m */}
-        {isAnyFetching && (
+        {isAnyPrefetching && (
           <div className="px-5 py-2 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-semibold text-black dark:text-white">
             <div className="flex items-center gap-2">
               <div className="w-3.5 h-3.5 border-2 border-black dark:border-white border-t-transparent rounded-full animate-spin shrink-0"></div>
               <span>Preparing AI structures (15m, 30m, 60m)…</span>
             </div>
             <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-normal shrink-0">Background caching</span>
+          </div>
+        )}
+
+        {isAnyFailed && (
+          <div className="px-5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 flex flex-col sm:flex-row sm:items-center gap-2 justify-between text-xs font-medium text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-2">
+              <i className="bi bi-exclamation-triangle text-amber-600 dark:text-amber-500 text-sm"></i>
+              <span>⚠ AI structure generation failed for some durations. You can retry or start with a fallback structure.</span>
+            </div>
           </div>
         )}
 
@@ -220,7 +212,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                   ? `${optDecision.creditCost} credits`
                   : optDecision.message;
 
-            const status = structureStatuses[opt.minutes];
+            const status = prefetchStatuses[opt.minutes];
 
             return (
               <div
@@ -252,18 +244,33 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                       </span>
 
                       {/* Dynamic Structure Ready / Generating badge per duration mode */}
-                      {status?.isReady ? (
+                      {status?.state === 'ready' ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
                           <i className="bi bi-check-circle-fill text-emerald-600 dark:text-emerald-400"></i> Structure Ready
                         </span>
-                      ) : status?.isFetching ? (
+                      ) : status?.state === 'prefetching' ? (
                         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 px-2 py-0.5 rounded-md animate-pulse">
                           <div className="w-2.5 h-2.5 border-2 border-black dark:border-white border-t-transparent rounded-full animate-spin"></div>
                           Generating AI structure…
                         </span>
+                      ) : status?.state === 'failed' ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-800 dark:text-red-300 bg-red-100/80 dark:bg-red-950/60 border border-red-300 dark:border-red-800 px-2 py-0.5 rounded-md">
+                            <i className="bi bi-exclamation-circle-fill text-red-600 dark:text-red-400"></i> Failed
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              retry(opt.minutes);
+                            }}
+                            className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 px-2 py-0.5 rounded border border-neutral-200 dark:border-neutral-700 transition-colors"
+                          >
+                            Retry
+                          </button>
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 px-2 py-0.5 rounded-md">
-                          <i className="bi bi-cpu text-neutral-400"></i> AI Ready
+                          <i className="bi bi-cpu text-neutral-400"></i> Will generate on start
                         </span>
                       )}
                     </div>
@@ -308,16 +315,44 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={() => onConfirm(selected)}
+            onClick={() => {
+              if (prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)) return;
+              onConfirm(selected);
+            }}
+            disabled={prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)}
             type="button"
-            className="px-5 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 text-xs font-bold flex items-center space-x-2 transition-transform active:scale-95 shadow-md cursor-pointer"
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-transform shadow-md ${
+              prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)
+                ? 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
+                : 'bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer'
+            }`}
           >
             <span>
-              {decision.payment === 'credits'
-                ? `Start · ${decision.creditCost} credits`
-                : 'Start lesson'}
+              {(() => {
+                let startLabel = 'Start lesson';
+                const selStatus = prefetchStatuses[selected]?.state;
+                const selReady = isReadyToStart(selected);
+                if (selStatus === 'prefetching' && !selReady) {
+                  startLabel = 'Generating…';
+                } else if (selStatus === 'idle') {
+                  startLabel = 'Generate & Start';
+                } else if (selStatus === 'failed' && !selReady) {
+                  startLabel = 'Retry & Start';
+                }
+                
+                if (decision.payment === 'credits') {
+                  if (startLabel === 'Start lesson') {
+                    return `Start · ${decision.creditCost} credits`;
+                  } else {
+                    return `${startLabel} · ${decision.creditCost} credits`;
+                  }
+                }
+                return startLabel;
+              })()}
             </span>
-            <i className="bi bi-arrow-right"></i>
+            {!(prefetchStatuses[selected]?.state === 'prefetching' && !isReadyToStart(selected)) && (
+              <i className="bi bi-arrow-right"></i>
+            )}
           </button>
         </div>
       </div>

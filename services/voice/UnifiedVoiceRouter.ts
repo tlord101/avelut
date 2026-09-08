@@ -2,10 +2,11 @@ import { grokVoiceEngine, type GrokAudioPlayer, type GrokTtsResponsePayload } fr
 import { alibabaVoiceEngine, type AlibabaAudioPlayer, type AlibabaAudioResponsePayload } from './AlibabaVoiceEngine';
 import type { AppSettings } from '../../types';
 
-export type UnifiedVoiceProvider = 'grok' | 'alibaba';
+export type UnifiedVoiceProvider = 'grok' | 'alibaba' | 'browser';
 
 export interface UnifiedSpeechOptions {
   provider?: UnifiedVoiceProvider;
+  context?: string;
   voice?: string;
   speed?: number;
   pitch?: number;

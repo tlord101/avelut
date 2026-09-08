@@ -21,6 +21,8 @@ interface SidebarProps {
   activeConversationId?: string | null;
   quickLinks?: NavItem[];
   brandTitle?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const timeAgo = (timestamp: number): string => {

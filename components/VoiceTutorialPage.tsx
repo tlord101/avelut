@@ -28,6 +28,9 @@ import { TeachingEngineSessionView } from './tutorial/TeachingEngineSessionView'
 import { safeJsonParse } from '../lib/safeJsonParse';
 
 import { LessonDurationModal, type LessonDurationMode } from './tutorial/LessonDurationModal';
+import { InsufficientCreditsModal } from './tutorial/InsufficientCreditsModal';
+import { getLiveDurationCreditCost, commitLiveTutorialStart, evaluateLiveTutorialStart, type LiveDurationMinutes } from '../utils/liveTutorialQuota';
+import { logTeachingEvent } from '../services/teachingEventLogger';
 import {
     getLiveTeachingProgress,
     topicKeyFromTitle,
@@ -155,6 +158,10 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 }) => {
     const { settings: hookAppSettings } = useAppSettings();
     const resolvedAppSettings = propAppSettings || hookAppSettings;
+    const { addToast } = useToast();
+
+    const [showCreditsModal, setShowCreditsModal] = useState(false);
+    const [creditCheckData, setCreditCheckData] = useState<any>(null);
 
     // ── Live Teaching Whiteboard Architecture ──
     const topicTitle = initialSessionData?.topic?.topic_name || initialSessionData?.customPrompt || 'Live Tutorial';
@@ -196,10 +203,54 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             userId: userProfile?.uid,
             userProfile,
             appSettings: resolvedAppSettings,
+        }).catch((err) => {
+            addToast?.('AI lesson preparation failed. You can still start manually.', 'warning');
         });
-    }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile]);
+    }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile, addToast]);
 
-    const handleConfirmDuration = (mode: LessonDurationMode) => {
+    const handleConfirmDuration = async (mode: LessonDurationMode) => {
+        // 1. Evaluate if user can start
+        const decision = evaluateLiveTutorialStart(userProfile, mode as LiveDurationMinutes, resolvedAppSettings);
+        
+        if (!decision.allowed) {
+            // Show insufficient credits modal
+            setCreditCheckData({
+                currentBalance: userProfile?.ai_credits_balance ?? 0,
+                requiredCost: decision.creditCost,
+                durationMinutes: mode,
+                poolRemaining: decision.poolRemaining,
+            });
+            setShowCreditsModal(true);
+            return;
+        }
+        
+        // 2. Commit usage (deduct minutes from pool)
+        try {
+            await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
+            
+            // 3. Deduct credits if payment is 'credits'
+            if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
+                await deductAICredits(userProfile.uid, decision.creditCost, 'Live Tutorial Session', resolvedAppSettings);
+            }
+            
+            logTeachingEvent({
+                type: 'session_start',
+                topic: topicTitle,
+                duration: mode,
+                metadata: { payment: decision.payment, creditCost: decision.creditCost },
+            });
+        } catch (err: any) {
+            addToast(err?.message || 'Failed to start session. Please try again.', 'error');
+            logTeachingEvent({
+                type: 'credit_fail',
+                topic: topicTitle,
+                duration: mode,
+                error: err?.message,
+            });
+            return;
+        }
+        
+        // 4. Mount the session
         setSelectedDurationMode(mode);
         setStartBoardIndex(0);
         setIsDurationModalOpen(false);
@@ -235,6 +286,23 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                 onResume={handleResumeSession}
                 userProfile={userProfile}
                 appSettings={resolvedAppSettings}
+            />
+
+            <InsufficientCreditsModal
+                isOpen={showCreditsModal}
+                onClose={() => setShowCreditsModal(false)}
+                currentBalance={creditCheckData?.currentBalance ?? 0}
+                requiredCost={creditCheckData?.requiredCost ?? 0}
+                durationMinutes={creditCheckData?.durationMinutes ?? 30}
+                poolRemaining={creditCheckData?.poolRemaining ?? 0}
+                onBuyCredits={() => { setShowCreditsModal(false); onNavigate?.('billing'); }}
+                onTryShorter={(shorterMode) => {
+                    setShowCreditsModal(false);
+                    handleConfirmDuration(shorterMode);
+                }}
+                affordableModes={([15, 30, 60] as const).filter(m =>
+                    evaluateLiveTutorialStart(userProfile, m as LiveDurationMinutes, resolvedAppSettings).allowed
+                )}
             />
 
             {!isDurationModalOpen && selectedDurationMode && (
@@ -662,7 +730,8 @@ export const LegacyVoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       const nextIdx = targetIdx + 1;
       if (nextIdx < len && isActiveRef.current) {
         const nSeg = buildGradedSegment(lessonPlanRef.current || lesson, nextIdx, nextIdx);
-        unifiedVoiceRouter.prefetchSpeech(nSeg.script, nSeg.key, {
+        unifiedVoiceRouter.prefetchSpeech(nSeg.script, {
+          cacheKey: nSeg.key,
           appSettings,
           context: isNotebook ? 'notebook' : 'study_guide',
           isPrivate: isNotebook,

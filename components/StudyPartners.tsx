@@ -74,10 +74,10 @@ export const StudyPartners: React.FC<StudyPartnersProps> = ({ userProfile, onNav
     useEffect(() => {
         const fetchMissingProfiles = async () => {
             const missingIds = new Set<string>();
-            const safeUsers = Array.isArray(allUsers) ? allUsers : Object.values(allUsers || {});
+            const safeUsers = Array.isArray(allUsers) ? allUsers : (allUsers && typeof allUsers === 'object' ? Object.values(allUsers) as UserProfile[] : []);
             Object.values(partnerRequests || {}).forEach((req: any) => {
-                if (req?.senderId && !safeUsers.find(u => u?.uid === req.senderId) && !missingProfiles[req.senderId]) missingIds.add(req.senderId);
-                if (req?.receiverId && !safeUsers.find(u => u?.uid === req.receiverId) && !missingProfiles[req.receiverId]) missingIds.add(req.receiverId);
+                if (req?.senderId && !safeUsers.find((u: UserProfile) => u?.uid === req.senderId) && !missingProfiles[req.senderId]) missingIds.add(req.senderId);
+                if (req?.receiverId && !safeUsers.find((u: UserProfile) => u?.uid === req.receiverId) && !missingProfiles[req.receiverId]) missingIds.add(req.receiverId);
             });
 
             if (missingIds.size > 0) {
@@ -215,7 +215,7 @@ export const StudyPartners: React.FC<StudyPartnersProps> = ({ userProfile, onNav
         }
     };
 
-    const safeAllUsers = useMemo(() => (Array.isArray(allUsers) ? allUsers : (allUsers && typeof allUsers === 'object' ? Object.values(allUsers) : [])), [allUsers]);
+    const safeAllUsers = useMemo<UserProfile[]>(() => (Array.isArray(allUsers) ? (allUsers as UserProfile[]) : (allUsers && typeof allUsers === 'object' ? (Object.values(allUsers) as UserProfile[]) : [])), [allUsers]);
 
     const availableSchools = useMemo(() => {
         const setOfSchools = new Set<string>();

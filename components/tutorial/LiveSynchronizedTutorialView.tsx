@@ -416,7 +416,7 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
             tutorPointer={tutorPointer}
             activeFocusArea={activeFocusArea}
             isStudentDrawingEnabled={studentMode === 'draw'}
-            studentMode={studentMode}
+            studentMode={studentMode === 'draw' ? 'drawing' : studentMode}
             onStudentLassoSelect={handleStudentLassoSelect}
             className="flex-1 w-full"
           />
