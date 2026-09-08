@@ -226,6 +226,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             <LessonDurationModal
                 isOpen={isDurationModalOpen}
                 topicTitle={topicTitle}
+                courseName={courseName}
                 onClose={handleCloseModal}
                 onConfirm={handleConfirmDuration}
                 initialMode={selectedDurationMode || 30}
@@ -236,8 +237,9 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                 appSettings={resolvedAppSettings}
             />
 
-            {selectedDurationMode && (
+            {!isDurationModalOpen && selectedDurationMode && (
                 <TeachingEngineSessionView
+                    key={`${topicTitle}_${courseName || ''}_${selectedDurationMode}_${startBoardIndex}`}
                     topicTitle={topicTitle}
                     courseName={courseName}
                     syllabusContext={syllabusContext}

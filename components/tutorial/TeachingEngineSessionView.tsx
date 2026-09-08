@@ -376,7 +376,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       unifiedVoiceRouter.stopAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicTitle, courseName, syllabusContext]);
+  }, [topicTitle, courseName, syllabusContext, durationMode]);
 
   const handleCloseSession = useCallback(() => {
     if (autoContinueTimerRef.current) {

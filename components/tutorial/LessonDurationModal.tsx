@@ -53,6 +53,7 @@ export const LESSON_DURATION_OPTIONS: LessonDurationOption[] = [
 export interface LessonDurationModalProps {
   isOpen: boolean;
   topicTitle?: string;
+  courseName?: string;
   onClose: () => void;
   onConfirm: (mode: LessonDurationMode) => void;
   initialMode?: LessonDurationMode;
@@ -66,6 +67,7 @@ export interface LessonDurationModalProps {
 export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   isOpen,
   topicTitle = 'Live Tutorial',
+  courseName,
   onClose,
   onConfirm,
   initialMode = 15,
@@ -112,7 +114,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
   const structureStatuses = useMemo(() => {
     const userId = effectiveProfile?.uid || 'anon';
-    const topicKey = topicKeyFromTitle(topicTitle);
+    const topicKey = topicKeyFromTitle(topicTitle, courseName);
 
     return ([15, 30, 60] as LessonDurationMode[]).reduce((acc, mode) => {
       const isReady = Boolean(getSavedTeachingStructure(userId, topicKey, mode));
