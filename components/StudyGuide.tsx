@@ -132,10 +132,10 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
         <div className="w-full max-w-4xl mx-auto py-1.5">
             <div
                 onClick={onClick}
-                className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-slate-400 dark:hover:border-slate-700 hover:shadow-md transition-all duration-200 cursor-pointer gap-3 group"
+                className="w-full flex items-center justify-between p-4 bg-[#FAF9F6] dark:bg-[#0A0A0A] border border-slate-200/90 dark:border-slate-800 rounded-2xl hover:border-slate-400 dark:hover:border-slate-700 hover:shadow-md transition-all duration-200 cursor-pointer gap-3 group"
             >
                 <div className="flex-1 flex items-center gap-3.5 min-w-0">
-                    <div className="w-11 h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 group-hover:scale-105 transition-transform shrink-0">
+                    <div className="w-11 h-11 rounded-2xl bg-slate-200/60 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 group-hover:scale-105 transition-transform shrink-0">
                         <i className="bi bi-journal-bookmark text-lg"></i>
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -144,7 +144,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
                                 {courseLabel}
                             </span>
                             {topicCount > 0 && (
-                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                                     {topicCount} {topicCount === 1 ? 'topic' : 'topics'}
                                 </span>
                             )}
@@ -157,7 +157,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
 
                 <div className="flex items-center gap-2.5 shrink-0">
                     {timeSpent > 0 && (
-                        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-slate-50 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300">
                             <i className="bi bi-clock text-slate-400 text-xs"></i>
                             <span>{formatDuration(timeSpent)}</span>
                         </div>
@@ -179,7 +179,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
                                 </div>
                             ) : (
                                 <label
-                                    className="cursor-pointer p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors"
+                                    className="cursor-pointer p-2.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors"
                                     title="Upload Syllabus / Textbook"
                                 >
                                     <i className="bi bi-cloud-arrow-up text-base"></i>
@@ -199,8 +199,8 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
                         </div>
                     )}
 
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-850 flex items-center justify-center text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-all">
-                        <i className="bi bi-chevron-right text-xs"></i>
+                    <div className="w-8 h-8 rounded-xl bg-slate-200/70 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-all">
+                        <i className="bi bi-chevron-right text-xs font-bold"></i>
                     </div>
                 </div>
             </div>
@@ -1011,7 +1011,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                         <div
                                             key={t.topic_id || idx}
                                             onClick={() => handleOpenTopic(topicPickerCourse, t)}
-                                            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[#E3E9F1] dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-700 transition-all cursor-pointer group shadow-2xs"
+                                            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-[#FAF9F6] dark:bg-[#0A0A0A] hover:border-slate-400 dark:hover:border-slate-700 transition-all cursor-pointer group shadow-2xs"
                                         >
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
@@ -1036,7 +1036,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-wrap mt-1">
                                                     {visitedLabel && (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F1F5F9] dark:bg-slate-800 text-[#64748B] dark:text-slate-400 text-[10px] font-semibold border border-[#E3E9F1] dark:border-slate-700">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-200/50 dark:bg-slate-800 text-[#64748B] dark:text-slate-400 text-[10px] font-semibold border border-slate-200 dark:border-slate-700">
                                                             <i className="bi bi-clock-history text-[#0066FF] text-[10px]"></i>
                                                             <span>{visitedLabel}</span>
                                                         </span>
@@ -1054,7 +1054,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                     e.stopPropagation();
                                                     handleOpenTopic(topicPickerCourse, t);
                                                 }}
-                                                className="w-8 h-8 flex items-center justify-center bg-[#F1F5F9] dark:bg-slate-800 group-hover:bg-[#0066FF] text-[#0F172A] group-hover:text-white dark:text-slate-300 rounded-full transition-all shrink-0 active:scale-95 cursor-pointer shadow-2xs"
+                                                className="w-8 h-8 flex items-center justify-center bg-slate-200/70 dark:bg-slate-800 group-hover:bg-[#0066FF] text-[#0F172A] group-hover:text-white dark:text-slate-200 rounded-full transition-all shrink-0 active:scale-95 cursor-pointer shadow-2xs"
                                                 title="Start Topic Tutorial"
                                             >
                                                 <i className="bi bi-chevron-right text-xs font-bold"></i>
@@ -1109,7 +1109,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     activeTab === 'courses' ? 'translate-x-0 opacity-100 z-10' : '-translate-x-full opacity-0 pointer-events-none z-0'
                 }`}>
                     {/* Top Roadmap Header */}
-                    <div className="flex-shrink-0 px-6 sm:px-10 py-6 sm:py-8 bg-white dark:bg-[#0A0A0A] border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+                    <div className="flex-shrink-0 px-6 sm:px-10 py-6 sm:py-8 bg-[#FAF9F6] dark:bg-[#0A0A0A] border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs">
                         <div className="max-w-4xl mx-auto flex flex-col items-center text-center">
                             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                                 Academic Study Guide

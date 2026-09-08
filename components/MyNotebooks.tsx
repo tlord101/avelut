@@ -166,10 +166,10 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in pb-28 bg-transparent dark:bg-[#000000] text-slate-900 dark:text-white">
-      <div className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">
+      <div className="bg-[#FAF9F6] dark:bg-[#0A0A0A] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-100 dark:bg-slate-800 text-black dark:text-white rounded-full text-[11px] font-bold tracking-wide uppercase border border-neutral-200/60 dark:border-slate-700">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-200/70 dark:bg-slate-800 text-black dark:text-white rounded-full text-[11px] font-bold tracking-wide uppercase border border-slate-200/80 dark:border-slate-700">
               <i className="bi bi-book"></i>
               <span>Study Notes & Textbooks</span>
             </div>
@@ -184,7 +184,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isExtracting}
-            className="w-full sm:w-auto px-5 py-3.5 bg-neutral-100 dark:bg-slate-800 hover:bg-neutral-50 dark:hover:bg-slate-750 border border-neutral-200 dark:border-slate-700 hover:border-neutral-300 dark:hover:border-slate-600 text-black dark:text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-2xs disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-3.5 bg-slate-200/70 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-black dark:text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-2xs disabled:opacity-50"
           >
             <i className="bi bi-cloud-arrow-up text-base text-black dark:text-white"></i>
             <span>{isExtracting ? 'Extracting Text...' : 'Upload PDF Material'}</span>
@@ -200,14 +200,14 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
         </div>
 
         {isExtracting && extractProgress && (
-          <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-slate-800 space-y-2 animate-fade-in">
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2 animate-fade-in">
             <div className="flex items-center justify-between text-xs font-bold text-black dark:text-white">
               <span>{extractProgress.message || 'Extracting text & segmenting chapters...'}</span>
               <span>
                 {extractProgress.current} / {extractProgress.total} Pages ({extractProgress.percent}%)
               </span>
             </div>
-            <div className="w-full bg-neutral-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-neutral-200 dark:border-slate-700">
+            <div className="w-full bg-slate-200/70 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-200 dark:border-slate-700">
               <div
                 className="bg-black dark:bg-amber-400 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${extractProgress.percent}%` }}
@@ -224,9 +224,9 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             placeholder="Search your uploaded materials..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-xs font-medium text-black dark:text-white placeholder:text-neutral-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-neutral-400 dark:focus:border-slate-600 transition-colors"
+            className="w-full bg-[#FAF9F6] dark:bg-[#06090E] border border-slate-200 dark:border-slate-800 rounded-2xl py-3 pl-11 pr-4 text-xs font-medium text-black dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
           />
-          <i className="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-slate-400 text-xs"></i>
+          <i className="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
         </div>
       )}
 
@@ -234,7 +234,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl animate-pulse" />
+              <div key={i} className="h-20 bg-[#FAF9F6] dark:bg-[#0A0A0A] border border-slate-200 dark:border-slate-800 rounded-2xl animate-pulse" />
             ))}
           </div>
         ) : filteredNotebooks.length > 0 ? (
@@ -242,7 +242,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             <div
               key={nb.id}
               onClick={() => setSelectedNotebook(nb)}
-              className="w-full flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-2xl hover:bg-neutral-50 dark:hover:bg-slate-800/80 hover:border-neutral-300 dark:hover:border-slate-700 transition-all cursor-pointer group shadow-2xs gap-3"
+              className="w-full flex items-center justify-between p-4 sm:p-5 bg-[#FAF9F6] dark:bg-[#0A0A0A] border border-slate-200/90 dark:border-slate-800 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer group shadow-2xs gap-3"
             >
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 flex items-center justify-center text-black dark:text-slate-200 text-lg shrink-0 group-hover:bg-neutral-900 dark:group-hover:bg-slate-700 group-hover:text-white transition-colors">
@@ -280,7 +280,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             </div>
           ))
         ) : (
-          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-3xl p-10 text-center space-y-3">
+          <div className="bg-[#FAF9F6] dark:bg-[#0A0A0A] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-10 text-center space-y-3">
             <div className="w-14 h-14 rounded-full bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 flex items-center justify-center text-black dark:text-slate-300 text-2xl mx-auto">
               <i className="bi bi-folder2-open"></i>
             </div>
