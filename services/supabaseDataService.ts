@@ -580,7 +580,10 @@ class SupabaseDataService {
         topic_key: topicKey,
         last_seen_at: new Date().toISOString(),
       };
-      await supabase.from('user_topic_views').upsert(payload, { onConflict: 'user_id,topic_key' });
+      const { error } = await supabase.from('user_topic_views').upsert(payload, { onConflict: 'user_id,topic_key' });
+      if (error) {
+        console.warn('[SupabaseDataService] Error saving topic last visited:', error.message);
+      }
     } catch (err) {
       console.warn('[SupabaseDataService] Exception saving topic last visited:', err);
     }
@@ -604,7 +607,10 @@ class SupabaseDataService {
         structure_json: structure,
         updated_at: new Date().toISOString(),
       };
-      await supabase.from('topic_teaching_structures').upsert(payload, { onConflict: 'topic_key' });
+      const { error } = await supabase.from('topic_teaching_structures').upsert(payload, { onConflict: 'topic_key' });
+      if (error) {
+        console.warn('[SupabaseDataService] Error saving topic teaching structure to Supabase:', error.message);
+      }
     } catch (err) {
       console.warn('[SupabaseDataService] Exception saving topic teaching structure to Supabase:', err);
     }
