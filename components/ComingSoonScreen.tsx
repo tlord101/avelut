@@ -8,8 +8,8 @@ interface ComingSoonScreenProps {
 
 export const ComingSoonScreen: React.FC<ComingSoonScreenProps> = ({ title, subtitle, supportText }) => {
   return (
-    <div className="min-h-screen overflow-hidden bg-[#07111f] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.22),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.18),_transparent_35%),linear-gradient(180deg,_#081120_0%,_#050b14_100%)]" />
+    <div className="min-h-screen overflow-hidden bg-[#000000] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.22),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.18),_transparent_35%),linear-gradient(180deg,_#000000_0%,_#000000_100%)]" />
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid w-full gap-6 overflow-hidden rounded-[36px] border border-white/10 bg-white dark:bg-black/5 p-6 shadow-[0_30px_100px_rgba(0,0,0,0.35)] backdrop-blur-xl lg:grid-cols-[1.1fr_0.9fr] lg:p-8">
           <div className="flex flex-col justify-between rounded-[28px] bg-[linear-gradient(135deg,_rgba(132,204,22,0.16),_rgba(59,130,246,0.12),_rgba(255,255,255,0.06))] p-6 ring-1 ring-white/10 lg:p-8">

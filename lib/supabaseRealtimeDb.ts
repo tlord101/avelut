@@ -1181,20 +1181,28 @@ export async function set(r: DbRef, value: any): Promise<void> {
       }
     } else {
       try {
-        const { error } = await supabase.from('study_partners').upsert(
+        const { error: err1 } = await supabase.from('study_partners').upsert(
           { user_id: userId, partner_id: targetId },
-          { onConflict: 'user_id,partner_id' }
+          { onConflict: 'user_id,partner_id', ignoreDuplicates: true }
         );
-        if (error) {
-          await supabase.from('study_partners').upsert(
+        if (err1) {
+          console.warn('[supabaseRealtimeDb] study_partners upsert attempt 1 failed:', err1.message);
+          // Try the reverse direction as fallback
+          const { error: err2 } = await supabase.from('study_partners').upsert(
             { user_id: targetId, partner_id: userId },
-            { onConflict: 'user_id,partner_id' }
+            { onConflict: 'user_id,partner_id', ignoreDuplicates: true }
           );
+          if (err2) {
+            console.error('[supabaseRealtimeDb] study_partners upsert BOTH attempts failed:', err2.message);
+            throw new Error(`Failed to save study partner: ${err1.message}`);
+          }
         }
       } catch (e) {
         console.warn('[supabaseRealtimeDb] upsert study_partners error', e);
+        throw e; // Re-throw so the UI caller can handle it
       }
     }
+
     const p1 = await loadPath(`study_partners/${userId}`);
     setLocalCache(`study_partners/${userId}`, p1);
     notify(`study_partners/${userId}`, p1);

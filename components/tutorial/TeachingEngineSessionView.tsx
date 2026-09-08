@@ -461,7 +461,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             <button
               onClick={handleCloseSession}
               type="button"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#131E32] hover:bg-[#1E2E4A] border border-[#1E293B] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
               title="Exit Classroom"
             >
               <i className="bi bi-arrow-left text-sm sm:text-base"></i>
@@ -476,7 +476,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         rightActions: (
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {!finalTest && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#131E32] border border-[#1E293B] text-[10px] sm:text-xs font-mono text-slate-300">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222] text-[10px] sm:text-xs font-mono text-slate-300">
                 <span className="text-[#38BDF8] font-bold">{String(boardIndex + 1).padStart(2, '0')}</span>
                 <span className="text-slate-500">/</span>
                 <span className="text-slate-400">{String(totalBoards).padStart(2, '0')}</span>
@@ -485,16 +485,16 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             <button
               onClick={() => setShowVoiceModal(true)}
               type="button"
-              className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#131E32] hover:bg-[#1E2E4A] border border-[#1E293B] text-[11px] font-bold text-[#60A5FA] transition-colors cursor-pointer"
+              className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] text-[11px] font-bold text-[#60A5FA] transition-colors cursor-pointer"
               title={`Lecturer: ${currentVoice}`}
             >
               <i className="bi bi-person-voice text-xs"></i>
               <span className="hidden sm:inline">{currentVoice}</span>
             </button>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#131E32] border border-[#1E293B]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222]">
               <span
                 className={`w-2 h-2 rounded-full transition-all ${
-                  isSpeaking ? 'bg-[#34D399] shadow-[0_0_8px_#34D399] animate-pulse' : 'bg-slate-500'
+                  isSpeaking ? 'bg-[#34D399] animate-pulse' : 'bg-slate-500'
                 }`}
               />
               <span className="text-[10px] sm:text-xs font-bold text-slate-200 tracking-wider">
@@ -504,7 +504,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           </div>
         ),
         hideBottomNav: true,
-        className: 'bg-[#070B14] border-b border-[#1E293B]',
+        className: 'bg-[#000000] border-b border-[#222222]',
       });
     }
     return () => {
@@ -534,13 +534,13 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#070B14] text-white select-none overflow-hidden relative">
+    <div className="flex flex-col h-full w-full bg-[#000000] text-white select-none overflow-hidden relative">
       <main className="flex-1 relative flex flex-col min-h-0 w-full overflow-hidden p-1.5 sm:p-3">
         {/* Render Final Test View or Board View */}
         {finalTest ? (
-          <div className="w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#1E293B] p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
+          <div className="w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
             <div className="max-w-2xl w-full flex flex-col gap-6">
-              <div className="text-center border-b border-[#1E293B] pb-4">
+              <div className="text-center border-b border-[#222222] pb-4">
                 <span className="px-3 py-1 rounded-full bg-[#38BDF8]/10 text-[#38BDF8] text-xs font-bold uppercase tracking-wider">
                   Final Mini Assessment
                 </span>
@@ -555,7 +555,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
                 const isCorrect = selectedAnswers[q.id] === q.correctAnswer;
 
                 return (
-                  <div key={q.id} className="p-4 rounded-xl bg-[#131E32] border border-[#1E293B] flex flex-col gap-3">
+                  <div key={q.id} className="p-4 rounded-xl bg-[#111111] border border-[#222222] flex flex-col gap-3">
                     <p className="text-sm sm:text-base font-semibold text-slate-100">
                       <span className="text-[#38BDF8] font-bold mr-2">{idx + 1}.</span> {q.question}
                     </p>
@@ -563,7 +563,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                       {q.options?.map((opt) => {
                         const active = selectedAnswers[q.id] === opt;
-                        let optionStyle = 'bg-[#0F172A] border-[#1E293B] text-slate-300 hover:border-[#38BDF8]';
+                        let optionStyle = 'bg-[#0F172A] border-[#222222] text-slate-300 hover:border-[#38BDF8]';
 
                         if (testSubmitted) {
                           if (opt === q.correctAnswer) {
@@ -614,7 +614,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
                   Submit Mini Test
                 </button>
               ) : (
-                <div className="flex flex-col items-center gap-4 bg-[#131E32] p-6 rounded-2xl border border-[#1E293B] text-center">
+                <div className="flex flex-col items-center gap-4 bg-[#111111] p-6 rounded-2xl border border-[#222222] text-center">
                   <div className="text-3xl font-black text-[#38BDF8]">
                     Score: {calculateScore()} / {finalTest.questions.length}
                   </div>
@@ -647,7 +647,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
 
         {/* Loading Indicator for Initial Board Fetching */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none bg-[#070B14]/60 backdrop-blur-sm">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none bg-[#000000]/60 backdrop-blur-sm">
             <div className="w-10 h-10 rounded-full border-2 border-[#38BDF8]/30 border-t-[#38BDF8] animate-spin mb-3" />
             <span className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
               {statusMessage || 'Preparing live board structure…'}

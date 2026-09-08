@@ -182,7 +182,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ notifications, onM
     return (
         <div className="flex-1 w-full max-w-4xl mx-auto h-full overflow-hidden flex flex-col bg-gray-50 dark:bg-black/50 md:rounded-2xl md:my-4 md:border border-gray-200 dark:border-gray-800 md:shadow-sm">
             {/* Header */}
-            <div className="flex-none p-4 md:p-6 bg-white dark:bg-[#0b1120] border-b border-gray-200 dark:border-gray-800 flex justify-between items-center z-10 sticky top-0">
+            <div className="flex-none p-4 md:p-6 bg-white dark:bg-[#0A0A0A] border-b border-gray-200 dark:border-gray-800 flex justify-between items-center z-10 sticky top-0">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <NotificationBellIcon className="w-6 h-6 text-lime-600" />
                     Notifications
@@ -206,7 +206,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ notifications, onM
                             onClick={() => handleNotificationClick(notification)}
                             className={`group relative overflow-hidden rounded-xl border p-4 transition-all duration-200 cursor-pointer
                                 ${notification.is_read 
-                                    ? 'bg-white dark:bg-[#0b1120] border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm' 
+                                    ? 'bg-white dark:bg-[#0A0A0A] border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm' 
                                     : 'bg-lime-50/30 dark:bg-lime-900/10 border-lime-200 dark:border-lime-900 shadow-sm ring-1 ring-lime-500/10'}`}
                         >
                             {!notification.is_read && (

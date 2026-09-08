@@ -126,7 +126,7 @@ const CustomSearchableSelect: React.FC<CustomSearchableSelectProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute z-30 w-full mt-2 bg-white dark:bg-[#0F172A] border border-[#E3E9F1] dark:border-white/10 rounded-2xl shadow-2xl max-h-72 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute z-30 w-full mt-2 bg-white dark:bg-[#0A0A0A] border border-[#E3E9F1] dark:border-white/10 rounded-2xl shadow-2xl max-h-72 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="p-3 border-b border-[#E3E9F1] dark:border-white/10 flex items-center bg-[#F8FAFC] dark:bg-white/5">
             <i className="bi bi-search text-[#64748B] ml-1 mr-2 shrink-0"></i>
             <input

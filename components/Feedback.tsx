@@ -123,7 +123,7 @@ export const Feedback: React.FC<FeedbackProps> = ({ userProfile }) => {
               <button
                 type="submit"
                 disabled={isSubmitting || !content.trim()}
-                className="px-8 py-3 bg-[#009EE2] hover:bg-[#0085BF] text-white rounded-xl text-sm font-black tracking-wide shadow-lg shadow-[#009EE2]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-8 py-3 bg-[#009EE2] hover:bg-[#0085BF] text-white rounded-xl text-sm font-black tracking-wide shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSubmitting ? (
                   <>

@@ -46,12 +46,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onOnboardingComple
   const isFormComplete = Boolean(selectedSchool && selectedCollege && selectedDepartment && selectedLevel);
 
   return (
-    <div className="min-h-screen bg-[#F6F6F3] dark:bg-[#080C16] flex items-center justify-center p-4 sm:p-8 md:p-12 relative z-50 transition-colors duration-200">
+    <div className="min-h-screen bg-[#F6F6F3] dark:bg-[#000000] flex items-center justify-center p-4 sm:p-8 md:p-12 relative z-50 transition-colors duration-200">
       {/* Ambient background glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#0066FF]/10 dark:bg-[#0066FF]/5 rounded-full blur-3xl pointer-events-none -z-10" />
 
       {/* Main Wide Card Surface */}
-      <div className="w-full max-w-5xl bg-white dark:bg-[#0F172A] border border-[#E3E9F1] dark:border-white/10 rounded-3xl sm:rounded-[36px] p-6 sm:p-10 md:p-12 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.08)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]">
+      <div className="w-full max-w-5xl bg-white dark:bg-[#0A0A0A] border border-[#E3E9F1] dark:border-white/10 rounded-3xl sm:rounded-[36px] p-6 sm:p-10 md:p-12 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.08)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]">
         
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 mb-8 border-b border-[#E3E9F1] dark:border-white/10">

@@ -315,7 +315,7 @@ const VoiceNotePlayer: React.FC<{ src: string; isMe: boolean; isUploading?: bool
         type="button"
         onClick={togglePlay}
         disabled={isUploading}
-        className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full transition shrink-0 ${isMe ? 'bg-black/20 text-white hover:bg-black/30' : 'bg-[#F8F9FA] dark:bg-[#0B141A] text-[#009EE2] dark:text-white hover:bg-[#E9ECEF] dark:hover:bg-white/10'
+        className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full transition shrink-0 ${isMe ? 'bg-black/20 text-white hover:bg-black/30' : 'bg-[#F8F9FA] dark:bg-[#000000] text-[#009EE2] dark:text-white hover:bg-[#E9ECEF] dark:hover:bg-white/10'
           } ${isUploading ? 'cursor-not-allowed' : ''}`}
       >
         {isUploading ? (
@@ -982,7 +982,7 @@ const AvelutMessageInput: React.FC<AvelutInputProps> = ({
 
       <div className="w-full flex flex-col gap-2 relative">
         {attachedImages.length > 0 && (
-          <div className="mx-2 mb-1 bg-white dark:bg-[#202C33] rounded-2xl p-2 flex items-center gap-2 overflow-x-auto shadow-sm border border-slate-100 dark:border-white/5 relative [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="mx-2 mb-1 bg-white dark:bg-[#111111] rounded-2xl p-2 flex items-center gap-2 overflow-x-auto shadow-sm border border-slate-100 dark:border-white/5 relative [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {attachedImages.map((img, idx) => (
               <div key={idx} className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-black/5 relative shrink-0">
                 <img src={img.previewUrl} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
@@ -2630,7 +2630,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             </div>
           </div>
         ),
-        className: 'bg-white dark:bg-[#1F2C34] shadow-md h-16 border-b border-slate-200 dark:border-slate-800',
+        className: 'bg-white dark:bg-[#111111] shadow-md h-16 border-b border-slate-200 dark:border-slate-800',
         hideDefaultRightActions: true,
         hideProfileAvatar: true,
         hideBottomNav: false
@@ -2899,11 +2899,11 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       </div>
 
       {/* Main Chat Viewport */}
-      <div className={`flex-1 flex flex-col h-full bg-[#EFEAE2] dark:bg-[#0B141A] relative ${!activeChat ? 'hidden lg:flex items-center justify-center' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col h-full bg-[#EFEAE2] dark:bg-[#000000] relative ${!activeChat ? 'hidden lg:flex items-center justify-center' : 'flex'}`}>
         {activeChat ? (
           <div className="flex flex-col h-full w-full relative overflow-hidden">
             {/* 2. Messages List */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto min-h-0 px-2 sm:px-3 pt-3 pb-3 md:py-6 bg-[#EFEAE2] dark:bg-[#0B141A] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto min-h-0 px-2 sm:px-3 pt-3 pb-3 md:py-6 bg-[#EFEAE2] dark:bg-[#000000] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth">
               <div className="min-h-full flex flex-col justify-end">
               {combinedMessageStream.length === 0 ? (
                 <div className="my-auto flex flex-col items-center justify-center px-4 py-8">
@@ -3154,9 +3154,9 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             </div>
 
             {/* 3. Bottom Control Anchor Panel Bar */}
-            <div className="p-3 bg-[#EFEAE2] dark:bg-[#0B141A] z-10 shrink-0">
+            <div className="p-3 bg-[#EFEAE2] dark:bg-[#000000] z-10 shrink-0">
               {replyingTo && (
-                <div className="flex items-center justify-between mb-2 p-2 bg-neutral-100 dark:bg-[#1A1D21] rounded-lg border-l-4 border-[#009EE2]">
+                <div className="flex items-center justify-between mb-2 p-2 bg-neutral-100 dark:bg-[#111111] rounded-lg border-l-4 border-[#009EE2]">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-[#009EE2] dark:text-white">Replying to {replyingTo.senderId === firebaseUser?.uid ? 'You' : activeChat.otherUser.display_name}</p>
                     <p className="text-xs text-neutral-600 dark:text-gray-400 truncate max-w-[200px] sm:max-w-[300px]">
@@ -3424,7 +3424,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           onClick={() => setShowDeleteChatConfirmDialog(false)}
         >
           <div
-            className="bg-white dark:bg-[#1F2C34] rounded-[28px] shadow-2xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-800 animate-scale-in flex flex-col gap-2"
+            className="bg-white dark:bg-[#111111] rounded-[28px] shadow-2xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-800 animate-scale-in flex flex-col gap-2"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-xl font-normal text-[#111B21] dark:text-gray-100">

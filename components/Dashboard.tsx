@@ -34,9 +34,9 @@ const StatCard: React.FC<{ title: string; value: string | number; description: s
     };
 
     return (
-        <div className="group relative overflow-hidden rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0b1120] p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-transparent hover:shadow-lg">
+        <div className="group relative overflow-hidden rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0A0A0A] p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-transparent hover:shadow-lg">
                 <div className="flex items-start justify-between gap-4">
-                        <div className="rounded-2xl border border-gray-100 dark:border-transparent bg-gray-50 dark:bg-[#0b1120] p-3 text-gray-500 dark:text-gray-400">
+                        <div className="rounded-2xl border border-gray-100 dark:border-transparent bg-gray-50 dark:bg-[#0A0A0A] p-3 text-gray-500 dark:text-gray-400">
                                 {icon}
                         </div>
                         <div className="text-right">
@@ -136,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <button 
                     onClick={onNavigateToStudyGuide}
-                    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-black border border-gray-200 p-8 text-left transition-all duration-200 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-[#0b1120] cursor-pointer"
+                    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-black border border-gray-200 p-8 text-left transition-all duration-200 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-[#0A0A0A] cursor-pointer"
                 >
                     <div className="flex flex-col gap-4">
                         <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 w-fit">
@@ -151,7 +151,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
 
                 <button 
                     onClick={onNavigateToLeaderboard}
-                    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-black border border-gray-200 p-8 text-left transition-all duration-200 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-[#0b1120] cursor-pointer"
+                    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-black border border-gray-200 p-8 text-left transition-all duration-200 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-[#0A0A0A] cursor-pointer"
                 >
                     <div className="flex flex-col gap-4">
                         <div className="rounded-2xl bg-sky-50 border border-sky-100 p-4 w-fit">
@@ -166,7 +166,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
             </div>
 
             {/* Academic Progress Summary */}
-            <div className="rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0b1120] p-6 md:p-8">
+            <div className="rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0A0A0A] p-6 md:p-8">
                 <div className="mb-6 flex items-center justify-between">
                     <div>
                         <h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-gray-500 dark:text-gray-400 mb-1">Academic Curriculum</h3>

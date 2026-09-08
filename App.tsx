@@ -165,7 +165,7 @@ const PWAInstallBannerOverlay: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => executeInstallationPipeline()}
-                        className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#009EE2] hover:bg-[#0070B8] py-4 text-[14px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#009EE2]/30 transition active:scale-95"
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#009EE2] hover:bg-[#0070B8] py-4 text-[14px] font-black uppercase tracking-wider text-white shadow-lg transition active:scale-95"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"></path>
@@ -231,7 +231,7 @@ const SharedImagePromptModal: React.FC<{
             <div className="w-full max-w-md rounded-[32px] border border-white/20 bg-white/95 dark:bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl dark:border-slate-800 transition-all">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/25">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -267,7 +267,7 @@ const SharedImagePromptModal: React.FC<{
                     <button
                         type="button"
                         onClick={onScan}
-                        className="flex-[1.5] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 px-5 py-3.5 text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-sky-600/30 transition-all hover:from-sky-500 hover:to-indigo-500 active:scale-95"
+                        className="flex-[1.5] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 px-5 py-3.5 text-sm font-black uppercase tracking-wider text-white shadow-lg transition-all hover:from-sky-500 hover:to-indigo-500 active:scale-95"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />

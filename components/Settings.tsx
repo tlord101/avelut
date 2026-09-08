@@ -165,7 +165,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
   return (
     <div className="bg-[#F0F2F5] dark:bg-black min-h-full animate-in fade-in duration-300">
       {/* WhatsApp-style top header bar */}
-      <div className="sticky top-0 z-20 bg-white dark:bg-[#1F2C34] px-4 py-3 flex items-center gap-4 border-b border-neutral-200/80 dark:border-white/10">
+      <div className="sticky top-0 z-20 bg-white dark:bg-[#111111] px-4 py-3 flex items-center gap-4 border-b border-neutral-200/80 dark:border-white/10">
         <button
           type="button"
           onClick={() => onNavigate('dashboard')}
@@ -210,7 +210,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       </div>
 
       {/* Profile header – exact WhatsApp layout */}
-      <div className="bg-white dark:bg-[#1F2C34] mt-0">
+      <div className="bg-white dark:bg-[#111111] mt-0">
         <button
           type="button"
           onClick={() => onNavigate('user_profile')}
@@ -244,7 +244,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
         onClick={() => onNavigate('billing')}
         role="button"
         tabIndex={0}
-        className="bg-white dark:bg-[#1F2C34] mt-2.5 cursor-pointer active:bg-neutral-50 dark:active:bg-white/5 transition-colors"
+        className="bg-white dark:bg-[#111111] mt-2.5 cursor-pointer active:bg-neutral-50 dark:active:bg-white/5 transition-colors"
       >
         <div className="px-4 py-3.5 flex items-center justify-between">
           <div>
@@ -266,7 +266,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       {(matchSearch('Profile Details', 'Display name, avatar, bio & contact') ||
         matchSearch('Academic Information', 'School, department, academic level') ||
         matchSearch('Avelut Pro & Verification', 'Get verified badge, unlimited AI tokens & perks')) && (
-        <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+        <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Profile Details', 'Display name, avatar, bio & contact') && (
             <SettingsRow
               icon={<i className="bi bi-person text-lg" />}
@@ -303,7 +303,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
         matchSearch('Study History & AI Logs', 'Past conversations, tutorials, and notes') ||
         matchSearch('Study Guide & Courses', 'Browse curriculum, syllabus & unit progress') ||
         matchSearch('My Notebooks', 'Saved study notes and summaries')) && (
-        <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+        <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Study Partners', 'Find classmates & manage connection requests') && (
             <SettingsRow
               icon={<i className="bi bi-people text-lg" />}
@@ -343,7 +343,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       {(matchSearch('Appearance', 'Chat theme, app icon, app theme') ||
         matchSearch('Push Notifications', 'Alerts for messages, requests & updates') ||
         matchSearch('Billing & Plans', 'Top-up AI credits, view plans & invoices')) && (
-        <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+        <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Appearance', 'Chat theme, app icon, app theme') && (
             <SettingsRow
               icon={<i className="bi bi-moon-stars text-lg" />}
@@ -383,7 +383,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       {(matchSearch('Password & Security', 'Send password reset link to your email') ||
         matchSearch('Help & Support', 'User guides, FAQs & interactive tour') ||
         matchSearch('Send Feedback', 'Report issues or suggest features')) && (
-        <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+        <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Password & Security', 'Send password reset link to your email') && (
             <SettingsRow
               icon={<i className="bi bi-shield-lock text-lg" />}
@@ -413,7 +413,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
 
       {/* Terms & Policies */}
       {(matchSearch('Terms & Conditions') || matchSearch('Privacy Policy')) && (
-        <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+        <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Terms & Conditions') && (
             <a
               href="/t&c"
@@ -446,7 +446,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       )}
 
       {/* Account Actions */}
-      <div className="bg-white dark:bg-[#1F2C34] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
+      <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
         <SettingsRow
           icon={<i className="bi bi-box-arrow-right text-lg" />}
           title="Log out"

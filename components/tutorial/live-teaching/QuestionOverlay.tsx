@@ -70,7 +70,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-11/12 max-w-xl z-40 animate-in slide-in-from-bottom-4 duration-300">
-      <div className="rounded-2xl sm:rounded-3xl bg-[#0B1120]/95 backdrop-blur-xl border border-[#38BDF8]/50 p-4 sm:p-5 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-white">
+      <div className="rounded-2xl sm:rounded-3xl bg-[#080808]/95 backdrop-blur-xl border border-[#38BDF8]/50 p-4 sm:p-5 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-white">
         {/* Header Badge */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -113,7 +113,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
                   className={`flex-1 min-w-[45%] px-4 py-3 rounded-xl border text-xs sm:text-sm font-semibold transition-all active:scale-95 cursor-pointer text-left flex items-center justify-between gap-2 ${
                     isSelected
                       ? 'bg-[#0066FF] border-[#38BDF8] text-white ring-2 ring-[#38BDF8]/50'
-                      : 'bg-[#1E293B] hover:bg-[#1E293B]/80 hover:border-[#38BDF8]/50 border-[#334155] text-slate-100'
+                      : 'bg-[#222222] hover:bg-[#222222]/80 hover:border-[#38BDF8]/50 border-[#334155] text-slate-100'
                   }`}
                 >
                   <span>{option}</span>
@@ -136,7 +136,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               placeholder="Speak or type your answer..."
               disabled={isSubmittingAnswer}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-[#1E293B] border border-[#334155] focus:border-[#38BDF8] focus:outline-none text-xs sm:text-sm text-white placeholder-slate-400 font-medium"
+              className="flex-1 px-4 py-2.5 rounded-xl bg-[#222222] border border-[#334155] focus:border-[#38BDF8] focus:outline-none text-xs sm:text-sm text-white placeholder-slate-400 font-medium"
             />
 
             <button
@@ -145,7 +145,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                 isListening
                   ? 'bg-rose-500 text-white animate-pulse'
-                  : 'bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] border border-[#334155]'
+                  : 'bg-[#222222] hover:bg-[#334155] text-[#38BDF8] border border-[#334155]'
               }`}
               title="Speak answer aloud"
             >
@@ -169,7 +169,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
 
         {/* Conversational Evaluation Feedback & Next Button */}
         {evaluationFeedback && (
-          <div className="mt-2 p-4 rounded-2xl bg-[#1E293B] border border-[#334155] animate-in fade-in duration-300 space-y-3">
+          <div className="mt-2 p-4 rounded-2xl bg-[#222222] border border-[#334155] animate-in fade-in duration-300 space-y-3">
             <div className="flex items-center gap-2">
               <i
                 className={`bi ${

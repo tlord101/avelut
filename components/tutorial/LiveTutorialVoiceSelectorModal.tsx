@@ -192,7 +192,7 @@ export const LiveTutorialVoiceSelectorModal: React.FC<LiveTutorialVoiceSelectorM
         {/* Modal Header */}
         <div className="p-6 bg-[#F6F6F3] border-b border-[#E3E9F1] flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#0066FF] text-white flex items-center justify-center shadow-md shadow-[#0066FF]/20">
+            <div className="w-10 h-10 rounded-2xl bg-[#0066FF] text-white flex items-center justify-center shadow-md">
               <i className="bi bi-mic-fill text-lg"></i>
             </div>
             <div>
@@ -276,7 +276,7 @@ export const LiveTutorialVoiceSelectorModal: React.FC<LiveTutorialVoiceSelectorM
                     title={isPlaying ? 'Pause sample' : 'Listen to preview'}
                     className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
                       isPlaying
-                        ? 'bg-[#0066FF] text-white animate-pulse shadow-md shadow-[#0066FF]/30'
+                        ? 'bg-[#0066FF] text-white animate-pulse shadow-md'
                         : 'bg-[#F1F5F9] hover:bg-[#E3E9F1] text-[#0066FF] border border-[#E3E9F1]'
                     }`}
                   >
@@ -309,7 +309,7 @@ export const LiveTutorialVoiceSelectorModal: React.FC<LiveTutorialVoiceSelectorM
 
           <button
             onClick={handleConfirmStart}
-            className="px-6 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#0052cc] text-white text-xs font-bold flex items-center space-x-2 transition-transform active:scale-95 shadow-md shadow-[#0066FF]/20"
+            className="px-6 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#0052cc] text-white text-xs font-bold flex items-center space-x-2 transition-transform active:scale-95 shadow-md"
           >
             <span>Start Live Tutorial</span>
             <i className="bi bi-arrow-right"></i>

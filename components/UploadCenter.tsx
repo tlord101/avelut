@@ -1128,7 +1128,7 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
                     {activeView.replace('_', ' ')}
                 </h1>
             </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-sky-500/20">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
                 {profile.display_name?.charAt(0).toUpperCase()}
             </div>
         </div>

@@ -5,7 +5,7 @@ import React from 'react';
  */
 export const Playground: React.FC = () => {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] bg-transparent dark:bg-[#070B14] px-6 text-center text-slate-900 dark:text-slate-100">
+    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] bg-transparent dark:bg-[#000000] px-6 text-center text-slate-900 dark:text-slate-100">
       <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-slate-800/80 border border-neutral-200/80 dark:border-slate-800 flex items-center justify-center mb-5">
         <svg
           xmlns="http://www.w3.org/2000/svg"

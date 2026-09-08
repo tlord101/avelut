@@ -166,7 +166,7 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-      <div className="w-full max-w-md rounded-3xl bg-[#0B1220] border border-[#1E293B] p-5 shadow-2xl text-white">
+      <div className="w-full max-w-md rounded-3xl bg-[#0B1220] border border-[#222222] p-5 shadow-2xl text-white">
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-bold text-white">Ask while lesson is paused</p>
@@ -178,14 +178,14 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
               onClose();
             }}
             type="button"
-            className="w-8 h-8 rounded-full bg-[#1E293B] flex items-center justify-center text-slate-400 hover:text-white"
+            className="w-8 h-8 rounded-full bg-[#222222] flex items-center justify-center text-slate-400 hover:text-white"
           >
             <i className="bi bi-x-lg text-sm"></i>
           </button>
         </div>
 
         {/* Wave visualizer */}
-        <div className="relative h-28 rounded-2xl bg-[#0F172A] border border-[#1E293B] flex items-center justify-center gap-[3px] overflow-hidden mb-3">
+        <div className="relative h-28 rounded-2xl bg-[#0F172A] border border-[#222222] flex items-center justify-center gap-[3px] overflow-hidden mb-3">
           {bars.map((h, i) => (
             <span
               key={i}
@@ -199,7 +199,7 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
         </div>
 
         {/* Live transcript */}
-        <div className="min-h-[52px] max-h-24 overflow-y-auto rounded-xl bg-[#131E32] border border-[#1E293B] px-3 py-2 mb-3 text-xs text-slate-200">
+        <div className="min-h-[52px] max-h-24 overflow-y-auto rounded-xl bg-[#111111] border border-[#222222] px-3 py-2 mb-3 text-xs text-slate-200">
           {transcript || <span className="text-slate-500">Your question will appear here…</span>}
         </div>
 
@@ -226,7 +226,7 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
             className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${
               isListening
                 ? 'bg-rose-500/90 border-rose-300 text-white animate-pulse'
-                : 'bg-[#1E293B] border-[#334155] text-[#38BDF8]'
+                : 'bg-[#222222] border-[#334155] text-[#38BDF8]'
             }`}
             title={isListening ? 'Stop listening' : 'Start listening'}
           >
@@ -236,7 +236,7 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-12 h-12 rounded-2xl bg-[#1E293B] border border-[#334155] flex items-center justify-center text-[#FACC15]"
+            className="w-12 h-12 rounded-2xl bg-[#222222] border border-[#334155] flex items-center justify-center text-[#FACC15]"
             title="Snap or upload"
           >
             <i className="bi bi-camera text-lg"></i>

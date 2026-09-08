@@ -60,7 +60,7 @@ export const LimitExceededModal: React.FC<LimitExceededModalProps> = ({
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in backdrop-blur-md">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer" onClick={onClose} />
       
-      <div className="bg-white dark:bg-[#0F172A] rounded-[32px] w-full max-w-md relative z-10 overflow-hidden shadow-2xl border border-[#E3E9F1] dark:border-slate-800 animate-scale-in text-[#0F172A] dark:text-white">
+      <div className="bg-white dark:bg-[#0A0A0A] rounded-[32px] w-full max-w-md relative z-10 overflow-hidden shadow-2xl border border-[#E3E9F1] dark:border-slate-800 animate-scale-in text-[#0F172A] dark:text-white">
         {/* Header banner */}
         <div className="bg-[#F6F6F3] dark:bg-slate-900/60 p-6 text-center border-b border-[#E3E9F1] dark:border-slate-800">
            <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs">
@@ -83,7 +83,7 @@ export const LimitExceededModal: React.FC<LimitExceededModalProps> = ({
            {/* Action 1: Upgrade to Plan */}
            <button
               onClick={handleUpgradeAccount}
-              className="w-full bg-[#0066FF] hover:bg-[#002D62] text-white font-extrabold py-3.5 px-5 rounded-2xl transition-all shadow-md shadow-[#0066FF]/20 active:scale-[0.98] flex items-center justify-between group cursor-pointer"
+              className="w-full bg-[#0066FF] hover:bg-[#002D62] text-white font-extrabold py-3.5 px-5 rounded-2xl transition-all shadow-md active:scale-[0.98] flex items-center justify-between group cursor-pointer"
            >
               <div className="flex items-center gap-3 text-left">
                  <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">

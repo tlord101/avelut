@@ -73,7 +73,7 @@
 /* Native status bar placeholder — only shown on native */
 .native-status-bar-spacer {
   height: var(--safe-area-top);
-  background-color: #0F172A;
+  background-color: #000000;
 }
 
 /* Pushes content up when keyboard is visible on native */
@@ -96,12 +96,12 @@
 @layer utilities {
   @keyframes glow-pulse {
     50% {
-      box-shadow: 0 0 16px 4px rgba(255, 255, 255, 0.3);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
   }
   @keyframes scan-pulse {
     50% {
-      box-shadow: 0 0 30px 10px rgba(0, 102, 255, 0.4);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
     }
   }
   @keyframes fade-in {
@@ -147,13 +147,13 @@
   @keyframes voice-pulse {
     50% {
       transform: scale(1.08);
-      box-shadow: 0 0 40px 10px rgba(0, 102, 255, 0.35);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
     }
   }
   @keyframes speaking-glow {
     50% {
       transform: scale(1.05);
-      box-shadow: 0 0 50px 15px rgba(0, 102, 255, 0.45);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }
   }
   @keyframes toast-in {
@@ -192,28 +192,28 @@
   @keyframes moon-listening-pulse {
     50% {
       transform: scale(1.03);
-      box-shadow: 0 0 40px 10px rgba(173, 216, 230, 0.2);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     }
   }
   @keyframes moon-speaking-pulse {
     50% {
       transform: scale(1.08);
-      box-shadow: 0 0 70px 25px rgba(70, 130, 180, 0.5); /* steelblue */
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
     }
   }
   /* New loader styles */
   .loader-logo {
     animation: finished-glow 1.5s ease-in-out infinite alternate;
     animation-delay: 2.2s; /* Start after draw animation is mostly done */
-    filter: drop-shadow(0 0 12px rgba(0, 136, 204, 0.28));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
   }
 
   @keyframes finished-glow {
     from {
-      filter: drop-shadow(0 0 4px rgba(0, 136, 204, 0.25));
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1));
     }
     to {
-      filter: drop-shadow(0 0 14px rgba(0, 45, 98, 0.4));
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
     }
   }
 
@@ -390,7 +390,7 @@
 }
 
 .dark .message-bubble.incoming {
-  background-color: #090D16;
+  background-color: #0A0A0A;
   color: #FFFFFF;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
@@ -605,7 +605,7 @@
 
 /* Blackboard Canvas Texture */
 .blackboard-canvas {
-  background-color: #111827;
+  background-color: #0A0A0A;
   background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
   background-size: 24px 24px;
 }

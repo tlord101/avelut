@@ -315,9 +315,9 @@ ${messageText}`;
             {formatLatexMath(completedPart)}
           </ReactMarkdown>
           {activePart && (
-            <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal drop-shadow-[0_0_10px_rgba(0,102,255,0.4)] animate-fade-in transition-all duration-300">
+            <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
               <span>{activePart}</span>
-              <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle shadow-[0_0_8px_#0066FF]" />
+              <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
             </div>
           )}
         </div>
@@ -325,9 +325,9 @@ ${messageText}`;
     }
 
     return (
-      <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal drop-shadow-[0_0_10px_rgba(0,102,255,0.4)] animate-fade-in transition-all duration-300">
+      <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
         <span>{text}</span>
-        <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle shadow-[0_0_8px_#0066FF]" />
+        <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
       </div>
     );
   };
@@ -356,7 +356,7 @@ ${messageText}`;
       inline ? (
         <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-slate-800 text-[#0066FF] dark:text-blue-400 border border-blue-100 dark:border-slate-700'}`} {...props} />
       ) : (
-        <code className="block overflow-x-auto rounded-2xl bg-[#0F172A] dark:bg-slate-900 text-slate-100 p-4 text-sm font-mono my-3 border border-slate-700/60" {...props} />
+        <code className="block overflow-x-auto rounded-2xl bg-[#0A0A0A] dark:bg-slate-900 text-slate-100 p-4 text-sm font-mono my-3 border border-slate-700/60" {...props} />
       ),
     blockquote: ({ node, ...props }: any) => (
       <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-blue-300 bg-white/10 text-white' : 'border-[#0066FF] dark:border-blue-500 bg-blue-50/70 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'}`} {...props} />

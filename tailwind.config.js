@@ -199,7 +199,7 @@ export default {
         'educational-blue': '#002D62',
         'active-blue': '#0066FF',
         mint: '#B3E5FC',
-        charcoal: '#002D62',
+        charcoal: '#1A1A1A',
       }
     },
   },

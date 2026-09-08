@@ -294,13 +294,13 @@ export const StudyPartners: React.FC<StudyPartnersProps> = ({ userProfile, onNav
             <div className="flex border-b border-[#E9ECEF] dark:border-white/10 bg-white dark:bg-black px-4 py-3 shrink-0 gap-3">
                 <button
                     onClick={() => setActiveTab('find')}
-                    className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition ${activeTab === 'find' ? 'bg-[#009EE2] text-white shadow-md shadow-[#009EE2]/20' : 'text-[#6C757D] dark:text-gray-400 hover:text-[#212529] dark:hover:text-white bg-neutral-50 dark:bg-black hover:bg-neutral-100 dark:hover:bg-neutral-900 dark:border dark:border-white/10'}`}
+                    className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition ${activeTab === 'find' ? 'bg-[#009EE2] text-white shadow-md' : 'text-[#6C757D] dark:text-gray-400 hover:text-[#212529] dark:hover:text-white bg-neutral-50 dark:bg-black hover:bg-neutral-100 dark:hover:bg-neutral-900 dark:border dark:border-white/10'}`}
                 >
                     Find Partners
                 </button>
                 <button
                     onClick={() => setActiveTab('requests')}
-                    className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition flex items-center gap-2 ${activeTab === 'requests' ? 'bg-[#009EE2] text-white shadow-md shadow-[#009EE2]/20' : 'text-[#6C757D] dark:text-gray-400 hover:text-[#212529] dark:hover:text-white bg-neutral-50 dark:bg-black hover:bg-neutral-100 dark:hover:bg-neutral-900 dark:border dark:border-white/10'}`}
+                    className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition flex items-center gap-2 ${activeTab === 'requests' ? 'bg-[#009EE2] text-white shadow-md' : 'text-[#6C757D] dark:text-gray-400 hover:text-[#212529] dark:hover:text-white bg-neutral-50 dark:bg-black hover:bg-neutral-100 dark:hover:bg-neutral-900 dark:border dark:border-white/10'}`}
                 >
                     Requests
                     {(receivedRequests.length > 0 || sentRequests.length > 0) && (

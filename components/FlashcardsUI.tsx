@@ -71,7 +71,7 @@ const FlashcardItem = ({ card, stackIndex, exitDirection, isFlipped, setIsFlippe
 
           {/* Back Side */}
           <div
-            className="absolute inset-0 backface-hidden flex flex-col items-center justify-center p-8 text-center bg-[#F8FAFC] dark:bg-[#0F172A]"
+            className="absolute inset-0 backface-hidden flex flex-col items-center justify-center p-8 text-center bg-[#F8FAFC] dark:bg-[#0A0A0A]"
             style={{ transform: 'rotateY(180deg)' }}
           >
             <span className="absolute top-8 left-8 text-[10px] font-black uppercase tracking-widest text-[#3B82F6] px-3 py-1 bg-[#DBEAFE] dark:bg-[#1E3A8A] rounded-full">

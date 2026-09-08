@@ -19,7 +19,7 @@ export const LiveTranscriptSubtitles: React.FC<LiveTranscriptSubtitlesProps> = (
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-11/12 max-w-2xl pointer-events-none z-20 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="bg-[#070B14]/85 backdrop-blur-md border border-[#1E293B]/90 rounded-2xl px-4 py-2.5 shadow-2xl flex items-center gap-3">
+      <div className="bg-[#000000]/85 backdrop-blur-md border border-[#222222]/90 rounded-2xl px-4 py-2.5 shadow-2xl flex items-center gap-3">
         <div className="w-2.5 h-2.5 rounded-full bg-[#38BDF8] shrink-0 animate-ping" />
         <div className="min-w-0 flex-1">
           {objective && (

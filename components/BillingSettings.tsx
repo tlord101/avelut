@@ -62,7 +62,7 @@ export const BillingSettingsScreen: React.FC<BillingSettingsProps> = ({ userProf
     <div className="p-4 sm:p-6 space-y-8 animate-in fade-in duration-300 max-w-6xl mx-auto">
       
       {/* Account Balance Card */}
-      <div className="bg-white dark:bg-[#0F172A] border border-[#E3E9F1] dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
+      <div className="bg-white dark:bg-[#0A0A0A] border border-[#E3E9F1] dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider mb-1 block">Account Plan & Balance</span>

@@ -179,7 +179,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             </div>
           </div>
         ),
-        className: 'bg-[#F6F6F3]/95 dark:bg-[#0B0F17]/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
+        className: 'bg-[#F6F6F3]/95 dark:bg-[#0A0A0A]/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
       });
     }
     return () => {
@@ -574,9 +574,9 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             </ReactMarkdown>
           )}
           {activePart && (
-            <div className="inline-block text-[#002D62] dark:text-[#60A5FA] font-medium tracking-normal drop-shadow-[0_0_10px_rgba(0,102,255,0.25)] animate-fade-in transition-all duration-300">
+            <div className="inline-block text-[#002D62] dark:text-[#60A5FA] font-medium tracking-normal animate-fade-in transition-all duration-300">
               <span>{activePart}</span>
-              <span className="inline-block w-2 h-4 sm:w-2.5 sm:h-5 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle shadow-[0_0_8px_#0066FF]" />
+              <span className="inline-block w-2 h-4 sm:w-2.5 sm:h-5 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
             </div>
           )}
         </div>
@@ -625,7 +625,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       inline ? (
         <code className={`px-1.5 py-0.5 rounded-md font-mono text-xs ${isUser ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/50 text-[#0066FF] dark:text-blue-300 border border-blue-100 dark:border-blue-900/50'}`} {...props} />
       ) : (
-        <code className="block overflow-x-auto rounded-2xl bg-[#0F172A] dark:bg-[#050711] text-slate-100 p-4 text-xs font-mono my-2.5 border border-slate-700/60" {...props} />
+        <code className="block overflow-x-auto rounded-2xl bg-[#0F172A] dark:bg-[#0A0A0A] text-slate-100 p-4 text-xs font-mono my-2.5 border border-slate-700/60" {...props} />
       ),
     blockquote: ({ node, ...props }: any) => (
       <blockquote className={`border-l-4 p-3 rounded-r-xl my-2.5 text-xs sm:text-sm leading-relaxed ${isUser ? 'border-blue-300 bg-white/10 text-white' : 'border-[#0066FF] bg-blue-50/70 dark:bg-blue-950/40 text-slate-800 dark:text-slate-200'}`} {...props} />
@@ -651,7 +651,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   });
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#F6F6F3] dark:bg-[#0B0F17] overflow-hidden select-none relative">
+    <div className="w-full h-full flex flex-col bg-[#F6F6F3] dark:bg-[#0A0A0A] overflow-hidden select-none relative">
       {/* Hidden File Inputs */}
       <input type="file" ref={fileInputRef} onChange={handleFileSelection} multiple className="hidden" />
       <input type="file" ref={cameraInputRef} onChange={handleFileSelection} accept="image/*" capture="environment" className="hidden" />
@@ -799,7 +799,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       </div>
 
       {/* ── Fullscreen Bottom Input Bar (Bottom Nav is Hidden) ── */}
-      <footer className="shrink-0 px-3 sm:px-6 pt-2 pb-[max(14px,env(safe-area-inset-bottom))] bg-[#F6F6F3]/90 dark:bg-[#0B0F17]/90 backdrop-blur-md z-20">
+      <footer className="shrink-0 px-3 sm:px-6 pt-2 pb-[max(14px,env(safe-area-inset-bottom))] bg-[#F6F6F3]/90 dark:bg-[#0A0A0A]/90 backdrop-blur-md z-20">
         <div className="max-w-4xl mx-auto w-full space-y-2">
           
           {/* Multi-Image Attachment Preview Chips */}
@@ -810,7 +810,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                 return (
                   <div
                     key={`${file.name}-${idx}`}
-                    className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-[#151B26] border border-transparent shadow-xs px-3 py-1 text-xs text-slate-800 dark:text-slate-200 shrink-0"
+                    className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-[#111111] border border-transparent shadow-xs px-3 py-1 text-xs text-slate-800 dark:text-slate-200 shrink-0"
                   >
                     {isImg ? (
                       <img
@@ -839,7 +839,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
           )}
 
           {/* Fluid Spring Morphing Pill Container (From Avelut AI) */}
-          <div className="relative w-full bg-white dark:bg-[#151B26] rounded-full flex items-center justify-between pl-3 pr-2 py-1.5 min-h-[54px] sm:min-h-[56px] border border-[#E3E9F1] dark:border-slate-800 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+          <div className="relative w-full bg-white dark:bg-[#111111] rounded-full flex items-center justify-between pl-3 pr-2 py-1.5 min-h-[54px] sm:min-h-[56px] border border-[#E3E9F1] dark:border-slate-800 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
             
             {/* Left: Plus Menu Button */}
             <div className="relative shrink-0">
@@ -855,7 +855,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
 
               {/* Plus Popup Menu */}
               {showAttachmentMenu && (
-                <div className="absolute bottom-14 left-0 w-56 bg-white/95 dark:bg-[#151B26]/95 backdrop-blur-xl border border-[#E3E9F1] dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50 p-1.5">
+                <div className="absolute bottom-14 left-0 w-56 bg-white/95 dark:bg-[#111111]/95 backdrop-blur-xl border border-[#E3E9F1] dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50 p-1.5">
                   <button
                     type="button"
                     onClick={() => {

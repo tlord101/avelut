@@ -395,7 +395,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 hideTitle: false,
                 hideDefaultRightActions: false,
                 hideBottomNav: false,
-                className: 'bg-[#F6F6F3]/95 dark:bg-[#0B0F17]/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
+                className: 'bg-[#F6F6F3]/95 dark:bg-[#0A0A0A]/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
             });
         }
     }, [selectedCourse, isVoiceTutorialActive, activeExternalSession, activeTab, setCustomHeaderConfig, onNavigate]);

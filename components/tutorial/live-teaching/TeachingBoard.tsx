@@ -64,7 +64,7 @@ const TypedText: React.FC<{
     <p className={className} style={style}>
       {displayedText}
       {(isTyping || (!enabled && isTitle)) && (
-        <span className="inline-block w-2.5 h-6 ml-1.5 bg-[#38BDF8] shadow-[0_0_10px_#38BDF8] animate-pulse align-middle rounded-xs" />
+        <span className="inline-block w-2.5 h-6 ml-1.5 bg-[#38BDF8] animate-pulse align-middle rounded-xs" />
       )}
     </p>
   );
@@ -238,9 +238,9 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#1E293B] shadow-2xl overflow-hidden select-none font-sans text-slate-100 ${className}`}
+      className={`relative w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#222222] shadow-2xl overflow-hidden select-none font-sans text-slate-100 ${className}`}
       style={{
-        background: 'radial-gradient(ellipse at 50% 18%, #131E35 0%, #0B1120 55%, #070B14 100%)',
+        background: 'radial-gradient(ellipse at 50% 18%, #111111 0%, #080808 55%, #000000 100%)',
       }}
     >
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0" />
@@ -386,15 +386,15 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
           })}
 
         {isWaitingForVoice && (
-          <div className="absolute left-1/2 top-[22%] -translate-x-1/2 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A]/90 border border-[#38BDF8]/40 shadow-[0_0_14px_rgba(56,189,248,0.3)] pointer-events-none animate-pulse z-20">
-            <span className="w-2 h-4.5 bg-[#38BDF8] shadow-[0_0_8px_#38BDF8] rounded-xs animate-ping" />
+          <div className="absolute left-1/2 top-[22%] -translate-x-1/2 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/90 border border-white/20 pointer-events-none animate-pulse z-20">
+            <span className="w-2 h-4.5 bg-[#38BDF8] rounded-xs animate-ping" />
             <span className="text-xs font-semibold tracking-wider text-slate-200">Lecturer preparing speech…</span>
           </div>
         )}
 
         {tutorPointer && tutorPointer.active && (
           <div
-            className="absolute z-30 w-4 h-4 rounded-full bg-[#38BDF8] shadow-[0_0_16px_#38BDF8] pointer-events-none -translate-x-1/2 -translate-y-1/2 animate-ping"
+            className="absolute z-30 w-4 h-4 rounded-full bg-[#38BDF8] pointer-events-none -translate-x-1/2 -translate-y-1/2 animate-ping"
             style={{ left: `${tutorPointer.x}%`, top: `${tutorPointer.y}%` }}
           />
         )}

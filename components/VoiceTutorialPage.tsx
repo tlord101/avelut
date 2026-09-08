@@ -1645,12 +1645,12 @@ At the very end say exactly: "Now, let us continue our lesson."`;
                                 {/* Realtime Audio Waveform Animation Bars */}
                                 <div className="flex items-center justify-center gap-2 py-3.5 px-4 bg-black/30 rounded-xl border border-white/10 shadow-inner">
                                     <div className="flex items-center gap-1.5 h-8">
-                                        <span className="w-1.5 bg-[#0066FF] rounded-full animate-[bounce_0.8s_ease-in-out_infinite] h-3 shadow-[0_0_8px_#0066FF]" />
-                                        <span className="w-1.5 bg-blue-400 rounded-full animate-[bounce_0.6s_ease-in-out_infinite_0.15s] h-6 shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
-                                        <span className="w-1.5 bg-white rounded-full animate-[bounce_0.75s_ease-in-out_infinite_0.3s] h-8 shadow-[0_0_10px_white]" />
-                                        <span className="w-1.5 bg-blue-300 rounded-full animate-[bounce_0.5s_ease-in-out_infinite_0.1s] h-7 shadow-[0_0_8px_rgba(147,197,253,0.8)]" />
-                                        <span className="w-1.5 bg-[#0066FF] rounded-full animate-[bounce_0.7s_ease-in-out_infinite_0.25s] h-5 shadow-[0_0_8px_#0066FF]" />
-                                        <span className="w-1.5 bg-blue-400 rounded-full animate-[bounce_0.9s_ease-in-out_infinite_0.05s] h-4 shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
+                                        <span className="w-1.5 bg-[#0066FF] rounded-full animate-[bounce_0.8s_ease-in-out_infinite] h-3" />
+                                        <span className="w-1.5 bg-blue-400 rounded-full animate-[bounce_0.6s_ease-in-out_infinite_0.15s] h-6" />
+                                        <span className="w-1.5 bg-white rounded-full animate-[bounce_0.75s_ease-in-out_infinite_0.3s] h-8" />
+                                        <span className="w-1.5 bg-blue-300 rounded-full animate-[bounce_0.5s_ease-in-out_infinite_0.1s] h-7" />
+                                        <span className="w-1.5 bg-[#0066FF] rounded-full animate-[bounce_0.7s_ease-in-out_infinite_0.25s] h-5" />
+                                        <span className="w-1.5 bg-blue-400 rounded-full animate-[bounce_0.9s_ease-in-out_infinite_0.05s] h-4" />
                                     </div>
                                     <span className="text-xs font-semibold text-white ml-2 tracking-wide">
                                         {qaAnswer ? 'Speaking answer aloud...' : 'Preparing spoken explanation...'}

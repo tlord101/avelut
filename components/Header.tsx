@@ -89,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({
         isFloating
           ? className
           : `sticky top-0 flex-shrink-0 px-3 sm:px-6 md:px-8 py-2.5 ${
-              className || 'bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-neutral-200/60 dark:border-white/5'
+              className || 'bg-white/70 dark:bg-black/60 backdrop-blur-xl border-b border-black/5 dark:border-white/8'
             }`
       }`}
     >

@@ -514,7 +514,7 @@ export const LiveWhiteboardCanvas: React.FC<LiveWhiteboardCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full min-h-[380px] bg-[#FFFFFF] dark:bg-[#0F172A] rounded-[24px] border border-[#E3E9F1] dark:border-slate-800 shadow-sm overflow-hidden select-none touch-none ${className}`}
+      className={`relative w-full h-full min-h-[380px] bg-[#FFFFFF] dark:bg-[#0A0A0A] rounded-[24px] border border-[#E3E9F1] dark:border-slate-800 shadow-sm overflow-hidden select-none touch-none ${className}`}
     >
       <canvas
         ref={canvasRef}
