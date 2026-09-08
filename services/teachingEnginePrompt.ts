@@ -74,8 +74,83 @@ JSON OUTPUT SCHEMA:
       "question_required": boolean,
       "question_type": "recall" | "understanding" | "prediction" | "calculation" | "application" | null,
       "estimated_duration_seconds": 120
-    }
+}
   ]
+}
+`;
+}
+
+export function buildUnifiedTeachingStructuresPrompt(params: {
+  topic: string;
+  courseName?: string;
+  syllabusContext?: string;
+  studentName?: string;
+}): string {
+  const { topic, courseName, syllabusContext, studentName } = params;
+  const resolvedName = studentName || 'Student';
+
+  return `Prepare COMPLETE Pedagogical Teaching Structures for the topic: "${topic}" across ALL THREE LESSON DURATION MODES (15 min, 30 min, and 60 min) in ONE SINGLE JSON output.
+
+${courseName ? `Course: ${courseName}\n` : ''}${syllabusContext ? `Syllabus/Context: ${syllabusContext}\n` : ''}Student Name: ${resolvedName}
+
+DURATIONS TO GENERATE IN THIS SINGLE RESPONSE:
+1) "mode_15" (~15 min lesson): exactly 8 boards. Fast overview — core idea, key visuals, short check.
+2) "mode_30" (~30 min lesson): exactly 15 boards. Full concept walkthrough with step-by-step illustrations.
+3) "mode_60" (~60 min lesson): exactly 30 boards. Full lecture with chapters, deep dives, and natural breaks.
+
+BOARD DESIGN RULES:
+- Every board MUST have a concrete visual_purpose describing what will be DRAWN (path/arrow/diagram). Text is secondary.
+- NEVER put giant walls of text on the board.
+- Keep board titles concise.
+
+${ILLUSTRATION_FIRST_PROMPT_BLOCK}
+
+JSON OUTPUT SCHEMA:
+{
+  "topic": "${topic}",
+  "mode_15": {
+    "topic": "${topic}",
+    "teaching_strategy": "Fast overview for 15m mode",
+    "learning_goal": "Clear learning goal for 15m mode",
+    "duration_minutes": 15,
+    "boards": [
+      {
+        "board_id": "board_1",
+        "board_number": 1,
+        "title": "Concise board title",
+        "step_type": "hook",
+        "teaching_objective": "Goal of this board",
+        "what_student_should_understand": "Key takeaway",
+        "why_this_board_exists": "Rationale",
+        "visual_purpose": "Concrete description of paths/diagram to draw",
+        "recommended_board_content": ["Short formula or label"],
+        "interaction_required": false,
+        "question_required": false,
+        "question_type": null,
+        "estimated_duration_seconds": 120
+      }
+      /* 8 boards total for mode_15 */
+    ]
+  },
+  "mode_30": {
+    "topic": "${topic}",
+    "teaching_strategy": "Full concept walkthrough for 30m mode",
+    "learning_goal": "Clear learning goal for 30m mode",
+    "duration_minutes": 30,
+    "boards": [
+      /* 15 boards total for mode_30 */
+    ]
+  },
+  "mode_60": {
+    "topic": "${topic}",
+    "teaching_strategy": "Comprehensive lecture for 60m mode",
+    "learning_goal": "Clear learning goal for 60m mode",
+    "duration_minutes": 60,
+    "chapters": ["Chapter 1", "Chapter 2"],
+    "boards": [
+      /* 30 boards total for mode_60 */
+    ]
+  }
 }`;
 }
 
@@ -155,7 +230,9 @@ JSON OUTPUT SCHEMA:
       "text": "First spoken chunk introducing the visual...",
       "purpose": "introduce figure",
       "mannerism": "attention",
-      "pauseAfterMs": 1200,
+      "pauseAfterMs": 1200
+    }
+  ],
   "board_actions": [
     {
       "id": "title_${currentBoardPlan.board_number}",

@@ -75,7 +75,7 @@ SEMANTIC CLASS DEFINITIONS FOR <defs><style>:
 
 CORE PEDAGOGICAL & VISUAL ALIGNMENT RULES:
 1) ILLUSTRATION DERIVED FROM SPEECH & BOARD TEXTS: The technical SVG diagram MUST be specifically created to illustrate the exact concepts, entity relationships, physical/abstract mechanisms, and key points spoken in the speech narrative of THIS board. Do NOT generate generic diagrams!
-2) MANDATORY SVG DIAGRAM: Every live tutorial board MUST produce a valid, detailed technical outline SVG diagram in the \`svg_illustration\` field matching this exact prompt template.
+2) MANDATORY SVG DIAGRAM: Every live tutorial board MUST produce a valid, detailed technical outline SVG diagram in the 'svg_illustration' field matching this exact prompt template.
 3) BOARD LAYOUT & VERTICAL ORDERING:
    - Title: Centered at Top (x: 50, y: 8).
    - Bullets / Key Points: Placed on the left side, descending vertically downwards with compact standard line spacing (x: 18, y: 20, y: 25.5, y: 31, y: 36.5).

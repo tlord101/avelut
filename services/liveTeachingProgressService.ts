@@ -141,10 +141,10 @@ export function formatResumeLabel(p: LiveTeachingProgress): string {
 const activePrefetches = new Set<string>();
 
 /**
-  * Prefetch teaching structures in the background when a user selects/enters a topic.
-  * Generates distinct AI structures for all duration modes (15 min, 30 min, 60 min)
-  * so that whichever duration the user selects, the exact tailored AI structure is ready.
-  */
+ * Prefetch teaching structures in the background when a user selects/enters a topic.
+ * Performs ONE SINGLE AI API CALL to generate distinct structures for all 3 duration modes
+ * (15 min, 30 min, 60 min) simultaneously, saving them to local cache and Supabase DB.
+ */
 export async function prefetchTopicTeachingStructure(params: {
   topicTitle: string;
   courseName?: string;
@@ -165,58 +165,70 @@ export async function prefetchTopicTeachingStructure(params: {
     void supabaseDataService.saveTopicLastVisited(resolvedUserId, topicTitle, params.courseName);
   }
 
+  // Check which modes are missing locally or in Supabase DB
+  const missingModes: LessonDurationMode[] = [];
   for (const mode of durationModes) {
     const modeKey = structureKey(resolvedUserId, topicKey, mode);
     const existing = readCachedJson<TeachingStructure | null>(modeKey, null);
     if (existing && existing.boards && existing.boards.length > 0) {
-      continue; // Skip if exact mode is already pre-cached locally
+      continue;
     }
-
-    // Check Supabase DB first
     const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, params.courseName, mode);
     if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
       await saveTeachingStructureOnly(resolvedUserId, topicKey, dbStruct, mode, params.courseName);
       continue;
     }
+    missingModes.push(mode);
+  }
 
+  if (missingModes.length === 0) return; // All 3 modes ready!
+
+  // Register in-flight promises for missing modes under a SINGLE unified request
+  const unifiedPrefetchId = `unified_${resolvedUserId}_${topicKey}`;
+  if (activePrefetches.has(unifiedPrefetchId)) return;
+  activePrefetches.add(unifiedPrefetchId);
+
+  let resolvePromise: (val: any) => void;
+  const singleUnifiedPromise = new Promise<any>((res) => { resolvePromise = res; });
+
+  for (const mode of missingModes) {
     const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
-    if (activePrefetches.has(prefetchId) || inFlightStructurePromises.has(prefetchId)) continue;
-    activePrefetches.add(prefetchId);
+    inFlightStructurePromises.set(prefetchId, singleUnifiedPromise);
+  }
 
-    const fetchPromise = (async () => {
-      try {
-        const { TeachingEngineService } = await import('./teachingEngineService');
-        const engine = new TeachingEngineService(
-          params.appSettings || {},
-          params.userProfile || null,
-          'Altair'
-        );
+  try {
+    const { TeachingEngineService } = await import('./teachingEngineService');
+    const engine = new TeachingEngineService(
+      params.appSettings || {},
+      params.userProfile || null,
+      'Altair'
+    );
 
-        const structure = await engine.generateTeachingStructure({
-          topic: topicTitle,
-          courseName: params.courseName,
-          syllabusContext: params.syllabusContext,
-          durationMode: mode,
-          isPrefetch: true,
-        });
+    // Make ONE SINGLE AI API call for all 3 duration structures
+    const result = await engine.generateUnifiedAllTeachingStructures({
+      topic: topicTitle,
+      courseName: params.courseName,
+      syllabusContext: params.syllabusContext,
+      studentName: params.userProfile?.display_name || 'Student',
+    });
 
-        if (structure && structure.boards && structure.boards.length > 0) {
-          await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode, params.courseName);
-        }
-        return structure;
-      } catch (err) {
-        console.warn(`[prefetchTopicTeachingStructure] Background prefetch failed for mode ${mode}m (non-critical):`, err);
-        return null;
-      } finally {
-        activePrefetches.delete(prefetchId);
-        inFlightStructurePromises.delete(prefetchId);
+    // Save whichever duration mode structures returned
+    for (const m of [15, 30, 60] as LessonDurationMode[]) {
+      const struct = result[m];
+      if (struct && struct.boards && struct.boards.length > 0) {
+        await saveTeachingStructureOnly(resolvedUserId, topicKey, struct, m, params.courseName);
       }
-    })();
-
-    inFlightStructurePromises.set(prefetchId, fetchPromise);
-    await fetchPromise;
-    // Small delay between background prefetch calls to prevent OpenRouter RPM rate limit bursts
-    await new Promise((res) => setTimeout(res, 400));
+    }
+    resolvePromise!(result);
+  } catch (err) {
+    console.warn('[prefetchTopicTeachingStructure] Single-call unified prefetch failed:', err);
+    resolvePromise!(null);
+  } finally {
+    activePrefetches.delete(unifiedPrefetchId);
+    for (const mode of missingModes) {
+      const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
+      inFlightStructurePromises.delete(prefetchId);
+    }
   }
 }
 

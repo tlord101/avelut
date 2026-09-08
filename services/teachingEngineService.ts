@@ -23,6 +23,7 @@ import {
 import {
   TEACHING_DIRECTOR_SYSTEM_PROMPT,
   buildTeachingStructurePrompt,
+  buildUnifiedTeachingStructuresPrompt,
   buildSingleBoardPrompt,
   buildFinalTestPrompt,
   buildStudentAnswerEvaluationPrompt,
@@ -196,6 +197,48 @@ export class TeachingEngineService {
     this.isPaused = false;
     if (this.currentBoardPerformance) {
       this.playBoardSpeech(this.currentBoardPerformance);
+    }
+  }
+
+  /**
+   * ONE SINGLE AI API CALL to generate teaching structures for ALL THREE duration modes (15m, 30m, 60m).
+   */
+  public async generateUnifiedAllTeachingStructures(params: {
+    topic: string;
+    courseName?: string;
+    syllabusContext?: string;
+    studentName?: string;
+  }): Promise<{ 15: TeachingStructure | null; 30: TeachingStructure | null; 60: TeachingStructure | null }> {
+    const defaultResult = { 15: null, 30: null, 60: null };
+    try {
+      const ai = createAvelutAI(this.appSettings, this.userProfile);
+      if (!ai) return defaultResult;
+
+      const prompt = buildUnifiedTeachingStructuresPrompt(params);
+      const rawResponse = await ai.chat(prompt, TEACHING_DIRECTOR_SYSTEM_PROMPT);
+      const parsed = cleanAndParseJson<any>(rawResponse);
+
+      if (!parsed) return defaultResult;
+
+      const s15: TeachingStructure | null =
+        parsed.mode_15?.boards && Array.isArray(parsed.mode_15.boards) && parsed.mode_15.boards.length > 0
+          ? parsed.mode_15
+          : null;
+
+      const s30: TeachingStructure | null =
+        parsed.mode_30?.boards && Array.isArray(parsed.mode_30.boards) && parsed.mode_30.boards.length > 0
+          ? parsed.mode_30
+          : null;
+
+      const s60: TeachingStructure | null =
+        parsed.mode_60?.boards && Array.isArray(parsed.mode_60.boards) && parsed.mode_60.boards.length > 0
+          ? parsed.mode_60
+          : null;
+
+      return { 15: s15, 30: s30, 60: s60 };
+    } catch (err) {
+      console.warn('[TeachingEngineService] Unified 1-call prefetch failed:', err);
+      return defaultResult;
     }
   }
 
