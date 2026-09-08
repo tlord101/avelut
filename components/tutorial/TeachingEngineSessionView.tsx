@@ -188,6 +188,17 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         if (struct.boards && struct.boards.length > 0) {
           setTotalBoards(struct.boards.length);
           setStatusMessage(`Writing Board 1 of ${struct.boards.length}…`);
+
+          // Immediately render Title Heading for Board 1 on the canvas
+          const b1Title = struct.boards[0]?.title || topicTitle;
+          manager.applyAction({
+            id: 'act_title_1_init',
+            type: 'write',
+            content: b1Title,
+            position: { x: 50, y: 10 },
+            metadata: { fontSize: '3xl', color: '#FFFFFF' },
+          });
+
           if (durationMode != null) {
             saveLiveTeachingProgress(resolvedUserId, {
               topicKey,
@@ -357,6 +368,17 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         setStructure(cachedStructure);
         setTotalBoards(cachedStructure.boards.length);
         setStatusMessage(`Writing Board 1 of ${cachedStructure.boards.length}…`);
+
+        // Immediately render Title Heading for Board 1 on the canvas
+        const b1Title = cachedStructure.boards[0]?.title || topicTitle;
+        manager.applyAction({
+          id: 'act_title_1_init',
+          type: 'write',
+          content: b1Title,
+          position: { x: 50, y: 10 },
+          metadata: { fontSize: '3xl', color: '#FFFFFF' },
+        });
+
         engine.loadBoardPerformance({ boardIndex: 0, completedBoardsSummary: [] });
       } else {
         setStatusMessage('Planning live lesson structure…');
@@ -645,12 +667,12 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           />
         )}
 
-        {/* Loading Indicator for Initial Board Fetching */}
+        {/* Sleek Non-Blocking Loading Badge for Initial Board Performance Fetching */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none bg-[#000000]/60 backdrop-blur-sm">
-            <div className="w-10 h-10 rounded-full border-2 border-[#38BDF8]/30 border-t-[#38BDF8] animate-spin mb-3" />
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/90 border border-[#38BDF8]/40 shadow-xl backdrop-blur-md animate-pulse pointer-events-none">
+            <div className="w-3.5 h-3.5 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin shrink-0" />
             <span className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
-              {statusMessage || 'Preparing live board structure…'}
+              {statusMessage || 'Lecturer writing board content & speech…'}
             </span>
           </div>
         )}

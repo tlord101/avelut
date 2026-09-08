@@ -396,9 +396,25 @@ const memoryFallbackStore: Record<string, any[]> = getSavedFallbackStore();
 function persistFallbackStore() {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
+      if (memoryFallbackStore.app_state.length > 80) {
+        memoryFallbackStore.app_state = memoryFallbackStore.app_state.slice(-40);
+      }
+      if (memoryFallbackStore.ai_semantic_cache.length > 15) {
+        memoryFallbackStore.ai_semantic_cache = memoryFallbackStore.ai_semantic_cache.slice(-10);
+      }
       window.localStorage.setItem('avelut_sqlite_memory_fallback', JSON.stringify(memoryFallbackStore));
     } catch (e) {
-      console.warn('[SQLite fallback] localStorage persist warning', e);
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k && (k.startsWith('avelut_grok_tts_') || k.startsWith('avelut_board_cache_'))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+        window.localStorage.setItem('avelut_sqlite_memory_fallback', JSON.stringify(memoryFallbackStore));
+      } catch (_) {}
     }
   }
 }

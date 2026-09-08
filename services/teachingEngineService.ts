@@ -60,7 +60,17 @@ function setCachedBoardItem<T>(key: string, data: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
-    console.warn('[BoardCache] Write error:', e);
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('avelut_grok_tts_') || k.startsWith('avelut_board_cache_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (_) {}
   }
 }
 

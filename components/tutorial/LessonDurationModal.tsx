@@ -308,10 +308,9 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={() => decision.allowed && onConfirm(selected)}
+            onClick={() => onConfirm(selected)}
             type="button"
-            disabled={!decision.allowed}
-            className="px-5 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold flex items-center space-x-2 transition-transform active:scale-95 shadow-md"
+            className="px-5 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 text-xs font-bold flex items-center space-x-2 transition-transform active:scale-95 shadow-md cursor-pointer"
           >
             <span>
               {decision.payment === 'credits'

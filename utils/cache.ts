@@ -149,6 +149,32 @@ export function readCachedJson<T = any>(key: string, fallback: T = null as unkno
 }
 
 /**
+ * Automatically prunes heavy cached audio and board items when localStorage quota is exceeded.
+ */
+export function pruneLocalStorageQuota(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith('avelut_grok_tts_') ||
+          k.startsWith('avelut_board_cache_') ||
+          k === 'avelut_sqlite_memory_fallback')
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try {
+        window.localStorage.removeItem(k);
+      } catch {}
+    });
+  } catch {}
+}
+
+/**
  * Write cached value into in-memory cache and persist to SQLite asynchronously.
  */
 export function writeCachedJson(key: string, value: unknown, userId: string = 'global'): void {
@@ -170,7 +196,10 @@ export function writeCachedJson(key: string, value: unknown, userId: string = 'g
     try {
       window.localStorage.setItem(key, payloadJson);
     } catch {
-      // Ignore quota errors if storage is full
+      pruneLocalStorageQuota();
+      try {
+        window.localStorage.setItem(key, payloadJson);
+      } catch {}
     }
   }
 }
