@@ -4,6 +4,7 @@
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import type { LessonDurationMode } from '../components/tutorial/LessonDurationModal';
 import type { TeachingStructure, TeachingBoardPerformance } from '../types/teachingScript';
+import { supabaseDataService } from './supabaseDataService';
 
 export interface LiveTeachingProgress {
   topicKey: string;
@@ -23,13 +24,14 @@ function progressKey(userId: string, topicKey: string): string {
   return `live_teach_progress_v1_${userId || 'anon'}_${topicKey}`;
 }
 
-function normalizeModeKey(mode?: LessonDurationMode | string): LessonDurationMode {
-  if (mode === 15 || mode === '15' || mode === '15min') return 15;
-  if (mode === 60 || mode === '60' || mode === '60min') return 60;
+function normalizeModeKey(mode?: LessonDurationMode | string | number): LessonDurationMode {
+  const m = typeof mode === 'number' ? mode : parseInt(String(mode), 10);
+  if (m === 15) return 15;
+  if (m === 60) return 60;
   return 30;
 }
 
-function structureKey(userId: string, topicKey: string, mode: LessonDurationMode | string): string {
+function structureKey(userId: string, topicKey: string, mode: LessonDurationMode | string | number): string {
   const norm = normalizeModeKey(mode);
   return `live_teach_structure_v1_${userId || 'anon'}_${topicKey}_${norm}min`;
 }
@@ -39,6 +41,16 @@ export function topicKeyFromTitle(topicTitle: string, courseName?: string): stri
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 80);
 }
 
+const inFlightStructurePromises = new Map<string, Promise<TeachingStructure | null>>();
+
+export function isTopicStructureFetching(userId: string, topicKey: string, mode?: LessonDurationMode | number): boolean {
+  const norm = mode ? normalizeModeKey(mode) : null;
+  if (norm) {
+    return inFlightStructurePromises.has(`${userId || 'anon'}_${topicKey}_${norm}`);
+  }
+  return [15, 30, 60].some((m) => inFlightStructurePromises.has(`${userId || 'anon'}_${topicKey}_${m}`));
+}
+
 export async function saveLiveTeachingProgress(
   userId: string,
   progress: Omit<LiveTeachingProgress, 'updatedAt'>
@@ -46,11 +58,11 @@ export async function saveLiveTeachingProgress(
   const payload: LiveTeachingProgress = { ...progress, updatedAt: Date.now() };
   await writeCachedJson(progressKey(userId, progress.topicKey), payload, userId || 'anon');
   if (progress.structure) {
-    await writeCachedJson(
-      structureKey(userId, progress.topicKey, progress.durationMode),
-      progress.structure,
-      userId || 'anon'
-    );
+    await saveTeachingStructureOnly(userId, progress.topicKey, progress.structure, progress.durationMode, progress.courseName);
+  }
+  // Store topic last seen in Supabase
+  if (userId && userId !== 'anon' && progress.topicTitle) {
+    void supabaseDataService.saveTopicLastVisited(userId, progress.topicTitle, progress.courseName);
   }
 }
 
@@ -65,7 +77,8 @@ export async function saveTeachingStructureOnly(
   userId: string,
   topicKey: string,
   structure: TeachingStructure,
-  mode: LessonDurationMode = 30
+  mode: LessonDurationMode = 30,
+  courseName?: string
 ): Promise<void> {
   const norm = normalizeModeKey(mode);
   await writeCachedJson(
@@ -73,24 +86,49 @@ export async function saveTeachingStructureOnly(
     structure,
     userId || 'anon'
   );
+  // Persist structure to Supabase DB so any user opening the same topic reuses it
+  if (structure && structure.topic) {
+    void supabaseDataService.saveTopicTeachingStructureSupabase(
+      structure.topic,
+      courseName,
+      norm,
+      structure
+    );
+  }
 }
 
 export function getSavedTeachingStructure(
   userId: string,
   topicKey: string,
-  mode?: LessonDurationMode | string
+  mode?: LessonDurationMode | string | number
 ): TeachingStructure | null {
   const targetMode = mode ? normalizeModeKey(mode) : undefined;
   if (targetMode) {
     const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, targetMode), null);
     if (s && s.boards && s.boards.length > 0) return s;
+    return null;
   }
+  return null;
+}
 
-  // Fallback to any pre-cached duration mode if exact target mode is not yet generated
-  const fallbackModes: LessonDurationMode[] = [30, 15, 60];
-  for (const m of fallbackModes) {
-    const s = readCachedJson<TeachingStructure | null>(structureKey(userId, topicKey, m), null);
-    if (s && s.boards && s.boards.length > 0) return s;
+export async function getSavedTeachingStructureAsync(
+  userId: string,
+  topicTitle: string,
+  courseName: string | undefined,
+  mode: LessonDurationMode = 30
+): Promise<TeachingStructure | null> {
+  const topicKey = topicKeyFromTitle(topicTitle, courseName);
+  const norm = normalizeModeKey(mode);
+
+  // 1. Check local cache first (0ms)
+  const local = getSavedTeachingStructure(userId, topicKey, norm);
+  if (local && local.boards && local.boards.length > 0) return local;
+
+  // 2. Check Supabase DB for pre-generated topic structure by any user
+  const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, courseName, norm);
+  if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
+    await saveTeachingStructureOnly(userId, topicKey, dbStruct, norm, courseName);
+    return dbStruct;
   }
   return null;
 }
@@ -103,10 +141,10 @@ export function formatResumeLabel(p: LiveTeachingProgress): string {
 const activePrefetches = new Set<string>();
 
 /**
- * Prefetch teaching structures in the background when a user selects/enters a topic.
- * Generates distinct AI structures for all duration modes (15 min, 30 min, 60 min)
- * so that whichever duration the user selects, the exact tailored AI structure is ready.
- */
+  * Prefetch teaching structures in the background when a user selects/enters a topic.
+  * Generates distinct AI structures for all duration modes (15 min, 30 min, 60 min)
+  * so that whichever duration the user selects, the exact tailored AI structure is ready.
+  */
 export async function prefetchTopicTeachingStructure(params: {
   topicTitle: string;
   courseName?: string;
@@ -122,42 +160,63 @@ export async function prefetchTopicTeachingStructure(params: {
   const topicKey = topicKeyFromTitle(topicTitle, params.courseName);
   const durationModes: LessonDurationMode[] = [15, 30, 60];
 
+  // Save topic last seen in Supabase database
+  if (resolvedUserId && resolvedUserId !== 'anon') {
+    void supabaseDataService.saveTopicLastVisited(resolvedUserId, topicTitle, params.courseName);
+  }
+
   for (const mode of durationModes) {
     const modeKey = structureKey(resolvedUserId, topicKey, mode);
     const existing = readCachedJson<TeachingStructure | null>(modeKey, null);
     if (existing && existing.boards && existing.boards.length > 0) {
-      continue; // Skip if exact mode is already pre-cached
+      continue; // Skip if exact mode is already pre-cached locally
+    }
+
+    // Check Supabase DB first
+    const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, params.courseName, mode);
+    if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
+      await saveTeachingStructureOnly(resolvedUserId, topicKey, dbStruct, mode, params.courseName);
+      continue;
     }
 
     const prefetchId = `${resolvedUserId}_${topicKey}_${mode}`;
-    if (activePrefetches.has(prefetchId)) continue;
+    if (activePrefetches.has(prefetchId) || inFlightStructurePromises.has(prefetchId)) continue;
     activePrefetches.add(prefetchId);
 
-    try {
-      const { TeachingEngineService } = await import('./teachingEngineService');
-      const engine = new TeachingEngineService({
-        appSettings: params.appSettings,
-        userProfile: params.userProfile,
-        durationMode: mode,
-      });
+    const fetchPromise = (async () => {
+      try {
+        const { TeachingEngineService } = await import('./teachingEngineService');
+        const engine = new TeachingEngineService(
+          params.appSettings || {},
+          params.userProfile || null,
+          'Altair'
+        );
 
-      const structure = await engine.generateTeachingStructure({
-        topic: topicTitle,
-        courseName: params.courseName,
-        syllabusContext: params.syllabusContext,
-        durationMode: mode,
-      });
+        const structure = await engine.generateTeachingStructure({
+          topic: topicTitle,
+          courseName: params.courseName,
+          syllabusContext: params.syllabusContext,
+          durationMode: mode,
+          isPrefetch: true,
+        });
 
-      if (structure && structure.boards && structure.boards.length > 0) {
-        await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode);
+        if (structure && structure.boards && structure.boards.length > 0) {
+          await saveTeachingStructureOnly(resolvedUserId, topicKey, structure, mode, params.courseName);
+        }
+        return structure;
+      } catch (err) {
+        console.warn(`[prefetchTopicTeachingStructure] Background prefetch failed for mode ${mode}m (non-critical):`, err);
+        return null;
+      } finally {
+        activePrefetches.delete(prefetchId);
+        inFlightStructurePromises.delete(prefetchId);
       }
-    } catch (err) {
-      console.warn(`[prefetchTopicTeachingStructure] Background prefetch failed for mode ${mode}m (non-critical):`, err);
-    } finally {
-      activePrefetches.delete(prefetchId);
-    }
+    })();
+
+    inFlightStructurePromises.set(prefetchId, fetchPromise);
+    await fetchPromise;
     // Small delay between background prefetch calls to prevent OpenRouter RPM rate limit bursts
-    await new Promise((res) => setTimeout(res, 500));
+    await new Promise((res) => setTimeout(res, 400));
   }
 }
 

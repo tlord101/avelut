@@ -137,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }).eq('id', uid);
       }
 
-      console.log(\Successfully processed Paystack webhook for user \, ref: \\);
+      console.log('Successfully processed Paystack webhook for user:', uid, 'ref:', reference);
     } catch (dbErr) {
       console.error('Error updating Supabase from Vercel Webhook:', dbErr);
       return res.status(500).json({ error: 'Database update failed' });

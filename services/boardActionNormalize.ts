@@ -5,6 +5,9 @@ import type { BoardAction } from '../types/teachingScript';
 
 export function normalizeBoardActions(actions: BoardAction[] | undefined | null): BoardAction[] {
   if (!actions || !Array.isArray(actions)) return [];
+
+  let keyPointIndex = 0;
+
   return actions.map((raw, idx) => {
     const a = { ...raw } as BoardAction & { style?: Record<string, string>; latex?: string };
     const t = String(a.type || '').toLowerCase();
@@ -39,6 +42,24 @@ export function normalizeBoardActions(actions: BoardAction[] | undefined | null)
     }
 
     if (!a.id) a.id = `act_norm_${idx}_${Date.now().toString(36)}`;
+
+    // Normalize vertical spacing for bullet points / key text elements to standard ~5.5% line height step
+    const isTitle = a.position?.y <= 16 || a.id?.includes('title') || a.content?.length < 30 && idx === 0;
+    const isSvgDraw = a.type === 'draw' || Boolean(a.metadata?.svgContent);
+
+    if (a.type === 'write' && !isTitle && !isSvgDraw) {
+      // If AI assigned excessively large vertical gaps (>8% step), collapse to compact 5.5% line spacing
+      const currentY = a.position?.y ?? 20;
+      if (currentY > 20 || keyPointIndex > 0) {
+        const compactY = Math.min(58, 20 + keyPointIndex * 5.5);
+        a.position = {
+          x: a.position?.x ?? 5,
+          y: compactY,
+        };
+      }
+      keyPointIndex++;
+    }
+
     return a as BoardAction;
   });
 }

@@ -30,6 +30,7 @@ import {
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { cleanAndParseJson } from '../utils/jsonUtils';
 import { saveTeachingStructureOnly, topicKeyFromTitle } from './liveTeachingProgressService';
+import { supabaseDataService } from './supabaseDataService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
@@ -250,7 +251,7 @@ export class TeachingEngineService {
     const durationMode = params.durationMode || 30;
     const structCacheKey = getLocalCacheKey('struct', params.topic, durationMode);
 
-    // Instant local storage cache lookup (0ms loading)
+    // 1. Instant local storage cache lookup (0ms loading)
     const cachedStruct = getCachedBoardItem<TeachingStructure>(structCacheKey);
     if (cachedStruct && Array.isArray(cachedStruct.boards) && cachedStruct.boards.length > 0) {
       if (!params.isPrefetch) {
@@ -259,6 +260,18 @@ export class TeachingEngineService {
         this.listeners.forEach((l) => l.onStructureLoaded?.(cachedStruct));
       }
       return cachedStruct;
+    }
+
+    // 2. Check Supabase database for pre-generated topic structure (shared across users)
+    const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(params.topic, params.courseName, durationMode);
+    if (dbStruct && Array.isArray(dbStruct.boards) && dbStruct.boards.length > 0) {
+      setCachedBoardItem(structCacheKey, dbStruct);
+      if (!params.isPrefetch) {
+        this.currentStructure = dbStruct;
+        this.currentBoardIndex = 0;
+        this.listeners.forEach((l) => l.onStructureLoaded?.(dbStruct));
+      }
+      return dbStruct;
     }
 
     try {
@@ -307,7 +320,7 @@ export class TeachingEngineService {
 
       const userId = this.userProfile?.uid || 'anon';
       const topicKey = topicKeyFromTitle(params.topic, params.courseName);
-      void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || '30min');
+      void saveTeachingStructureOnly(userId, topicKey, structure, durationMode || 30, params.courseName);
       setCachedBoardItem(structCacheKey, structure);
 
       if (!params.isPrefetch) {
@@ -330,7 +343,8 @@ export class TeachingEngineService {
 
   private buildFallbackTeachingStructure(topic: string, mode?: any): TeachingStructure {
     const durationMinutes = typeof mode === 'number' ? mode : (parseInt(String(mode), 10) || 30);
-    const boardCount = Math.max(5, Math.round(durationMinutes / 2));
+    // 15m mode -> 8 boards, 30m mode -> 15 boards, 60m mode -> 30 boards (~2 mins per board)
+    const boardCount = durationMinutes === 15 ? 8 : durationMinutes === 60 ? 30 : 15;
     const boards: TeachingBoardPlan[] = [];
 
     for (let i = 1; i <= boardCount; i++) {
@@ -378,7 +392,7 @@ export class TeachingEngineService {
         id: `act_kt_${boardNum}_${idx}`,
         type: 'write' as const,
         content: `• ${kt}`,
-        position: { x: 20, y: 30 + idx * 14 },
+        position: { x: 18, y: 22 + idx * 5.5 },
         metadata: { fontSize: '2xl' as const, color: '#E2E8F0' },
         sync: { phrase: kt },
       })),
@@ -417,6 +431,12 @@ export class TeachingEngineService {
 
     const requestedIndex = params.boardIndex;
     const sessionTag = this.currentSessionId;
+
+    // Deduct 2 minutes for this board from user's live tutorial balance in Supabase
+    const userId = this.userProfile?.uid;
+    if (userId && userId !== 'anon') {
+      void supabaseDataService.deductLiveMinutes(userId, 2);
+    }
 
     // Check if Board N was pre-fetched in background
     if (this.prefetchedBoardIndex === requestedIndex && this.prefetchedBoardPerformance) {

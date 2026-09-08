@@ -22,11 +22,11 @@ const SHARED_ILLUSTRATION = `ILLUSTRATION-FIRST (always):
 export const DURATION_PROFILES: Record<LessonDurationMode, DurationTeachingProfile> = {
   15: {
     minutes: 15,
-    boardCountHint: 'Plan 7 to 8 boards. Each board MUST last ~2 minutes of teaching speech (~200-260 words per board).',
+    boardCountHint: 'Plan EXACTLY 8 boards (board_1 to board_8). Each board MUST last ~2 minutes of teaching speech (~200-260 words per board).',
     speechWordRange: '200 to 260 words per board (~2 minutes of spoken lecturer explanation per board)',
     toneRules: 'Efficient coach. Minimal small talk. Clear, direct, and thorough step-by-step teaching.',
     pacingRules: 'Paced teaching (~2 mins per board); short 1-2s reflection pause after key formulas or diagrams.',
-    structureExtra: `STEP TYPES: prefer hook, concept, definition, worked_example, summary.
+    structureExtra: `STEP TYPES: prefer hook, concept, definition, worked_example, summary. EXACTLY 8 boards total.
 Every board needs a concrete visual_purpose (what is drawn). Each board MUST provide ~2 minutes of full teaching speech.
 ${SHARED_ILLUSTRATION}`,
     boardExtra: `SPEECH: rich, high-signal, ~2-minute lecture speech per board (~200-260 words).
@@ -35,11 +35,11 @@ ${SHARED_ILLUSTRATION}`,
   },
   30: {
     minutes: 30,
-    boardCountHint: 'Plan 14 to 16 boards covering intuition through application. Each board MUST last ~2 minutes of teaching speech (~220-280 words per board).',
+    boardCountHint: 'Plan EXACTLY 15 boards (board_1 to board_15) covering intuition through application. Each board MUST last ~2 minutes of teaching speech (~220-280 words per board).',
     speechWordRange: '220 to 280 words per board (~2 minutes of spoken lecturer explanation per board)',
     toneRules: 'Friendly university tutor. Occasional encouragement. Address the student by name occasionally.',
     pacingRules: 'Paced teaching (~2 mins per board); short reflection pauses after key diagrams or formulas (pauseAfterMs 1500-3500).',
-    structureExtra: `Include intuition, mechanism, worked_example, misconception_check, and question boards. Each board MUST be ~2 minutes of active teaching.
+    structureExtra: `Include intuition, mechanism, worked_example, misconception_check, and question boards. EXACTLY 15 boards total. Each board MUST be ~2 minutes of active teaching.
 visual_purpose must describe a drawable figure for almost every board.
 ${SHARED_ILLUSTRATION}`,
     boardExtra: `SPEECH: comprehensive 2-minute walkthrough per board; clear step-by-step depth.
@@ -50,7 +50,7 @@ ${SHARED_ILLUSTRATION}`,
   60: {
     minutes: 60,
     boardCountHint:
-      'Plan 28 to 32 boards organized into 4-6 chapters/sections. Each board MUST last ~2 minutes of teaching speech (~240-320 words per board). Full live lecture.',
+      'Plan EXACTLY 30 boards (board_1 to board_30) organized into 4-6 chapters/sections. Each board MUST last ~2 minutes of teaching speech (~240-320 words per board). Full live lecture.',
     speechWordRange: '240 to 320 words per board (~2 minutes of spoken lecturer explanation per board)',
     toneRules: `REAL HUMAN LECTURER:
 - Talk to the student by name.
@@ -61,7 +61,7 @@ ${SHARED_ILLUSTRATION}`,
 - Speech per board takes ~2 minutes of clear teaching.
 - After major ideas, mannerism "reflection_pause" with pauseAfterMs 2000-5000.
 - Every 6-8 boards, soft check-in.`,
-    structureExtra: `REQUIRED: chapters. Put chapter in titles like "[Ch 2] Net force intuition".
+    structureExtra: `REQUIRED: chapters. Put chapter in titles like "[Ch 2] Net force intuition". EXACTLY 30 boards total.
 Sequence: hook -> intuition -> core -> worked example -> trap -> practice -> summary. Each board is a ~2-minute deep dive.
 3-6 question or misconception_check boards.
 ${SHARED_ILLUSTRATION}`,

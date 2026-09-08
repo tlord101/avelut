@@ -566,6 +566,103 @@ class SupabaseDataService {
       return null;
     }
   }
+
+  // ── Topic Last Visited & Topic Structure DB Persistence ──────────────────
+
+  public async saveTopicLastVisited(userId: string, topicTitle: string, courseName?: string): Promise<void> {
+    if (!isSupabaseConfigured || !userId || !topicTitle) return;
+    try {
+      const topicKey = topicTitle.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      const payload = {
+        user_id: userId,
+        topic_title: topicTitle,
+        course_name: courseName || 'General',
+        topic_key: topicKey,
+        last_seen_at: new Date().toISOString(),
+      };
+      await supabase.from('user_topic_views').upsert(payload, { onConflict: 'user_id,topic_key' });
+    } catch (err) {
+      console.warn('[SupabaseDataService] Exception saving topic last visited:', err);
+    }
+  }
+
+  public async saveTopicTeachingStructureSupabase(
+    topicTitle: string,
+    courseName: string | undefined,
+    durationMode: number,
+    structure: any
+  ): Promise<void> {
+    if (!isSupabaseConfigured || !topicTitle || !structure) return;
+    try {
+      const cleanTopic = topicTitle.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      const structKey = `${cleanTopic}_${durationMode}min`;
+      const payload = {
+        topic_key: structKey,
+        topic_title: topicTitle,
+        course_name: courseName || 'General',
+        duration_mode: durationMode,
+        structure_json: structure,
+        updated_at: new Date().toISOString(),
+      };
+      await supabase.from('topic_teaching_structures').upsert(payload, { onConflict: 'topic_key' });
+    } catch (err) {
+      console.warn('[SupabaseDataService] Exception saving topic teaching structure to Supabase:', err);
+    }
+  }
+
+  public async getTopicTeachingStructureSupabase(
+    topicTitle: string,
+    courseName: string | undefined,
+    durationMode: number
+  ): Promise<any | null> {
+    if (!isSupabaseConfigured || !topicTitle) return null;
+    try {
+      const cleanTopic = topicTitle.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      const structKey = `${cleanTopic}_${durationMode}min`;
+      const { data, error } = await supabase
+        .from('topic_teaching_structures')
+        .select('structure_json')
+        .eq('topic_key', structKey)
+        .maybeSingle();
+
+      if (error || !data || !data.structure_json) return null;
+      return data.structure_json;
+    } catch (err) {
+      console.warn('[SupabaseDataService] Exception fetching topic teaching structure from Supabase:', err);
+      return null;
+    }
+  }
+
+  // ── Deduct Live Tutorial Minutes (2 mins per board generated/played) ─────
+
+  public async deductLiveMinutes(userId: string, minutesToDeduct: number = 2): Promise<{ success: boolean; remainingMinutes: number }> {
+    if (!isSupabaseConfigured || !userId || userId === 'anon') {
+      return { success: true, remainingMinutes: 999 };
+    }
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('live_tutorial_minutes, ai_credits')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const currentMinutes = profile?.live_tutorial_minutes ?? 120;
+      const updatedMinutes = Math.max(0, currentMinutes - minutesToDeduct);
+
+      await supabase
+        .from('profiles')
+        .update({
+          live_tutorial_minutes: updatedMinutes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      return { success: true, remainingMinutes: updatedMinutes };
+    } catch (err) {
+      console.warn('[SupabaseDataService] Exception deducting live tutorial minutes:', err);
+      return { success: true, remainingMinutes: 0 };
+    }
+  }
 }
 
 export const supabaseDataService = SupabaseDataService.getInstance();

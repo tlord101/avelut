@@ -78,7 +78,7 @@ CORE PEDAGOGICAL & VISUAL ALIGNMENT RULES:
 2) MANDATORY SVG DIAGRAM: Every live tutorial board MUST produce a valid, detailed technical outline SVG diagram in the \`svg_illustration\` field matching this exact prompt template.
 3) BOARD LAYOUT & VERTICAL ORDERING:
    - Title: Centered at Top (x: 50, y: 8).
-   - Bullets / Key Points: Placed on the left side, descending vertically downwards (x: 18, y: 24, y: 38, y: 52, y: 66).
+   - Bullets / Key Points: Placed on the left side, descending vertically downwards with compact standard line spacing (x: 18, y: 20, y: 25.5, y: 31, y: 36.5).
    - SVG Technical Diagram: Placed on the middle-right or lower zone (x: 65, y: 55 or x: 50, y: 68) so that text bullets and the SVG diagram NEVER overlap or crowd each other.
 4) COLOR PALETTE & CONTRAST: Use a restrained professional palette with semantic classes (.fill-accent, .fill-subtle, .path-accent, .path-structural, .path-dashed). On dark chalkboard themes, use bright high-contrast colors (#FFFFFF, #38BDF8, #E2E8F0, #FACC15).
 5) LINE WEIGHTS & RESPONSIVENESS: Thin, deliberate strokes (stroke-width: 1.5 to 2) with viewBox="0 0 400 200" and width="100%" height="100%" for crisp responsiveness.
