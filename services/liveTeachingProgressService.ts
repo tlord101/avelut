@@ -73,12 +73,14 @@ export function getPrefetchLock(userId: string, topicKey: string): PrefetchLockI
     const raw = localStorage.getItem(prefetchLockKey(userId, topicKey));
     if (!raw) return null;
     const lock: PrefetchLockInfo = JSON.parse(raw);
+    if (!lock || typeof lock !== 'object') return null;
+    const startedAt = typeof lock.startedAt === 'number' ? lock.startedAt : Date.now();
     // Lock expires after 3 minutes (180,000 ms)
-    if (Date.now() - lock.startedAt > 180000) {
+    if (Date.now() - startedAt > 180000) {
       localStorage.removeItem(prefetchLockKey(userId, topicKey));
       return null;
     }
-    return lock;
+    return { ...lock, startedAt };
   } catch {
     return null;
   }
