@@ -37,3 +37,73 @@
 -    }, [topicTitle, courseName, initialSessionData]);
 +        startCommittedRef.current = null;
 +    }, [sessionIdentity]);
+ 
+     // Check for existing progress to allow 1-click session resuming
+     useEffect(() => {
+@@ -203,11 +221,13 @@
+             userId: userProfile?.uid,
+             userProfile,
+             appSettings: resolvedAppSettings,
+-        }).catch((err) => {
++        }).catch(() => {
+             addToast?.('AI lesson preparation failed. You can still start manually.', 'warning');
+         });
+-    }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile, addToast]);
++        // Intentionally omit userProfile / resolvedAppSettings object identity to avoid re-prefetch storms
++        // eslint-disable-next-line react-hooks/exhaustive-deps
++    }, [topicTitle, courseName, syllabusContext, userProfile?.uid]);
+ 
+     const handleConfirmDuration = (mode: LessonDurationMode) => {
+         // 1. Evaluate if user can start
+@@ -232,12 +252,28 @@
+         setSelectedDurationMode(mode);
+         setStartBoardIndex(0);
+ 
+-        // 3. Process background usage commitment & logging asynchronously
++        // 3. Process background usage commitment & logging asynchronously (once per sessionIdentity)
++        const commitKey = `${sessionIdentity}::${mode}`;
++        if (startCommittedRef.current === commitKey) {
++            return;
++        }
++        startCommittedRef.current = commitKey;
++
+         void (async () => {
+             try {
++                if (!userProfile) return;
+                 await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
+-                
++ 
+                 if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
+-                    await deductAICredits(userProfile.uid, decision.creditCost, 'Live Tutorial Session', resolvedAppSettings);
++                    const result = await deductAICredits(
++                        userProfile.uid,
++                        decision.creditCost,
++                        'Live Tutorial Session',
++                        resolvedAppSettings
++                    );
++                    if (result && result.success === false) {
++                        addToast?.(result.error || 'Could not sync credits to server. Balance may be out of date.', 'warning');
++                    }
+                 }
+ 
+                 logTeachingEvent({
+@@ -245,6 +281,10 @@
+                     metadata: { payment: decision.payment, creditCost: decision.creditCost },
+                 });
+             } catch (err: any) {
++                // Allow a retry if the charge failed hard
++                if (startCommittedRef.current === commitKey) {
++                    startCommittedRef.current = null;
++                }
+                 addToast?.(err?.message || 'Failed to process session start.', 'error');
+                 logTeachingEvent({
+                     type: 'credit_fail',
+@@ -258,6 +298,8 @@
+ 
+     const handleResumeSession = () => {
+         if (resumeProgress) {
++            // Resume does not re-charge; mark committed so accidental Start cannot double-bill
++            startCommittedRef.current = `${sessionIdentity}::${resumeProgress.durationMode}`;
+             setSelectedDurationMode(resumeProgress.durationMode);
+             setStartBoardIndex(resumeProgress.boardIndex);
+             setIsDurationModalOpen(false);
