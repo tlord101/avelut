@@ -802,23 +802,30 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             .some(value => value!.toLowerCase().includes(searchTerm));
     });
 
-    // ── 1. ACTIVE REALTIME VOICE & BLACKBOARD TUTORIAL VIEW ──
-    if (activeExternalSession || isVoiceTutorialActive) {
-        const activeSessionData: VoiceTutorialSessionData = activeExternalSession || {
-            course: selectedCourse!,
-            topic: topicToOpen || (Array.isArray(selectedCourse?.topics) && selectedCourse!.topics.length > 0 ? selectedCourse!.topics[0] : {
-                topic_id: 'core_principles',
-                topic_name: 'Core Principles & Overview',
-                topic_context: `Overview and principles of ${selectedCourse?.course_name || 'Course'}`,
-            }),
+    // Stable session object so VoiceTutorialPage is not reset on every parent re-render
+    const memoizedVoiceSessionData = useMemo<VoiceTutorialSessionData | null>(() => {
+        if (activeExternalSession) return activeExternalSession;
+        if (!isVoiceTutorialActive || !selectedCourse) return null;
+        return {
+            course: selectedCourse,
+            topic: topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0
+                ? selectedCourse.topics[0]
+                : {
+                    topic_id: 'core_principles',
+                    topic_name: 'Core Principles & Overview',
+                    topic_context: `Overview and principles of ${selectedCourse.course_name || 'Course'}`,
+                }),
             syllabusContext: '',
         };
+    }, [activeExternalSession, isVoiceTutorialActive, selectedCourse, topicToOpen]);
 
+    // ── 1. ACTIVE REALTIME VOICE & BLACKBOARD TUTORIAL VIEW ──
+    if ((activeExternalSession || isVoiceTutorialActive) && memoizedVoiceSessionData) {
         return (
             <VoiceTutorialPage
                 userProfile={userProfile}
                 appSettings={appSettings}
-                initialSessionData={activeSessionData}
+                initialSessionData={memoizedVoiceSessionData}
                 onBack={() => {
                     if (isVoiceTutorialActive) {
                         setIsVoiceTutorialActive(false);

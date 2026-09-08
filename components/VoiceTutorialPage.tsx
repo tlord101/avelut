@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -173,13 +173,31 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
     const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
 
-    // Reset duration mode & progress whenever topic or initialSessionData changes
+    // Stable identity for the current topic. Do NOT depend on initialSessionData object
+    // identity — parents often rebuild that object every render, which used to re-open
+    // the duration modal and remount the session (double Alibaba/speech + double charge).
+    const sessionIdentity = useMemo(() => {
+        const topicId = initialSessionData?.topic?.topic_id || '';
+        const courseId = initialSessionData?.course?.course_id || '';
+        return `${courseId}::${topicId}::${topicTitle}::${courseName}`;
+    }, [
+        initialSessionData?.topic?.topic_id,
+        initialSessionData?.course?.course_id,
+        topicTitle,
+        courseName,
+    ]);
+
+    // One-shot guard so Start cannot charge credits / commit pool more than once per topic session.
+    const startCommittedRef = useRef<string | null>(null);
+
+    // Reset duration mode & progress only when the *topic* actually changes
     useEffect(() => {
         setSelectedDurationMode(null);
         setStartBoardIndex(0);
         setResumeProgress(null);
         setIsDurationModalOpen(true);
-    }, [topicTitle, courseName, initialSessionData]);
+        startCommittedRef.current = null;
+    }, [sessionIdentity]);
 
     // Check for existing progress to allow 1-click session resuming
     useEffect(() => {
@@ -203,10 +221,12 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             userId: userProfile?.uid,
             userProfile,
             appSettings: resolvedAppSettings,
-        }).catch((err) => {
+        }).catch(() => {
             addToast?.('AI lesson preparation failed. You can still start manually.', 'warning');
         });
-    }, [topicTitle, courseName, syllabusContext, resolvedAppSettings, userProfile, addToast]);
+        // Intentionally omit userProfile / resolvedAppSettings object identity to avoid re-prefetch storms
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [topicTitle, courseName, syllabusContext, userProfile?.uid]);
 
     const handleConfirmDuration = (mode: LessonDurationMode) => {
         // 1. Evaluate if user can start
@@ -229,13 +249,28 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         setSelectedDurationMode(mode);
         setStartBoardIndex(0);
 
-        // 3. Process background usage commitment & logging asynchronously
+        // 3. Process background usage commitment & logging asynchronously (once per sessionIdentity)
+        const commitKey = `${sessionIdentity}::${mode}`;
+        if (startCommittedRef.current === commitKey) {
+            return;
+        }
+        startCommittedRef.current = commitKey;
+
         void (async () => {
             try {
+                if (!userProfile) return;
                 await commitLiveTutorialStart(userProfile, decision, resolvedAppSettings);
                 
                 if (decision.payment === 'credits' && decision.creditCost > 0 && userProfile?.uid) {
-                    await deductAICredits(userProfile.uid, decision.creditCost, 'Live Tutorial Session', resolvedAppSettings);
+                    const result = await deductAICredits(
+                        userProfile.uid,
+                        decision.creditCost,
+                        'Live Tutorial Session',
+                        resolvedAppSettings
+                    );
+                    if (result && result.success === false) {
+                        addToast?.(result.error || 'Could not sync credits to server. Balance may be out of date.', 'warning');
+                    }
                 }
                 
                 logTeachingEvent({
@@ -245,6 +280,10 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
                     metadata: { payment: decision.payment, creditCost: decision.creditCost },
                 });
             } catch (err: any) {
+                // Allow a retry if the charge failed hard
+                if (startCommittedRef.current === commitKey) {
+                    startCommittedRef.current = null;
+                }
                 addToast?.(err?.message || 'Failed to process session start.', 'error');
                 logTeachingEvent({
                     type: 'credit_fail',
@@ -258,6 +297,8 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 
     const handleResumeSession = () => {
         if (resumeProgress) {
+            // Resume does not re-charge; mark committed so accidental Start cannot double-bill
+            startCommittedRef.current = `${sessionIdentity}::${resumeProgress.durationMode}`;
             setSelectedDurationMode(resumeProgress.durationMode);
             setStartBoardIndex(resumeProgress.boardIndex);
             setIsDurationModalOpen(false);
