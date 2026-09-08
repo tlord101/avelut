@@ -82,6 +82,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   const [statusMessage, setStatusMessage] = useState('Planning live lesson structure…');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
+  const [isWaitingForVoice, setIsWaitingForVoice] = useState(true);
 
   const [boardElements, setBoardElements] = useState<LiveBoardElement[]>([]);
   const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
@@ -211,13 +212,39 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         setIsLoading(false);
         setStatusMessage('');
         setIsAudioReady(false);
+        setIsWaitingForVoice(true);
 
         manager.clearBoard();
+
+        // Render Title Action immediately when board is loaded before speech audio starts
+        const titleAction = perf.board_actions?.find(
+          (a) =>
+            a.position?.y <= 16 ||
+            a.id?.includes('title') ||
+            a.type === 'title' ||
+            (a.type === 'write' && a.content === perf.title)
+        );
+
+        if (titleAction) {
+          manager.applyAction(titleAction);
+        } else if (perf.title) {
+          manager.applyAction({
+            id: `act_title_${perf.board_number}`,
+            type: 'write',
+            content: perf.title,
+            position: { x: 50, y: 10 },
+            metadata: { fontSize: '3xl', color: '#FFFFFF' },
+          });
+        }
+
         engine.playBoardSpeech(perf);
       },
       onAudioPlaybackStateChanged: (playing) => {
         setIsSpeaking(playing);
-        if (playing) setIsAudioReady(true);
+        if (playing) {
+          setIsAudioReady(true);
+          setIsWaitingForVoice(false);
+        }
 
         if (!playing && isAnsweringOnBoard) {
           setIsAnsweringOnBoard(false);
@@ -614,14 +641,17 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             activeUnderlines={activeUnderlines}
             tutorPointer={tutorPointer}
             isAudioReady={isAudioReady}
+            isWaitingForVoice={isWaitingForVoice}
           />
         )}
 
-        {/* Loading Indicator */}
-        {(isLoading || (!isAudioReady && !showAskModal && !isAnsweringOnBoard && !finalTest)) && (
+        {/* Loading Indicator for Initial Board Fetching */}
+        {isLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none bg-[#070B14]/60 backdrop-blur-sm">
             <div className="w-10 h-10 rounded-full border-2 border-[#38BDF8]/30 border-t-[#38BDF8] animate-spin mb-3" />
-            <p className="text-xs sm:text-sm font-semibold text-slate-300 tracking-wide">{statusMessage}</p>
+            <span className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
+              {statusMessage || 'Preparing live board structure…'}
+            </span>
           </div>
         )}
 

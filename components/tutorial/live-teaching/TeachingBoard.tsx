@@ -11,6 +11,7 @@ export interface TeachingBoardProps {
   activeUnderlines?: Set<string>;
   tutorPointer?: { x: number; y: number; active: boolean; color?: string } | null;
   isAudioReady?: boolean;
+  isWaitingForVoice?: boolean;
   className?: string;
 }
 
@@ -19,19 +20,26 @@ const TypedText: React.FC<{
   className?: string;
   style?: React.CSSProperties;
   enabled?: boolean;
+  isTitle?: boolean;
   speedMs?: number;
-}> = ({ text, className, style, enabled = true, speedMs = 26 }) => {
+}> = ({ text, className, style, enabled = true, isTitle = false, speedMs = 26 }) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
 
   useEffect(() => {
     if (!text) {
       setDisplayedText('');
+      setIsTyping(false);
       return;
     }
     if (!enabled) {
-      setDisplayedText(text);
-      setIsTyping(false);
+      if (isTitle) {
+        setDisplayedText(text);
+        setIsTyping(false);
+      } else {
+        setDisplayedText('');
+        setIsTyping(false);
+      }
       return;
     }
 
@@ -50,13 +58,13 @@ const TypedText: React.FC<{
     }, speedMs);
 
     return () => clearInterval(timer);
-  }, [text, enabled, speedMs]);
+  }, [text, enabled, isTitle, speedMs]);
 
   return (
     <p className={className} style={style}>
       {displayedText}
-      {isTyping && (
-        <span className="inline-block w-2 h-5 ml-1 bg-[#38BDF8] shadow-[0_0_8px_#38BDF8] animate-pulse align-middle" />
+      {(isTyping || (!enabled && isTitle)) && (
+        <span className="inline-block w-2.5 h-6 ml-1.5 bg-[#38BDF8] shadow-[0_0_10px_#38BDF8] animate-pulse align-middle rounded-xs" />
       )}
     </p>
   );
@@ -171,6 +179,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
   activeUnderlines = new Set(),
   tutorPointer,
   isAudioReady = false,
+  isWaitingForVoice = false,
   className = '',
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -355,6 +364,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                     <TypedText
                       text={el.content || ''}
                       enabled={isAudioReady}
+                      isTitle={isTitle}
                       className={`tracking-wide break-words leading-snug ${
                         isTitle
                           ? 'text-2xl sm:text-3xl md:text-4xl font-black uppercase text-white border-b-2 border-[#38BDF8] pb-1'
@@ -374,6 +384,13 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
               </div>
             );
           })}
+
+        {isWaitingForVoice && (
+          <div className="absolute left-1/2 top-[22%] -translate-x-1/2 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A]/90 border border-[#38BDF8]/40 shadow-[0_0_14px_rgba(56,189,248,0.3)] pointer-events-none animate-pulse z-20">
+            <span className="w-2 h-4.5 bg-[#38BDF8] shadow-[0_0_8px_#38BDF8] rounded-xs animate-ping" />
+            <span className="text-xs font-semibold tracking-wider text-slate-200">Lecturer preparing speech…</span>
+          </div>
+        )}
 
         {tutorPointer && tutorPointer.active && (
           <div

@@ -165,6 +165,14 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
     const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
 
+    // Reset duration mode & progress whenever topic or initialSessionData changes
+    useEffect(() => {
+        setSelectedDurationMode(null);
+        setStartBoardIndex(0);
+        setResumeProgress(null);
+        setIsDurationModalOpen(true);
+    }, [topicTitle, courseName, initialSessionData]);
+
     // Check for existing progress to allow 1-click session resuming
     useEffect(() => {
         const userId = userProfile?.uid || 'anon';
