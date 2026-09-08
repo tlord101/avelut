@@ -221,7 +221,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           (a) =>
             a.position?.y <= 16 ||
             a.id?.includes('title') ||
-            a.type === 'title' ||
+            (a.type as string) === 'title' ||
             (a.type === 'write' && a.content === perf.title)
         );
 

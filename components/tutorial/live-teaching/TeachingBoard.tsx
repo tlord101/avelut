@@ -247,15 +247,15 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
 
       <div className="relative z-10 w-full h-full overflow-hidden">
         {elements.map((el) => {
-            const isSvg = el.type === 'svg' || el.type === 'draw' || Boolean(el.svgContent) || Boolean((el as any).metadata?.svgContent);
+            const isSvg = (el as any).type === 'svg' || (el as any).type === 'draw' || Boolean(el.svgContent) || Boolean((el as any).metadata?.svgContent);
             const rawSvg = isSvg
               ? el.svgContent || (el as any).metadata?.svgContent || (typeof el.content === 'string' && el.content.includes('<svg') ? el.content : null)
               : null;
 
             const isTitle =
-              (el.type === 'text' || el.type === 'write') &&
+              ((el as any).type === 'text' || (el as any).type === 'write') &&
               (el.position?.y <= 16 || el.id?.includes('title'));
-            const isKeyPoint = (el.type === 'text' || el.type === 'write') && !isTitle;
+            const isKeyPoint = ((el as any).type === 'text' || (el as any).type === 'write') && !isTitle;
 
             const posX = isTitle || isSvg ? 50 : 5;
             const posY = isSvg
@@ -359,7 +359,7 @@ export const TeachingBoard: React.FC<TeachingBoardProps> = ({
                   </span>
                 )}
 
-                {(el.type === 'text' || el.type === 'write') && !el.latex && (
+                {((el as any).type === 'text' || (el as any).type === 'write') && !el.latex && (
                   <div className={`relative px-1 ${isKeyPoint ? 'text-left' : 'text-center'} max-w-full`}>
                     <TypedText
                       text={el.content || ''}

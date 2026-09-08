@@ -257,19 +257,64 @@ export class TeachingEngineService {
       const structCacheKey = getLocalCacheKey('struct', params.topic, mode);
       const cached = getCachedBoardItem<TeachingStructure>(structCacheKey);
       if (cached && Array.isArray(cached.boards) && cached.boards.length > 0) {
-        return; // Already cached in localStorage
+        void this.generateAndCacheBoard0Performance(cached, mode);
+        return;
       }
       try {
-        await this.generateTeachingStructure({
+        const struct = await this.generateTeachingStructure({
           ...params,
           durationMode: mode,
           isPrefetch: true,
         });
+        if (struct) {
+          void this.generateAndCacheBoard0Performance(struct, mode);
+        }
       } catch (err) {
         console.warn(`[TeachingEngine] Background prefetch failed for duration mode ${mode}:`, err);
       }
     });
     await Promise.allSettled(prefetchPromises);
+  }
+
+  /**
+   * Background prefetch & cache Board 1 (Board 0) performance & speech audio for a specific duration mode structure.
+   */
+  public async generateAndCacheBoard0Performance(
+    structure: TeachingStructure,
+    durationMode: any = 30
+  ): Promise<TeachingBoardPerformance | null> {
+    if (!structure || !structure.boards || structure.boards.length === 0) return null;
+
+    const mode = structure.duration_minutes || (typeof durationMode === 'number' ? durationMode : parseInt(String(durationMode), 10)) || 30;
+    const board1Plan = structure.boards[0];
+    const perfCacheKey = getLocalCacheKey('perf', structure.topic, `${mode}_1`);
+
+    // 1. Check if Board 1 performance is already in localStorage
+    let perf = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
+    if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) {
+      this.currentStructure = structure;
+      try {
+        perf = await this.fetchSingleBoardFromAI(board1Plan);
+        if (perf) {
+          setCachedBoardItem(perfCacheKey, perf);
+        }
+      } catch (err) {
+        console.warn(`[TeachingEngine] Board 0 prefetch failed for duration mode ${mode}:`, err);
+        return null;
+      }
+    }
+
+    // 2. Pre-fetch TTS audio for Board 1 if speech text exists
+    if (perf && perf.speech) {
+      const speechText = perf.speech.trim();
+      unifiedVoiceRouter.prefetchSpeech(speechText, {
+        appSettings: this.appSettings,
+        voice: this.voice,
+        cacheKey: `tts_perf_${structure.topic}_${mode}_1_${this.voice}`,
+      });
+    }
+
+    return perf;
   }
 
   /**
@@ -394,6 +439,9 @@ export class TeachingEngineService {
       boards.push({
         board_id: `board_${i}`,
         board_number: i,
+        step_type: 'core_concept',
+        prerequisite_knowledge: [],
+        key_concepts: [`${topic} Core Point ${i}`],
         title: i === 1 ? `Introduction to ${topic}` : i === boardCount ? `Summary & Key Takeaways` : `${topic} - Core Concept ${i - 1}`,
         teaching_objective: `Master key concept ${i} for ${topic}`,
         what_student_should_understand: `Understanding aspect ${i} of ${topic}`,
@@ -452,6 +500,7 @@ export class TeachingEngineService {
           text: `Welcome to this board on ${boardTitle}.`,
           purpose: 'introduce title',
           board_actions: [actions[0]],
+          visual_actions: [],
         },
       ],
       board_actions: normalizeBoardActions(actions),
@@ -501,8 +550,9 @@ export class TeachingEngineService {
     this.currentBoardIndex = requestedIndex;
     const boardPlan: TeachingBoardPlan = this.currentStructure.boards[requestedIndex];
 
+    const mode = this.currentStructure?.duration_minutes || 30;
     const boardNum = requestedIndex + 1;
-    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, boardNum);
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, `${mode}_${boardNum}`);
 
     // Instant local storage cache lookup (0ms board loading)
     const cachedPerf = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
@@ -555,12 +605,37 @@ export class TeachingEngineService {
     if (!this.currentStructure || !this.currentStructure.boards[nextIndex]) return;
     if (this.currentSessionId !== sessionTag) return;
 
+    const mode = this.currentStructure.duration_minutes || 30;
+    const boardNum = nextIndex + 1;
     const boardPlan = this.currentStructure.boards[nextIndex];
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, `${mode}_${boardNum}`);
+
+    const cached = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
+    if (cached) {
+      this.prefetchedBoardPerformance = cached;
+      this.prefetchedBoardIndex = nextIndex;
+      if (cached.speech) {
+        unifiedVoiceRouter.prefetchSpeech(cached.speech.trim(), {
+          appSettings: this.appSettings,
+          voice: this.voice,
+          cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${boardNum}_${this.voice}`,
+        });
+      }
+      return;
+    }
+
     try {
       const perf = await this.fetchSingleBoardFromAI(boardPlan, studentName, completedSummary);
       if (this.currentSessionId === sessionTag && !this.isDestroyed) {
         this.prefetchedBoardPerformance = perf;
         this.prefetchedBoardIndex = nextIndex;
+        if (perf?.speech) {
+          unifiedVoiceRouter.prefetchSpeech(perf.speech.trim(), {
+            appSettings: this.appSettings,
+            voice: this.voice,
+            cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${boardNum}_${this.voice}`,
+          });
+        }
       }
     } catch (err) {
       console.warn('[TeachingEngine] Background prefetch failed for board', nextIndex, err);
@@ -734,8 +809,9 @@ export class TeachingEngineService {
       performance.board_actions = [...(performance.board_actions || []), ...keyPointActions];
     }
 
+    const mode = this.currentStructure?.duration_minutes || 30;
     const boardNum = boardPlan.board_number || 1;
-    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure!.topic, boardNum);
+    const perfCacheKey = getLocalCacheKey('perf', this.currentStructure!.topic, `${mode}_${boardNum}`);
     setCachedBoardItem(perfCacheKey, performance);
 
     return performance;
@@ -784,6 +860,8 @@ export class TeachingEngineService {
       let audioStarted = false;
       const speed = 1.08;
       const wps = wordsPerSecond(speed);
+      const mode = this.currentStructure?.duration_minutes || 30;
+      const boardNum = performance.board_number || this.currentBoardIndex + 1;
 
       const fireAction = (act: BoardAction) => {
         if (triggeredActionIds.has(act.id)) return;
@@ -795,6 +873,7 @@ export class TeachingEngineService {
         appSettings: this.appSettings,
         voice: this.voice,
         speed,
+        cacheKey: `tts_perf_${this.currentStructure?.topic || 'topic'}_${mode}_${boardNum}_${this.voice}`,
         onStart: () => {
           if (this.isDestroyed || this.isPaused) return;
           audioStarted = true;

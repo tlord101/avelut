@@ -224,18 +224,42 @@ export async function prefetchTopicTeachingStructure(params: {
 
   // Check which modes are missing locally or in Supabase DB
   const missingModes: LessonDurationMode[] = [];
+  const readyStructures: Array<{ struct: TeachingStructure; mode: LessonDurationMode }> = [];
+
   for (const mode of durationModes) {
     const modeKey = structureKey(resolvedUserId, topicKey, mode);
-    const existing = readCachedJson<TeachingStructure | null>(modeKey, null);
-    if (existing && existing.boards && existing.boards.length > 0) {
-      continue;
+    let existing = readCachedJson<TeachingStructure | null>(modeKey, null);
+    if (!existing || !existing.boards || existing.boards.length === 0) {
+      const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, params.courseName, mode);
+      if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
+        await saveTeachingStructureOnly(resolvedUserId, topicKey, dbStruct, mode, params.courseName);
+        existing = dbStruct;
+      }
     }
-    const dbStruct = await supabaseDataService.getTopicTeachingStructureSupabase(topicTitle, params.courseName, mode);
-    if (dbStruct && dbStruct.boards && dbStruct.boards.length > 0) {
-      await saveTeachingStructureOnly(resolvedUserId, topicKey, dbStruct, mode, params.courseName);
+    if (existing && existing.boards && existing.boards.length > 0) {
+      readyStructures.push({ struct: existing, mode });
       continue;
     }
     missingModes.push(mode);
+  }
+
+  // Pre-fetch Board 0 performance for already ready structures
+  if (readyStructures.length > 0) {
+    void (async () => {
+      try {
+        const { TeachingEngineService } = await import('./teachingEngineService');
+        const engine = new TeachingEngineService(
+          params.appSettings || {},
+          params.userProfile || null,
+          'Altair'
+        );
+        for (const { struct, mode } of readyStructures) {
+          await engine.generateAndCacheBoard0Performance(struct, mode);
+        }
+      } catch (err) {
+        console.warn('[prefetchTopicTeachingStructure] Board 0 prefetch for ready structures failed:', err);
+      }
+    })();
   }
 
   if (missingModes.length === 0) {
@@ -273,13 +297,16 @@ export async function prefetchTopicTeachingStructure(params: {
       studentName: params.userProfile?.display_name || 'Student',
     });
 
-    // Save whichever duration mode structures returned
+    // Save whichever duration mode structures returned and pre-fetch Board 0
     let savedAny = false;
     for (const m of [15, 30, 60] as LessonDurationMode[]) {
       const struct = result[m];
       if (struct && struct.boards && struct.boards.length > 0) {
         await saveTeachingStructureOnly(resolvedUserId, topicKey, struct, m, params.courseName);
         savedAny = true;
+
+        // Background prefetch Board 0 AI performance & speech for this duration mode
+        void engine.generateAndCacheBoard0Performance(struct, m);
       }
     }
     setPrefetchLock(resolvedUserId, topicKey, savedAny ? 'completed' : 'failed', topicTitle, params.courseName);

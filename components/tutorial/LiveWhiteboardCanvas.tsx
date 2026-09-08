@@ -45,6 +45,8 @@ export interface LiveWhiteboardCanvasProps {
   tutorPointer?: { x: number; y: number; active: boolean; color?: string } | null;
   activeFocusArea?: { x: number; y: number; w: number; h: number; color?: string } | null;
   isStudentDrawingEnabled?: boolean;
+  studentMode?: 'none' | 'drawing' | 'lasso';
+  onStudentLassoSelect?: (elementIds: string[], bounds?: { x: number; y: number; w: number; h: number }) => void;
   onStudentStrokeComplete?: (stroke: { points: Point2D[]; color: string; size: number }) => void;
   className?: string;
   gridStyle?: 'dots' | 'grid' | 'clean';
@@ -123,7 +125,8 @@ export const LiveWhiteboardCanvas: React.FC<LiveWhiteboardCanvasProps> = ({
     const render = (time: number) => {
       const dpr = window.devicePixelRatio || 1;
       const rect = container.getBoundingClientRect();
-      const elapsedSec = (time - startTime) / 1000;
+      const safeTime = typeof time === 'number' && !isNaN(time) ? time : performance.now();
+      const elapsedSec = (safeTime - startTime) / 1000;
 
       // Clear Canvas
       ctx.save();
