@@ -490,25 +490,51 @@ export const Chat: React.FC<ChatProps> = ({
       let currentConvoId = activeConversationId;
       const now = Date.now();
 
+      const isNewConvo = !currentConvoId;
       if (!currentConvoId) {
         currentConvoId = generateLocalId('conv');
-        const titleSnippet = currentInput.slice(0, 30);
+        const initialTitle = currentInput.slice(0, 30);
         void saveLocalConversation({
           id: currentConvoId,
           user_id: userProfile.uid,
-          title: titleSnippet,
+          title: initialTitle,
           created_at: now,
           last_updated_at: now,
         });
 
         const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`);
         await set(conversationsRef, {
-          title: titleSnippet,
+          title: initialTitle,
           created_at: now,
           last_updated_at: now,
         });
         setActiveConversationId(currentConvoId);
         onSelectConversation?.(currentConvoId);
+      }
+
+      if (isNewConvo && ai && currentConvoId) {
+        const convoIdForTitle = currentConvoId;
+        (async () => {
+          try {
+            const titleResult = await ai.models.generateContent({
+              model: aiModel,
+              contents: [{
+                role: 'user',
+                parts: [{
+                  text: `Summarize the following user prompt into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser prompt: "${currentInput.slice(0, 300)}"`
+                }]
+              }],
+              config: { temperature: 0.3 }
+            });
+            const generatedTitle = getResponseText(titleResult).trim().replace(/^["']|["']$/g, '');
+            if (generatedTitle && generatedTitle.length > 0) {
+              void renameLocalConversation(convoIdForTitle, generatedTitle);
+              void update(dbRef(db, `chat_conversations/${userProfile.uid}/${convoIdForTitle}`), { title: generatedTitle });
+            }
+          } catch (e) {
+            console.warn('Failed to auto-generate chat title:', e);
+          }
+        })();
       }
 
       const userMsgId = generateLocalId('msg');
@@ -555,10 +581,11 @@ export const Chat: React.FC<ChatProps> = ({
 
       // Build clean, responsive system instruction for Avelut AI
       const baseSystemInstruction = [
-        'You are Avelut, a smart, versatile, helpful, and friendly AI assistant.',
-        'You can assist with any topic: everyday conversation, writing, coding, math, science, and general learning.',
+        'You are Avelut, a smart, versatile, helpful, and friendly conversational AI assistant.',
+        'You can assist with any topic: everyday casual chat, writing, coding, math, science, and general learning.',
         'Guidelines:',
-        '- Keep responses natural, direct, clear, and helpful.',
+        '- Keep responses natural, direct, human-like, and clear. Avoid robotic formal speeches, scripted intros, or repeating "I am Avelut, how can I help you?".',
+        '- For simple greetings or casual small talk (e.g., "hi", "hello", "hey", "what\'s up"), reply warmly, naturally, and directly.',
         '- When formatting equations or mathematical expressions, use standard LaTeX ($...$ for inline, $$...$$ for blocks).',
       ].join('\n');
 

@@ -758,15 +758,12 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                       )}
                     </div>
                   ) : !message.text ? (
-                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.3s]" />
                         <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.15s]" />
                         <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce" />
                       </div>
-                      <span className="text-xs sm:text-sm font-semibold text-[#64748B] dark:text-slate-400">
-                        Course Tutor is preparing your lesson...
-                      </span>
                     </div>
                   ) : isCurrentlyStreaming ? (
                     <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
