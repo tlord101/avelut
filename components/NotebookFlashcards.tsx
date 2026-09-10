@@ -74,7 +74,7 @@ export const NotebookFlashcards: React.FC<NotebookFlashcardsProps> = ({
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 max-w-[calc(100vw-110px)] sm:max-w-none">
             <button
               onClick={onBack}
-              className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+              className="w-10 h-10 rounded-full bg-white dark:bg-[#141414] hover:bg-slate-50 dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-[#2A2A2A] flex items-center justify-center text-[#0F172A] dark:text-white transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
               aria-label="Back to chapters"
               title="Back"
             >
@@ -94,14 +94,14 @@ export const NotebookFlashcards: React.FC<NotebookFlashcardsProps> = ({
           <button
             type="button"
             onClick={() => void generateCards(true)}
-            className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#64748B] dark:text-slate-300 hover:text-[#0066FF] dark:hover:text-blue-400 transition-all cursor-pointer shadow-2xs"
+            className="w-9 h-9 rounded-xl bg-white dark:bg-[#141414] hover:bg-slate-50 dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-[#2A2A2A] flex items-center justify-center text-[#64748B] dark:text-[#A3A3A3] hover:text-[#2563EB] dark:hover:text-[#3B82F6] transition-all cursor-pointer shadow-2xs"
             title="Regenerate Flashcards"
             aria-label="Regenerate Flashcards"
           >
             <i className="bi bi-arrow-clockwise text-sm"></i>
           </button>
         ),
-        className: 'bg-[#F6F6F3]/95 dark:bg-slate-950/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
+        className: 'bg-[#F6F6F3]/95 dark:bg-[#141414]/95 border-b border-[#E3E9F1] dark:border-[#2A2A2A] backdrop-blur-md',
       });
     }
 
@@ -214,7 +214,7 @@ RULES:
   if (isGenerating) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-fade-in max-w-md mx-auto my-auto">
-        <div className="w-14 h-14 rounded-full border-3 border-[#E3E9F1] dark:border-slate-800 border-t-[#0066FF] dark:border-t-blue-400 animate-spin mb-4" />
+        <div className="w-14 h-14 rounded-full border-3 border-[#E3E9F1] dark:border-[#2A2A2A] border-t-[#2563EB] dark:border-t-[#3B82F6] animate-spin mb-4" />
         <h3 className="text-lg font-black text-[#0F172A] dark:text-white tracking-tight">
           Generating Flashcards...
         </h3>
@@ -228,7 +228,7 @@ RULES:
   if (cards.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-fade-in max-w-md mx-auto my-auto space-y-4">
-        <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 flex items-center justify-center text-[#0066FF] dark:text-blue-400 text-2xl shadow-xs">
+        <div className="w-14 h-14 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] flex items-center justify-center text-[#2563EB] dark:text-[#3B82F6] text-2xl shadow-xs">
           <i className="bi bi-card-text"></i>
         </div>
         <h3 className="text-base font-black text-[#0F172A] dark:text-white">No Flashcards Yet</h3>
@@ -261,7 +261,7 @@ RULES:
       {currentCard && (
         <div
           onClick={() => setIsFlipped(!isFlipped)}
-          className="flex-1 min-h-[300px] sm:min-h-[360px] bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between cursor-pointer transition-all hover:border-[#0066FF]/40 dark:hover:border-blue-500/40 mb-3 select-none shadow-xs"
+          className="flex-1 min-h-[300px] sm:min-h-[360px] bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] rounded-3xl p-6 sm:p-8 flex flex-col justify-between cursor-pointer transition-all hover:border-[#2563EB]/40 dark:hover:border-[#3B82F6]/40 mb-3 select-none shadow-xs"
         >
           {/* Card Label */}
           <div className="flex items-center justify-between">
@@ -283,7 +283,7 @@ RULES:
             </div>
 
             {showHint && currentCard.hint && !isFlipped && (
-              <div className="mt-4 p-3 bg-[#F1F5F9] dark:bg-slate-800 rounded-2xl border border-[#E3E9F1] dark:border-slate-700 text-xs text-[#64748B] dark:text-slate-300 inline-block animate-fade-in">
+              <div className="mt-4 p-3 bg-[#F1F5F9] dark:bg-[#1C1C1C] rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] text-xs text-[#64748B] dark:text-[#A3A3A3] inline-block animate-fade-in">
                 <i className="bi bi-lightbulb mr-1 text-amber-500"></i>
                 {currentCard.hint}
               </div>
@@ -291,7 +291,7 @@ RULES:
           </div>
 
           {/* Bottom Hint Toggle */}
-          <div className="flex items-center justify-between pt-4 border-t border-[#E3E9F1]/60 dark:border-slate-800">
+          <div className="flex items-center justify-between pt-4 border-t border-[#E3E9F1]/60 dark:border-[#2A2A2A]">
             {currentCard.hint && !isFlipped ? (
               <button
                 type="button"
@@ -314,7 +314,7 @@ RULES:
       )}
 
       {/* Prominent Large Bottom Navigation Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-3xl p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 shadow-xs">
+      <div className="bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] rounded-3xl p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 shadow-xs">
         <button
           type="button"
           onClick={() => {
@@ -323,13 +323,13 @@ RULES:
             setCurrentIndex((prev) => Math.max(0, prev - 1));
           }}
           disabled={currentIndex === 0}
-          className="flex-1 py-3.5 sm:py-4 px-4 rounded-2xl bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#E3E9F1] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 text-[#0F172A] dark:text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center justify-center gap-2 font-bold text-xs sm:text-sm active:scale-98 shadow-2xs"
+          className="flex-1 py-3.5 sm:py-4 px-4 rounded-2xl bg-[#F6F6F3] dark:bg-[#1C1C1C] hover:bg-[#E3E9F1] dark:hover:bg-[#2A2A2A] border border-[#E3E9F1] dark:border-[#2A2A2A] text-[#0F172A] dark:text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center justify-center gap-2 font-bold text-xs sm:text-sm active:scale-98 shadow-2xs"
         >
           <i className="bi bi-arrow-left text-base font-black"></i>
           <span>Previous</span>
         </button>
 
-        <div className="px-3 py-1.5 bg-[#F1F5F9] dark:bg-slate-800 rounded-xl text-xs font-black text-[#0F172A] dark:text-white shrink-0 border border-[#E3E9F1] dark:border-slate-700">
+        <div className="px-3 py-1.5 bg-[#F1F5F9] dark:bg-[#1C1C1C] rounded-xl text-xs font-black text-[#0F172A] dark:text-white shrink-0 border border-[#E3E9F1] dark:border-[#2A2A2A]">
           {currentIndex + 1} / {cards.length}
         </div>
 

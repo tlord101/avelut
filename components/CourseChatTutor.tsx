@@ -130,21 +130,21 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             {/* Back Arrow Button — Off-white styling */}
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-[#E3E9F1] dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white text-xs sm:text-sm font-bold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] bg-white dark:bg-[#141414] hover:bg-slate-50 dark:hover:bg-[#1C1C1C] text-[#0F172A] dark:text-white text-xs sm:text-sm font-bold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs"
               aria-label="Back to study guide"
               title="Back"
             >
-              <i className="bi bi-arrow-left text-sm font-bold text-[#0066FF]"></i>
+              <i className="bi bi-arrow-left text-sm font-bold text-[#2563EB] dark:text-[#3B82F6]"></i>
               <span className="hidden sm:inline">Back</span>
             </button>
 
             {/* Live Tutorial Button — Enlarged with high visibility & padlock gating */}
             <button
               onClick={handleTriggerLiveTutorial}
-              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#0066FF]/30 hover:border-[#0066FF] bg-white dark:bg-slate-900 hover:bg-brand-50/40 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#2563EB]/30 dark:border-[#3B82F6]/30 hover:border-[#2563EB] dark:hover:border-[#3B82F6] bg-white dark:bg-[#141414] hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
               title={liveAccess.allowed ? "Launch Live Voice & Whiteboard Tutorial" : "Live Tutorial Locked (Weekly/Monthly Plan or ₦450/topic)"}
             >
-              <div className="w-5 h-5 rounded-full bg-[#0066FF]/10 flex items-center justify-center text-[#0066FF] shrink-0">
+              <div className="w-5 h-5 rounded-full bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 flex items-center justify-center text-[#2563EB] dark:text-[#3B82F6] shrink-0">
                 <i className="bi bi-broadcast text-xs font-bold animate-pulse"></i>
               </div>
               <span className="whitespace-nowrap font-black tracking-tight text-[#0F172A] dark:text-white">Live Tutorial</span>
@@ -167,7 +167,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             </div>
           </div>
         ),
-        className: 'bg-[#F6F6F3]/95 dark:bg-[#0A0A0A]/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
+        className: 'bg-[#F6F6F3]/95 dark:bg-[#141414]/95 border-b border-[#E3E9F1] dark:border-[#2A2A2A] backdrop-blur-md',
       });
     }
     return () => {
@@ -600,7 +600,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       <h1 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight" {...props} />
     ),
     h2: ({ node, ...props }: any) => (
-      <h2 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-white mt-3.5 mb-1.5 tracking-tight border-b border-[#E3E9F1] dark:border-slate-800 pb-1" {...props} />
+      <h2 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-white mt-3.5 mb-1.5 tracking-tight border-b border-[#E3E9F1] dark:border-[#2A2A2A] pb-1" {...props} />
     ),
     h3: ({ node, ...props }: any) => (
       <h3 className="text-base sm:text-lg font-semibold text-[#0066FF] dark:text-[#60A5FA] mt-3 mb-1" {...props} />
@@ -629,18 +629,18 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     li: ({ node, ...props }: any) => <li className="leading-[1.75]" {...props} />,
     a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-brand-200 underline' : 'text-[#0066FF] underline hover:text-[#002D62]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
     table: ({ node, ...props }: any) => (
-      <div className="w-full my-3.5 overflow-x-auto [scrollbar-width:thin] rounded-2xl border border-[#E3E9F1] dark:border-slate-800 shadow-2xs">
+      <div className="w-full my-3.5 overflow-x-auto [scrollbar-width:thin] rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs">
         <table className="min-w-full border-collapse text-xs sm:text-sm text-left" {...props} />
       </div>
     ),
     thead: ({ node, ...props }: any) => (
-      <thead className="bg-[#F1F5F9] dark:bg-slate-800/90 text-[#002D62] dark:text-[#60A5FA] border-b border-[#E3E9F1] dark:border-slate-700 font-bold" {...props} />
+      <thead className="bg-[#F1F5F9] dark:bg-[#1C1C1C] text-[#2563EB] dark:text-[#3B82F6] border-b border-[#E3E9F1] dark:border-[#2A2A2A] font-bold" {...props} />
     ),
     th: ({ node, ...props }: any) => (
-      <th className="p-3 font-bold border-r last:border-r-0 border-[#E3E9F1] dark:border-slate-700 whitespace-nowrap" {...props} />
+      <th className="p-3 font-bold border-r last:border-r-0 border-[#E3E9F1] dark:border-[#2A2A2A] whitespace-nowrap" {...props} />
     ),
     td: ({ node, ...props }: any) => (
-      <td className="p-3 border-t border-r last:border-r-0 border-[#E3E9F1] dark:border-slate-800 bg-white dark:bg-slate-900 text-[#0F172A] dark:text-slate-200" {...props} />
+      <td className="p-3 border-t border-r last:border-r-0 border-[#E3E9F1] dark:border-[#2A2A2A] bg-white dark:bg-[#141414] text-[#0F172A] dark:text-[#FAFAFA]" {...props} />
     ),
   });
 
@@ -758,7 +758,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                       )}
                     </div>
                   ) : !message.text ? (
-                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 shadow-2xs w-fit animate-fade-in">
+                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.3s]" />
                         <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.15s]" />
@@ -833,7 +833,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
           )}
 
           {/* Fluid Spring Morphing Pill Container (From Avelut AI) */}
-          <div className="relative w-full bg-white dark:bg-[#111111] rounded-full flex items-center justify-between pl-3 pr-2 py-1.5 min-h-[54px] sm:min-h-[56px] border border-[#E3E9F1] dark:border-slate-800 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+          <div className="relative w-full bg-white dark:bg-[#141414] rounded-full flex items-center justify-between pl-3 pr-2 py-1.5 min-h-[54px] sm:min-h-[56px] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
             
             {/* Left: Plus Menu Button */}
             <div className="relative shrink-0">
@@ -841,7 +841,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                 type="button"
                 onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
                 disabled={isSending}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${showAttachmentMenu ? 'bg-slate-100 dark:bg-slate-800' : ''}`}
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-[#1C1C1C] transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${showAttachmentMenu ? 'bg-slate-100 dark:bg-[#1C1C1C]' : ''}`}
                 title="Add photo or document"
               >
                 <PlusIcon />
@@ -849,7 +849,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
 
               {/* Plus Popup Menu */}
               {showAttachmentMenu && (
-                <div className="absolute bottom-14 left-0 w-56 bg-white/95 dark:bg-[#111111]/95 backdrop-blur-xl border border-[#E3E9F1] dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50 p-1.5">
+                <div className="absolute bottom-14 left-0 w-56 bg-white/95 dark:bg-[#141414]/95 backdrop-blur-xl border border-[#E3E9F1] dark:border-[#2A2A2A] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50 p-1.5">
                   <button
                     type="button"
                     onClick={() => {
