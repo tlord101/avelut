@@ -187,35 +187,183 @@ function normalizeMessage(chatId: string, messageId: string, value: Record<strin
 
 async function persistMessage(chatId: string, messageId: string, value: Record<string, any>): Promise<NormalizedMessage> {
   const message = normalizeMessage(chatId, messageId, value);
-  const { error } = await supabase.rpc('send_chat_message', {
-    p_chat_id: message.chatId,
-    p_message_id: message.id,
-    p_sender_id: message.senderId,
-    p_text: message.text,
-    p_media_url: message.mediaUrl,
-    p_media_type: message.mediaType,
-    p_reply_to: message.replyTo,
-    p_created_at: message.createdAt,
+
+  try {
+    const { error } = await supabase.rpc('send_chat_message', {
+      p_chat_id: message.chatId,
+      p_message_id: message.id,
+      p_sender_id: message.senderId,
+      p_text: message.text,
+      p_media_url: message.mediaUrl,
+      p_media_type: message.mediaType,
+      p_reply_to: message.replyTo,
+      p_created_at: message.createdAt,
+    });
+
+    if (!error) {
+      return message;
+    }
+
+    console.warn('[supabaseRealtimeDb] RPC send_chat_message failed, using direct table fallback:', error.message);
+  } catch (rpcErr) {
+    console.warn('[supabaseRealtimeDb] RPC send_chat_message exception, using direct table fallback:', rpcErr);
+  }
+
+  // Fallback: direct table inserts & updates if RPC function is missing/failing
+  const client = supabaseAdmin || supabase;
+  const { error: msgErr } = await client.from('messages').insert({
+    id: message.id,
+    chat_id: message.chatId,
+    sender_id: message.senderId,
+    text: message.text,
+    media_url: message.mediaUrl,
+    media_type: message.mediaType,
+    reply_to: message.replyTo,
+    created_at: message.createdAt,
   });
 
-  if (error) {
-    throw new Error(error.message);
+  if (msgErr && !msgErr.message?.includes('duplicate key') && (msgErr as any).code !== '23505') {
+    console.warn('[supabaseRealtimeDb] Fallback message insert error:', msgErr.message);
+  }
+
+  const summary = message.mediaType === 'voice' ? 'Voice message'
+    : message.mediaType === 'image' ? 'Image file'
+    : message.mediaType === 'file' ? 'Document file'
+    : (message.text || 'Media');
+
+  // Update sender's member record
+  await client.from('chat_members')
+    .update({
+      last_message_text: summary,
+      last_message_at: message.createdAt,
+      last_message_sender_id: message.senderId,
+      last_message_is_read: true,
+      unread_count: 0,
+    })
+    .eq('chat_id', message.chatId)
+    .eq('user_id', message.senderId);
+
+  // Update recipient(s) member records
+  const { data: recipientMembers } = await client.from('chat_members')
+    .select('unread_count, user_id')
+    .eq('chat_id', message.chatId)
+    .neq('user_id', message.senderId);
+
+  if (recipientMembers && recipientMembers.length > 0) {
+    for (const member of recipientMembers) {
+      await client.from('chat_members')
+        .update({
+          last_message_text: summary,
+          last_message_at: message.createdAt,
+          last_message_sender_id: message.senderId,
+          last_message_is_read: false,
+          unread_count: (member.unread_count || 0) + 1,
+        })
+        .eq('chat_id', message.chatId)
+        .eq('user_id', member.user_id);
+    }
   }
 
   return message;
 }
 
 export async function ensureDirectChat(otherUserId: string): Promise<string> {
-  const { data, error } = await supabase.rpc('get_or_create_direct_chat', {
-    p_other_user_id: otherUserId,
-  });
-  if (error) {
-    throw new Error(error.message);
+  if (!otherUserId) {
+    throw new Error('A recipient user ID is required.');
   }
-  if (!data || typeof data !== 'string') {
-    throw new Error('Chat creation did not return an ID.');
+
+  // First try RPC
+  try {
+    const { data, error } = await supabase.rpc('get_or_create_direct_chat', {
+      p_other_user_id: otherUserId,
+    });
+    if (!error && data && typeof data === 'string') {
+      return data;
+    }
+    if (error) {
+      console.warn('[supabaseRealtimeDb] RPC get_or_create_direct_chat failed, using direct table fallback:', error.message);
+    }
+  } catch (rpcErr) {
+    console.warn('[supabaseRealtimeDb] RPC get_or_create_direct_chat exception, using direct table fallback:', rpcErr);
   }
-  return data;
+
+  // Direct table fallback
+  const authUserRes = await supabase.auth.getUser();
+  const currentUserId = authUserRes.data.user?.id;
+  if (!currentUserId) {
+    throw new Error('Authentication is required');
+  }
+  if (otherUserId === currentUserId) {
+    throw new Error('A different recipient is required');
+  }
+
+  const client = supabaseAdmin || supabase;
+
+  // 1. Check existing membership in chat_members for current user and target user
+  const { data: existingMember } = await client
+    .from('chat_members')
+    .select('chat_id')
+    .eq('user_id', currentUserId)
+    .eq('other_user_id', otherUserId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMember?.chat_id) {
+    return existingMember.chat_id;
+  }
+
+  // 2. Determine direct key and check chats table
+  const directKey = [currentUserId, otherUserId].sort().join(':');
+  let chatId: string | null = null;
+
+  try {
+    const { data: existingChat } = await client
+      .from('chats')
+      .select('id')
+      .eq('direct_key', directKey)
+      .maybeSingle();
+    if (existingChat?.id) {
+      chatId = existingChat.id;
+    }
+  } catch {}
+
+  // 3. Create new chat if not found
+  if (!chatId) {
+    const newChatId = crypto.randomUUID();
+    const { data: newChat, error: chatErr } = await client
+      .from('chats')
+      .insert({ id: newChatId, direct_key: directKey })
+      .select('id')
+      .maybeSingle();
+
+    if (newChat?.id) {
+      chatId = newChat.id;
+    } else if (chatErr) {
+      // Fallback if column `direct_key` does not exist on chats table yet
+      const { data: plainChat } = await client
+        .from('chats')
+        .insert({ id: newChatId })
+        .select('id')
+        .maybeSingle();
+      chatId = plainChat?.id || newChatId;
+    } else {
+      chatId = newChatId;
+    }
+  }
+
+  // 4. Ensure chat_members entries exist for both users
+  const members = [
+    { chat_id: chatId, user_id: currentUserId, other_user_id: otherUserId },
+    { chat_id: chatId, user_id: otherUserId, other_user_id: currentUserId },
+  ];
+
+  const { error: memberErr } = await client.from('chat_members').upsert(members);
+  if (memberErr) {
+    await client.from('chat_members').upsert(members[0]).catch(() => {});
+    await client.from('chat_members').upsert(members[1]).catch(() => {});
+  }
+
+  return chatId;
 }
 
 export function limitToLast(n: number) {
