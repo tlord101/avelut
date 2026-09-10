@@ -185,12 +185,12 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
         {/* Reassuring notice while any prep is running */}
         {isAnyPreparing && (
-          <div className="px-5 py-2.5 bg-brand-50 dark:bg-brand-950/40 border-b border-brand-200 dark:border-brand-900/50 flex items-center justify-between text-xs text-brand-900 dark:text-brand-200">
+          <div className="px-5 py-2.5 bg-neutral-100 dark:bg-[#1C1C1C] border-b border-neutral-200 dark:border-[#2A2A2A] flex items-center justify-between text-xs text-neutral-700 dark:text-[#FAFAFA]">
             <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 border-2 border-brand-600 dark:border-brand-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+              <div className="w-3.5 h-3.5 border-2 border-neutral-500 dark:border-[#A3A3A3] border-t-transparent rounded-full animate-spin shrink-0"></div>
               <span className="font-semibold">Preparing lesson in background. You can leave anytime!</span>
             </div>
-            <span className="text-[10px] text-brand-600 dark:text-brand-400 font-medium shrink-0">~2–4 min</span>
+            <span className="text-[10px] text-neutral-500 dark:text-[#A3A3A3] font-medium shrink-0">~2–4 min</span>
           </div>
         )}
 
@@ -242,14 +242,14 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                 onClick={() => setSelected(opt.minutes)}
                 className={`p-4 rounded-2xl border-2 transition-all flex flex-col gap-3 ${
                   !canAfford && state !== 'ready'
-                    ? 'border-neutral-200 dark:border-neutral-800/60 bg-neutral-50 dark:bg-neutral-900/40 opacity-75'
+                    ? 'border-neutral-200 dark:border-[#2A2A2A] bg-neutral-50 dark:bg-[#1C1C1C]/40 opacity-75'
                     : state === 'ready'
                       ? 'border-emerald-500/80 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm'
                       : state === 'preparing'
-                        ? 'border-brand-500/70 bg-brand-50/30 dark:bg-brand-950/20'
+                        ? 'border-[#3A3A3A] bg-neutral-100 dark:bg-[#1C1C1C]'
                         : isSelected
-                          ? 'border-black dark:border-white bg-neutral-50 dark:bg-neutral-900 shadow-sm'
-                          : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0A0A0A] hover:border-neutral-300 dark:hover:border-neutral-700'
+                          ? 'border-black dark:border-[#3A3A3A] bg-neutral-50 dark:bg-[#1C1C1C] shadow-sm'
+                          : 'border-neutral-200 dark:border-[#2A2A2A] bg-white dark:bg-[#141414] hover:border-neutral-300 dark:hover:border-[#3A3A3A]'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -259,10 +259,10 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                         state === 'ready'
                           ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black'
                           : state === 'preparing'
-                            ? 'bg-brand-600 text-white dark:bg-brand-400 dark:text-black'
+                            ? 'bg-neutral-800 text-white dark:bg-[#FAFAFA] dark:text-black'
                             : isSelected && canAfford
-                              ? 'bg-black text-white dark:bg-white dark:text-black'
-                              : 'bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-neutral-200 dark:border-neutral-700'
+                              ? 'bg-black text-white dark:bg-[#FAFAFA] dark:text-black'
+                              : 'bg-neutral-100 dark:bg-[#1C1C1C] text-black dark:text-[#FAFAFA] border border-neutral-200 dark:border-[#2A2A2A]'
                       }`}
                     >
                       <i className={`bi ${opt.icon} text-base`}></i>
@@ -271,7 +271,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
-                        <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] font-semibold text-neutral-500 dark:text-[#A3A3A3] bg-neutral-100 dark:bg-[#1C1C1C] px-2 py-0.5 rounded-md">
                           {opt.subtitle} ({opt.boardsCount} boards)
                         </span>
 
@@ -282,7 +282,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                           </span>
                         )}
                         {state === 'preparing' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-800 dark:text-brand-300 bg-brand-100 dark:bg-brand-950/80 border border-brand-300 dark:border-brand-800 px-2 py-0.5 rounded-md animate-pulse">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-neutral-700 dark:text-[#FAFAFA] bg-neutral-100 dark:bg-[#1C1C1C] border border-neutral-300 dark:border-[#3A3A3A] px-2 py-0.5 rounded-md animate-pulse">
                             <i className="bi bi-hourglass-split"></i> Preparing
                           </span>
                         )}
@@ -357,21 +357,21 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
                 {/* Progress Details When Preparing */}
                 {state === 'preparing' && (
-                  <div className="bg-brand-50/80 dark:bg-brand-950/50 border border-brand-200/80 dark:border-brand-900/60 rounded-xl p-2.5 text-xs text-brand-900 dark:text-brand-200 space-y-1.5 animate-fade-in">
+                  <div className="bg-neutral-100/80 dark:bg-[#1C1C1C] border border-neutral-200/80 dark:border-[#2A2A2A] rounded-xl p-2.5 text-xs text-neutral-900 dark:text-[#FAFAFA] space-y-1.5 animate-fade-in">
                     <div className="flex items-center justify-between text-[11px] font-semibold">
                       <span className="flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-ping"></span>
                         {prepStatus?.message || '1/3 Planning lesson structure…'}
                       </span>
-                      <span className="text-[10px] text-brand-600 dark:text-brand-400">
+                      <span className="text-[10px] text-[#2563EB] dark:text-[#3B82F6]">
                         {prepStatus?.etaMinutes || '~2–4 min'}
                       </span>
                     </div>
 
                     {/* Progress Bar (board-level i/N when available) */}
-                    <div className="w-full bg-brand-200 dark:bg-brand-900 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-neutral-200 dark:bg-[#2A2A2A] rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="bg-brand-600 dark:bg-brand-400 h-1.5 rounded-full transition-all duration-500"
+                        className="bg-[#2563EB] dark:bg-[#3B82F6] h-1.5 rounded-full transition-all duration-500"
                         style={{
                           width: `${
                             typeof prepStatus?.progressPercent === 'number'
@@ -392,7 +392,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                       </p>
                     ) : null}
 
-                    <p className="text-[10px] text-brand-700 dark:text-brand-300/80 leading-relaxed">
+                    <p className="text-[10px] text-neutral-600 dark:text-[#A3A3A3] leading-relaxed">
                       &bull; This usually takes about 2–4 minutes.<br />
                       &bull; You can leave this page and keep using the app.<br />
                       &bull; We’ll notify you when this lesson is ready.

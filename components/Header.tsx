@@ -293,7 +293,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </svg>
                     <span>Upgrade to Pro</span>
                   </div>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-[#1C1C1C] text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                     Pro
                   </span>
                 </button>

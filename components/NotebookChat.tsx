@@ -126,14 +126,14 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 max-w-[calc(100vw-110px)] sm:max-w-none">
             <button
               onClick={onBack}
-              className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+              className="w-10 h-10 rounded-full bg-white dark:bg-[#141414] hover:bg-slate-50 dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-[#2A2A2A] flex items-center justify-center text-[#0F172A] dark:text-white transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
               aria-label="Back to chapters"
               title="Back"
             >
-              <i className="bi bi-arrow-left text-base font-bold text-[#0066FF] dark:text-brand-400"></i>
+              <i className="bi bi-arrow-left text-base font-bold text-[#2563EB] dark:text-[#3B82F6]"></i>
             </button>
             <div className="min-w-0 flex flex-col justify-center">
-              <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
+              <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A3A3A3] uppercase tracking-wider block truncate">
                 {notebook.title}
               </span>
               <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[140px] sm:max-w-[280px] md:max-w-[400px]">
@@ -146,14 +146,14 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
           <button
             type="button"
             onClick={handleClearHistory}
-            className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-slate-700 hover:border-[#D0D0D0] dark:hover:border-[#3A3A3A] flex items-center justify-center text-[#64748B] dark:text-slate-300 hover:text-[#0A0A0A] dark:hover:text-[#FAFAFA] transition-all cursor-pointer shadow-2xs"
+            className="w-9 h-9 rounded-xl bg-white dark:bg-[#141414] hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-[#2A2A2A] hover:border-[#D0D0D0] dark:hover:border-[#3A3A3A] flex items-center justify-center text-[#64748B] dark:text-[#A3A3A3] hover:text-[#0A0A0A] dark:hover:text-[#FAFAFA] transition-all cursor-pointer shadow-2xs"
             title="Clear Conversation History"
             aria-label="Clear Conversation History"
           >
             <i className="bi bi-trash text-sm"></i>
           </button>
         ) : null,
-        className: 'bg-[#F6F6F3]/95 dark:bg-slate-950/95 border-b border-[#E3E9F1] dark:border-slate-800 backdrop-blur-md',
+        className: 'bg-[#F6F6F3]/95 dark:bg-[#141414]/95 border-b border-[#E3E9F1] dark:border-[#2A2A2A] backdrop-blur-md',
       });
     }
 
@@ -340,10 +340,10 @@ ${messageText}`;
       <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white mt-5 mb-3 tracking-tight" {...props} />
     ),
     h2: ({ node, ...props }: any) => (
-      <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight border-b border-[#E3E9F1] dark:border-slate-800 pb-1.5" {...props} />
+      <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight border-b border-[#E3E9F1] dark:border-[#2A2A2A] pb-1.5" {...props} />
     ),
     h3: ({ node, ...props }: any) => (
-      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-brand-400 mt-3.5 mb-1.5" {...props} />
+      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#3B82F6] mt-3.5 mb-1.5" {...props} />
     ),
     h4: ({ node, ...props }: any) => (
       <h4 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white mt-3 mb-1" {...props} />
@@ -353,25 +353,25 @@ ${messageText}`;
       <strong className={isUser ? 'font-black text-white' : 'font-black text-[#0F172A] dark:text-white'} {...props} />
     ),
     em: ({ node, ...props }: any) => (
-      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-slate-300'} {...props} />
+      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-[#A3A3A3]'} {...props} />
     ),
     code: ({ node, inline, ...props }: any) =>
       inline ? (
-        <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-brand-50 dark:bg-slate-800 text-[#0066FF] dark:text-brand-400 border border-brand-100 dark:border-slate-700'}`} {...props} />
+        <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-neutral-100 dark:bg-[#1C1C1C] text-[#2563EB] dark:text-[#3B82F6] border border-neutral-200 dark:border-[#2A2A2A]'}`} {...props} />
       ) : (
-        <code className="block overflow-x-auto rounded-2xl bg-[#0A0A0A] dark:bg-slate-900 text-slate-100 p-4 text-sm font-mono my-3 border border-slate-700/60" {...props} />
+        <code className="block overflow-x-auto rounded-2xl bg-[#0A0A0A] dark:bg-[#141414] text-slate-100 p-4 text-sm font-mono my-3 border border-[#2A2A2A]" {...props} />
       ),
     blockquote: ({ node, ...props }: any) => (
-      <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-brand-300 bg-white/10 text-white' : 'border-[#0066FF] dark:border-brand-500 bg-brand-50/70 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'}`} {...props} />
+      <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-[#3B82F6] bg-white/10 text-white' : 'border-[#2563EB] dark:border-[#3B82F6] bg-neutral-100 dark:bg-[#1C1C1C] text-slate-800 dark:text-slate-200'}`} {...props} />
     ),
-    ul: ({ node, ...props }: any) => <ul className="mb-4 last:mb-0 list-disc pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-brand-400 text-[#0F172A] dark:text-slate-100" {...props} />,
-    ol: ({ node, ...props }: any) => <ol className="mb-4 last:mb-0 list-decimal pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-brand-400 text-[#0F172A] dark:text-slate-100 font-medium" {...props} />,
+    ul: ({ node, ...props }: any) => <ul className="mb-4 last:mb-0 list-disc pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#2563EB] dark:marker:text-[#3B82F6] text-[#0F172A] dark:text-slate-100" {...props} />,
+    ol: ({ node, ...props }: any) => <ol className="mb-4 last:mb-0 list-decimal pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#2563EB] dark:marker:text-[#3B82F6] text-[#0F172A] dark:text-slate-100 font-medium" {...props} />,
     li: ({ node, ...props }: any) => <li className="leading-relaxed" {...props} />,
-    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-brand-200 underline' : 'text-[#0066FF] dark:text-brand-400 underline hover:text-[#0F172A] dark:hover:text-brand-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
+    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-blue-200 underline' : 'text-[#2563EB] dark:text-[#3B82F6] underline hover:text-[#1D4ED8]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
   });
 
   return (
-    <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#F6F6F3] dark:bg-slate-950 animate-fade-in">
+    <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#F6F6F3] dark:bg-[#0A0A0A] animate-fade-in">
       {/* Scrollable Messages Area — WhatsApp-style bottom upwards loading */}
       <div 
         ref={messagesContainerRef}
@@ -379,12 +379,12 @@ ${messageText}`;
       >
         <div className="max-w-4xl mx-auto w-full min-h-full flex flex-col justify-end py-3 sm:py-4">
           {messages.length === 0 ? (
-            <div className="my-auto flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-3xl shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-[#0066FF]/10 dark:bg-brand-500/20 text-[#0066FF] dark:text-brand-400 flex items-center justify-center text-2xl mb-3.5 shadow-2xs">
+            <div className="my-auto flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] rounded-3xl shadow-xs">
+              <div className="w-14 h-14 rounded-2xl bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#3B82F6] flex items-center justify-center text-2xl mb-3.5 shadow-2xs">
                 <i className="bi bi-chat-heart-fill"></i>
               </div>
               <h3 className="text-lg font-bold text-[#0F172A] dark:text-white">Socratic Tutor for {chapter.title}</h3>
-              <p className="text-sm text-[#64748B] dark:text-slate-400 max-w-md mt-1 mb-4 leading-relaxed">
+              <p className="text-sm text-[#64748B] dark:text-[#A3A3A3] max-w-md mt-1 mb-4 leading-relaxed">
                 Ask any question, clarify a tricky concept, or get step-by-step worked examples directly from your material.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg">
@@ -392,9 +392,9 @@ ${messageText}`;
                   <button
                     key={i}
                     onClick={() => handleSendMessage(pill)}
-                    className="px-4 py-2 rounded-full bg-[#F6F6F3] dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/40 text-[#0F172A] dark:text-slate-200 hover:text-[#0066FF] dark:hover:text-brand-400 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-full bg-[#F6F6F3] dark:bg-[#1C1C1C] hover:bg-[#E6E6E6] dark:hover:bg-[#2A2A2A] border border-[#E3E9F1] dark:border-[#2A2A2A] text-[#0F172A] dark:text-slate-200 hover:text-[#2563EB] dark:hover:text-[#3B82F6] text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
                   >
-                    <span className="text-[#0066FF] dark:text-brand-400">✦</span>
+                    <span className="text-[#2563EB] dark:text-[#3B82F6]">✦</span>
                     <span>{pill}</span>
                   </button>
                 ))}
@@ -462,13 +462,13 @@ ${messageText}`;
               })}
 
               {isLoading && !streamingMsgId && (
-                <div className="flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-[#E3E9F1] dark:border-slate-800 shadow-2xs w-fit animate-fade-in">
+                <div className="flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-[#141414] rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce" />
                   </div>
-                  <span className="text-xs sm:text-sm text-[#64748B] dark:text-slate-400 font-semibold">Tutor is formulating response...</span>
+                  <span className="text-xs sm:text-sm text-[#64748B] dark:text-[#A3A3A3] font-semibold">Tutor is formulating response...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -487,9 +487,9 @@ ${messageText}`;
                 <button
                   key={i}
                   onClick={() => handleSendMessage(pill)}
-                  className="px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 hover:border-[#0066FF] dark:hover:border-brand-500 text-[#0F172A] dark:text-slate-200 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shadow-2xs shrink-0"
+                  className="px-3.5 py-1.5 rounded-full bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] hover:border-[#2563EB] dark:hover:border-[#3B82F6] text-[#0F172A] dark:text-slate-200 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shadow-2xs shrink-0"
                 >
-                  <i className="bi bi-sparkles mr-1 text-[#0066FF] dark:text-brand-400"></i>
+                  <i className="bi bi-sparkles mr-1 text-[#2563EB] dark:text-[#3B82F6]"></i>
                   {pill}
                 </button>
               ))}
@@ -497,7 +497,7 @@ ${messageText}`;
           )}
 
           {/* Input Form */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-2xl p-1.5 sm:p-2 flex items-center gap-2 shadow-2xs">
+          <div className="bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] rounded-2xl p-1.5 sm:p-2 flex items-center gap-2 shadow-2xs">
             <input
               type="text"
               value={inputText}
@@ -509,12 +509,12 @@ ${messageText}`;
                 }
               }}
               placeholder="Ask a question about this chapter..."
-              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 bg-transparent text-sm text-[#0F172A] dark:text-white placeholder:text-[#64748B] dark:placeholder:text-slate-500 focus:outline-none"
+              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 bg-transparent text-sm text-[#0F172A] dark:text-white placeholder:text-[#64748B] dark:placeholder:text-[#737373] focus:outline-none"
             />
             <button
               onClick={() => handleSendMessage()}
               disabled={!inputText.trim() || isLoading}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#0066FF] hover:bg-[#0052cc] disabled:opacity-40 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] dark:bg-[#3B82F6] dark:hover:bg-[#60A5FA] disabled:opacity-40 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
               aria-label="Send message"
             >
               <i className="bi bi-send-fill text-sm"></i>
