@@ -286,9 +286,14 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                             <i className="bi bi-hourglass-split"></i> Preparing
                           </span>
                         )}
+                        {state === 'paused_offline' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 px-2 py-0.5 rounded-md">
+                            <i className="bi bi-wifi-off text-amber-600 dark:text-amber-400"></i> Paused Offline
+                          </span>
+                        )}
                         {state === 'failed' && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-exclamation-circle-fill text-rose-600 dark:text-rose-400"></i> Failed
+                            <i className="bi bi-exclamation-circle-fill text-rose-600 dark:text-rose-400"></i> Paused
                           </span>
                         )}
                       </div>
@@ -323,14 +328,14 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                         <div className="w-3 h-3 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin"></div>
                         <span>Preparing…</span>
                       </button>
-                    ) : state === 'failed' ? (
+                    ) : state === 'paused_offline' || state === 'failed' || (typeof prepStatus?.boardIndex === 'number' && prepStatus.boardIndex > 1) ? (
                       <button
                         type="button"
-                        onClick={(e) => handleActionClick(e, opt.minutes, 'failed')}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
+                        onClick={(e) => handleActionClick(e, opt.minutes, state)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-brand-600 hover:bg-brand-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
                       >
-                        <i className="bi bi-arrow-counterclockwise"></i>
-                        <span>Retry prepare</span>
+                        <i className="bi bi-arrow-clockwise"></i>
+                        <span>Resume preparation</span>
                       </button>
                     ) : (
                       <button
@@ -383,7 +388,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
                     {typeof prepStatus?.boardIndex === 'number' && prepStatus?.totalBoards ? (
                       <p className="text-[10px] font-bold text-brand-700 dark:text-brand-300/90">
-                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} prepared on device
+                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} saved on device
                       </p>
                     ) : null}
 
@@ -395,11 +400,22 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                   </div>
                 )}
 
-                {/* Failed Error Message */}
-                {state === 'failed' && prepStatus?.error && (
-                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
-                    {prepStatus.error}
-                  </p>
+                {/* Offline or Error Banner */}
+                {(state === 'paused_offline' || state === 'failed') && (
+                  <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-xl p-2.5 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                    <p className="text-[11px] font-bold flex items-center gap-1.5">
+                      <i className="bi bi-shield-check text-amber-600 dark:text-amber-400"></i>
+                      <span>{prepStatus?.message || 'Preparation saved on this device.'}</span>
+                    </p>
+                    {typeof prepStatus?.boardIndex === 'number' && prepStatus?.totalBoards ? (
+                      <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-300">
+                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} saved on device. No work was lost.
+                      </p>
+                    ) : null}
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                      Tap "Resume preparation" to pick up right where it left off.
+                    </p>
+                  </div>
                 )}
               </div>
             );
