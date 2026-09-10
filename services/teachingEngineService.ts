@@ -418,6 +418,9 @@ export class TeachingEngineService {
 
     for (let i = 0; i < total; i++) {
       if (signal?.aborted) return false;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return false;
+      }
       const boardNum = i + 1;
       const boardPlan = structure.boards[i];
       if (!boardPlan) return false;
@@ -425,13 +428,18 @@ export class TeachingEngineService {
       // ── Board performance: localStorage → IndexedDB → AI ──────────────────
       const perfCacheKey = getLocalCacheKey('perf', structure.topic, `${mode}_${boardNum}`);
       let perf = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
-      if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) {
+      if (!perf || (!perf.title && !perf.speech && !perf.board_actions) || (perf as any).isFallback === true) {
         perf = await getLessonBoard<TeachingBoardPerformance>(packageKey, i);
       }
-      if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) {
+      if (!perf || (!perf.title && !perf.speech && !perf.board_actions) || (perf as any).isFallback === true) {
         onProgress?.({ phase: 'board', boardIndex: i, totalBoards: total });
-        perf = await this.fetchSingleBoardFromAI(boardPlan, this.userProfile?.display_name || 'Student', []);
-        if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) return false;
+        try {
+          perf = await this.fetchSingleBoardFromAI(boardPlan, this.userProfile?.display_name || 'Student', [], { mode: 'prep' });
+        } catch (fetchErr) {
+          console.warn(`[TeachingEngine] Board ${boardNum} AI prep fetch failed:`, fetchErr);
+          return false; // Prep mode: never substitute fallbacks
+        }
+        if (!perf || (!perf.title && !perf.speech && !perf.board_actions) || (perf as any).isFallback === true) return false;
         // Guarantee the exact key the live playback path reads (boardNum = index + 1)
         setCachedBoardItem(perfCacheKey, perf);
       }
@@ -443,6 +451,9 @@ export class TeachingEngineService {
         const ttsCacheKey = `tts_perf_${structure.topic}_${mode}_${boardNum}_${voice}`;
         let audioPayload = await getLessonAudio<any>(ttsCacheKey);
         if (!audioPayload?.audio) {
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            return false;
+          }
           onProgress?.({ phase: 'audio', boardIndex: i, totalBoards: total });
           try {
             audioPayload = await unifiedVoiceRouter.fetchSpeech(speechText, {
@@ -870,11 +881,16 @@ export class TeachingEngineService {
     }
   }
 
-  private async fetchSingleBoardFromAI(
+  public async fetchSingleBoardFromAI(
     boardPlan: TeachingBoardPlan,
     studentName?: string,
-    completedBoardsSummary?: string[]
+    completedBoardsSummary?: string[],
+    options?: { mode?: 'prep' | 'live' }
   ): Promise<TeachingBoardPerformance> {
+    if (options?.mode === 'prep' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      throw new TypeError('Failed to fetch: Connection lost');
+    }
+
     const ai = createAvelutAI(this.appSettings, this.userProfile);
     if (!ai) throw new Error('AI client could not be initialized');
 
@@ -890,6 +906,10 @@ export class TeachingEngineService {
     let performance: TeachingBoardPerformance | null = null;
 
     for (let attempt = 1; attempt <= 3; attempt++) {
+      if (options?.mode === 'prep' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new TypeError('Failed to fetch: Connection lost');
+      }
+
       try {
         const responseStream = await ai.models.generateContentStream({
           model: this.appSettings.alibaba_model || 'qwen3.7-flash',
@@ -912,13 +932,27 @@ export class TeachingEngineService {
             break;
           }
         }
-      } catch (attemptErr) {
+      } catch (attemptErr: any) {
         console.warn(`[TeachingEngine] Streaming board performance attempt ${attempt} failed:`, attemptErr);
+        // Abort retries immediately if offline or hard network error in prep mode
+        if (
+          options?.mode === 'prep' &&
+          (typeof navigator !== 'undefined' && navigator.onLine === false ||
+            attemptErr?.name === 'TypeError' ||
+            attemptErr?.message?.includes('Failed to fetch') ||
+            attemptErr?.message?.includes('ERR_') ||
+            attemptErr?.message?.includes('NetworkError'))
+        ) {
+          throw attemptErr;
+        }
       }
       if (attempt < 3) await new Promise((res) => setTimeout(res, attempt * 300));
     }
 
     if (!performance) {
+      if (options?.mode === 'prep') {
+        throw new Error(`Failed to generate real AI board performance for board ${boardPlan.board_number || 1}`);
+      }
       console.warn('[TeachingEngine] AI board performance failed after 3 attempts, creating fallback performance');
       performance = this.buildFallbackBoardPerformance(boardPlan);
     }
