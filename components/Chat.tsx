@@ -490,25 +490,51 @@ export const Chat: React.FC<ChatProps> = ({
       let currentConvoId = activeConversationId;
       const now = Date.now();
 
+      const isNewConvo = !currentConvoId;
       if (!currentConvoId) {
         currentConvoId = generateLocalId('conv');
-        const titleSnippet = currentInput.slice(0, 30);
+        const initialTitle = currentInput.slice(0, 30);
         void saveLocalConversation({
           id: currentConvoId,
           user_id: userProfile.uid,
-          title: titleSnippet,
+          title: initialTitle,
           created_at: now,
           last_updated_at: now,
         });
 
         const conversationsRef = dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`);
         await set(conversationsRef, {
-          title: titleSnippet,
+          title: initialTitle,
           created_at: now,
           last_updated_at: now,
         });
         setActiveConversationId(currentConvoId);
         onSelectConversation?.(currentConvoId);
+      }
+
+      if (isNewConvo && ai && currentConvoId) {
+        const convoIdForTitle = currentConvoId;
+        (async () => {
+          try {
+            const titleResult = await ai.models.generateContent({
+              model: aiModel,
+              contents: [{
+                role: 'user',
+                parts: [{
+                  text: `Summarize the following user prompt into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser prompt: "${currentInput.slice(0, 300)}"`
+                }]
+              }],
+              config: { temperature: 0.3 }
+            });
+            const generatedTitle = getResponseText(titleResult).trim().replace(/^["']|["']$/g, '');
+            if (generatedTitle && generatedTitle.length > 0) {
+              void renameLocalConversation(convoIdForTitle, generatedTitle);
+              void update(dbRef(db, `chat_conversations/${userProfile.uid}/${convoIdForTitle}`), { title: generatedTitle });
+            }
+          } catch (e) {
+            console.warn('Failed to auto-generate chat title:', e);
+          }
+        })();
       }
 
       const userMsgId = generateLocalId('msg');
