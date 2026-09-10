@@ -55,6 +55,20 @@ const onAuthStateChanged = (_authObj: any, callback: (user: AuthUser | null) => 
       (auth as any)._currentUser = authUser;
       callback(authUser);
     } else {
+      if (typeof window !== 'undefined' && localStorage.getItem('avelut_dev_user')) {
+        try {
+          const devUser = JSON.parse(localStorage.getItem('avelut_dev_user')!);
+          const authUser: AuthUser = {
+            uid: devUser.uid || 'test_user_123',
+            email: devUser.email || 'test@avelut.com',
+            displayName: devUser.display_name || 'Test Learner',
+            photoURL: '',
+          };
+          (auth as any)._currentUser = authUser;
+          callback(authUser);
+          return;
+        } catch {}
+      }
       (auth as any)._currentUser = null;
       callback(null);
     }

@@ -357,7 +357,8 @@ const ALLOWED_ROUTE_ITEMS = new Set([
     'admin',
     'study_partners',
     'voice_tutorial',
-    'notifications'
+    'notifications',
+    'playground'
 ]);
 
 const resolveActiveItemFromPath = (pathname: string): string => {
@@ -1129,9 +1130,9 @@ const App: React.FC = () => {
                     display_name: user.displayName || 'AVELITE',
                     email: user.email || '',
                     photo_url: user.photoURL || '',
-                    school_id: '',
-                    college_id: '',
-                    department_id: '',
+                    school_id: 'sch_1',
+                    college_id: 'col_1',
+                    department_id: 'dept_math',
                     level: '100',
                     current_streak: 0,
                     last_activity_date: Date.now(),
