@@ -1463,14 +1463,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
 
   const openChatWithUser = useCallback(async (otherUser: UserProfile) => {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !otherUser?.uid) return;
 
     try {
       const chatId = await ensureDirectChat(otherUser.uid);
       setActiveChat({ chatId, otherUser });
     } catch (error: any) {
       console.error('Failed to open direct chat:', error);
-      addToast(error?.message || 'Could not open this chat.', 'error');
+      const errMsg = error?.message || 'Could not open this chat.';
+      addToast(errMsg, 'error');
     }
   }, [addToast, firebaseUser]);
 
@@ -1681,14 +1682,29 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   }, [safeChats, userMap, fetchedUserProfiles, userProfile.uid]);
 
   useEffect(() => {
-    if (!initialChatId || !safeChats.length) return;
+    if (!initialChatId || !firebaseUser) return;
     const nextChat = safeChats.find(chat => chat?.id === initialChatId);
-    if (!nextChat) return;
-    const resolvedUser = userMap.get(nextChat.otherUserId) || fetchedUserProfiles[nextChat.otherUserId] || nextChat.otherUser;
-    if (activeChat?.chatId !== nextChat.id || activeChat.otherUser?.uid !== resolvedUser?.uid) {
-      setActiveChat({ chatId: nextChat.id, otherUser: resolvedUser });
+    if (nextChat) {
+      const resolvedUser = userMap.get(nextChat.otherUserId) || fetchedUserProfiles[nextChat.otherUserId] || nextChat.otherUser;
+      if (activeChat?.chatId !== nextChat.id || activeChat.otherUser?.uid !== resolvedUser?.uid) {
+        setActiveChat({ chatId: nextChat.id, otherUser: resolvedUser });
+      }
+      return;
     }
-  }, [initialChatId, safeChats, activeChat, userMap, fetchedUserProfiles]);
+
+    // Fallback if initialChatId is an otherUserId directly
+    const targetUser = userMap.get(initialChatId) || fetchedUserProfiles[initialChatId];
+    if (targetUser && activeChat?.otherUser?.uid !== targetUser.uid) {
+      ensureDirectChat(targetUser.uid)
+        .then((chatId) => {
+          setActiveChat({ chatId, otherUser: targetUser });
+        })
+        .catch((error: any) => {
+          console.error('Failed to open direct chat from initial target:', error);
+          addToast(error?.message || 'Could not open this chat.', 'error');
+        });
+    }
+  }, [initialChatId, safeChats, activeChat, userMap, fetchedUserProfiles, firebaseUser, addToast]);
 
   useEffect(() => {
     if (!activeChat) {
