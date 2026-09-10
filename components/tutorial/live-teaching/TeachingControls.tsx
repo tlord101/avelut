@@ -42,7 +42,7 @@ export const TeachingControls: React.FC<TeachingControlsProps> = ({
         <button
           onClick={onOpenAskModal}
           type="button"
-          className="flex items-center gap-2 px-4 sm:px-5 py-2 rounded-full bg-gradient-to-r from-[#0066FF] to-[#002D62] hover:brightness-110 text-white text-xs sm:text-sm font-bold shadow-lg border border-blue-400/30 transition-all active:scale-95 cursor-pointer"
+          className="flex items-center gap-2 px-4 sm:px-5 py-2 rounded-full bg-gradient-to-r from-[#0066FF] to-[#002D62] hover:brightness-110 text-white text-xs sm:text-sm font-bold shadow-lg border border-brand-400/30 transition-all active:scale-95 cursor-pointer"
           title="Interrupt to ask the lecturer a question"
         >
           <i className="bi bi-mic-fill text-yellow-300 text-xs sm:text-sm animate-pulse"></i>

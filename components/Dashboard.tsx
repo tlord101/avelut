@@ -2,6 +2,7 @@ import React from 'react';
 import type { UserProfile, DashboardData } from '../types';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
 import { LeaderboardIcon } from './icons/LeaderboardIcon';
+import { ProgressSummarySkeleton } from './Skeleton';
 
 // Icons for Stat Cards
 const LevelIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -71,33 +72,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
 
         const examAverageLabel = dashboardData?.examHistory && dashboardData.examHistory.length > 0 ? `${examAverageScore}%` : 'No exams yet';
 
-    if (!dashboardData) {
-        return (
-            <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 md:p-10 animate-pulse">
-                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                    <div>
-                        <div className="h-4 w-32 bg-gray-200 rounded mb-4"></div>
-                        <div className="h-10 w-64 bg-gray-300 rounded mb-2"></div>
-                        <div className="h-4 w-48 bg-gray-200 rounded"></div>
-                    </div>
-                    <div className="h-8 w-32 bg-gray-200 rounded-full"></div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div className="h-32 bg-gray-200 rounded-3xl"></div>
-                    <div className="h-32 bg-gray-200 rounded-3xl"></div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div className="h-40 bg-gray-200 rounded-[2rem]"></div>
-                    <div className="h-40 bg-gray-200 rounded-[2rem]"></div>
-                </div>
-
-                <div className="h-80 bg-gray-200 rounded-3xl"></div>
-            </div>
-        );
-    }
-
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 md:p-10" data-tour-id="dashboard-content">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between font-sans">
@@ -165,7 +139,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                 </button>
             </div>
 
-            {/* Academic Progress Summary */}
+            {/* Academic Progress Summary — per-section loading (shell stays instant) */}
+            {dashboardData ? (
             <div className="rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0A0A0A] p-6 md:p-8">
                 <div className="mb-6 flex items-center justify-between">
                     <div>
@@ -201,6 +176,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, dashboardData
                     </div>
                 </div>
             </div>
+            ) : (
+                <ProgressSummarySkeleton />
+            )}
         </div>
     );
 };

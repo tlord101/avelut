@@ -222,7 +222,7 @@ export const TopicSummaryNotebookModal: React.FC<TopicSummaryNotebookModalProps>
                     </span>
                     <h5 className="font-bold text-sm sm:text-base text-[#0F172A] dark:text-white">{eq.question}</h5>
                   </div>
-                  <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 text-xs text-[#002D62] dark:text-blue-200 border border-blue-100 dark:border-blue-900/40">
+                  <div className="p-3 rounded-xl bg-brand-50/60 dark:bg-brand-950/30 text-xs text-[#002D62] dark:text-brand-200 border border-brand-100 dark:border-brand-900/40">
                     <span className="font-bold">Marking Scheme: </span>
                     {eq.markingScheme}
                   </div>

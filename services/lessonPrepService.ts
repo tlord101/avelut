@@ -4,13 +4,15 @@
  * Survives page navigation, component unmounts, and reloads.
  * Key: ${userId}::${topicKey}::${durationMode}
  *
- * 3-Step Pipeline:
+ * FULL-TOPIC pipeline (for the selected duration only):
  *  1/3 Planning lesson structure…
- *  2/3 Writing Board 1 content…
- *  3/3 Generating Board 1 speech audio…
+ *  2/3 Writing Board i/N content…      (every board, in order)
+ *  3/3 Generating Board i/N audio…     (every board, in order)
  *
- * Upon completing all 3 steps: transitions to 'ready', fires in-app notification
- * and browser notification fallback, and caches payload for instant session start.
+ * "Ready" ONLY when the structure + ALL boards + ALL board audio are persisted
+ * on the device (IndexedDB via lessonPackageStore + engine caches). Opening a
+ * Ready lesson performs ZERO structure/board/TTS network calls — playback is
+ * served from the device package (IndexedDB → engine memory caches).
  */
 
 import type { LessonDurationMode } from '../components/tutorial/LessonDurationModal';
@@ -20,6 +22,15 @@ import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { buildTopicKey, buildContentHash, structureCacheKey } from './structurePrefetchService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { logTeachingEvent } from './teachingEventLogger';
+import {
+  getLessonStructure,
+  getLessonBoard,
+  getLessonAudio,
+  getLessonMeta,
+  saveLessonStructure,
+  saveLessonMeta,
+  evictOldLessonPackages,
+} from './lessonPackageStore';
 
 export type LessonPrepState = 'idle' | 'preparing' | 'ready' | 'failed';
 
@@ -38,6 +49,13 @@ export interface LessonPrepStatus {
   structure?: TeachingStructure | null;
   board1Perf?: TeachingBoardPerformance | null;
   audioCached?: boolean;
+  /** 1-based index of the board currently being prepared (steps 2/3) */
+  boardIndex?: number;
+  totalBoards?: number;
+  /** 0–100 overall prep progress for progress bars */
+  progressPercent?: number;
+  /** Voice used for the prepared audio (TTS cache keys include it) */
+  voice?: string;
 }
 
 export interface StartPrepParams {
@@ -51,23 +69,68 @@ export interface StartPrepParams {
   voice?: string;
 }
 
+export interface ReadyLessonPackage {
+  structure: TeachingStructure;
+  boards: TeachingBoardPerformance[];
+  /** TTS cache key → audio payload (base64 + timestamps) */
+  audio: Record<string, any>;
+  voice: string;
+  totalBoards: number;
+}
+
 type StatusListener = (status: LessonPrepStatus) => void;
 
 // ── Storage Keys ─────────────────────────────────────────────────────────────
 const STORAGE_KEY_STATUSES = 'avelut_lesson_prep_statuses_v1';
 const STORAGE_KEY_BILLED = 'avelut_lesson_prep_billed_v1';
-const PREP_TIMEOUT_MS = 6 * 60 * 1000; // 6 minutes max before timing out stale prep
 
-// ── Key Helper ───────────────────────────────────────────────────────────────
+// ── Key Helpers ──────────────────────────────────────────────────────────────
 export function buildPrepKey(userId: string | undefined, topicKey: string, durationMode: LessonDurationMode): string {
   const cleanUid = (userId || 'anon').trim();
   return `${cleanUid}::${topicKey}::${durationMode}`;
+}
+
+/** TTS cache key — must match TeachingEngineService.playBoardSpeech exactly. */
+export function buildBoardTtsCacheKey(
+  topic: string,
+  mode: LessonDurationMode | number,
+  boardNumber: number,
+  voice: string
+): string {
+  return `tts_perf_${topic}_${mode}_${boardNumber}_${voice}`;
+}
+
+/** Engine board perf cache key — must match getLocalCacheKey('perf', …) exactly. */
+function getPerfCacheKey(topic: string, mode: LessonDurationMode | number, boardNumber: number): string {
+  const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+  return `avelut_board_cache_perf_${cleanTopic}_${mode}_${boardNumber}`;
+}
+
+function isValidPerf(perf: TeachingBoardPerformance | null | undefined): boolean {
+  return !!perf && !!(perf.title || perf.speech || perf.board_actions);
+}
+
+function readEnginePerfCache(topic: string, mode: LessonDurationMode | number, boardNumber: number): TeachingBoardPerformance | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = localStorage.getItem(getPerfCacheKey(topic, mode, boardNumber));
+    if (raw) return JSON.parse(raw) as TeachingBoardPerformance;
+  } catch {}
+  return null;
+}
+
+function estimateEta(remainingBoards: number): string {
+  if (remainingBoards <= 0) return 'Finishing…';
+  const low = Math.max(1, Math.round(remainingBoards * 0.5));
+  const high = Math.max(2, Math.round(remainingBoards * 0.9));
+  return low === high ? `~${low} min` : `~${low}–${high} min`;
 }
 
 // ── Singleton State ──────────────────────────────────────────────────────────
 const statusMap = new Map<string, LessonPrepStatus>();
 const listeners = new Map<string, Set<StatusListener>>();
 const activeControllers = new Map<string, AbortController>();
+const readyPackageCache = new Map<string, ReadyLessonPackage>();
 let isInitialized = false;
 
 function loadPersistedStatuses(): void {
@@ -79,11 +142,13 @@ function loadPersistedStatuses(): void {
       const parsed = JSON.parse(raw) as Record<string, LessonPrepStatus>;
       if (parsed && typeof parsed === 'object') {
         Object.entries(parsed).forEach(([k, status]) => {
-          // If stuck in 'preparing' for longer than PREP_TIMEOUT_MS, mark failed with retry
-          if (status.state === 'preparing' && Date.now() - (status.updatedAt || 0) > PREP_TIMEOUT_MS) {
+          // A persisted 'preparing' status is always orphaned after a reload —
+          // the module-level pipeline died with the page. Mark failed so the
+          // user can retry (retry resumes from the on-device package).
+          if (status.state === 'preparing') {
             status.state = 'failed';
-            status.error = 'Preparation timed out. Please tap retry.';
-            status.message = 'Preparation timed out.';
+            status.error = 'Preparation was interrupted. Tap retry to resume where it left off.';
+            status.message = 'Preparation interrupted.';
           }
           statusMap.set(k, status);
         });
@@ -236,17 +301,13 @@ function dispatchReadyNotifications(params: {
   }
 }
 
-// ── Cache Key Helpers for Teaching Engine ───────────────────────────────────
-function getPerfCacheKey(topic: string, mode: LessonDurationMode, boardNumber: number): string {
-  const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
-  return `avelut_board_cache_perf_${cleanTopic}_${mode}_${boardNumber}`;
-}
-
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export class LessonPrepService {
   constructor() {
     loadPersistedStatuses();
+    // Reconcile persisted statuses with the on-device package store (async).
+    void this.reconcileDeviceStatuses();
   }
 
   /**
@@ -269,53 +330,131 @@ export class LessonPrepService {
   }
 
   /**
-   * Check if a lesson is already ready.
+   * Check if a lesson is fully ready on device.
+   * Ready = structure + ALL boards + ALL board audio persisted (IndexedDB).
    */
   public isReady(key: string): boolean {
     const status = this.getStatus(key);
-    if (status.state === 'ready') return true;
-
-    // Check localStorage cache directly in case another tab or session prepared it
-    if (typeof window !== 'undefined') {
-      const parts = key.split('::');
-      if (parts.length >= 3) {
-        const userId = parts[0];
-        const topicKey = parts[1];
-        const mode = parseInt(parts[2], 10) as LessonDurationMode;
-        const structKey = structureCacheKey(topicKey, mode);
-        const struct = readCachedJson<TeachingStructure | null>(structKey, null);
-        if (struct?.boards?.length) {
-          const perfKey = getPerfCacheKey(struct.topic || topicKey, mode, 1);
-          const rawPerf = localStorage.getItem(perfKey);
-          if (rawPerf) {
-            updateStatus(key, {
-              state: 'ready',
-              step: 3,
-              message: 'Lesson ready!',
-              etaMinutes: '0 min',
-              durationMode: mode,
-              topicTitle: struct.topic || topicKey,
-            });
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
+    return status.state === 'ready';
   }
 
   /**
-   * Get payload for opening a ready lesson (structure + Board 1 perf).
+   * Async device verification: returns the complete on-device package
+   * (structure + every board + every board's audio) or null if incomplete.
+   * Falls back to the legacy localStorage engine caches when IndexedDB is empty.
+   */
+  public async loadReadyPackage(key: string, preferredVoice?: string): Promise<ReadyLessonPackage | null> {
+    const parts = key.split('::');
+    if (parts.length < 3) return null;
+    const topicKey = parts[1];
+    const mode = parseInt(parts[2], 10) as LessonDurationMode;
+
+    const meta = await getLessonMeta(key);
+    const voiceCandidates = Array.from(
+      new Set([meta?.voice, preferredVoice].filter((v): v is string => !!v))
+    );
+    if (voiceCandidates.length === 0) voiceCandidates.push('Altair');
+
+    // Structure: IndexedDB → localStorage cache
+    let structure = await getLessonStructure<TeachingStructure>(key);
+    if (!structure?.boards?.length) {
+      structure = readCachedJson<TeachingStructure | null>(structureCacheKey(topicKey, mode), null);
+    }
+    if (!structure?.boards?.length) return null;
+
+    const total = structure.boards.length;
+    const topic = structure.topic || topicKey;
+
+    // Boards: IndexedDB → engine localStorage cache
+    const boards: TeachingBoardPerformance[] = [];
+    for (let i = 0; i < total; i++) {
+      let perf = await getLessonBoard<TeachingBoardPerformance>(key, i);
+      if (!isValidPerf(perf)) {
+        perf = readEnginePerfCache(topic, mode, i + 1);
+      }
+      if (!isValidPerf(perf)) return null; // incomplete → not ready
+      boards.push(perf!);
+    }
+
+    // Audio: IndexedDB per board (only boards that actually have speech),
+    // for any candidate voice
+    const audio: Record<string, any> = {};
+    for (let n = 1; n <= total; n++) {
+      const boardPerf = boards[n - 1];
+      if (!boardPerf?.speech?.trim()) continue; // no speech → no audio needed
+      let found: any = null;
+      for (const v of voiceCandidates) {
+        const ck = buildBoardTtsCacheKey(topic, mode, n, v);
+        const payload = await getLessonAudio<any>(ck);
+        if (payload?.audio) {
+          audio[ck] = payload;
+          found = payload;
+          break;
+        }
+      }
+      if (!found) return null; // incomplete → not ready
+    }
+
+    const pkg: ReadyLessonPackage = {
+      structure,
+      boards,
+      audio,
+      voice: voiceCandidates[0],
+      totalBoards: total,
+    };
+    readyPackageCache.set(key, pkg);
+    return pkg;
+  }
+
+  /**
+   * Hydrate engine caches from a device package so opening the lesson performs
+   * ZERO board/TTS network calls:
+   *  - board perfs → engine localStorage perf keys (loadBoardPerformance hits)
+   *  - audio payloads → voice engine memory caches (playSpeech hits)
+   */
+  public hydrateLessonPackageCaches(pkg: ReadyLessonPackage): void {
+    if (typeof window === 'undefined') return;
+    const { structure, boards, audio } = pkg;
+    const mode = structure.duration_minutes || 30;
+    const topic = structure.topic;
+
+    boards.forEach((perf, idx) => {
+      if (!isValidPerf(perf)) return;
+      try {
+        localStorage.setItem(getPerfCacheKey(topic, mode, idx + 1), JSON.stringify(perf));
+      } catch {
+        // Quota — the engine's offline board map still covers playback.
+      }
+    });
+
+    Object.entries(audio).forEach(([cacheKey, payload]) => {
+      try {
+        unifiedVoiceRouter.primeSpeechCache(cacheKey, payload, { voice: pkg.voice });
+      } catch {}
+    });
+  }
+
+  /**
+   * LEGACY sync payload (structure + Board 1 perf from local caches).
+   * Prefer `loadReadyPackage` for the full on-device package.
    */
   public getReadyPayload(key: string): {
     structure: TeachingStructure | null;
     board1Perf: TeachingBoardPerformance | null;
     audioCached: boolean;
   } | null {
+    // Prefer the in-memory device package (populated by loadReadyPackage)
+    const cachedPkg = readyPackageCache.get(key);
+    if (cachedPkg?.structure?.boards?.length) {
+      return {
+        structure: cachedPkg.structure,
+        board1Perf: cachedPkg.boards[0] || null,
+        audioCached: true,
+      };
+    }
+
     const parts = key.split('::');
     if (parts.length < 3) return null;
-    const userId = parts[0];
     const topicKey = parts[1];
     const mode = parseInt(parts[2], 10) as LessonDurationMode;
 
@@ -325,15 +464,13 @@ export class LessonPrepService {
 
     let board1Perf: TeachingBoardPerformance | null = null;
     try {
-      const perfKey = getPerfCacheKey(struct.topic || topicKey, mode, 1);
-      const rawPerf = localStorage.getItem(perfKey);
-      if (rawPerf) board1Perf = JSON.parse(rawPerf);
+      board1Perf = readEnginePerfCache(struct.topic || topicKey, mode, 1);
     } catch {}
 
     return {
       structure: struct,
       board1Perf,
-      audioCached: true,
+      audioCached: !!board1Perf,
     };
   }
 
@@ -375,8 +512,9 @@ export class LessonPrepService {
   }
 
   /**
-   * Starts the 3-step preparation pipeline for a topic + duration.
-   * Survives navigation and runs to completion.
+   * Starts the FULL-TOPIC preparation pipeline for a topic + duration.
+   * Survives navigation and runs to completion. Retries resume from the
+   * on-device package (cached boards/audio are skipped).
    */
   public async startPrep(params: StartPrepParams): Promise<void> {
     loadPersistedStatuses();
@@ -404,19 +542,23 @@ export class LessonPrepService {
       state: 'preparing',
       step: 1,
       message: '1/3 Planning lesson structure…',
-      etaMinutes: '2–4 minutes',
+      etaMinutes: '1–2 minutes',
       startedAt: Date.now(),
       topicTitle,
       courseName,
       durationMode,
+      voice: resolvedVoice,
       error: undefined,
+      boardIndex: 0,
+      totalBoards: undefined,
+      progressPercent: 5,
     });
 
     logTeachingEvent({
       type: 'prefetch_start',
       topic: topicTitle,
       duration: durationMode,
-      metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service' },
+      metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service_full' },
     });
 
     try {
@@ -429,7 +571,13 @@ export class LessonPrepService {
       // ── STEP 1: Generate or Load Teaching Structure ────────────────────────
       let structure: TeachingStructure | null = null;
       const v2StructKey = structureCacheKey(topicKey, durationMode, contentHash);
-      structure = readCachedJson<TeachingStructure | null>(v2StructKey, null);
+
+      // Device-first: IndexedDB package structure
+      structure = await getLessonStructure<TeachingStructure>(key);
+
+      if (!structure?.boards?.length) {
+        structure = readCachedJson<TeachingStructure | null>(v2StructKey, null);
+      }
 
       if (!structure?.boards?.length) {
         // Check fallback v2 without content hash
@@ -459,86 +607,105 @@ export class LessonPrepService {
         throw new Error('Failed to generate lesson structure.');
       }
 
+      await saveLessonStructure(key, structure);
+
+      const total = structure.boards.length;
+      const topic = structure.topic || topicTitle;
+
+      await saveLessonMeta({
+        key,
+        state: 'preparing',
+        voice: resolvedVoice,
+        topic,
+        topicTitle,
+        courseName,
+        durationMode,
+        boardCount: total,
+        progress: { boardIndex: 0, totalBoards: total },
+        audioKeys: structure.boards.map((_, i) => buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice)),
+        createdAt: Date.now(),
+      });
+
       if (abortController.signal.aborted) throw new Error('Cancelled');
 
-      // ── STEP 2: Generate & Cache Board 1 Performance ───────────────────────
-      updateStatus(key, {
-        state: 'preparing',
-        step: 2,
-        message: '2/3 Writing Board 1 content…',
-        etaMinutes: '1–2 minutes',
+      // ── STEPS 2+3: ALL boards content + ALL boards audio ───────────────────
+      const ok = await engine.prepareFullLesson({
         structure,
-      });
-
-      const perfKey = getPerfCacheKey(structure.topic || topicTitle, durationMode, 1);
-      let board1Perf: TeachingBoardPerformance | null = null;
-
-      try {
-        const rawPerf = typeof window !== 'undefined' ? localStorage.getItem(perfKey) : null;
-        if (rawPerf) {
-          board1Perf = JSON.parse(rawPerf);
-        }
-      } catch {}
-
-      if (!board1Perf || (!board1Perf.title && !board1Perf.speech && !board1Perf.board_actions)) {
-        board1Perf = await engine.generateAndCacheBoard0Performance(structure, durationMode);
-        if (board1Perf && typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(perfKey, JSON.stringify(board1Perf));
-          } catch {}
-        }
-      }
-
-      if (abortController.signal.aborted) throw new Error('Cancelled');
-
-      // ── STEP 3: Prefetch TTS for Board 1 speech ────────────────────────────
-      updateStatus(key, {
-        state: 'preparing',
-        step: 3,
-        message: '3/3 Generating Board 1 speech audio…',
-        etaMinutes: '< 1 minute',
-        board1Perf,
-      });
-
-      let audioCached = false;
-      if (board1Perf?.speech && board1Perf.speech.trim().length > 0) {
-        const ttsCacheKey = `tts_perf_${structure.topic || topicTitle}_${durationMode}_1_${resolvedVoice}`;
-        try {
-          const speechResult = await unifiedVoiceRouter.fetchSpeech(board1Perf.speech.trim(), {
-            appSettings,
-            voice: resolvedVoice,
-            cacheKey: ttsCacheKey,
-          });
-          if (speechResult) {
-            audioCached = true;
+        packageKey: key,
+        durationMode,
+        voice: resolvedVoice,
+        signal: abortController.signal,
+        onProgress: ({ phase, boardIndex, totalBoards }) => {
+          const n = boardIndex + 1;
+          if (phase === 'board') {
+            updateStatus(key, {
+              state: 'preparing',
+              step: 2,
+              boardIndex: n,
+              totalBoards,
+              progressPercent: Math.min(64, Math.round(10 + (n / totalBoards) * 54)),
+              message: `Writing Board ${n} of ${totalBoards} content…`,
+              etaMinutes: estimateEta(totalBoards - n),
+            });
+          } else {
+            updateStatus(key, {
+              state: 'preparing',
+              step: 3,
+              boardIndex: n,
+              totalBoards,
+              progressPercent: Math.min(96, Math.round(65 + (n / totalBoards) * 30)),
+              message: `Generating Board ${n} of ${totalBoards} speech audio…`,
+              etaMinutes: estimateEta(totalBoards - n),
+            });
           }
-        } catch (ttsErr) {
-          console.warn('[LessonPrepService] Board 1 speech prefetch warning:', ttsErr);
-          // Audio generation failure should not block starting, as speech will stream/retry on open
-          audioCached = true;
-        }
-      } else {
-        audioCached = true;
+        },
+      });
+
+      if (abortController.signal.aborted) {
+        // Cancelled — keep partial progress; user can retry to resume.
+        return;
       }
 
-      if (abortController.signal.aborted) throw new Error('Cancelled');
+      if (!ok) {
+        throw new Error('Some boards or audio could not be prepared. Tap retry to resume.');
+      }
 
       // ── PIPELINE SUCCESS: Mark Ready ───────────────────────────────────────
+      const board1Perf = readEnginePerfCache(topic, durationMode, 1);
+
+      await saveLessonMeta({
+        key,
+        state: 'ready',
+        voice: resolvedVoice,
+        topic,
+        topicTitle,
+        courseName,
+        durationMode,
+        boardCount: total,
+        progress: { boardIndex: total - 1, totalBoards: total },
+        audioKeys: structure.boards.map((_, i) => buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice)),
+        createdAt: Date.now(),
+        readyAt: Date.now(),
+      });
+
       const finalStatus = updateStatus(key, {
         state: 'ready',
         step: 3,
         message: 'Lesson ready!',
         etaMinutes: '0 min',
         structure,
-        board1Perf,
-        audioCached,
+        board1Perf: board1Perf,
+        audioCached: true,
+        boardIndex: total,
+        totalBoards: total,
+        progressPercent: 100,
       });
 
       logTeachingEvent({
         type: 'prefetch_complete',
         topic: topicTitle,
         duration: durationMode,
-        metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service' },
+        metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service_full', totalBoards: total },
       });
 
       // Dispatch in-app, browser, and push notifications
@@ -549,6 +716,9 @@ export class LessonPrepService {
         durationMode,
         key,
       });
+
+      // LRU eviction of old device packages (best-effort)
+      void evictOldLessonPackages();
     } catch (err: any) {
       if (err?.message === 'Cancelled' || abortController.signal.aborted) {
         return;
@@ -572,6 +742,58 @@ export class LessonPrepService {
       });
     } finally {
       activeControllers.delete(key);
+    }
+  }
+
+  /**
+   * Reconciles persisted statuses with the on-device package store:
+   *  - statuses claiming 'ready' without a ready device package → idle (re-prepare)
+   *  - device packages marked 'ready' whose status was lost → ready again
+   */
+  private async reconcileDeviceStatuses(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const keys = Array.from(statusMap.keys());
+      await Promise.all(
+        keys.map(async (key) => {
+          const status = statusMap.get(key);
+          if (!status) return;
+          const meta = await getLessonMeta(key);
+
+          if (status.state === 'ready') {
+            if (!meta || meta.state !== 'ready') {
+              // Legacy (board-1-only) or evicted package — no longer fully ready
+              updateStatus(key, {
+                state: 'idle',
+                step: 1,
+                message: 'Lesson package needs preparation.',
+                etaMinutes: '2–4 minutes',
+                structure: undefined,
+                board1Perf: undefined,
+                audioCached: false,
+                boardIndex: undefined,
+                totalBoards: undefined,
+                progressPercent: undefined,
+              });
+            }
+          } else if (status.state !== 'preparing' && meta?.state === 'ready') {
+            // Device package is ready but the status was lost (e.g. cleared localStorage)
+            updateStatus(key, {
+              state: 'ready',
+              step: 3,
+              message: 'Lesson ready!',
+              etaMinutes: '0 min',
+              audioCached: true,
+              totalBoards: meta.boardCount,
+              boardIndex: Math.max(0, (meta.boardCount || 1) - 1),
+              progressPercent: 100,
+              voice: meta.voice,
+            });
+          }
+        })
+      );
+    } catch (e) {
+      console.warn('[LessonPrepService] Device status reconciliation error:', e);
     }
   }
 }

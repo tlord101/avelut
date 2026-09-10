@@ -143,6 +143,10 @@ const compressImageForSolver = (dataUrl: string, maxDim: number = 1024, quality:
                     height = maxDim;
                 }
             }
+            // Ensure minimum dimensions (at least 32px) so vision APIs do not reject image
+            width = Math.max(32, width);
+            height = Math.max(32, height);
+
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;

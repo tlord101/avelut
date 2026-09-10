@@ -54,6 +54,16 @@ class GrokVoiceEngine {
   /** Prevents duplicate POSTs when the same cache key is requested concurrently. */
   private inFlightCache = new Map<string, Promise<GrokTtsResponsePayload | null>>();
 
+  /**
+   * Pre-seed the in-memory cache from device storage (IndexedDB / SQLite cache).
+   * Used by offline lesson packages so playback makes zero network calls.
+   */
+  public primeMemoryCache(cacheKey: string, payload: GrokTtsResponsePayload): void {
+    if (cacheKey && payload?.audio) {
+      this.memoryCache.set(cacheKey, payload);
+    }
+  }
+
   private getAudioContext(): AudioContext {
     if (!this.audioCtx || this.audioCtx.state === 'closed') {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;

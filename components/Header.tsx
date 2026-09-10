@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppUpdateBadge } from './AppUpdateBadge';
-import type { UserProfile } from '../types';
+import { NotificationDropdown } from './NotificationDropdown';
+import type { UserProfile, Notification as NotificationType } from '../types';
 import { isNative } from '../utils/capacitorUtils';
 
 export interface HeaderProps {
@@ -9,6 +10,9 @@ export interface HeaderProps {
   title?: React.ReactNode;
   onNotificationsClick?: () => void;
   unreadCount?: number;
+  notifications?: NotificationType[];
+  onMarkAllAsRead?: () => void;
+  onMarkAsRead?: (id: string) => void;
   onMenuClick: () => void;
   onMessengerClick?: () => void;
   onCalendarClick?: () => void;
@@ -35,6 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
   title,
   onNotificationsClick, 
   unreadCount = 0, 
+  notifications = [],
+  onMarkAllAsRead,
+  onMarkAsRead,
   onMenuClick, 
   onMessengerClick, 
   onCalendarClick,
@@ -54,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   hasMessages = false,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isAiPage = activeItem === 'chat' || activeItem === 'dashboard';
@@ -166,25 +174,50 @@ export const Header: React.FC<HeaderProps> = ({
                   </svg>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={onNotificationsClick}
-                  className="relative w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/10 transition active:scale-95 cursor-pointer"
-                  aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
-                  title="Notifications"
-                >
-                  {/* Notification Bell Icon */}
-                  <svg className="w-4 h-4 text-neutral-900 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0066FF] opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0066FF]" />
-                    </span>
-                  )}
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsNotificationOpen((prev) => !prev);
+                      onNotificationsClick?.();
+                    }}
+                    className={`relative w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/10 transition active:scale-95 cursor-pointer ${
+                      isNotificationOpen ? 'bg-neutral-100 dark:bg-white/10' : ''
+                    }`}
+                    aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
+                    title="Notifications"
+                  >
+                    {/* Notification Bell Icon */}
+                    <svg className="w-4 h-4 text-neutral-900 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0066FF] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0066FF]" />
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Notification Dropdown Popup */}
+                  <NotificationDropdown
+                    isOpen={isNotificationOpen}
+                    onClose={() => setIsNotificationOpen(false)}
+                    notifications={notifications}
+                    onMarkAllAsRead={() => onMarkAllAsRead?.()}
+                    onMarkAsRead={(id) => onMarkAsRead?.(id)}
+                    onNavigate={(route) => {
+                      setIsNotificationOpen(false);
+                      onNavigate?.(route);
+                    }}
+                    onViewAll={() => {
+                      setIsNotificationOpen(false);
+                      onNavigate?.('notifications');
+                    }}
+                  />
+                </div>
               )}
 
               {/* Vertical Hairline Divider */}

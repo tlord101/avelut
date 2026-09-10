@@ -47,6 +47,8 @@
   --border: #E3E9F1;
   --input: #E3E9F1;
   --ring: #0066FF;
+  --destructive: #475569;
+  --destructive-foreground: #F8FAFC;
 }
 
 .dark {
@@ -68,6 +70,8 @@
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.12);
   --ring: #0066FF;
+  --destructive: #334155;
+  --destructive-foreground: #F8FAFC;
 }
 
 /* Native status bar placeholder — only shown on native */
@@ -379,7 +383,7 @@
 .dark .message-bubble.outgoing {
   background-color: #000000;
   color: #FFFFFF;
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .message-bubble.incoming {
@@ -438,7 +442,7 @@
 }
 
 .dark .message-bubble.incoming .message-time {
-  color: #38BDF8;
+  color: #94A3B8;
 }
 
 @layer base {

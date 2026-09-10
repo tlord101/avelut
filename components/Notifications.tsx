@@ -13,7 +13,7 @@ const Send: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   </svg>
 );
 
-const timeAgo = (timestamp: number): string => {
+export const timeAgo = (timestamp: number): string => {
   const now = Date.now();
   const seconds = Math.floor((now - timestamp) / 1000);
 
@@ -51,7 +51,7 @@ const isKnownRouteTarget = (route: string): boolean => {
     ]).has(route);
 };
 
-const NotificationTypeIcon: React.FC<{ type: Notification['type'], className?: string }> = ({ type, className = "w-6 h-6" }) => {
+export const NotificationTypeIcon: React.FC<{ type: Notification['type'], className?: string }> = ({ type, className = "w-6 h-6" }) => {
     switch (type) {
         case 'welcome':
         case 'app_update':
@@ -69,7 +69,7 @@ const NotificationTypeIcon: React.FC<{ type: Notification['type'], className?: s
     }
 };
 
-const resolveNotificationRoute = (notification: Notification): string | null => {
+export const resolveNotificationRoute = (notification: Notification): string | null => {
     const candidates = [notification.route, notification.link];
 
     const navigateAction = notification.action_buttons?.find(button => button.action === 'navigate');

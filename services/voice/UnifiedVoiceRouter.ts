@@ -165,6 +165,27 @@ export class UnifiedVoiceRouter {
   }
 
   /**
+   * Pre-seed both engine memory caches from device storage (IndexedDB lesson
+   * packages) so playback of a prepared lesson makes zero network calls.
+   * The raw cacheKey matches the `options.cacheKey` used at playback time.
+   */
+  public primeSpeechCache(cacheKey: string, payload: any, options: UnifiedSpeechOptions = {}): void {
+    if (!cacheKey || !payload?.audio) return;
+    const provider = this.resolveProvider(options);
+    try {
+      if (provider === 'alibaba') {
+        alibabaVoiceEngine.primeMemoryCache(`avelut_alibaba_tts_${cacheKey}`, payload);
+        grokVoiceEngine.primeMemoryCache(`avelut_grok_tts_${cacheKey}`, payload);
+      } else {
+        grokVoiceEngine.primeMemoryCache(`avelut_grok_tts_${cacheKey}`, payload);
+        alibabaVoiceEngine.primeMemoryCache(`avelut_alibaba_tts_${cacheKey}`, payload);
+      }
+    } catch (e) {
+      console.warn('[UnifiedVoiceRouter] primeSpeechCache error:', e);
+    }
+  }
+
+  /**
    * Universal audio stop across all engines
    */
   public stopAudio(): void {

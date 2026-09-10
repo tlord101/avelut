@@ -90,7 +90,7 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
               aria-label="Back to notebooks"
               title="Back"
             >
-              <i className="bi bi-arrow-left text-base font-bold text-[#0066FF] dark:text-blue-400"></i>
+              <i className="bi bi-arrow-left text-base font-bold text-[#0066FF] dark:text-brand-400"></i>
             </button>
             <div className="min-w-0 flex flex-col justify-center">
               <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
@@ -210,15 +210,15 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
         {/* Metadata Pills */}
         <div className="flex items-center gap-2.5 flex-wrap text-xs text-[#64748B] dark:text-slate-400 pt-3 mt-3 border-t border-[#E3E9F1] dark:border-slate-800">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F6F6F3] dark:bg-slate-800 rounded-full border border-[#E3E9F1] dark:border-slate-700">
-            <i className="bi bi-file-earmark-text text-[#0066FF] dark:text-blue-400"></i>
+            <i className="bi bi-file-earmark-text text-[#0066FF] dark:text-brand-400"></i>
             {notebook.total_pages} {notebook.total_pages === 1 ? 'Page' : 'Pages'}
           </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F6F6F3] dark:bg-slate-800 rounded-full border border-[#E3E9F1] dark:border-slate-700">
-            <i className="bi bi-bookmark text-[#0066FF] dark:text-blue-400"></i>
+            <i className="bi bi-bookmark text-[#0066FF] dark:text-brand-400"></i>
             {notebook.chapter_count} {notebook.chapter_count === 1 ? 'Chapter' : 'Chapters'}
           </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F6F6F3] dark:bg-slate-800 rounded-full border border-[#E3E9F1] dark:border-slate-700">
-            <i className="bi bi-hdd text-[#0066FF] dark:text-blue-400"></i>
+            <i className="bi bi-hdd text-[#0066FF] dark:text-brand-400"></i>
             {(notebook.file_size / (1024 * 1024)).toFixed(1)} MB
           </span>
         </div>
@@ -241,20 +241,20 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
             <div
               key={ch.id}
               onClick={() => handleOpenChapterActions(ch)}
-              className="w-full flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-2xl hover:border-[#0066FF]/50 dark:hover:border-blue-500/50 transition-all cursor-pointer group shadow-2xs gap-3"
+              className="w-full flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-2xl hover:border-[#0066FF]/50 dark:hover:border-brand-500/50 transition-all cursor-pointer group shadow-2xs gap-3"
             >
               <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-[#F6F6F3] dark:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white font-bold text-sm shrink-0 group-hover:bg-[#002D62] dark:group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <div className="w-10 h-10 rounded-2xl bg-[#F6F6F3] dark:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white font-bold text-sm shrink-0 group-hover:bg-[#002D62] dark:group-hover:bg-brand-600 group-hover:text-white transition-colors">
                   {idx + 1}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-sm font-bold text-[#0F172A] dark:text-white truncate group-hover:text-[#0066FF] dark:group-hover:text-blue-400 transition-colors">
+                  <h4 className="text-sm font-bold text-[#0F172A] dark:text-white truncate group-hover:text-[#0066FF] dark:group-hover:text-brand-400 transition-colors">
                     {ch.title}
                   </h4>
                   <div className="flex items-center gap-2 flex-wrap mt-0.5 text-xs text-[#64748B] dark:text-slate-400">
                     {visitedLabel && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F1F5F9] dark:bg-slate-800 text-[#64748B] dark:text-slate-400 text-[10px] font-semibold border border-[#E3E9F1] dark:border-slate-700">
-                        <i className="bi bi-clock-history text-[#0066FF] dark:text-blue-400 text-[10px]"></i>
+                        <i className="bi bi-clock-history text-[#0066FF] dark:text-brand-400 text-[10px]"></i>
                         <span>{visitedLabel}</span>
                       </span>
                     )}
@@ -266,10 +266,10 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
               </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <span className="hidden sm:inline-block text-xs font-bold text-[#0066FF] dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="hidden sm:inline-block text-xs font-bold text-[#0066FF] dark:text-brand-400 opacity-0 group-hover:opacity-100 transition-opacity">
                 Study Chapter
               </span>
-              <div className="w-8 h-8 rounded-full bg-[#F6F6F3] dark:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white group-hover:bg-[#0066FF] dark:group-hover:bg-blue-600 group-hover:text-white transition-all">
+              <div className="w-8 h-8 rounded-full bg-[#F6F6F3] dark:bg-slate-800 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white group-hover:bg-[#0066FF] dark:group-hover:bg-brand-600 group-hover:text-white transition-all">
                 <i className="bi bi-chevron-right text-xs"></i>
               </div>
             </div>
@@ -315,13 +315,13 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
                 type="button"
                 onClick={() => handleSelectMode('chat')}
                 disabled={isLoadingContent}
-                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-blue-500/50 rounded-2xl text-left transition-all cursor-pointer group"
+                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-brand-500/50 rounded-2xl text-left transition-all cursor-pointer group"
               >
-                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-blue-400 shrink-0 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-brand-400 shrink-0 shadow-2xs">
                   <i className="bi bi-chat-dots text-base"></i>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-blue-400 truncate">Chat Tutorial</h4>
+                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-brand-400 truncate">Chat Tutorial</h4>
                   <p className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5 leading-tight">Socratic 1-on-1 tutor</p>
                 </div>
               </button>
@@ -331,13 +331,13 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
                 type="button"
                 onClick={() => handleSelectMode('flashcards')}
                 disabled={isLoadingContent}
-                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-blue-500/50 rounded-2xl text-left transition-all cursor-pointer group"
+                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-brand-500/50 rounded-2xl text-left transition-all cursor-pointer group"
               >
-                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-blue-400 shrink-0 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-brand-400 shrink-0 shadow-2xs">
                   <i className="bi bi-card-text text-base"></i>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-blue-400 truncate">Flashcards</h4>
+                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-brand-400 truncate">Flashcards</h4>
                   <p className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5 leading-tight">Interactive 3D cards</p>
                 </div>
               </button>
@@ -347,13 +347,13 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
                 type="button"
                 onClick={() => handleSelectMode('quiz')}
                 disabled={isLoadingContent}
-                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-blue-500/50 rounded-2xl text-left transition-all cursor-pointer group"
+                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-brand-500/50 rounded-2xl text-left transition-all cursor-pointer group"
               >
-                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-blue-400 shrink-0 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-brand-400 shrink-0 shadow-2xs">
                   <i className="bi bi-check2-square text-base"></i>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-blue-400 truncate">Quiz Test</h4>
+                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-brand-400 truncate">Quiz Test</h4>
                   <p className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5 leading-tight">Timed test & timer</p>
                 </div>
               </button>
@@ -363,16 +363,16 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({
                 type="button"
                 onClick={() => handleSelectMode('voice')}
                 disabled={isLoadingContent}
-                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-blue-500/50 rounded-2xl text-left transition-all cursor-pointer group relative"
+                className="flex items-center gap-3 p-3.5 bg-[#F6F6F3] dark:bg-slate-800 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/50 dark:hover:border-brand-500/50 rounded-2xl text-left transition-all cursor-pointer group relative"
               >
-                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-blue-400 shrink-0 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-700 flex items-center justify-center text-[#0066FF] dark:text-brand-400 shrink-0 shadow-2xs">
                   <i className="bi bi-mic text-base"></i>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-blue-400 truncate">Voice Tutorial</h4>
+                    <h4 className="text-xs font-bold text-[#0F172A] dark:text-white group-hover:text-[#0066FF] dark:group-hover:text-brand-400 truncate">Voice Tutorial</h4>
                     {!liveAccess.allowed && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold border border-amber-500/20 shrink-0">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#F3F3F3] dark:bg-[#1C1C1C] text-[#525252] dark:text-[#A3A3A3] text-[10px] font-extrabold border border-[#E6E6E6] dark:border-[#2A2A2A] shrink-0">
                         <i className="bi bi-lock-fill text-[9px]"></i>
                         <span>₦450</span>
                       </span>

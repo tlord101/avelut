@@ -139,7 +139,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
                     </div>
                     <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                            <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate group-hover:text-[#0A0A0A] dark:group-hover:text-[#FAFAFA] transition-colors">
                                 {courseLabel}
                             </span>
                             {topicCount > 0 && (
@@ -171,7 +171,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
                                     </div>
                                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
                                         <div
-                                            className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+                                            className="bg-[#0A0A0A] dark:bg-[#FAFAFA] h-1.5 rounded-full transition-all duration-300"
                                             style={{ width: `${uploadProgress?.percent || 0}%` }}
                                         />
                                     </div>
@@ -238,7 +238,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
                 <div className="p-8 text-center max-w-xl mx-auto my-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
                     <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Something went wrong</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Could not load Study Guide. Please retry.</p>
-                    <button onClick={this.reset} className="px-6 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl shadow-md hover:bg-amber-400 transition-colors">
+                    <button onClick={this.reset} className="px-6 py-2.5 bg-[#2563EB] text-white font-bold rounded-xl shadow-md hover:bg-[#1D4ED8] transition-colors">
                         Retry
                     </button>
                 </div>
@@ -908,7 +908,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                     <div className="p-4 overflow-y-auto space-y-3 flex-1 [scrollbar-width:thin]">
                         {coursePinned.length > 0 && (
                             <div className="space-y-2 mb-4">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-[#525252] dark:text-[#A3A3A3] flex items-center gap-1.5">
                                     <i className="bi bi-pin-angle-fill text-xs"></i>
                                     <span>Pinned Topics</span>
                                 </div>
@@ -924,10 +924,10 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                                 topic_name: p.topic_name,
                                                 topic_context: p.topic_context,
                                             })}
-                                            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer group"
+                                            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[#E6E6E6] dark:border-[#2A2A2A] bg-[#F3F3F3]/40 dark:bg-[#1C1C1C]/20 hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] transition-colors cursor-pointer group"
                                         >
                                             <div className="flex-1 min-w-0">
-                                                <div className="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-amber-500 transition-colors">
+                                                <div className="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-[#0A0A0A] dark:group-hover:text-[#FAFAFA] transition-colors">
                                                     {p.topic_name}
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-wrap mt-1">

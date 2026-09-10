@@ -141,7 +141,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             {/* Live Tutorial Button — Enlarged with high visibility & padlock gating */}
             <button
               onClick={handleTriggerLiveTutorial}
-              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#0066FF]/30 hover:border-[#0066FF] bg-white dark:bg-slate-900 hover:bg-blue-50/40 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#0066FF]/30 hover:border-[#0066FF] bg-white dark:bg-slate-900 hover:bg-brand-50/40 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
               title={liveAccess.allowed ? "Launch Live Voice & Whiteboard Tutorial" : "Live Tutorial Locked (Weekly/Monthly Plan or ₦450/topic)"}
             >
               <div className="w-5 h-5 rounded-full bg-[#0066FF]/10 flex items-center justify-center text-[#0066FF] shrink-0">
@@ -149,7 +149,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               </div>
               <span className="whitespace-nowrap font-black tracking-tight text-[#0F172A] dark:text-white">Live Tutorial</span>
               {!liveAccess.allowed && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold border border-amber-500/20">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#F3F3F3] dark:bg-[#1C1C1C] text-[#525252] dark:text-[#A3A3A3] text-[10px] font-extrabold border border-[#E6E6E6] dark:border-[#2A2A2A]">
                   <i className="bi bi-lock-fill text-[10px]"></i>
                   <span className="hidden sm:inline">₦450</span>
                 </span>
@@ -617,17 +617,17 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     ),
     code: ({ node, inline, ...props }: any) =>
       inline ? (
-        <code className={`px-1.5 py-0.5 rounded-md font-mono text-xs ${isUser ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/50 text-[#0066FF] dark:text-blue-300 border border-blue-100 dark:border-blue-900/50'}`} {...props} />
+        <code className={`px-1.5 py-0.5 rounded-md font-mono text-xs ${isUser ? 'bg-white/20 text-white' : 'bg-brand-50 dark:bg-brand-950/50 text-[#0066FF] dark:text-brand-300 border border-brand-100 dark:border-brand-900/50'}`} {...props} />
       ) : (
         <code className="block overflow-x-auto rounded-2xl bg-[#0F172A] dark:bg-[#0A0A0A] text-slate-100 p-4 text-xs font-mono my-2.5 border border-slate-700/60" {...props} />
       ),
     blockquote: ({ node, ...props }: any) => (
-      <blockquote className={`border-l-4 p-3 rounded-r-xl my-2.5 text-xs sm:text-sm leading-relaxed ${isUser ? 'border-blue-300 bg-white/10 text-white' : 'border-[#0066FF] bg-blue-50/70 dark:bg-blue-950/40 text-slate-800 dark:text-slate-200'}`} {...props} />
+      <blockquote className={`border-l-4 p-3 rounded-r-xl my-2.5 text-xs sm:text-sm leading-relaxed ${isUser ? 'border-brand-300 bg-white/10 text-white' : 'border-[#0066FF] bg-brand-50/70 dark:bg-brand-950/40 text-slate-800 dark:text-slate-200'}`} {...props} />
     ),
     ul: ({ node, ...props }: any) => <ul className="mb-3 last:mb-0 list-disc pl-5 space-y-1.5 marker:text-[#0066FF] leading-[1.7]" {...props} />,
     ol: ({ node, ...props }: any) => <ol className="mb-3 last:mb-0 list-decimal pl-5 space-y-1.5 marker:text-[#0066FF] font-medium leading-[1.7]" {...props} />,
     li: ({ node, ...props }: any) => <li className="leading-[1.75]" {...props} />,
-    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-blue-200 underline' : 'text-[#0066FF] underline hover:text-[#002D62]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
+    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-brand-200 underline' : 'text-[#0066FF] underline hover:text-[#002D62]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
     table: ({ node, ...props }: any) => (
       <div className="w-full my-3.5 overflow-x-auto [scrollbar-width:thin] rounded-2xl border border-[#E3E9F1] dark:border-slate-800 shadow-2xs">
         <table className="min-w-full border-collapse text-xs sm:text-sm text-left" {...props} />
@@ -670,7 +670,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               >
                 {!isUser && (
                   <div className="flex items-center gap-2 mb-1.5 px-1">
-                    <div className="w-6 h-6 rounded-full bg-[#0066FF]/10 dark:bg-blue-900/40 flex items-center justify-center p-0.5 shrink-0 border border-[#0066FF]/20">
+                    <div className="w-6 h-6 rounded-full bg-[#0066FF]/10 dark:bg-brand-900/40 flex items-center justify-center p-0.5 shrink-0 border border-[#0066FF]/20">
                       <img src="/logo_icon.png" alt="Avelut Tutor" className="w-full h-full object-contain" />
                     </div>
                     <span className="text-[12px] font-bold text-[#002D62] dark:text-[#60A5FA]">
@@ -724,7 +724,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                                   </div>
                                   <div className="min-w-0">
                                     <p className="truncate text-sm font-semibold text-white">{att.name}</p>
-                                    <p className="text-[10px] uppercase tracking-[0.2em] opacity-70 text-blue-200">Open attachment</p>
+                                    <p className="text-[10px] uppercase tracking-[0.2em] opacity-70 text-brand-200">Open attachment</p>
                                   </div>
                                 </div>
                               )}

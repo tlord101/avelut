@@ -375,6 +375,8 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
       },
     });
 
+    let disposed = false;
+
     if (startBoardIndexRef.current > 0 && resumeInfo?.structure) {
       engine.setStructure(resumeInfo.structure);
       setStructure(resumeInfo.structure);
@@ -386,46 +388,77 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         completedBoardsSummary: completedTitlesRef.current,
       });
     } else {
-      let cachedStructure = getSavedTeachingStructure(resolvedUserId, topicKey, durationMode);
-      if (!cachedStructure?.boards?.length && durationMode) {
-        const prepKey = buildPrepKey(resolvedUserId, topicKey, durationMode);
-        const payload = lessonPrepService.getReadyPayload(prepKey);
-        if (payload?.structure?.boards?.length) {
-          cachedStructure = payload.structure;
-        } else {
+      void (async () => {
+        let cachedStructure = getSavedTeachingStructure(resolvedUserId, topicKey, durationMode);
+
+        // 1) Device-first: load the fully prepared lesson package (IndexedDB) and
+        //    hydrate engine caches so opening a Ready lesson makes ZERO
+        //    structure/board/TTS network calls.
+        if (durationMode) {
+          const prepKey = buildPrepKey(resolvedUserId, topicKey, durationMode);
+          try {
+            const pkg = await lessonPrepService.loadReadyPackage(prepKey, currentVoice);
+            if (disposed) return;
+            if (pkg?.structure?.boards?.length) {
+              lessonPrepService.hydrateLessonPackageCaches(pkg);
+              engine.hydrateOfflineBoards(pkg.boards);
+              // Adopt the voice the audio was prepared with so TTS cache keys match
+              if (pkg.voice && pkg.voice !== currentVoice) {
+                engine.setVoice(pkg.voice);
+                setCurrentVoice(pkg.voice);
+              }
+              cachedStructure = pkg.structure;
+            }
+          } catch (e) {
+            console.warn('[TeachingEngineSessionView] Device package hydration failed:', e);
+          }
+        }
+
+        // 2) Legacy fallbacks (localStorage / prefetch cache)
+        if (!cachedStructure?.boards?.length && durationMode) {
+          const prepKey = buildPrepKey(resolvedUserId, topicKey, durationMode);
+          const payload = lessonPrepService.getReadyPayload(prepKey);
+          if (payload?.structure?.boards?.length) {
+            cachedStructure = payload.structure;
+          }
+        }
+        if (!cachedStructure?.boards?.length) {
           cachedStructure = getCachedStructure(topicKey, durationMode, resolvedUserId);
         }
-      }
 
-      if (cachedStructure?.boards?.length) {
-        engine.setStructure(cachedStructure);
-        setStructure(cachedStructure);
-        setTotalBoards(cachedStructure.boards.length);
-        setStatusMessage(`Writing Board 1 of ${cachedStructure.boards.length}…`);
+        if (disposed) return;
 
-        // Immediately render Title Heading for Board 1 on the canvas
-        const b1Title = cachedStructure.boards[0]?.title || topicTitle;
-        manager.applyAction({
-          id: 'act_title_1_init',
-          type: 'write',
-          content: b1Title,
-          position: { x: 50, y: 10 },
-          metadata: { fontSize: '3xl', color: '#FFFFFF' },
-        });
+        if (cachedStructure?.boards?.length) {
+          engine.setStructure(cachedStructure);
+          setStructure(cachedStructure);
+          setTotalBoards(cachedStructure.boards.length);
+          setStatusMessage(`Writing Board 1 of ${cachedStructure.boards.length}…`);
 
-        engine.loadBoardPerformance({ boardIndex: 0, completedBoardsSummary: [] });
-      } else {
-        setStatusMessage('Planning live lesson structure…');
-        engine.generateTeachingStructure({
-          topic: topicTitle,
-          courseName,
-          syllabusContext,
-          durationMode,
-        });
-      }
+          // Immediately render Title Heading for Board 1 on the canvas
+          const b1Title = cachedStructure.boards[0]?.title || topicTitle;
+          manager.applyAction({
+            id: 'act_title_1_init',
+            type: 'write',
+            content: b1Title,
+            position: { x: 50, y: 10 },
+            metadata: { fontSize: '3xl', color: '#FFFFFF' },
+          });
+
+          engine.loadBoardPerformance({ boardIndex: 0, completedBoardsSummary: [] });
+        } else {
+          setStatusMessage('Planning live lesson structure…');
+          engine.generateTeachingStructure({
+            topic: topicTitle,
+            courseName,
+            syllabusContext,
+            durationMode,
+          });
+        }
+      })();
     }
 
     return () => {
+      disposed = true;
       if (autoContinueTimerRef.current) clearTimeout(autoContinueTimerRef.current);
       unsubscribe();
       engine.destroy();
@@ -719,12 +752,12 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         ) : (
           <>
             {sessionError && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-md w-[90%] max-w-lg shadow-lg">
-                <i className="bi bi-exclamation-triangle-fill text-red-500 text-lg shrink-0"></i>
-                <p className="text-sm text-red-200 font-medium leading-snug flex-1">{sessionError}</p>
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 backdrop-blur-md w-[90%] max-w-lg shadow-lg">
+                <i className="bi bi-exclamation-triangle-fill text-rose-500 text-lg shrink-0"></i>
+                <p className="text-sm text-rose-200 font-medium leading-snug flex-1">{sessionError}</p>
                 <button
                   onClick={() => setSessionError(null)}
-                  className="w-6 h-6 rounded-full bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-400 transition-colors shrink-0 cursor-pointer"
+                  className="w-6 h-6 rounded-full bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-400 transition-colors shrink-0 cursor-pointer"
                 >
                   <i className="bi bi-x-lg text-xs"></i>
                 </button>

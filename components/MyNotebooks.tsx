@@ -209,7 +209,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
             </div>
             <div className="w-full bg-slate-200/70 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-200 dark:border-slate-700">
               <div
-                className="bg-black dark:bg-amber-400 h-2 rounded-full transition-all duration-300"
+                className="bg-black dark:bg-[#FAFAFA] h-2 rounded-full transition-all duration-300"
                 style={{ width: `${extractProgress.percent}%` }}
               />
             </div>

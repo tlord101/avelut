@@ -130,7 +130,7 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
               aria-label="Back to chapters"
               title="Back"
             >
-              <i className="bi bi-arrow-left text-base font-bold text-[#0066FF] dark:text-blue-400"></i>
+              <i className="bi bi-arrow-left text-base font-bold text-[#0066FF] dark:text-brand-400"></i>
             </button>
             <div className="min-w-0 flex flex-col justify-center">
               <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
@@ -146,7 +146,7 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
           <button
             type="button"
             onClick={handleClearHistory}
-            className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E3E9F1] dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-800 flex items-center justify-center text-[#64748B] dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-all cursor-pointer shadow-2xs"
+            className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] border border-[#E3E9F1] dark:border-slate-700 hover:border-[#D0D0D0] dark:hover:border-[#3A3A3A] flex items-center justify-center text-[#64748B] dark:text-slate-300 hover:text-[#0A0A0A] dark:hover:text-[#FAFAFA] transition-all cursor-pointer shadow-2xs"
             title="Clear Conversation History"
             aria-label="Clear Conversation History"
           >
@@ -318,7 +318,7 @@ ${messageText}`;
             {formatLatexMath(completedPart)}
           </ReactMarkdown>
           {activePart && (
-            <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
+            <div className="inline-block text-[#0F172A] dark:text-brand-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
               <span>{activePart}</span>
               <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
             </div>
@@ -328,7 +328,7 @@ ${messageText}`;
     }
 
     return (
-      <div className="inline-block text-[#0F172A] dark:text-blue-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
+      <div className="inline-block text-[#0F172A] dark:text-brand-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
         <span>{text}</span>
         <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
       </div>
@@ -343,7 +343,7 @@ ${messageText}`;
       <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight border-b border-[#E3E9F1] dark:border-slate-800 pb-1.5" {...props} />
     ),
     h3: ({ node, ...props }: any) => (
-      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-blue-400 mt-3.5 mb-1.5" {...props} />
+      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-brand-400 mt-3.5 mb-1.5" {...props} />
     ),
     h4: ({ node, ...props }: any) => (
       <h4 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white mt-3 mb-1" {...props} />
@@ -357,17 +357,17 @@ ${messageText}`;
     ),
     code: ({ node, inline, ...props }: any) =>
       inline ? (
-        <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-slate-800 text-[#0066FF] dark:text-blue-400 border border-blue-100 dark:border-slate-700'}`} {...props} />
+        <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-brand-50 dark:bg-slate-800 text-[#0066FF] dark:text-brand-400 border border-brand-100 dark:border-slate-700'}`} {...props} />
       ) : (
         <code className="block overflow-x-auto rounded-2xl bg-[#0A0A0A] dark:bg-slate-900 text-slate-100 p-4 text-sm font-mono my-3 border border-slate-700/60" {...props} />
       ),
     blockquote: ({ node, ...props }: any) => (
-      <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-blue-300 bg-white/10 text-white' : 'border-[#0066FF] dark:border-blue-500 bg-blue-50/70 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'}`} {...props} />
+      <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-brand-300 bg-white/10 text-white' : 'border-[#0066FF] dark:border-brand-500 bg-brand-50/70 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'}`} {...props} />
     ),
-    ul: ({ node, ...props }: any) => <ul className="mb-4 last:mb-0 list-disc pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-blue-400 text-[#0F172A] dark:text-slate-100" {...props} />,
-    ol: ({ node, ...props }: any) => <ol className="mb-4 last:mb-0 list-decimal pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-blue-400 text-[#0F172A] dark:text-slate-100 font-medium" {...props} />,
+    ul: ({ node, ...props }: any) => <ul className="mb-4 last:mb-0 list-disc pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-brand-400 text-[#0F172A] dark:text-slate-100" {...props} />,
+    ol: ({ node, ...props }: any) => <ol className="mb-4 last:mb-0 list-decimal pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#0066FF] dark:marker:text-brand-400 text-[#0F172A] dark:text-slate-100 font-medium" {...props} />,
     li: ({ node, ...props }: any) => <li className="leading-relaxed" {...props} />,
-    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-blue-200 underline' : 'text-[#0066FF] dark:text-blue-400 underline hover:text-[#0F172A] dark:hover:text-blue-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
+    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-brand-200 underline' : 'text-[#0066FF] dark:text-brand-400 underline hover:text-[#0F172A] dark:hover:text-brand-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
   });
 
   return (
@@ -380,7 +380,7 @@ ${messageText}`;
         <div className="max-w-4xl mx-auto w-full min-h-full flex flex-col justify-end py-3 sm:py-4">
           {messages.length === 0 ? (
             <div className="my-auto flex flex-col items-center justify-center text-center p-6 sm:p-8 bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 rounded-3xl shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-[#0066FF]/10 dark:bg-blue-500/20 text-[#0066FF] dark:text-blue-400 flex items-center justify-center text-2xl mb-3.5 shadow-2xs">
+              <div className="w-14 h-14 rounded-2xl bg-[#0066FF]/10 dark:bg-brand-500/20 text-[#0066FF] dark:text-brand-400 flex items-center justify-center text-2xl mb-3.5 shadow-2xs">
                 <i className="bi bi-chat-heart-fill"></i>
               </div>
               <h3 className="text-lg font-bold text-[#0F172A] dark:text-white">Socratic Tutor for {chapter.title}</h3>
@@ -392,9 +392,9 @@ ${messageText}`;
                   <button
                     key={i}
                     onClick={() => handleSendMessage(pill)}
-                    className="px-4 py-2 rounded-full bg-[#F6F6F3] dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/40 text-[#0F172A] dark:text-slate-200 hover:text-[#0066FF] dark:hover:text-blue-400 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-full bg-[#F6F6F3] dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-slate-700 border border-[#E3E9F1] dark:border-slate-700 hover:border-[#0066FF]/40 text-[#0F172A] dark:text-slate-200 hover:text-[#0066FF] dark:hover:text-brand-400 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
                   >
-                    <span className="text-[#0066FF] dark:text-blue-400">✦</span>
+                    <span className="text-[#0066FF] dark:text-brand-400">✦</span>
                     <span>{pill}</span>
                   </button>
                 ))}
@@ -464,9 +464,9 @@ ${messageText}`;
               {isLoading && !streamingMsgId && (
                 <div className="flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-[#E3E9F1] dark:border-slate-800 shadow-2xs w-fit animate-fade-in">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-blue-400 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-blue-400 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-blue-400 animate-bounce" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] dark:bg-brand-400 animate-bounce" />
                   </div>
                   <span className="text-xs sm:text-sm text-[#64748B] dark:text-slate-400 font-semibold">Tutor is formulating response...</span>
                 </div>
@@ -487,9 +487,9 @@ ${messageText}`;
                 <button
                   key={i}
                   onClick={() => handleSendMessage(pill)}
-                  className="px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 hover:border-[#0066FF] dark:hover:border-blue-500 text-[#0F172A] dark:text-slate-200 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shadow-2xs shrink-0"
+                  className="px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-[#E3E9F1] dark:border-slate-800 hover:border-[#0066FF] dark:hover:border-brand-500 text-[#0F172A] dark:text-slate-200 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shadow-2xs shrink-0"
                 >
-                  <i className="bi bi-sparkles mr-1 text-[#0066FF] dark:text-blue-400"></i>
+                  <i className="bi bi-sparkles mr-1 text-[#0066FF] dark:text-brand-400"></i>
                   {pill}
                 </button>
               ))}

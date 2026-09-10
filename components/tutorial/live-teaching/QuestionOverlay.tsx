@@ -156,7 +156,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
               onClick={() => handleSubmit()}
               disabled={!inputText.trim() || isSubmittingAnswer}
               type="button"
-              className="px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-blue-600 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-brand-600 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
             >
               {isSubmittingAnswer ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -189,7 +189,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
               <button
                 onClick={onDismiss}
                 type="button"
-                className="w-full py-2.5 px-4 rounded-xl bg-[#0066FF] hover:bg-blue-600 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#0066FF] hover:bg-brand-600 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
               >
                 <span>Continue to Next Concept</span>
                 <i className="bi bi-arrow-right text-xs"></i>

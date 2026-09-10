@@ -20,6 +20,7 @@ import {
   limitToLast,
   increment,
   notifyUserCreditsUpdated,
+  ensureDirectChat,
   type DbRef,
 } from './supabaseRealtimeDb';
 import { supabase } from './supabaseClient';
@@ -233,6 +234,7 @@ export {
   limitToFirst,
   increment,
   notifyUserCreditsUpdated,
+  ensureDirectChat,
   orderByChild,
   equalTo,
   orderByKey,

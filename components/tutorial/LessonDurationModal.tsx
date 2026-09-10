@@ -185,12 +185,12 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
         {/* Reassuring notice while any prep is running */}
         {isAnyPreparing && (
-          <div className="px-5 py-2.5 bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-900/50 flex items-center justify-between text-xs text-sky-900 dark:text-sky-200">
+          <div className="px-5 py-2.5 bg-brand-50 dark:bg-brand-950/40 border-b border-brand-200 dark:border-brand-900/50 flex items-center justify-between text-xs text-brand-900 dark:text-brand-200">
             <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 border-2 border-sky-600 dark:border-sky-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+              <div className="w-3.5 h-3.5 border-2 border-brand-600 dark:border-brand-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
               <span className="font-semibold">Preparing lesson in background. You can leave anytime!</span>
             </div>
-            <span className="text-[10px] text-sky-600 dark:text-sky-400 font-medium shrink-0">~2–4 min</span>
+            <span className="text-[10px] text-brand-600 dark:text-brand-400 font-medium shrink-0">~2–4 min</span>
           </div>
         )}
 
@@ -246,7 +246,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                     : state === 'ready'
                       ? 'border-emerald-500/80 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm'
                       : state === 'preparing'
-                        ? 'border-sky-500/70 bg-sky-50/30 dark:bg-sky-950/20'
+                        ? 'border-brand-500/70 bg-brand-50/30 dark:bg-brand-950/20'
                         : isSelected
                           ? 'border-black dark:border-white bg-neutral-50 dark:bg-neutral-900 shadow-sm'
                           : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0A0A0A] hover:border-neutral-300 dark:hover:border-neutral-700'
@@ -259,7 +259,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                         state === 'ready'
                           ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black'
                           : state === 'preparing'
-                            ? 'bg-sky-600 text-white dark:bg-sky-400 dark:text-black'
+                            ? 'bg-brand-600 text-white dark:bg-brand-400 dark:text-black'
                             : isSelected && canAfford
                               ? 'bg-black text-white dark:bg-white dark:text-black'
                               : 'bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-neutral-200 dark:border-neutral-700'
@@ -282,13 +282,13 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                           </span>
                         )}
                         {state === 'preparing' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-800 dark:text-sky-300 bg-sky-100 dark:bg-sky-950/80 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-md animate-pulse">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-800 dark:text-brand-300 bg-brand-100 dark:bg-brand-950/80 border border-brand-300 dark:border-brand-800 px-2 py-0.5 rounded-md animate-pulse">
                             <i className="bi bi-hourglass-split"></i> Preparing
                           </span>
                         )}
                         {state === 'failed' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-800 dark:text-red-300 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-exclamation-circle-fill text-red-600 dark:text-red-400"></i> Failed
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded-md">
+                            <i className="bi bi-exclamation-circle-fill text-rose-600 dark:text-rose-400"></i> Failed
                           </span>
                         )}
                       </div>
@@ -327,7 +327,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleActionClick(e, opt.minutes, 'failed')}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-red-600 hover:bg-red-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
                       >
                         <i className="bi bi-arrow-counterclockwise"></i>
                         <span>Retry prepare</span>
@@ -352,33 +352,42 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
                 {/* Progress Details When Preparing */}
                 {state === 'preparing' && (
-                  <div className="bg-sky-50/80 dark:bg-sky-950/50 border border-sky-200/80 dark:border-sky-900/60 rounded-xl p-2.5 text-xs text-sky-900 dark:text-sky-200 space-y-1.5 animate-fade-in">
+                  <div className="bg-brand-50/80 dark:bg-brand-950/50 border border-brand-200/80 dark:border-brand-900/60 rounded-xl p-2.5 text-xs text-brand-900 dark:text-brand-200 space-y-1.5 animate-fade-in">
                     <div className="flex items-center justify-between text-[11px] font-semibold">
                       <span className="flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
+                        <span className="inline-block w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
                         {prepStatus?.message || '1/3 Planning lesson structure…'}
                       </span>
-                      <span className="text-[10px] text-sky-600 dark:text-sky-400">
+                      <span className="text-[10px] text-brand-600 dark:text-brand-400">
                         {prepStatus?.etaMinutes || '~2–4 min'}
                       </span>
                     </div>
 
-                    {/* Progress Bar */}
-                    <div className="w-full bg-sky-200 dark:bg-sky-900 rounded-full h-1.5 overflow-hidden">
+                    {/* Progress Bar (board-level i/N when available) */}
+                    <div className="w-full bg-brand-200 dark:bg-brand-900 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="bg-sky-600 dark:bg-sky-400 h-1.5 rounded-full transition-all duration-500"
+                        className="bg-brand-600 dark:bg-brand-400 h-1.5 rounded-full transition-all duration-500"
                         style={{
-                          width:
-                            prepStatus?.step === 3
-                              ? '90%'
-                              : prepStatus?.step === 2
-                                ? '60%'
-                                : '30%',
+                          width: `${
+                            typeof prepStatus?.progressPercent === 'number'
+                              ? prepStatus.progressPercent
+                              : prepStatus?.step === 3
+                                ? 90
+                                : prepStatus?.step === 2
+                                  ? 60
+                                  : 30
+                          }%`,
                         }}
                       ></div>
                     </div>
 
-                    <p className="text-[10px] text-sky-700 dark:text-sky-300/80 leading-relaxed">
+                    {typeof prepStatus?.boardIndex === 'number' && prepStatus?.totalBoards ? (
+                      <p className="text-[10px] font-bold text-brand-700 dark:text-brand-300/90">
+                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} prepared on device
+                      </p>
+                    ) : null}
+
+                    <p className="text-[10px] text-brand-700 dark:text-brand-300/80 leading-relaxed">
                       &bull; This usually takes about 2–4 minutes.<br />
                       &bull; You can leave this page and keep using the app.<br />
                       &bull; We’ll notify you when this lesson is ready.
@@ -388,7 +397,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
                 {/* Failed Error Message */}
                 {state === 'failed' && prepStatus?.error && (
-                  <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">
+                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
                     {prepStatus.error}
                   </p>
                 )}

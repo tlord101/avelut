@@ -16,6 +16,34 @@ const listeners = new Map<string, Set<(snap: { val: () => any; exists: () => boo
 const pathDataCache = new Map<string, any>();
 const channelByPath = new Map<string, ReturnType<typeof supabase.channel>>();
 
+function realtimeChannelName(path: string): string | null {
+  const parts = parsePath(path);
+  if ((parts[0] === 'messages' || parts[0] === 'private_messages') && parts.length === 2) return `messages:${parts[1]}`;
+  if (parts[0] === 'user_chats' && parts.length >= 2) return `user_chats:${parts[1]}`;
+  if (parts[0] === 'notifications' && parts.length === 2) return `notifications:${parts[1]}`;
+  if (parts[0] === 'study_partners' && parts.length >= 2) return `study_partners:${parts[1]}`;
+  if (parts[0] === 'partner_requests' && parts.length >= 2) return `partner_requests:${parts[1]}`;
+  if (parts[0] === 'chat_meta_data' && parts[2] === 'typing') return `typing:${parts[1]}`;
+  if (parts[0] === 'users' && parts.length === 2) return `profile:${parts[1]}`;
+  if (parts[0] === 'users' && parts.length === 1) return 'profiles:all';
+  return null;
+}
+
+function releaseRealtimeChannel(path: string) {
+  const channelName = realtimeChannelName(path);
+  if (!channelName) return;
+  const isStillUsed = [...listeners.entries()].some(([listenerPath, callbacks]) =>
+    callbacks.size > 0 && realtimeChannelName(listenerPath) === channelName
+  );
+  if (isStillUsed) return;
+
+  const channel = channelByPath.get(channelName);
+  if (channel) {
+    channelByPath.delete(channelName);
+    void supabase.removeChannel(channel);
+  }
+}
+
 let isAppKvAvailable: boolean | null = typeof window !== 'undefined' && window.sessionStorage?.getItem('avelut_app_kv_missing') === '1' ? false : null;
 
 function getLocalCache(path: string): any {
@@ -112,6 +140,82 @@ export function serverTimestamp(): number {
 
 export function increment(by: number) {
   return { __op: 'increment', by } as const;
+}
+
+type NormalizedMessage = {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  mediaUrl: string | null;
+  mediaType: string | null;
+  replyTo: string | null;
+  createdAt: string;
+  isDeleted: boolean;
+};
+
+function normalizeTimestamp(value: unknown): string {
+  const date = value instanceof Date
+    ? value
+    : typeof value === 'number'
+      ? new Date(value)
+      : typeof value === 'string'
+        ? new Date(value)
+        : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeMessage(chatId: string, messageId: string, value: Record<string, any>): NormalizedMessage {
+  const senderId = value.sender_id ?? value.senderId;
+  if (!senderId) {
+    throw new Error('A message sender is required.');
+  }
+
+  const rawReplyTo = value.reply_to ?? value.replyTo ?? null;
+  return {
+    id: messageId,
+    chatId,
+    senderId,
+    text: value.text ?? value.message ?? '',
+    mediaUrl: value.media_url ?? value.imageUrl ?? value.fileUrl ?? null,
+    mediaType: value.media_type ?? value.type ?? null,
+    replyTo: typeof rawReplyTo === 'object' ? rawReplyTo?.id ?? null : rawReplyTo,
+    createdAt: normalizeTimestamp(value.created_at ?? value.timestamp),
+    isDeleted: value.is_deleted ?? false,
+  };
+}
+
+async function persistMessage(chatId: string, messageId: string, value: Record<string, any>): Promise<NormalizedMessage> {
+  const message = normalizeMessage(chatId, messageId, value);
+  const { error } = await supabase.rpc('send_chat_message', {
+    p_chat_id: message.chatId,
+    p_message_id: message.id,
+    p_sender_id: message.senderId,
+    p_text: message.text,
+    p_media_url: message.mediaUrl,
+    p_media_type: message.mediaType,
+    p_reply_to: message.replyTo,
+    p_created_at: message.createdAt,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return message;
+}
+
+export async function ensureDirectChat(otherUserId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('get_or_create_direct_chat', {
+    p_other_user_id: otherUserId,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data || typeof data !== 'string') {
+    throw new Error('Chat creation did not return an ID.');
+  }
+  return data;
 }
 
 export function limitToLast(n: number) {
@@ -375,23 +479,26 @@ async function loadPath(path: string): Promise<any> {
 
   if (parts[0] === 'user_chats' && parts.length === 2) {
     const userId = parts[1];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_members')
       .select('*')
       .eq('user_id', userId)
       .order('last_message_at', { ascending: false });
+    if (error) throw error;
+
     const map: Record<string, any> = {};
     (data || []).forEach((row: any) => {
+      const timestamp = row.last_message_at ? new Date(row.last_message_at).getTime() : Date.now();
       map[row.chat_id] = {
         otherUserId: row.other_user_id,
-        timestamp: row.last_message_at ? new Date(row.last_message_at).getTime() : Date.now(),
+        timestamp,
         unreadCount: row.unread_count || 0,
         last_message: row.last_message_text
           ? {
               text: row.last_message_text,
-              sender_id: row.last_message_sender_id,
+              senderId: row.last_message_sender_id,
               isRead: row.last_message_is_read,
-              timestamp: row.last_message_at ? new Date(row.last_message_at).getTime() : Date.now(),
+              timestamp,
             }
           : null,
       };
@@ -401,22 +508,25 @@ async function loadPath(path: string): Promise<any> {
 
   if (parts[0] === 'user_chats' && parts.length === 3) {
     const [, userId, chatId] = parts;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_members')
       .select('*')
       .eq('user_id', userId)
       .eq('chat_id', chatId)
       .maybeSingle();
+    if (error) throw error;
     if (!data) return null;
+    const timestamp = data.last_message_at ? new Date(data.last_message_at).getTime() : Date.now();
     return {
       otherUserId: data.other_user_id,
-      timestamp: data.last_message_at ? new Date(data.last_message_at).getTime() : Date.now(),
+      timestamp,
       unreadCount: data.unread_count || 0,
       last_message: data.last_message_text
         ? {
             text: data.last_message_text,
-            sender_id: data.last_message_sender_id,
+            senderId: data.last_message_sender_id,
             isRead: data.last_message_is_read,
+            timestamp,
           }
         : null,
     };
@@ -424,22 +534,35 @@ async function loadPath(path: string): Promise<any> {
 
   if ((parts[0] === 'messages' || parts[0] === 'private_messages') && parts.length === 2) {
     const chatId = parts[1];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('chat_id', chatId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: true })
       .limit(200);
+    if (error) throw error;
+
+    const rowsById = new Map((data || []).map((row: any) => [row.id, row]));
     const map: Record<string, any> = {};
     (data || []).forEach((row: any) => {
+      const repliedTo = row.reply_to ? rowsById.get(row.reply_to) : null;
       map[row.id] = {
         id: row.id,
-        sender_id: row.sender_id,
-        text: row.text,
-        media_url: row.media_url,
-        media_type: row.media_type,
-        reply_to: row.reply_to,
-        is_deleted: row.is_deleted,
+        senderId: row.sender_id,
+        text: row.text || '',
+        imageUrl: row.media_type === 'image' ? row.media_url : undefined,
+        fileUrl: row.media_type !== 'image' ? row.media_url : undefined,
+        type: row.media_type || 'text',
+        replyTo: repliedTo
+          ? {
+              id: repliedTo.id,
+              text: repliedTo.text || `[${repliedTo.media_type || 'message'}]`,
+              senderId: repliedTo.sender_id,
+              senderName: 'Message',
+            }
+          : null,
+        isDeleted: row.is_deleted,
         timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
       };
     });
@@ -1016,6 +1139,7 @@ export function onValue(
       set.delete(callback);
       if (set.size === 0) listeners.delete(path);
     }
+    releaseRealtimeChannel(path);
   };
 }
 
@@ -1052,6 +1176,8 @@ export function off(r?: DbRef, _event?: string, callback?: (snap: any) => void) 
   if (!set) return;
   if (callback) set.delete(callback);
   else set.clear();
+  if (set.size === 0) listeners.delete(r.path);
+  releaseRealtimeChannel(r.path);
 }
 
 export async function set(r: DbRef, value: any): Promise<void> {
@@ -1150,26 +1276,38 @@ export async function set(r: DbRef, value: any): Promise<void> {
     }
   }
 
-  if (parts[0] === 'user_chats' && parts.length === 3) {
-    const [, userId, chatId] = parts;
+  if (parts[0] === 'user_chats' && parts.length >= 3) {
+    const [, userId, chatId, ...fieldPath] = parts;
+    if (parts.length > 3) {
+      const field = fieldPath.join('/');
+      const values = field === 'unreadCount'
+        ? { unreadCount: value }
+        : field === 'last_message/isRead'
+          ? { last_message: { isRead: value } }
+          : { [field]: value };
+      await update(ref(null, `user_chats/${userId}/${chatId}`), values);
+      return;
+    }
+
     if (value === null) {
-      await supabase.from('chat_members').delete().eq('user_id', userId).eq('chat_id', chatId);
+      const { error } = await supabase.from('chat_members').delete().eq('user_id', userId).eq('chat_id', chatId);
+      if (error) throw error;
       notify(`user_chats/${userId}`, await loadPath(`user_chats/${userId}`));
       return;
     }
-    await supabase.from('chat_members').upsert({
+
+    const lastMessage = value.last_message ?? {};
+    const { error } = await supabase.from('chat_members').upsert({
       chat_id: chatId,
       user_id: userId,
-      other_user_id: value.otherUserId || value.other_user_id || null,
-      last_message_text: value.last_message?.text ?? value.last_message_text ?? null,
-      last_message_at: value.timestamp
-        ? new Date(value.timestamp).toISOString()
-        : new Date().toISOString(),
-      last_message_sender_id: value.last_message?.sender_id ?? null,
-      last_message_is_read: value.last_message?.isRead ?? true,
+      other_user_id: value.otherUserId ?? value.other_user_id ?? null,
+      last_message_text: lastMessage.text ?? value.last_message_text ?? null,
+      last_message_at: normalizeTimestamp(value.timestamp ?? lastMessage.timestamp),
+      last_message_sender_id: lastMessage.sender_id ?? lastMessage.senderId ?? value.last_message_sender_id ?? null,
+      last_message_is_read: lastMessage.isRead ?? value.last_message_is_read ?? true,
       unread_count: value.unreadCount ?? value.unread_count ?? 0,
     });
-    await supabase.from('chats').upsert({ id: chatId });
+    if (error) throw error;
     notify(`user_chats/${userId}`, await loadPath(`user_chats/${userId}`));
     return;
   }
@@ -1324,38 +1462,14 @@ export async function set(r: DbRef, value: any): Promise<void> {
     const chatId = parts[1];
     const msgId = parts[2];
     if (value === null) {
-      try {
-        await supabase.from('messages').update({ is_deleted: true }).eq('id', msgId);
-      } catch (e) {
-        console.warn('[supabaseRealtimeDb] delete message error', e);
-      }
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_deleted: true })
+        .eq('id', msgId)
+        .eq('chat_id', chatId);
+      if (error) throw error;
     } else {
-      const row = {
-        id: msgId,
-        chat_id: chatId,
-        sender_id: value.sender_id,
-        text: value.text ?? value.message ?? '',
-        media_url: value.media_url || value.imageUrl || value.fileUrl || null,
-        media_type: value.media_type || value.type || null,
-        reply_to: value.reply_to || null,
-        is_deleted: value.is_deleted ?? false,
-        created_at: value.created_at ? new Date(value.created_at).toISOString() : new Date().toISOString(),
-      };
-      try {
-        await supabase.from('messages').upsert(row);
-        const text = row.text || (row.media_url ? '📎 Media' : '');
-        await supabase
-          .from('chat_members')
-          .update({
-            last_message_text: text,
-            last_message_at: row.created_at,
-            last_message_sender_id: row.sender_id,
-            last_message_is_read: false,
-          })
-          .eq('chat_id', chatId);
-      } catch (e) {
-        console.warn('[supabaseRealtimeDb] upsert message error', e);
-      }
+      await persistMessage(chatId, msgId, value);
     }
     notify(`messages/${chatId}`, await loadPath(`messages/${chatId}`));
     return;
@@ -1874,16 +1988,21 @@ export async function update(r: DbRef, values: Record<string, any>): Promise<voi
 
   if (parts[0] === 'user_chats' && parts.length === 3) {
     const [, userId, chatId] = parts;
-    const patch: any = {};
+    const patch: Record<string, any> = {};
     if ('unreadCount' in values) patch.unread_count = values.unreadCount;
     if (values.last_message) {
-      patch.last_message_text = values.last_message.text;
-      patch.last_message_sender_id = values.last_message.sender_id;
-      patch.last_message_is_read = values.last_message.isRead;
-      patch.last_message_at = new Date().toISOString();
+      if ('text' in values.last_message) patch.last_message_text = values.last_message.text;
+      if ('sender_id' in values.last_message || 'senderId' in values.last_message) {
+        patch.last_message_sender_id = values.last_message.sender_id ?? values.last_message.senderId;
+      }
+      if ('isRead' in values.last_message) patch.last_message_is_read = values.last_message.isRead;
+      if ('timestamp' in values.last_message) patch.last_message_at = normalizeTimestamp(values.last_message.timestamp);
     }
-    if ('timestamp' in values) patch.last_message_at = new Date(values.timestamp).toISOString();
-    await supabase.from('chat_members').update(patch).eq('user_id', userId).eq('chat_id', chatId);
+    if ('timestamp' in values) patch.last_message_at = normalizeTimestamp(values.timestamp);
+    if (Object.keys(patch).length > 0) {
+      const { error } = await supabase.from('chat_members').update(patch).eq('user_id', userId).eq('chat_id', chatId);
+      if (error) throw error;
+    }
     notify(`user_chats/${userId}`, await loadPath(`user_chats/${userId}`));
     return;
   }
@@ -1905,48 +2024,8 @@ export function push(r: DbRef, value?: any): DbRef & { key: string; ref: DbRef; 
   if (value !== undefined) {
     if ((parts[0] === 'messages' || parts[0] === 'private_messages') && parts.length === 2) {
       const chatId = parts[1];
-      const row = {
-        id: key,
-        chat_id: chatId,
-        sender_id: value?.sender_id,
-        text: value?.text ?? value?.message ?? '',
-        media_url: value?.media_url || value?.imageUrl || value?.fileUrl || null,
-        media_type: value?.media_type || value?.type || null,
-        reply_to: value?.reply_to || null,
-        is_deleted: false,
-        created_at: new Date().toISOString(),
-      };
       promise = (async () => {
-        try {
-          await supabase.from('messages').insert(row);
-          const text = row.text || (row.media_url ? '📎 Media' : '');
-          await supabase
-            .from('chat_members')
-            .update({
-              last_message_text: text,
-              last_message_at: row.created_at,
-              last_message_sender_id: row.sender_id,
-              last_message_is_read: false,
-            })
-            .eq('chat_id', chatId);
-
-          try {
-            const { data: members } = await supabase.from('chat_members').select('user_id, unread_count').eq('chat_id', chatId);
-            for (const m of members || []) {
-              if (m.user_id !== row.sender_id) {
-                await supabase
-                  .from('chat_members')
-                  .update({ unread_count: (m.unread_count || 0) + 1 })
-                  .eq('chat_id', chatId)
-                  .eq('user_id', m.user_id);
-              }
-            }
-          } catch {
-            /* ignore */
-          }
-        } catch (e) {
-          console.warn('[supabaseRealtimeDb] push message error', e);
-        }
+        await persistMessage(chatId, key, value);
         notify(path, await loadPath(path));
       })();
     } else if (parts[0] === 'notifications' && parts.length === 2) {

@@ -37,6 +37,7 @@ import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
 import { AppSettings, UserProfile } from '../types';
 import { logTeachingEvent } from './teachingEventLogger';
+import { getLessonBoard, saveLessonBoard, getLessonAudio, saveLessonAudio } from './lessonPackageStore';
 
 export function getLocalCacheKey(prefix: string, topic: string, keySuffix: string | number): string {
   const cleanTopic = (topic || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
@@ -141,6 +142,26 @@ export class TeachingEngineService {
   private currentSessionId: string = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   private inFlightBoardPromises = new Map<string, Promise<TeachingBoardPerformance | null>>();
   private isPrefetchingNextBoard = false;
+
+  // Offline (device-prepared) boards hydrated at open time — zero network playback
+  private offlineBoards = new Map<number, TeachingBoardPerformance>();
+
+  /**
+   * Hydrate the engine with the full board set from a device lesson package
+   * (IndexedDB). After this, loadBoardPerformance/prefetchNextBoard serve every
+   * board from memory — no AI or TTS network calls for prepared boards.
+   */
+  public hydrateOfflineBoards(boards: TeachingBoardPerformance[]): void {
+    boards.forEach((perf, idx) => {
+      if (!perf) return;
+      const num = typeof perf.board_number === 'number' && perf.board_number > 0 ? perf.board_number : idx + 1;
+      this.offlineBoards.set(num - 1, perf);
+    });
+  }
+
+  public hasOfflineBoard(boardIndex: number): boolean {
+    return this.offlineBoards.has(boardIndex);
+  }
 
   constructor(appSettings: AppSettings, userProfile: UserProfile | null = null, voice: string = 'Altair') {
     this.appSettings = appSettings;
@@ -363,6 +384,87 @@ export class TeachingEngineService {
     }
 
     return perf;
+  }
+
+  /**
+   * OFFLINE PREP: Generate the FULL board set for a structure (every board) and
+   * prefetch TTS audio for every board, persisting everything to IndexedDB.
+   * Used by LessonPrepService so "Ready" means the whole topic is on the device.
+   *
+   * Cache order per board: localStorage → IndexedDB → AI generation.
+   * Cache order per audio: IndexedDB → engine TTS cache → network.
+   *
+   * Returns true ONLY when every board has a performance and (if it has speech)
+   * an audio payload cached on device.
+   */
+  public async prepareFullLesson(params: {
+    structure: TeachingStructure;
+    packageKey: string;
+    durationMode?: number;
+    voice?: string;
+    signal?: AbortSignal;
+    onProgress?: (p: { phase: 'board' | 'audio'; boardIndex: number; totalBoards: number }) => void;
+  }): Promise<boolean> {
+    const { structure, packageKey, signal, onProgress } = params;
+    if (!structure?.boards?.length) return false;
+
+    const mode = structure.duration_minutes || params.durationMode || 30;
+    const voice = params.voice || this.voice;
+    const total = structure.boards.length;
+
+    // Prep runs on a dedicated engine instance; point it at the prep structure
+    // so fetchSingleBoardFromAI builds prompts/cache keys against it.
+    this.currentStructure = structure;
+
+    for (let i = 0; i < total; i++) {
+      if (signal?.aborted) return false;
+      const boardNum = i + 1;
+      const boardPlan = structure.boards[i];
+      if (!boardPlan) return false;
+
+      // ── Board performance: localStorage → IndexedDB → AI ──────────────────
+      const perfCacheKey = getLocalCacheKey('perf', structure.topic, `${mode}_${boardNum}`);
+      let perf = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);
+      if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) {
+        perf = await getLessonBoard<TeachingBoardPerformance>(packageKey, i);
+      }
+      if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) {
+        onProgress?.({ phase: 'board', boardIndex: i, totalBoards: total });
+        perf = await this.fetchSingleBoardFromAI(boardPlan, this.userProfile?.display_name || 'Student', []);
+        if (!perf || (!perf.title && !perf.speech && !perf.board_actions)) return false;
+        // Guarantee the exact key the live playback path reads (boardNum = index + 1)
+        setCachedBoardItem(perfCacheKey, perf);
+      }
+      await saveLessonBoard(packageKey, i, perf);
+
+      // ── TTS audio: IndexedDB → engine cache → network ─────────────────────
+      const speechText = perf.speech?.trim();
+      if (speechText) {
+        const ttsCacheKey = `tts_perf_${structure.topic}_${mode}_${boardNum}_${voice}`;
+        let audioPayload = await getLessonAudio<any>(ttsCacheKey);
+        if (!audioPayload?.audio) {
+          onProgress?.({ phase: 'audio', boardIndex: i, totalBoards: total });
+          try {
+            audioPayload = await unifiedVoiceRouter.fetchSpeech(speechText, {
+              appSettings: this.appSettings,
+              voice,
+              cacheKey: ttsCacheKey,
+            });
+          } catch (ttsErr) {
+            console.warn(`[TeachingEngine] TTS prep failed for Board ${boardNum}:`, ttsErr);
+          }
+          if (audioPayload?.audio) {
+            await saveLessonAudio(ttsCacheKey, audioPayload);
+          } else {
+            // Ready requires audio for every board — fail so the user can retry
+            // (retry resumes: cached boards/audio are skipped).
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -604,6 +706,20 @@ export class TeachingEngineService {
       return cached;
     }
 
+    // Offline device-prepared package (zero network — hydrated from IndexedDB)
+    const offlinePerf = this.offlineBoards.get(requestedIndex);
+    if (offlinePerf && (offlinePerf.title || offlinePerf.speech || offlinePerf.board_actions)) {
+      this.currentBoardIndex = requestedIndex;
+      this.currentBoardPerformance = offlinePerf;
+
+      this.listeners.forEach((l) => l.onBoardLoaded?.(offlinePerf));
+      this.emitLegacySegment(offlinePerf);
+
+      // Stage Board N+1 from the offline package (its audio is already primed)
+      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      return offlinePerf;
+    }
+
     this.setRuntimeState('PREPARING');
     this.currentBoardIndex = requestedIndex;
     const boardPlan: TeachingBoardPlan = this.currentStructure.boards[requestedIndex];
@@ -696,6 +812,22 @@ export class TeachingEngineService {
     const mode = this.currentStructure.duration_minutes || 30;
     const nextBoardNum = nextIndex + 1;
     const perfCacheKey = getLocalCacheKey('perf', this.currentStructure.topic, `${mode}_${nextBoardNum}`);
+
+    // Offline device-prepared package (zero network — hydrated from IndexedDB)
+    const offlineNext = this.offlineBoards.get(nextIndex);
+    if (offlineNext && (offlineNext.title || offlineNext.speech || offlineNext.board_actions)) {
+      this.prefetchedBoardPerformance = offlineNext;
+      this.prefetchedBoardIndex = nextIndex;
+      if (offlineNext.speech) {
+        // Hits the primed engine memory cache — no network.
+        unifiedVoiceRouter.prefetchSpeech(offlineNext.speech.trim(), {
+          appSettings: this.appSettings,
+          voice: this.voice,
+          cacheKey: `tts_perf_${this.currentStructure.topic}_${mode}_${nextBoardNum}_${this.voice}`,
+        });
+      }
+      return;
+    }
 
     // If Board N+1 is already cached, make sure its audio is prefetched and stage it
     const existing = getCachedBoardItem<TeachingBoardPerformance>(perfCacheKey);

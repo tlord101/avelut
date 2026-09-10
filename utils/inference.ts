@@ -207,9 +207,10 @@ export const getResponseText = (response: any): string => {
  * Convert contents/parts to standard OpenAI/Alibaba chat messages
  * Supports both text and multi-modal image content
  */
-function paramsToChatMessages(params: any): { systemPrompt: string; messages: Array<{ role: string; content: any }> } {
+function paramsToChatMessages(params: any): { systemPrompt: string; messages: Array<{ role: string; content: any }>; hasImage: boolean } {
   let systemPrompt = '';
   const messages: Array<{ role: string; content: any }> = [];
+  let hasImage = false;
 
   if (params?.config?.systemInstruction) {
     const si = params.config.systemInstruction;
@@ -231,8 +232,9 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
       if (typeof c === 'string') {
         messages.push({ role, content: c });
       } else if (c?.parts && Array.isArray(c?.parts)) {
-        const hasImage = c.parts.some((p: any) => p.inlineData || p.imageUrl || p.image_url);
-        if (hasImage) {
+        const itemHasImage = c.parts.some((p: any) => p.inlineData || p.imageUrl || p.image_url);
+        if (itemHasImage) {
+          hasImage = true;
           const multiModalContent: any[] = [];
           for (const p of c.parts) {
             if (p.text) {
@@ -265,7 +267,7 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
     messages.push({ role: 'user', content: contents });
   }
 
-  return { systemPrompt, messages };
+  return { systemPrompt, messages, hasImage };
 }
 
 export const OPENROUTER_MODEL =
@@ -274,10 +276,18 @@ export const OPENROUTER_MODEL =
   'qwen/qwen3.7-flash';
 
 /**
- * Normalizes model names to OpenRouter Qwen 3.7 Flash
+ * Normalizes model names to OpenRouter models.
+ * For image/multi-modal requests, ensures a vision-capable model is targeted.
  */
-export function normalizeQwenModelName(model?: string, _hasImage: boolean = false): string {
-  return model?.trim() || OPENROUTER_MODEL;
+export function normalizeQwenModelName(model?: string, hasImage: boolean = false): string {
+  const trimmed = model?.trim();
+  if (hasImage) {
+    if (!trimmed || trimmed === 'qwen/qwen3.7-flash' || trimmed === 'qwen-vl-plus' || trimmed === 'qwen-vl-max') {
+      return 'google/gemini-2.5-flash';
+    }
+    return trimmed;
+  }
+  return trimmed || OPENROUTER_MODEL;
 }
 
 const FALLBACK_MODELS = [
@@ -289,14 +299,28 @@ const FALLBACK_MODELS = [
   'qwen/qwen-2.5-7b-instruct:free',
 ];
 
+const VISION_FALLBACK_MODELS = [
+  'google/gemini-2.5-flash',
+  'qwen/qwen-2.5-vl-72b-instruct',
+  'qwen/qwen3.7-flash',
+];
+
 /**
  * Call OpenRouter endpoint with model candidate fallbacks on 429 Rate Limits
  */
 async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promise<any> {
   const apiKey = getOpenRouterApiKey(appSettings);
-  const { messages } = paramsToChatMessages(params);
-  const primaryModel = appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL;
-  const candidateModels = Array.from(new Set([primaryModel, ...FALLBACK_MODELS]));
+  const { messages, hasImage } = paramsToChatMessages(params);
+  
+  let candidateModels: string[];
+  if (hasImage) {
+    const specifiedModel = params?.model || appSettings?.openrouter_model;
+    const primaryModel = normalizeQwenModelName(specifiedModel, true);
+    candidateModels = Array.from(new Set([primaryModel, ...VISION_FALLBACK_MODELS]));
+  } else {
+    const primaryModel = appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL;
+    candidateModels = Array.from(new Set([primaryModel, ...FALLBACK_MODELS]));
+  }
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -390,8 +414,11 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
  */
 async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings): AsyncGenerator<any, void, unknown> {
   const apiKey = getOpenRouterApiKey(appSettings);
-  const { messages } = paramsToChatMessages(params);
-  const model = appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL;
+  const { messages, hasImage } = paramsToChatMessages(params);
+  const specifiedModel = params?.model || appSettings?.openrouter_model;
+  const model = hasImage
+    ? normalizeQwenModelName(specifiedModel, true)
+    : (appSettings?.openrouter_model?.trim() || OPENROUTER_MODEL);
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -598,9 +625,11 @@ async function callAlibabaQwen(
   options?: AvelutAIOptions
 ): Promise<any> {
   const apiKey = getAlibabaApiKey(appSettings);
-  const { messages } = paramsToChatMessages(params);
-  const primaryModel = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
-  const candidateModels = Array.from(new Set([primaryModel, 'qwen-max', 'qwen-plus', 'qwen-turbo']));
+  const { messages, hasImage } = paramsToChatMessages(params);
+  const primaryModel = appSettings?.alibaba_model?.trim() || (hasImage ? 'qwen-vl-plus' : 'qwen3.7-flash');
+  const candidateModels = hasImage
+    ? Array.from(new Set([params?.model || primaryModel, 'qwen-vl-plus', 'qwen-vl-max']))
+    : Array.from(new Set([primaryModel, 'qwen-max', 'qwen-plus', 'qwen-turbo']));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -683,8 +712,10 @@ async function* callAlibabaQwenStream(
   options?: AvelutAIOptions
 ): AsyncGenerator<any, void, unknown> {
   const apiKey = getAlibabaApiKey(appSettings);
-  const { messages } = paramsToChatMessages(params);
-  const model = appSettings?.alibaba_model?.trim() || 'qwen3.7-flash';
+  const { messages, hasImage } = paramsToChatMessages(params);
+  const model = hasImage
+    ? (params?.model || 'qwen-vl-plus')
+    : (appSettings?.alibaba_model?.trim() || 'qwen3.7-flash');
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||

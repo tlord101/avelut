@@ -1811,7 +1811,9 @@ const App: React.FC = () => {
                     currentPageLabel={typeof customHeaderConfig?.title === 'string' ? customHeaderConfig.title : currentPageLabel}
                     title={typeof customHeaderConfig?.title !== 'string' ? customHeaderConfig?.title : undefined}
                     unreadCount={unreadCount}
-                    onNotificationsClick={() => setActiveItem('notifications')}
+                    notifications={notifications}
+                    onMarkAllAsRead={handleMarkAllNotificationsRead}
+                    onMarkAsRead={handleMarkNotificationRead}
                     onMenuClick={handleToggleMenu}
                     onMessengerClick={() => setActiveItem('messenger')}
                     onCalendarClick={() => setIsCalendarOpen(true)}

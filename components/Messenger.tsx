@@ -1,4 +1,4 @@
-import { auth, db, get, increment, limitToLast, off, onAuthStateChanged, onDisconnect, onValue, push, query, ref as dbRef, remove, serverTimestamp as firebaseServerTimestamp, set, storage, type FirebaseUser, update } from '@/lib/backend';
+import { auth, db, ensureDirectChat, get, limitToLast, off, onAuthStateChanged, onDisconnect, onValue, push, query, ref as dbRef, remove, serverTimestamp as firebaseServerTimestamp, set, storage, type FirebaseUser, update } from '@/lib/backend';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import type { UserProfile } from '../types';
@@ -1218,24 +1218,22 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Realtime active chats statuses (typing, recording)
-  const [chatStatuses, setChatStatuses] = useState<Record<string, { isTyping?: boolean; isRecording?: boolean }>>({});
+  const [chatStatuses, setChatStatuses] = useState<Record<string, Record<string, 'typing' | 'recording'>>>({});
 
   // Ref for my typing timeout
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTypingStatus = (status: 'typing' | 'recording' | 'idle') => {
     if (!firebaseUser || !activeChat) return;
-    const myId = firebaseUser.uid;
-    const otherId = activeChat.otherUser.uid;
-    const refPath = `user_chats/${otherId}/${activeChat.chatId}`;
+    if (status === 'idle') {
+      void updateTypingStatus(null);
+      return;
+    }
+
+    void updateTypingStatus(status);
     if (status === 'typing') {
-      update(dbRef(db, refPath), { isTyping: true, isRecording: false });
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => handleTypingStatus('idle'), 3000);
-    } else if (status === 'recording') {
-      update(dbRef(db, refPath), { isTyping: false, isRecording: true });
-    } else {
-      update(dbRef(db, refPath), { isTyping: false, isRecording: false });
     }
   };
 
@@ -1381,8 +1379,20 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   const safeStudyPartners = useMemo(() => (studyPartners && typeof studyPartners === 'object' && !Array.isArray(studyPartners)) ? studyPartners : {}, [studyPartners]);
   const safePartnerRequests = useMemo(() => (partnerRequests && typeof partnerRequests === 'object' && !Array.isArray(partnerRequests)) ? partnerRequests : {}, [partnerRequests]);
 
+  const chatsWithStatuses = useMemo(() => {
+    return safeChats.map((chat: any) => {
+      const otherUserId = chat?.otherUserId || chat?.otherUser?.uid;
+      const otherUserState = otherUserId ? chatStatuses[chat.id]?.[otherUserId] : null;
+      return {
+        ...chat,
+        isTyping: otherUserState === 'typing',
+        isRecording: otherUserState === 'recording',
+      };
+    });
+  }, [safeChats, chatStatuses]);
+
   const activeChats = useMemo(() => {
-    let list = safeChats.filter(c => {
+    let list = chatsWithStatuses.filter(c => {
       if (!c) return false;
       const partnerId = c.otherUserId || c.otherUser?.uid;
       return safeStudyPartners[partnerId] === true;
@@ -1403,7 +1413,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       if (aPinned !== bPinned) return bPinned - aPinned;
       return (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0);
     });
-  }, [safeChats, safeStudyPartners, chatSearchQuery, pinnedChatIds]);
+  }, [chatsWithStatuses, safeStudyPartners, chatSearchQuery, pinnedChatIds]);
 
   const confirmedStudyPartnersList = useMemo(() => {
     const list = safeAllUsers.filter(u => u && safeStudyPartners[u.uid] === true);
@@ -1452,61 +1462,17 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
   const selectedChatUser = activeChat?.otherUser || createFallbackChatUser(activeChat?.chatId || '');
 
-  const getUnreadCountForUser = useCallback((otherUserId: string) => {
-    if (!firebaseUser) return 0;
-    const chatId = [firebaseUser.uid, otherUserId].sort().join('_');
-    const chat = safeChats.find(item => item?.id === chatId);
-    return chat ? getUnreadCount(chat) : 0;
-  }, [safeChats, firebaseUser]);
-
-  const ensureChatThreadRecord = useCallback(async (otherUser: UserProfile) => {
-    if (!firebaseUser) return null;
-    const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
-    const currentThreadRef = dbRef(db, `user_chats/${firebaseUser.uid}/${chatId}`);
-    const recipientThreadRef = dbRef(db, `user_chats/${otherUser.uid}/${chatId}`);
-    const snapshot = await get(currentThreadRef);
-    const recipientSnapshot = await get(recipientThreadRef);
-    const now = Date.now();
-
-    if (!snapshot.exists()) {
-      await set(currentThreadRef, {
-        otherUserId: otherUser.uid,
-        timestamp: now,
-        unreadCount: 0,
-        last_message: {
-          text: 'Start a conversation',
-          senderId: firebaseUser.uid,
-          timestamp: now,
-          type: 'text',
-        },
-      });
-    }
-
-    if (!recipientSnapshot.exists()) {
-      await set(recipientThreadRef, {
-        otherUserId: firebaseUser.uid,
-        timestamp: now,
-        unreadCount: 0,
-        last_message: {
-          text: 'Start a conversation',
-          senderId: firebaseUser.uid,
-          timestamp: now,
-          type: 'text',
-        },
-      });
-    }
-
-    return chatId;
-  }, [firebaseUser]);
-
-  const openChatWithUser = useCallback((otherUser: UserProfile) => {
+  const openChatWithUser = useCallback(async (otherUser: UserProfile) => {
     if (!firebaseUser) return;
 
-    const chatId = [firebaseUser.uid, otherUser.uid].sort().join('_');
-    setActiveChat({ chatId, otherUser });
-
-    void ensureChatThreadRecord(otherUser);
-  }, [ensureChatThreadRecord, firebaseUser]);
+    try {
+      const chatId = await ensureDirectChat(otherUser.uid);
+      setActiveChat({ chatId, otherUser });
+    } catch (error: any) {
+      console.error('Failed to open direct chat:', error);
+      addToast(error?.message || 'Could not open this chat.', 'error');
+    }
+  }, [addToast, firebaseUser]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
@@ -1601,7 +1567,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   useEffect(() => {
     if (!firebaseUser) return;
     const userChatsRef = dbRef(db, `user_chats/${firebaseUser.uid}`);
-    onValue(userChatsRef, (snap) => {
+    const unsubscribeChats = onValue(userChatsRef, (snap) => {
       const rawVal = snap.val() || {};
       setChats(prevChats => {
         const safePrev = ensureArray(prevChats);
@@ -1615,9 +1581,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           return {
             id: chatId,
             ...details,
-            otherUser,
-            isTyping: !!details.isTyping,
-            isRecording: !!details.isRecording
+            otherUser
           };
         });
 
@@ -1649,6 +1613,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       });
       setIsLoading(false);
     });
+    return unsubscribeChats;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firebaseUser]);
 
@@ -1739,7 +1704,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     }
     const messagesRef = dbRef(db, `messages/${activeChat.chatId}`);
     const messagesQuery = query(messagesRef, limitToLast(50));
-    onValue(messagesQuery, (snap) => {
+    const unsubscribeMessages = onValue(messagesQuery, (snap) => {
       const cloudMsgs = Object.entries(snap.val() || {}).map(([id, msg]: any) => ({ id, ...msg })).sort((a, b) => a.timestamp - b.timestamp);
       setMessages(prev => {
         const safePrev = ensureArray(prev);
@@ -1753,32 +1718,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         return cloudMsgs;
       });
 
-      setOptimisticMessages(prev => ensureArray(prev).filter(opt => !cloudMsgs.some(cloud => cloud.timestamp === opt.timestamp)));
+      setOptimisticMessages(prev => ensureArray(prev).filter(opt => !cloudMsgs.some(cloud => cloud.id === opt.id)));
 
       setTimeout(() => scrollToBottom(cached.length === 0 ? ('instant' as ScrollBehavior) : 'smooth'), 40);
       if (firebaseUser) {
-        set(dbRef(db, `user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`), 0);
-
-        const updates: any = {};
-        let needsUpdate = false;
-        let lastMsgRead = false;
-        cloudMsgs.forEach((msg: any, index: number) => {
-          if (msg.senderId !== firebaseUser.uid && !msg.isRead) {
-            updates[`messages/${activeChat.chatId}/${msg.id}/isRead`] = true;
-            needsUpdate = true;
-            if (index === cloudMsgs.length - 1) lastMsgRead = true;
-          }
-        });
-        if (lastMsgRead) {
-          updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/last_message/isRead`] = true;
-          updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/last_message/isRead`] = true;
-        }
-        if (needsUpdate) {
-          update(dbRef(db, '/'), updates).catch(console.error);
-        }
+        void set(dbRef(db, `user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`), 0)
+          .catch(console.error);
       }
     });
-    return () => off(messagesRef);
+    return unsubscribeMessages;
   }, [activeChat, firebaseUser, userProfile.uid, scrollToBottom]);
 
   useEffect(() => {
@@ -1792,42 +1740,12 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     return [...msgs, ...optMsgs].sort((a, b) => (Number(a?.timestamp) || 0) - (Number(b?.timestamp) || 0));
   }, [messages, optimisticMessages]);
 
-  const updateChatMetaFromLatestMessage = async (chatId: string, otherUserId: string) => {
-    if (!firebaseUser) return;
-    const latestSnapshot = await get(dbRef(db, `messages/${chatId}`));
-    let summaryText = 'No messages yet';
-    let latestTimestamp = Date.now();
-    if (latestSnapshot.exists()) {
-      const cloudMsgs = Object.entries(latestSnapshot.val() || {}).map(([, msg]: any) => msg);
-      cloudMsgs.sort((a: any, b: any) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0));
-      const lastMessage: any = cloudMsgs[cloudMsgs.length - 1] || {};
-      latestTimestamp = Number(lastMessage?.timestamp || Date.now());
-      if (lastMessage?.type === 'voice') summaryText = '🎵 Voice message';
-      else if (lastMessage?.type === 'image') summaryText = '📷 Image file';
-      else if (lastMessage?.type === 'file') summaryText = '📄 Document file';
-      else summaryText = (lastMessage?.text || 'No messages yet').toString();
-    }
-
-    const updates: any = {};
-    const participantIds = Array.from(new Set([firebaseUser.uid, otherUserId]));
-
-    participantIds.forEach((participantId) => {
-      updates[`user_chats/${participantId}/${chatId}/last_message`] = { text: summaryText };
-      updates[`user_chats/${participantId}/${chatId}/timestamp`] = latestTimestamp;
-    });
-    await update(dbRef(db), updates);
-  };
-
   const handleDeleteChatThread = async (chat: any) => {
     if (!firebaseUser || !chat?.id || !chat?.otherUserId) return;
     const confirmed = window.confirm(`Delete this chat with ${chat.otherUser?.display_name || 'this user'}?`);
     if (!confirmed) return;
     try {
-      const updates: any = {};
-      updates[`user_chats/${firebaseUser.uid}/${chat.id}`] = null;
-      updates[`user_chats/${chat.otherUserId}/${chat.id}`] = null;
-      updates[`messages/${chat.id}`] = null;
-      await update(dbRef(db), updates);
+      await remove(dbRef(db, `user_chats/${firebaseUser.uid}/${chat.id}`));
       if (activeChat?.chatId === chat.id) {
         setActiveChat(null);
         setMessages([]);
@@ -1910,7 +1828,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     (async () => {
       try {
         await remove(dbRef(db, `messages/${activeChat.chatId}/${target.id}`));
-        await updateChatMetaFromLatestMessage(activeChat.chatId, activeChat.otherUser.uid);
         addToast('Message deleted.', 'success');
       } catch (error: any) {
         console.error('Failed to delete message:', error);
@@ -2292,54 +2209,35 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       return;
     }
 
-    const msgRef = push(dbRef(db, `messages/${activeChat.chatId}`));
-    const clientTimestamp = Date.now();
-    const optimisticId = msgRef.key || `${clientTimestamp}`;
-    const data: any = { senderId: firebaseUser.uid, text, type, timestamp: firebaseServerTimestamp(), ...extraData };
-
-    if (replyingTo) {
-      data.replyTo = {
-        id: replyingTo.id,
-        text: replyingTo.type === 'text' ? replyingTo.text : `[${replyingTo.type}]`,
-        senderId: replyingTo.senderId,
-        senderName: replyingTo.senderId === firebaseUser.uid ? 'You' : activeChat.otherUser.display_name
-      };
-      setReplyingTo(null);
-    }
-
-    const optimisticMessage = { id: optimisticId, ...data, timestamp: clientTimestamp };
-
-    setMessages(prev => [...prev, optimisticMessage]);
-    playBubbleSound();
+    let optimisticId: string | null = null;
     try {
-      await set(msgRef, data);
-      const updates: any = {};
-      let summaryText = text;
-      if (type === 'voice') summaryText = '🎵 Voice message';
-      else if (type === 'image') summaryText = '📷 Image file';
-      else if (type === 'file') summaryText = '📄 Document file';
-      const metaTimestamp = firebaseServerTimestamp();
-
-      const participantIds = Array.from(new Set([firebaseUser.uid, activeChat.otherUser.uid]));
-      participantIds.forEach((participantId) => {
-        updates[`user_chats/${participantId}/${activeChat.chatId}/last_message`] = {
-          text: summaryText,
-          senderId: firebaseUser.uid,
-          timestamp: metaTimestamp,
-          type,
-        };
-        updates[`user_chats/${participantId}/${activeChat.chatId}/timestamp`] = metaTimestamp;
-        updates[`user_chats/${participantId}/${activeChat.chatId}/otherUserId`] = participantId === firebaseUser.uid
-          ? activeChat.otherUser.uid
-          : firebaseUser.uid;
-      });
-      updates[`user_chats/${firebaseUser.uid}/${activeChat.chatId}/unreadCount`] = 0;
-      if (activeChat.otherUser.uid !== firebaseUser.uid) {
-        updates[`user_chats/${activeChat.otherUser.uid}/${activeChat.chatId}/unreadCount`] = increment(1);
+      const chatId = await ensureDirectChat(activeChat.otherUser.uid);
+      if (chatId !== activeChat.chatId) {
+        setActiveChat({ chatId, otherUser: activeChat.otherUser });
       }
-      await update(dbRef(db), updates);
+
+      const msgRef = push(dbRef(db, `messages/${chatId}`));
+      const clientTimestamp = Date.now();
+      optimisticId = msgRef.key || `${clientTimestamp}`;
+      const data: any = { senderId: firebaseUser.uid, text, type, timestamp: firebaseServerTimestamp(), ...extraData };
+
+      if (replyingTo) {
+        data.replyTo = {
+          id: replyingTo.id,
+          text: replyingTo.type === 'text' ? replyingTo.text : `[${replyingTo.type}]`,
+          senderId: replyingTo.senderId,
+          senderName: replyingTo.senderId === firebaseUser.uid ? 'You' : activeChat.otherUser.display_name
+        };
+        setReplyingTo(null);
+      }
+
+      setMessages(prev => [...prev, { id: optimisticId, ...data, timestamp: clientTimestamp }]);
+      playBubbleSound();
+      await set(msgRef, data);
     } catch (error: any) {
-      setMessages(prev => prev.filter(message => message.id !== optimisticId));
+      if (optimisticId) {
+        setMessages(prev => prev.filter(message => message.id !== optimisticId));
+      }
       console.error('Failed to send message:', error);
       addToast(error?.message || 'Message failed to send.', 'error');
     }
@@ -2442,33 +2340,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
     if (!firebaseUser) return;
     try {
       for (const recipientId of recipientUserIds) {
-        const chatId = [firebaseUser.uid, recipientId].sort().join('_');
+        const chatId = await ensureDirectChat(recipientId);
         const msgRef = push(dbRef(db, `messages/${chatId}`));
-        const data = { senderId: firebaseUser.uid, text, type, timestamp: Date.now(), is_forwarded: true };
-        await set(msgRef, data);
-        const updates: any = {};
-        let summaryText = text;
-        if (type === 'voice') summaryText = '🎵 Voice message';
-        else if (type === 'image') summaryText = '📷 Image file';
-        else if (type === 'file') summaryText = '📄 Document file';
-        const participantIds = Array.from(new Set([firebaseUser.uid, recipientId]));
-        participantIds.forEach((participantId) => {
-          updates[`user_chats/${participantId}/${chatId}/last_message`] = {
-            text: summaryText,
-            senderId: firebaseUser.uid,
-            timestamp: Date.now(),
-            type,
-          };
-          updates[`user_chats/${participantId}/${chatId}/timestamp`] = Date.now();
-          updates[`user_chats/${participantId}/${chatId}/otherUserId`] = participantId === firebaseUser.uid
-            ? recipientId
-            : firebaseUser.uid;
+        await set(msgRef, {
+          senderId: firebaseUser.uid,
+          text,
+          type,
+          timestamp: firebaseServerTimestamp(),
+          is_forwarded: true,
         });
-        updates[`user_chats/${firebaseUser.uid}/${chatId}/unreadCount`] = 0;
-        if (recipientId !== firebaseUser.uid) {
-          updates[`user_chats/${recipientId}/${chatId}/unreadCount`] = increment(1);
-        }
-        await update(dbRef(db), updates);
       }
       addToast('Message forwarded successfully!', 'success');
     } catch (err: any) {
@@ -2861,7 +2741,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
                     </div>
                     {getUnreadCount(c) > 0 && (
-                      <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
                         {getUnreadCount(c) > 99 ? '99+' : getUnreadCount(c)}
                       </span>
                     )}
@@ -3130,7 +3010,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 );
               })}
 
-              {activeChat && chats.find(c => c.chatId === activeChat.chatId)?.isTyping && (
+              {activeChat && chatStatuses[activeChat.chatId]?.[activeChat.otherUser.uid] === 'typing' && (
                 <div className="flex justify-start mb-6 w-full max-w-[85%] pr-14 group transition-all duration-300 transform animate-in fade-in slide-in-from-bottom-2">
                   <div className="flex items-end gap-2">
                     <div className="w-[38px] h-[38px] shrink-0 rounded-full overflow-hidden border border-neutral-100 dark:border-transparent shadow-sm select-none pointer-events-none">
@@ -3169,7 +3049,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 </div>
               )}
               {isBlocked || isBlockingMe ? (
-                <div className="p-3 text-center text-sm font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl">
+                <div className="p-3 text-center text-sm font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl">
                   {isBlocked ? "You have blocked this user." : "This user is unavailable."}
                 </div>
               ) : studyPartners[selectedChatUser.uid] === true || selectedChatUser.uid === firebaseUser?.uid ? (
@@ -3215,7 +3095,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                         <button
                           type="button"
                           onClick={() => declinePartnerRequest(selectedChatUser)}
-                          className="px-4 py-2 bg-white dark:bg-black hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl transition-all select-none shadow-sm cursor-pointer"
+                          className="px-4 py-2 bg-white dark:bg-black hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold rounded-xl transition-all select-none shadow-sm cursor-pointer"
                         >
                           Decline
                         </button>
@@ -3445,17 +3325,11 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
                 onClick={async () => {
                   if (!firebaseUser) return;
                   try {
-                    const updates: any = {};
-                    for (const chatId of selectedChatIds) {
-                      const chat = chats.find(c => c.id === chatId);
-                      const otherUserId = chat?.otherUserId || chat?.otherUser?.uid;
-                      updates[`user_chats/${firebaseUser.uid}/${chatId}`] = null;
-                      if (otherUserId) {
-                        updates[`user_chats/${otherUserId}/${chatId}`] = null;
-                      }
-                      updates[`messages/${chatId}`] = null;
-                    }
-                    await update(dbRef(db), updates);
+                    await Promise.all(
+                      selectedChatIds.map((chatId) =>
+                        remove(dbRef(db, `user_chats/${firebaseUser.uid}/${chatId}`))
+                      )
+                    );
                     if (activeChat && selectedChatIds.includes(activeChat.chatId)) {
                       setActiveChat(null);
                       setMessages([]);
@@ -3543,7 +3417,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             </select>
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowReportModal(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleReportSubmit} className="px-4 py-2 text-sm font-black text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors">Submit Report</button>
+              <button onClick={handleReportSubmit} className="px-4 py-2 text-sm font-black text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors">Submit Report</button>
             </div>
           </div>
         </div>
@@ -3602,7 +3476,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           studyPartners={safeStudyPartners}
           partnerRequests={safePartnerRequests}
           onOpenChat={(user) => {
-            openChatWithUser(user);
+            void openChatWithUser(user);
             setIsPartnerModalOpen(false);
           }}
           sendPartnerRequest={sendPartnerRequest}

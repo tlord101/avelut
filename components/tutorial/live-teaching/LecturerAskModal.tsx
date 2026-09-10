@@ -254,7 +254,7 @@ export const LecturerAskModal: React.FC<LecturerAskModalProps> = ({
             type="button"
             onClick={handleDone}
             disabled={isProcessing || (!transcript.trim() && !imagePreview)}
-            className="flex-1 h-12 rounded-2xl bg-[#0066FF] hover:bg-blue-600 disabled:opacity-40 text-white font-bold text-sm"
+            className="flex-1 h-12 rounded-2xl bg-[#0066FF] hover:bg-brand-600 disabled:opacity-40 text-white font-bold text-sm"
           >
             {isProcessing ? 'Answering…' : 'Done — ask'}
           </button>

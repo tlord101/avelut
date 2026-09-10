@@ -337,4 +337,28 @@ export const PageSkeleton: React.FC = () => (
     </div>
 );
 
+// ---------------------------------------------------------------------------
+// Progress Summary skeleton — per-section loading for the Academic Progress card
+// ---------------------------------------------------------------------------
+export const ProgressSummarySkeleton: React.FC = () => (
+    <div className="rounded-3xl border border-gray-200 dark:border-transparent bg-white dark:bg-[#0A0A0A] p-6 md:p-8 space-y-5">
+        <div className="flex items-center justify-between">
+            <div className="space-y-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-6 w-52" />
+            </div>
+            <Skeleton className="h-7 w-12 rounded-lg" />
+        </div>
+        <Skeleton className="h-3.5 w-full rounded-full" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="p-4 rounded-2xl border border-gray-100 bg-gray-50 dark:bg-slate-900/50 space-y-2">
+                    <Skeleton className="h-2.5 w-20" />
+                    <Skeleton className="h-5 w-14" />
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
 export default Skeleton;
