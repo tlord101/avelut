@@ -1042,18 +1042,6 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
   const pendingIncomingCount = incomingUsersList.length;
   const pendingSentCount = sentUsersList.length;
 
-  const discoveryUsersList = useMemo(() => {
-    let list = safeAllUsers.filter(u => u && u.uid !== firebaseUser?.uid);
-    if (discoverySearchQuery.trim()) {
-      const q = discoverySearchQuery.toLowerCase();
-      list = list.filter(u =>
-        (u?.display_name || '').toLowerCase().includes(q) ||
-        (u?.department_id || '').toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [safeAllUsers, discoverySearchQuery, firebaseUser]);
-
   const userMap = useMemo(() => new Map(safeAllUsers.filter(user => user && user.uid).map(user => [user.uid, user])), [safeAllUsers]);
 
   const userMapRef = useRef(userMap);
