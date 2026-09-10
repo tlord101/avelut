@@ -2722,10 +2722,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           className="fixed md:absolute bottom-24 md:bottom-6 right-6 flex items-center justify-center w-14 h-14 rounded-full bg-[#141414] text-[#FAFAFA] hover:bg-[#1C1C1C] border border-[#2A2A2A] shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 z-40 cursor-pointer"
           title="New Chat"
         >
-          <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <i className="bi bi-chat-dots-fill text-2xl leading-none" aria-hidden="true" />
           {pendingIncomingCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-rose-600 text-white font-black text-[11px] min-w-[22px] h-[22px] px-1 rounded-full border-2 border-white dark:border-black flex items-center justify-center shadow-md animate-pulse">
               {pendingIncomingCount > 99 ? '99+' : pendingIncomingCount}
