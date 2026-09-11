@@ -65,7 +65,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-0 top-full mt-2 w-[92vw] sm:w-96 max-w-[420px] bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl border border-neutral-200/80 dark:border-white/10 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 origin-top-right transition-all"
+      className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] sm:w-96 max-w-[min(420px,calc(100vw-1.5rem))] bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl border border-neutral-200/80 dark:border-white/10 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 origin-top-right transition-all max-h-[calc(85vh-3.5rem)] flex flex-col"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-neutral-100 dark:border-white/10 bg-neutral-50/50 dark:bg-white/[0.02]">
@@ -93,7 +93,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
       </div>
 
       {/* Notifications List (Max 5) */}
-      <div className="max-h-[380px] overflow-y-auto divide-y divide-neutral-100 dark:divide-white/5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex-1 max-h-[380px] overflow-y-auto divide-y divide-neutral-100 dark:divide-white/5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {recentNotifications.length > 0 ? (
           recentNotifications.map((notification) => (
             <div

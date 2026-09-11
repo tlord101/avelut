@@ -1560,46 +1560,57 @@ export async function set(r: DbRef, value: any): Promise<void> {
     return;
   }
 
-  if (parts[0] === 'notifications' && parts.length === 3) {
+  if (parts[0] === 'notifications') {
     const userId = parts[1];
     const notifId = parts[2];
-    if (value === null) {
-      try {
-        await supabase.from('notifications').delete().eq('id', notifId);
-      } catch (e) {
-        console.warn('[supabaseRealtimeDb] delete notification error', e);
-      }
-    } else {
-      const metadata = {
-        ...(typeof value.metadata_json === 'object' && value.metadata_json ? value.metadata_json : {}),
-        ...(typeof value.data === 'object' && value.data ? value.data : {}),
-        ...(value.route ? { route: value.route } : {}),
-        ...(value.category ? { category: value.category } : {}),
-        ...(value.audience ? { audience: value.audience } : {}),
-        ...(value.timestamp ? { timestamp: value.timestamp } : {}),
-      };
-      try {
-        const payload = {
-          id: notifId,
-          user_id: userId,
-          title: value.title ?? null,
-          message: value.message || value.body || '',
-          type: value.type || 'general',
-          metadata_json: metadata,
-          action_url: value.action_url || value.actionUrl || null,
-          is_read: value.is_read ?? false,
-        };
-        const { error: insErr } = await supabase.from('notifications').insert(payload);
-        if (insErr) {
-          await supabase.from('notifications').update(payload).eq('id', notifId);
+    if (parts.length === 3) {
+      if (value === null) {
+        try {
+          await supabase.from('notifications').delete().eq('id', notifId);
+        } catch (e) {
+          console.warn('[supabaseRealtimeDb] delete notification error', e);
         }
-      } catch (e) {
-        console.warn('[supabaseRealtimeDb] notification write error', e);
+      } else {
+        const metadata = {
+          ...(typeof value.metadata_json === 'object' && value.metadata_json ? value.metadata_json : {}),
+          ...(typeof value.data === 'object' && value.data ? value.data : {}),
+          ...(value.route ? { route: value.route } : {}),
+          ...(value.category ? { category: value.category } : {}),
+          ...(value.audience ? { audience: value.audience } : {}),
+          ...(value.timestamp ? { timestamp: value.timestamp } : {}),
+        };
+        try {
+          const payload = {
+            id: notifId,
+            user_id: userId,
+            title: value.title ?? null,
+            message: value.message || value.body || '',
+            type: value.type || 'general',
+            metadata_json: metadata,
+            action_url: value.action_url || value.actionUrl || null,
+            is_read: value.is_read ?? false,
+          };
+          const { error: insErr } = await supabase.from('notifications').insert(payload);
+          if (insErr) {
+            await supabase.from('notifications').update(payload).eq('id', notifId);
+          }
+        } catch (e) {
+          console.warn('[supabaseRealtimeDb] notification write error', e);
+        }
       }
+      setLocalCache(`notifications/${userId}/${notifId}`, value);
+      notify(`notifications/${userId}`, await loadPath(`notifications/${userId}`));
+      return;
+    } else if (parts.length === 4 && notifId) {
+      const fieldName = parts[3];
+      try {
+        await supabase.from('notifications').update({ [fieldName]: value }).eq('id', notifId);
+      } catch (e) {
+        console.warn('[supabaseRealtimeDb] notification field update error', e);
+      }
+      notify(`notifications/${userId}`, await loadPath(`notifications/${userId}`));
+      return;
     }
-    setLocalCache(`notifications/${userId}/${notifId}`, value);
-    notify(`notifications/${userId}`, await loadPath(`notifications/${userId}`));
-    return;
   }
 
   if ((parts[0] === 'messages' || parts[0] === 'private_messages') && parts.length === 3) {

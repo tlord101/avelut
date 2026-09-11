@@ -135,7 +135,9 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
     if (onPrepare) {
       onPrepare(mode);
     } else {
-      void startPrep(mode);
+      void startPrep(mode).catch((err) => {
+        console.error('[LessonDurationModal] startPrep error:', err);
+      });
     }
   };
 

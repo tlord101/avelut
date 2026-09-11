@@ -1,4 +1,4 @@
-import { auth as firebaseAuth, db, firebaseSignOut, get, off, onAuthStateChanged, onDisconnect, onValue, push, ref as dbRef, serverTimestamp, set, type FirebaseUser, update, updateProfile } from '@/lib/backend';
+import { auth as firebaseAuth, db, firebaseSignOut, get, off, onAuthStateChanged, onDisconnect, onValue, push, ref as dbRef, serverTimestamp, set, type FirebaseUser, update, updateProfile, supabase } from '@/lib/backend';
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import { readCachedJson, writeCachedJson, clearCachedKey, initCacheFromSqlite } from './utils/cache';
 import { DEFAULT_USAGE_SETTINGS } from './utils/appSettings';
@@ -336,6 +336,7 @@ const AppUpdateDropModal: React.FC<{
 
 const normalizeRouteSegment = (segment: string): string => {
     const s = (segment || '').toLowerCase().replace(/-/g, '_');
+    if (s === 'dashboard') return 'chat';
     if (s === 'studyguide') return 'study_guide';
     if (s === 'notebooks') return 'study_guide';
     return s;
@@ -362,7 +363,7 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 ]);
 
 const resolveActiveItemFromPath = (pathname: string): string => {
-    if (pathname === '/' || pathname === '/chat' || pathname === '/avelut-ai') return 'chat';
+    if (pathname === '/' || pathname === '/chat' || pathname === '/avelut-ai' || pathname === '/dashboard') return 'chat';
     const rawSegment = pathname.substring(1).split('/')[0];
     if (!rawSegment) return 'chat';
     let decodedSegment = rawSegment;
@@ -1486,31 +1487,52 @@ const App: React.FC = () => {
 
     const handleMarkNotificationRead = async (id: string) => {
         if (!user) return;
-        const notificationRef = dbRef(db, `notifications/${user.uid}/${id}`);
+        const target = notifications.find(n => n.id === id);
+        if (!target || target.is_read) return;
+
+        const previousNotifications = notifications;
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+
         try {
-            await update(notificationRef, { is_read: true });
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id)
+                .eq('user_id', user.uid);
+
+            if (error) throw error;
         } catch (err: any) {
             console.error("Error marking notification read:", err);
+            setNotifications(previousNotifications);
             addToast("Could not update notification.", "error");
         }
     };
 
     const handleMarkAllNotificationsRead = async () => {
         if (!user) return;
-        const notificationsRef = dbRef(db, `notifications/${user.uid}`);
+        const unreadCountBefore = notifications.filter(n => !n.is_read).length;
+        if (unreadCountBefore === 0) return;
+
+        const previousNotifications = notifications;
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+
         try {
-            const snapshot = await get(notificationsRef);
-            const data = snapshot.val() || {};
-            const updates: any = {};
-            Object.keys(data).forEach(id => {
-                if (!data[id].is_read) { updates[`${id}/is_read`] = true; }
-            });
-            if (Object.keys(updates).length > 0) {
-                await update(notificationsRef, updates);
+            const { data, error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', user.uid)
+                .eq('is_read', false)
+                .select();
+
+            if (error) throw error;
+
+            const updatedCount = data ? data.length : unreadCountBefore;
+            if (updatedCount > 0) {
                 addToast('All notifications marked as read.', 'success');
             }
         } catch (error: any) {
             console.error("Error clearing notifications:", error);
+            setNotifications(previousNotifications);
             addToast("Could not clear notifications.", "error");
         }
     };

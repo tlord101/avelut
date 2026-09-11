@@ -75,7 +75,7 @@ export function useLessonPrep(params: UseLessonPrepParams) {
         userProfile,
         appSettings,
       };
-      await lessonPrepService.startPrep(prepParams);
+      return await lessonPrepService.startPrep(prepParams);
     },
     [resolvedUserId, topicTitle, courseName, syllabusContext, userProfile, appSettings]
   );
