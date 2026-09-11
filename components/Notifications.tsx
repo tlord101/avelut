@@ -40,7 +40,7 @@ const normalizeRouteTarget = (route: string): string => {
 
 const isKnownRouteTarget = (route: string): boolean => {
     return new Set([
-        'dashboard',
+        'chat',
         'study_guide',
         'messenger',
         'study_partners',

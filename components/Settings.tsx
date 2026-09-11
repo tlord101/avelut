@@ -168,7 +168,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       <div className="sticky top-0 z-20 bg-white dark:bg-[#111111] px-4 py-3 flex items-center gap-4 border-b border-neutral-200/80 dark:border-white/10">
         <button
           type="button"
-          onClick={() => onNavigate('dashboard')}
+          onClick={() => onNavigate('chat')}
           className="p-1 -ml-1 text-neutral-700 dark:text-neutral-200"
           aria-label="Back"
         >

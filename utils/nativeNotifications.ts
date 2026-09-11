@@ -14,7 +14,7 @@ const resolveNotificationScreen = (data: Record<string, any>): string | null => 
 
   const normalized = route.replace(/^\//, '').replace(/-/g, '_');
   const allowedScreens = new Set([
-    'dashboard',
+    'chat',
     'study_guide',
     'messenger',
     'leaderboard',
@@ -203,7 +203,7 @@ export const initNativeNotifications = async (
       // Handle screen navigation
       if (data.screen) {
         const screenMap: Record<string, string> = {
-          dashboard: 'dashboard',
+          dashboard: 'chat',
           study_guide: 'study_guide',
           exam: 'exam',
           messenger: 'messenger',

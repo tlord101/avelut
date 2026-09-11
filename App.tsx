@@ -29,6 +29,7 @@ const RefillCreditsWeb = lazy(() => import('./components/marketing/RefillCredits
 const PlansWeb = lazy(() => import('./components/marketing/PlansWeb').then(m => ({ default: m.PlansWeb })));
 const PaymentSuccessWeb = lazy(() => import('./components/marketing/PaymentSuccessWeb').then(m => ({ default: m.PaymentSuccessWeb })));
 import { Sidebar, FloatingMenuButton } from './components/Sidebar';
+import { useSidebarGesture } from './hooks/useSidebarGesture';
 import { Header } from './components/Header';
 import { NativePullToRefresh } from './components/NativePullToRefresh';
 import { MainContent } from './MainContent';
@@ -126,6 +127,13 @@ const PWAInstallBannerOverlay: React.FC = () => {
             return localStorage.getItem('pwa_install_dismissed') === 'true';
         }
         return false;
+    });
+
+    const { mainRef, overlayRef, sidebarRef } = useSidebarGesture({
+        isOpen: isMobileSidebarOpen,
+        onOpen: () => setIsMobileSidebarOpen(true),
+        onClose: () => setIsMobileSidebarOpen(false),
+        enabled: true,
     });
     const canTriggerNativeInstall = !!deferredPrompt;
 
@@ -343,7 +351,6 @@ const normalizeRouteSegment = (segment: string): string => {
 };
 
 const ALLOWED_ROUTE_ITEMS = new Set([
-    'dashboard',
     'leaderboard',
     'study_guide',
     'visual_solver',
@@ -935,7 +942,7 @@ const App: React.FC = () => {
             
             if (url.protocol.replace(':', '') === 'avelut' && url.host === 'payment-success') {
                 addToast('Payment Successful! Refreshing profile...', 'success');
-                setActiveItem('dashboard');
+                setActiveItem('chat');
                 return;
             }
             if (url.protocol.replace(':', '') === 'avelut' && url.host === 'action') {
@@ -1827,8 +1834,10 @@ const App: React.FC = () => {
                     setActiveConversationId(null);
                     setActiveItem('chat');
                 }}
+                overlayRef={overlayRef}
+                sidebarRef={sidebarRef}
             />
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            <main ref={mainRef as any} className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <Header 
                     activeItem={activeItem}
                     currentPageLabel={typeof customHeaderConfig?.title === 'string' ? customHeaderConfig.title : currentPageLabel}
@@ -1859,7 +1868,7 @@ const App: React.FC = () => {
                 <div 
                     id="main-scroll-container"
                     className={
-                        activeItem === 'chat' || activeItem === 'dashboard' || activeItem === 'messenger' || activeItem === 'voice_tutorial' || activeItem === 'study_guide'
+                        activeItem === 'chat' || activeItem === 'messenger' || activeItem === 'voice_tutorial' || activeItem === 'study_guide'
                         ? "flex-1 min-h-0 overflow-hidden flex flex-col"
                         : "flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden content-with-bottom-nav isolate"
                     }
@@ -1918,7 +1927,7 @@ const App: React.FC = () => {
                       setActiveItem('visual_solver');
                   }
               }}
-              isVisible={activeItem !== 'chat' && activeItem !== 'dashboard' && activeItem !== 'voice_tutorial' && !customHeaderConfig?.hideBottomNav}
+              isVisible={activeItem !== 'chat' && activeItem !== 'voice_tutorial' && !customHeaderConfig?.hideBottomNav}
               userProfile={userProfile}
             />
             <GuidedTour 

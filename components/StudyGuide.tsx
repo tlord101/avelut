@@ -342,7 +342,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                         type="button"
                         onClick={() => {
                             if (onNavigate) {
-                                onNavigate('dashboard');
+                                onNavigate('chat');
                             } else {
                                 window.dispatchEvent(new CustomEvent('app-go-back'));
                             }

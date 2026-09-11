@@ -1,5 +1,5 @@
 import { db, off, onValue, ref as dbRef } from '@/lib/backend';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import type { UserProfile, ChatConversation } from '../types';
 import { Chat } from './Chat';
 import { getLocalConversations } from '../services/chatStorageService';
@@ -26,9 +26,6 @@ export default function AvelutAI({
   activeConversationId,
   onSelectConversation,
 }: AvelutAIProps) {
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const swipeTriggeredRef = useRef(false);
-
   useEffect(() => {
     if (!userProfile?.uid || !onConversationsUpdate) return;
     let isMounted = true;
@@ -86,60 +83,8 @@ export default function AvelutAI({
     };
   }, [userProfile?.uid, onConversationsUpdate]);
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-      touchStartRef.current = null;
-      return;
-    }
-    swipeTriggeredRef.current = false;
-    touchStartRef.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-      time: Date.now(),
-    };
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartRef.current || swipeTriggeredRef.current || !onOpenMenu) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - touchStartRef.current.x;
-    const diffY = currentY - touchStartRef.current.y;
-
-    if (diffX > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.25) {
-      swipeTriggeredRef.current = true;
-      touchStartRef.current = null;
-      onOpenMenu();
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartRef.current || swipeTriggeredRef.current || !onOpenMenu) {
-      touchStartRef.current = null;
-      return;
-    }
-    const currentX = e.changedTouches[0].clientX;
-    const currentY = e.changedTouches[0].clientY;
-    const diffX = currentX - touchStartRef.current.x;
-    const diffY = currentY - touchStartRef.current.y;
-    const elapsed = Date.now() - touchStartRef.current.time;
-
-    if (diffX >= 40 && Math.abs(diffX) > Math.abs(diffY) * 1.25 && elapsed < 350) {
-      swipeTriggeredRef.current = true;
-      onOpenMenu();
-    }
-    touchStartRef.current = null;
-  };
-
   return (
-    <div 
-      className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white dark:bg-[#121212]"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white dark:bg-black">
       <Chat
         userProfile={userProfile}
         onNavigate={onNavigate}

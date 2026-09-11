@@ -33,17 +33,17 @@ export interface HeaderProps {
   hasMessages?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
+export const Header: React.FC<HeaderProps> = ({
   activeItem,
-  currentPageLabel, 
+  currentPageLabel,
   title,
-  onNotificationsClick, 
-  unreadCount = 0, 
+  onNotificationsClick,
+  unreadCount = 0,
   notifications = [],
   onMarkAllAsRead,
   onMarkAsRead,
-  onMenuClick, 
-  onMessengerClick, 
+  onMenuClick,
+  onMessengerClick,
   onCalendarClick,
   unreadMessagesCount = 0,
   rightActions,
@@ -64,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const isAiPage = activeItem === 'chat' || activeItem === 'dashboard';
+  const isAiPage = activeItem === 'chat';
   const isFloating = className?.includes('absolute') || className?.includes('fixed');
 
   // Handle click outside and Escape key to close dropdown
@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [isMenuOpen]);
 
   return (
-    <header 
+    <header
       className={`z-40 flex items-center justify-between w-full ${
         isFloating
           ? className
@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
         {leftActions ? (
           leftActions
         ) : (
-          <button 
+          <button
             type="button"
             onClick={onMenuClick}
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white dark:bg-[#212124] shadow-md hover:shadow-lg border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-800 dark:text-white transition-all active:scale-95 cursor-pointer relative shrink-0 pointer-events-auto"
@@ -439,4 +439,4 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
     </header>
   );
-};
+};
