@@ -296,6 +296,9 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
             durationMode: mode,
             userProfile,
             appSettings: resolvedAppSettings,
+        }).catch((err: any) => {
+            console.error('[VoiceTutorialPage] startPrep error:', err);
+            addToast?.(err?.message || 'Failed to prepare lesson.', 'error');
         });
 
         addToast('Preparing lesson in background. You can leave this page anytime — we’ll notify you when ready!', 'info');

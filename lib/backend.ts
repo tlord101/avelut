@@ -215,6 +215,7 @@ const messaging = null;
 const functions = null;
 
 export {
+  supabase,
   db,
   storage,
   auth,

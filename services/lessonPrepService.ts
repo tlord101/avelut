@@ -727,6 +727,8 @@ export class LessonPrepService {
         throw new Error('Failed to generate lesson structure.');
       }
 
+      engine.setStructure(structure);
+
       await putCheckpointStructure(key, structure);
       await saveLessonStructure(key, structure);
 

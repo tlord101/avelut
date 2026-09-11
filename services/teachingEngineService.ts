@@ -205,6 +205,10 @@ export class TeachingEngineService {
     this.currentBoardIndex = 0;
   }
 
+  public setCurrentStructure(structure: TeachingStructure) {
+    this.setStructure(structure);
+  }
+
   public getCurrentBoardPerformance(): TeachingBoardPerformance | null {
     return this.currentBoardPerformance;
   }
@@ -895,9 +899,16 @@ export class TeachingEngineService {
     if (!ai) throw new Error('AI client could not be initialized');
 
     const resolvedStudentName = studentName || this.userProfile?.display_name || 'Student';
+    const activeTopic = this.currentStructure?.topic || boardPlan?.topic || 'Academic Concept';
+    const activeStructure = this.currentStructure || {
+      topic: activeTopic,
+      boards: [boardPlan],
+      duration_minutes: 30,
+    };
+
     const prompt = buildSingleBoardPrompt({
-      topic: this.currentStructure!.topic,
-      fullStructure: this.currentStructure!,
+      topic: activeTopic,
+      fullStructure: activeStructure,
       currentBoardPlan: boardPlan,
       studentName: resolvedStudentName,
       completedBoardsSummary,
