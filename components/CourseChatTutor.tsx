@@ -14,7 +14,12 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { XIcon } from './icons/XIcon';
-import { TypingIndicator } from './TypingIndicator';
+import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
+import {
+  getOrGenerateTopicStructure,
+  saveTopicStructureProgress,
+  TopicStructureData,
+} from '../services/topicStructureService';
 import type { Course, Topic, UserProfile } from '../types';
 
 const PlusIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -96,6 +101,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitCost, setLimitCost] = useState(1);
+  const [topicStructure, setTopicStructure] = useState<TopicStructureData | null>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -107,8 +113,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   // Check live tutorial access
   const liveAccess = hasLiveTutorialAccess(userProfile);
 
-
-
   const handleTriggerLiveTutorial = useCallback(() => {
     if (!liveAccess.allowed) {
       setLimitCost(450);
@@ -118,9 +122,32 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     onOpenVoiceTutorial();
   }, [liveAccess.allowed, onOpenVoiceTutorial]);
 
+  // Load or generate topic structure JSON stored on the user's device
+  useEffect(() => {
+    let isMounted = true;
+    getOrGenerateTopicStructure({
+      topicKey: topic.topic_id || topic.topic_name,
+      topicTitle: topic.topic_name,
+      courseTitle: course.course_name,
+      context: topic.topic_context || topic.start_point,
+      userProfile,
+      appSettings,
+    }).then((struct) => {
+      if (isMounted && struct) {
+        setTopicStructure(struct);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [topic.topic_id, topic.topic_name, topic.topic_context, topic.start_point, course.course_name, userProfile, appSettings]);
+
   // Configure Main App Header for Course Chat Tutor
   useEffect(() => {
     if (setCustomHeaderConfig) {
+      const activeStepNumber = (topicStructure?.currentStepIndex ?? 0) + 1;
+      const totalSteps = topicStructure?.steps?.length || 4;
+
       setCustomHeaderConfig({
         hideBottomNav: true,
         hideTitle: true,
@@ -138,7 +165,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               <span className="hidden sm:inline">Back</span>
             </button>
 
-            {/* Live Tutorial Button — Enlarged with high visibility & padlock gating */}
+            {/* Live Tutorial Button */}
             <button
               onClick={handleTriggerLiveTutorial}
               className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#2563EB]/30 dark:border-[#3B82F6]/30 hover:border-[#2563EB] dark:hover:border-[#3B82F6] bg-white dark:bg-[#141414] hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
@@ -156,11 +183,16 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               )}
             </button>
 
-            {/* Topic & Course Info */}
+            {/* Topic & Course Info with Step Progress Pill */}
             <div className="min-w-0 flex flex-col justify-center ml-1">
-              <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
-                {course.course_code || course.course_name}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
+                  {course.course_code || course.course_name}
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#3B82F6] text-[9px] font-extrabold border border-[#2563EB]/20">
+                  Step {activeStepNumber}/{totalSteps}
+                </span>
+              </div>
               <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[110px] sm:max-w-[220px] md:max-w-[320px]">
                 {topic.topic_name}
               </h2>
@@ -175,7 +207,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
         setCustomHeaderConfig(null);
       }
     };
-  }, [setCustomHeaderConfig, onBack, handleTriggerLiveTutorial, course, topic, liveAccess.allowed]);
+  }, [setCustomHeaderConfig, onBack, handleTriggerLiveTutorial, course, topic, liveAccess.allowed, topicStructure]);
 
   const toggleUserMessageExpand = (id: string) => {
     setExpandedUserMessageIds((prev) => {
@@ -216,7 +248,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       void initFirstBiteSizedStep();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [topicStructure]);
 
   const initFirstBiteSizedStep = async () => {
     const ai = createAvelutAI(appSettings, userProfile, {
@@ -236,23 +268,30 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setMessages([initialPlaceholder]);
     setStreamingMsgId(starterAiMsgId);
 
+    const activeStep = topicStructure?.steps?.[topicStructure?.currentStepIndex || 0] || {
+      title: 'Core Fundamentals',
+      objective: `Master basic intuition and definition of ${topic.topic_name}`,
+      keyConcepts: ['Definition', 'Intuition'],
+    };
+
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
-      `TOPIC OVERVIEW: "${topic.topic_context || topic.start_point || 'Core principles of ' + topic.topic_name}"`,
+      `STRUCTURED STEP ${(topicStructure?.currentStepIndex || 0) + 1} OF ${topicStructure?.steps?.length || 4}: "${activeStep.title}"`,
+      `STEP OBJECTIVE: "${activeStep.objective}"`,
+      `KEY CONCEPTS TO COVER IN THIS STEP: ${activeStep.keyConcepts?.join(', ') || 'Core concepts'}`,
       '',
-      'TASK: Begin the first bite-sized step of teaching this topic to the student.',
+      'TASK: Teach the student Step 1 of this topic from the saved topic structure.',
       'MANDATORY TEACHING CONSTRAINTS:',
-      '1. STRICTLY BITE-SIZED: Keep total response under 80-110 words. Teach only ONE introductory micro-concept. Never dump paragraphs of text.',
-      '2. INTERACTIVE CHECK: Conclude with 1 simple, engaging check question or thought prompt to test the student before proceeding.',
+      '1. STRICTLY BITE-SIZED: Keep total response under 80-110 words. Teach only this step. Never dump paragraphs of text.',
+      '2. INTERACTIVE CHECK: Conclude with 1 simple, engaging check question or thought prompt to test the student before moving to the next step.',
       '3. TYPOGRAPHIC HIERARCHY (Strictly Follow):',
-      '   - Use a clear ### Subheading for the concept title.',
+      '   - Use a clear ### Subheading for Step 1 title.',
       '   - Use **bold** for key concepts, essential terms, and definitions.',
       '   - Use *italics* for emphasis or subtle terminology.',
-      '   - Use clean bullet points (- ) when listing items (max 2 bullets).',
       '   - Format all math, formulas, and symbols with LaTeX ($...$ inline, $$...$$ block).',
       '4. ANALOGY: Use an intuitive everyday Nigerian analogy (e.g. POS charges, Danfo bus speeds, NEPA power vs. generator, market prices).',
-      '5. Provide your response directly. Do not use emojis or internal reasoning monologues.',
+      '5. Provide your response directly without meta commentary or emojis.',
     ].join('\n');
 
     const aiParams = {
@@ -260,7 +299,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       contents: [
         {
           role: 'user',
-          parts: [{ text: `Hello! I am ready to learn "${topic.topic_name}" for ${course.course_name}. Please begin our first step.` }],
+          parts: [{ text: `Hello! I am ready to learn "${topic.topic_name}" - Step 1: ${activeStep.title}. Please begin.` }],
         },
       ],
       config: {
@@ -294,7 +333,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     }
 
     if (!streamedText.trim()) {
-      streamedText = `Welcome to **${topic.topic_name}** for ${course.course_name}!\n\nLet's master this topic step by step. Ready to begin?`;
+      streamedText = `Welcome to **${topic.topic_name}** - Step 1: ${activeStep.title}!\n\nLet's master this concept step by step. Ready to begin?`;
     }
 
     setMessages((prev) => {
@@ -304,21 +343,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     });
     setIsSending(false);
     setStreamingMsgId(null);
-  };
-
-  const handleClearChat = async () => {
-    if (window.confirm(`Clear conversation for ${topic.topic_name}?`)) {
-      setMessages([]);
-      clearCachedKey(cacheKey);
-      addToast('Conversation cleared.', 'info');
-      void initFirstBiteSizedStep();
-    }
-  };
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
-    e.target.style.height = 'auto';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
   };
 
   const handleSendMessage = async (customText?: string) => {
@@ -387,7 +411,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       timestamp: now + 1,
     };
 
-    // Optimistically update messages with both user message and thinking tutor placeholder
     const nextMessages = [...messages, userMessage, aiPlaceholderMsg];
     setMessages(nextMessages);
     setInputValue('');
@@ -400,25 +423,45 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       inputElementRef.current.style.height = 'auto';
     }
 
+    // Determine current step and advance step progress if student responded correctly/moved ahead
+    let currentStepIdx = topicStructure?.currentStepIndex || 0;
+    const totalSteps = topicStructure?.steps?.length || 4;
+    const userMsgCount = messages.filter((m) => m.sender === 'user').length;
+
+    if (userMsgCount > 0 && userMsgCount % 2 === 0 && currentStepIdx < totalSteps - 1) {
+      currentStepIdx = currentStepIdx + 1;
+      if (topicStructure) {
+        const updatedStruct = { ...topicStructure, currentStepIndex: currentStepIdx };
+        setTopicStructure(updatedStruct);
+        saveTopicStructureProgress(updatedStruct, userProfile?.uid);
+      }
+    }
+
+    const activeStep = topicStructure?.steps?.[currentStepIdx] || {
+      title: 'Topic Deep Dive',
+      objective: `Master ${topic.topic_name}`,
+      keyConcepts: ['Core principles'],
+    };
+
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
-      `TOPIC OVERVIEW: "${topic.topic_context || topic.start_point || 'Core principles of ' + topic.topic_name}"`,
+      `CURRENT TOPIC STRUCTURE STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}"`,
+      `STEP OBJECTIVE: "${activeStep.objective}"`,
+      `KEY CONCEPTS: ${activeStep.keyConcepts?.join(', ') || 'Core principles'}`,
       '',
       'CRITICAL SOCRATIC TEACHING RULES:',
-      '1. STRICTLY BITE-SIZED: Teach in small, digestible bits. Never dump long textbook text walls or multi-paragraph lectures. Target 80-120 words per response (max 150 words only if working through a calculation step).',
-      '2. INTERACTIVE TEACHING LOOP: Teach ONE micro-step at a time, then ALWAYS end with 1 quick check question, challenge, or thought experiment to keep the student actively responding before moving forward.',
-      '3. TYPOGRAPHIC HIERARCHY (Strictly Observe):',
-      '   - Use ### Subheadings to organize sections or concept names.',
-      '   - Use **bold** for crucial terms, definitions, and core rules.',
-      '   - Use *italics* for emphasis, technical jargon, or variable names in text.',
-      '   - Use concise bullet points (- ) when listing items.',
+      '1. STRICTLY BITE-SIZED: Teach in small, digestible bits. Never dump long textbook text walls or multi-paragraph lectures. Target 80-120 words per response.',
+      '2. STEP-BY-STEP GUIDANCE: Guide the student through current step objective. When they demonstrate understanding, transition smoothly to the next step.',
+      '3. INTERACTIVE TEACHING LOOP: Teach ONE micro-step at a time, then ALWAYS end with 1 quick check question or thought experiment.',
+      '4. TYPOGRAPHIC HIERARCHY:',
+      '   - Use ### Subheadings to organize sections or step titles.',
+      '   - Use **bold** for crucial terms and definitions.',
       '   - Format all math, equations, and variables with LaTeX ($...$ inline or $$...$$ block).',
-      '4. PRACTICAL EXAMPLES: Use relatable Nigerian real-world scenarios when illustrating ideas (e.g. POS transactions, Danfo speeds, NEPA light vs. generator, market trade, boiling kettle/jollof rice).',
-      '5. DIRECT RESPONSE: Provide your response directly without meta commentary, internal monologues, or emojis.',
+      '5. PRACTICAL EXAMPLES: Use relatable Nigerian real-world scenarios when illustrating ideas.',
+      '6. DIRECT RESPONSE: Provide response directly without meta commentary or emojis.',
     ].join('\n');
 
-    // Build multi-turn history from previous messages (last 8 completed messages)
     const historyContents = messages
       .filter((m) => m.text && m.text.trim())
       .slice(-8)
@@ -485,9 +528,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       }
     }
 
-    // Safety check: if stream ended with empty text (e.g. reasoning model consumed without content)
     if (!streamedText.trim()) {
-      console.warn('[CourseChatTutor] Empty stream text, executing non-streaming fallback...');
       const fallbackResult = await attemptApiCall(async () => {
         const result = await ai.models.generateContent(aiParams);
         const resText = getResponseText(result);
@@ -505,7 +546,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       );
     }
 
-    // Persist and deduct credits
     setMessages((prev) => {
       const final = prev.map((m) => (m.id === aiMsgId ? { ...m, text: streamedText } : m));
       writeCachedJson(cacheKey, final, userProfile?.uid);
@@ -543,7 +583,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Helper to render streaming text with active trailing sentence glowing in deep blue
   const renderStreamingContent = (text: string) => {
     const lastPunctuationIdx = Math.max(
       text.lastIndexOf('\n'),
@@ -577,18 +616,15 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       );
     }
 
-    const hasCompletedPart = text.length > 0;
-    const completedPart = text;
-
     return (
       <div className="space-y-1 font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em]">
-        {hasCompletedPart && (
+        {text && (
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeKatex]}
             components={markdownComponents(false)}
           >
-            {formatLatexMath(completedPart)}
+            {formatLatexMath(text)}
           </ReactMarkdown>
         )}
       </div>
@@ -651,7 +687,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       <input type="file" ref={cameraInputRef} onChange={handleFileSelection} accept="image/*" capture="environment" className="hidden" />
       <input type="file" ref={photoInputRef} onChange={handleFileSelection} accept="image/*" multiple className="hidden" />
 
-      {/* ── Scrollable Messages Area (WhatsApp-Style Bottom-Up Layout) ── */}
+      {/* ── Scrollable Messages Area ── */}
       <div
         ref={messagesContainerRef}
         className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -758,13 +794,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                       )}
                     </div>
                   ) : !message.text ? (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.3s]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.15s]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#0066FF] animate-bounce" />
-                      </div>
-                    </div>
+                    <ThinkingTypingIndicator label="thinking" />
                   ) : isCurrentlyStreaming ? (
                     <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
                       {renderStreamingContent(message.text)}
@@ -789,7 +819,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
         </div>
       </div>
 
-      {/* ── Fullscreen Bottom Input Bar (Bottom Nav is Hidden) ── */}
+      {/* ── Fullscreen Bottom Input Bar ── */}
       <footer className="shrink-0 px-3 sm:px-6 pt-2 pb-[max(14px,env(safe-area-inset-bottom))] bg-[#F6F6F3]/90 dark:bg-[#0A0A0A]/90 backdrop-blur-md z-20">
         <div className="max-w-4xl mx-auto w-full space-y-2">
           
@@ -829,7 +859,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             </div>
           )}
 
-          {/* Fluid Spring Morphing Pill Container (From Avelut AI) */}
+          {/* Fluid Input Bar */}
           <div className="relative w-full bg-white dark:bg-[#141414] rounded-full flex items-center justify-between pl-3 pr-2 py-1.5 min-h-[54px] sm:min-h-[56px] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
             
             {/* Left: Plus Menu Button */}
@@ -890,7 +920,11 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                 ref={inputElementRef}
                 rows={1}
                 value={inputValue}
-                onChange={handleTextChange}
+                onChange={(e) => {
+                  setInputValue(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
