@@ -715,61 +715,113 @@ export const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  const [likedMessages, setLikedMessages] = useState<Record<string, 'up' | 'down'>>({});
+
+  const handleToggleLike = (msgId: string, rating: 'up' | 'down') => {
+    setLikedMessages((prev) => {
+      const current = prev[msgId];
+      if (current === rating) {
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      }
+      return { ...prev, [msgId]: rating };
+    });
+    addToast(rating === 'up' ? 'Feedback submitted (Thumbs up)' : 'Feedback submitted (Thumbs down)', 'info');
+  };
+
+  const handleCopyMessage = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      addToast('Copied to clipboard', 'success');
+    }).catch(() => {
+      addToast('Failed to copy text', 'error');
+    });
+  };
+
+  const handleShareMessage = async (text: string) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+      } catch (e) {
+        // Ignored if cancelled
+      }
+    } else {
+      handleCopyMessage(text);
+    }
+  };
+
+  const handleRegenerateMessage = (msgIndex: number) => {
+    // Find the nearest preceding user message
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].sender === 'user') {
+        void handleSendMessage(messages[i].text);
+        break;
+      }
+    }
+  };
+
+  const TypingIndicator: React.FC = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <style>{`
+        .dot {
+          fill: #555555;
+          animation: shine 1.8s infinite linear;
+        }
+
+        .c0 { animation-delay: 0s; }
+        .c1 { animation-delay: 0.2s; }
+        .c2 { animation-delay: 0.4s; }
+
+        @keyframes shine {
+          0%, 100% {
+            fill: #555555;
+            opacity: 0.3;
+          }
+          30%, 50% {
+            fill: #888888;
+            opacity: 1;
+          }
+        }
+      `}</style>
+      <circle className="dot c0" cx="6" cy="6" r="1.5" />
+      <circle className="dot c0" cx="6" cy="12" r="1.5" />
+      <circle className="dot c0" cx="6" cy="18" r="1.5" />
+      <circle className="dot c1" cx="12" cy="6" r="1.5" />
+      <circle className="dot c1" cx="12" cy="12" r="1.5" />
+      <circle className="dot c1" cx="12" cy="18" r="1.5" />
+      <circle className="dot c2" cx="18" cy="6" r="1.5" />
+      <circle className="dot c2" cx="18" cy="12" r="1.5" />
+      <circle className="dot c2" cx="18" cy="18" r="1.5" />
+    </svg>
+  );
+
   return (
-    <div className="flex-1 flex flex-col h-full w-full bg-white dark:bg-[#121212] overflow-hidden text-neutral-900 dark:text-white">
+    <div className="flex-1 flex flex-col h-full w-full bg-white dark:bg-black overflow-hidden text-neutral-900 dark:text-white">
       {/* MESSAGES / EMPTY STATE AREA */}
       <div className="flex-1 overflow-y-auto px-4 pt-[calc(max(0.875rem,env(safe-area-inset-top))+3.5rem)] pb-6 space-y-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {messages.length === 0 && !isLoading ? (
           <div className="flex-1 h-full min-h-[40vh]" />
         ) : (
           <div className="w-full max-w-3xl mx-auto space-y-8">
-            {messages.map((msg) => (
+            {messages.map((msg, index) => (
               <div
                 key={msg.id}
                 className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.sender === 'user' ? (
-                  /* User messages keep a compact bubble */
-                  <div className="max-w-[85%] sm:max-w-[75%] flex gap-3 flex-row-reverse">
-                    <Avatar
-                      display_name={userProfile.display_name}
-                      photo_url={userProfile.photo_url}
-                      className="w-8 h-8 shrink-0 mt-0.5"
-                    />
-                    <div className="min-w-0 text-right">
-                      <div className="flex items-center justify-end gap-2 mb-1 px-1">
-                        <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-                          You
-                        </span>
-                        <span className="text-[10px] text-neutral-400 dark:text-neutral-600">
-                          {timeAgo(msg.timestamp)}
-                        </span>
-                      </div>
-                      <div className="px-4 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm bg-neutral-900 text-white dark:bg-white dark:text-black rounded-tr-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                      </div>
+                  /* Gemini User messages: Simple rounded pill bubble only, NO avatar, NO label, NO timestamp */
+                  <div className="max-w-[85%] sm:max-w-[75%]">
+                    <div className="px-5 py-3 rounded-full text-[15px] sm:text-[16px] leading-relaxed bg-[#f0f0f0] dark:bg-[#2f2f2f] text-neutral-900 dark:text-white inline-block text-left break-words">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
                   </div>
                 ) : (
-                  /* AI responses: invisible container spanning viewport content width so text doesn't spread out */
+                  /* Gemini AI responses: Plain text (no bubble, no logo, no name, no timestamp) + Action Icon Row */
                   <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 select-none">
-                      <div className="w-7 h-7 rounded-full bg-neutral-100 dark:bg-white/10 flex items-center justify-center p-1 shrink-0">
-                        <img src="/logo_icon.png" alt="Avelut" className="w-full h-full object-contain" />
-                      </div>
-                      <span className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                        Avelut
-                      </span>
-                      <span className="text-[10px] text-neutral-400 dark:text-neutral-600">
-                        {timeAgo(msg.timestamp)}
-                      </span>
-                    </div>
-                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0] prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-p:leading-[1.75] prose-headings:my-4 prose-headings:font-bold prose-headings:tracking-tight prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0">
+                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-neutral-900 dark:text-neutral-100 prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-p:leading-[1.75] prose-headings:my-4 prose-headings:font-bold prose-headings:tracking-tight prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0">
                       {!msg.text ? (
-                        <div className="flex items-center gap-1.5 py-1">
-                          <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce" />
-                          <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.2s]" />
-                          <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.4s]" />
+                        <div className="py-1">
+                          <TypingIndicator />
                         </div>
                       ) : (
                         <ReactMarkdown
@@ -806,21 +858,103 @@ export const Chat: React.FC<ChatProps> = ({
                         </ReactMarkdown>
                       )}
                     </div>
+
+                    {/* Gemini Action Icon Row under AI responses */}
+                    {msg.text && (
+                      <div className="flex items-center gap-1 mt-3 text-neutral-500 dark:text-neutral-400 select-none">
+                        {/* Thumbs Up */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLike(msg.id, 'up')}
+                          className={`p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors ${
+                            likedMessages[msg.id] === 'up' ? 'text-blue-600 dark:text-blue-400' : ''
+                          }`}
+                          title="Good response"
+                          aria-label="Good response"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.5c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 012.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 00.322-1.672V3a.75.75 0 01.75-.75A2.25 2.25 0 0116.5 4.5c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282h3.126c1.026 0 1.945.694 2.054 1.715.045.422-.068.85-.31 1.196l-2.483 3.548c-.412.589-1.082.941-1.796.941H12.75a3 3 0 01-2.006-.764l-2.073-1.866a3 3 0 00-2.006-.764H5.25a.75.75 0 01-.75-.75V11.25c0-.414.336-.75.75-.75h1.383z" />
+                          </svg>
+                        </button>
+
+                        {/* Thumbs Down */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLike(msg.id, 'down')}
+                          className={`p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors ${
+                            likedMessages[msg.id] === 'down' ? 'text-red-600 dark:text-red-400' : ''
+                          }`}
+                          title="Bad response"
+                          aria-label="Bad response"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.367 13.5c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 01-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 00-.322 1.672V21a.75.75 0 01-.75.75A2.25 2.25 0 017.5 19.5c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282H4.372c-1.026 0-1.945-.694-2.054-1.715a2.235 2.235 0 01.31-1.196l2.483-3.548c.412-.589 1.082-.941 1.796-.941h4.343a3 3 0 012.006.764l2.073 1.866c.57.513 1.298.764 2.006.764h1.383c.414 0 .75.336.75.75v5.25c0 .414-.336.75-.75.75h-1.383z" />
+                          </svg>
+                        </button>
+
+                        {/* Regenerate */}
+                        <button
+                          type="button"
+                          onClick={() => handleRegenerateMessage(index)}
+                          className="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                          title="Regenerate response"
+                          aria-label="Regenerate response"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M20.985 8.358a9.003 9.003 0 00-15.357-2m15.357 2H16.023m-4.956 9.349H6.075v.001m-4.993-1.01a9.003 9.003 0 0015.357 2m-15.357-2H6.075" />
+                          </svg>
+                        </button>
+
+                        {/* Copy */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMessage(msg.text)}
+                          className="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                          title="Copy text"
+                          aria-label="Copy text"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25c0-.621.504-1.125 1.125-1.125h6.75c.621 0 1.125.504 1.125 1.125v9.25c0 .621-.504 1.125-1.125 1.125z" />
+                          </svg>
+                        </button>
+
+                        {/* Share */}
+                        <button
+                          type="button"
+                          onClick={() => handleShareMessage(msg.text)}
+                          className="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                          title="Share"
+                          aria-label="Share"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                          </svg>
+                        </button>
+
+                        {/* More (⋯) */}
+                        <button
+                          type="button"
+                          onClick={() => addToast('More options', 'info')}
+                          className="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                          title="More options"
+                          aria-label="More options"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <circle cx="5" cy="12" r="2" />
+                            <circle cx="12" cy="12" r="2" />
+                            <circle cx="19" cy="12" r="2" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             ))}
             {isLoading && (messages.length === 0 || messages[messages.length - 1]?.sender === 'user') && (
               <div className="flex justify-start w-full">
-                <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-neutral-100 dark:bg-white/10 flex items-center justify-center p-1 shrink-0">
-                    <img src="/logo_icon.png" alt="Avelut" className="w-full h-full object-contain" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce" />
-                    <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.2s]" />
-                    <div className="w-2 h-2 rounded-full bg-[#0066FF] animate-bounce [animation-delay:-0.4s]" />
-                  </div>
+                <div className="py-1">
+                  <TypingIndicator />
                 </div>
               </div>
             )}

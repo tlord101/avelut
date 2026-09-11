@@ -119,6 +119,7 @@ export const MainContent: React.FC<MainContentProps> = ({
                             </div>
                         );
                     case 'dashboard':
+                        // Fallthrough redirect
                     case 'chat':
                         return (
                             <AvelutAI
