@@ -1,0 +1,12 @@
+# Minimal Supabase config for Edge Functions in this repo folder.
+# Full project is already hosted; use `supabase link` then deploy functions.
+
+[functions.lesson-prep-enqueue]
+verify_jwt = true
+
+[functions.lesson-prep-worker]
+# Worker is kicked with service role key; disable JWT verify so cron/kick works
+verify_jwt = false
+
+[functions.lesson-feedback-speech]
+verify_jwt = true
