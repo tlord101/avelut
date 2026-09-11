@@ -284,6 +284,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeConversationId,
   quickLinks,
   brandTitle = 'Avelut',
+  overlayRef,
+  sidebarRef,
 }) => {
   const handleMobileItemClick = (id: string) => {
     onItemClick(id);
