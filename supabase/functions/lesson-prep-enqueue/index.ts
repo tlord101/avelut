@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     const topicKey = topicKeyFromTitle(topicTitle);
     const prepKey = `${user.id}::${topicKey}::${durationMode}`;
     const totalBoards = boardsForDuration(durationMode);
-    const storagePrefix = `lesson-packages/${user.id}/${prepKey}`;
+    const storagePrefix = `${user.id}/${prepKey}`;
 
     const admin = createClient(supabaseUrl, serviceKey);
 

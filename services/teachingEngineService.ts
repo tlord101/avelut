@@ -145,6 +145,7 @@ export class TeachingEngineService {
 
   // Offline (device-prepared) boards hydrated at open time — zero network playback
   private offlineBoards = new Map<number, TeachingBoardPerformance>();
+  private offlinePackageMode = false;
 
   /**
    * Hydrate the engine with the full board set from a device lesson package
@@ -152,11 +153,20 @@ export class TeachingEngineService {
    * board from memory — no AI or TTS network calls for prepared boards.
    */
   public hydrateOfflineBoards(boards: TeachingBoardPerformance[]): void {
+    this.offlinePackageMode = true;
     boards.forEach((perf, idx) => {
       if (!perf) return;
       const num = typeof perf.board_number === 'number' && perf.board_number > 0 ? perf.board_number : idx + 1;
       this.offlineBoards.set(num - 1, perf);
     });
+  }
+
+  public setOfflinePackageMode(enabled: boolean): void {
+    this.offlinePackageMode = enabled;
+  }
+
+  public isOfflinePackageMode(): boolean {
+    return this.offlinePackageMode;
   }
 
   public hasOfflineBoard(boardIndex: number): boolean {
@@ -529,6 +539,11 @@ export class TeachingEngineService {
       return validDbStruct;
     }
 
+    if (this.offlinePackageMode) {
+      if (this.currentStructure) return this.currentStructure;
+      throw new Error('Offline package mode: structure generation forbidden');
+    }
+
     try {
       const ai = createAvelutAI(this.appSettings, this.userProfile);
       if (!ai) throw new Error('AI client could not be initialized');
@@ -891,6 +906,10 @@ export class TeachingEngineService {
     completedBoardsSummary?: string[],
     options?: { mode?: 'prep' | 'live' }
   ): Promise<TeachingBoardPerformance> {
+    if (this.offlinePackageMode) {
+      throw new Error('Offline package mode: single board AI generation forbidden');
+    }
+
     if (options?.mode === 'prep' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       throw new TypeError('Failed to fetch: Connection lost');
     }

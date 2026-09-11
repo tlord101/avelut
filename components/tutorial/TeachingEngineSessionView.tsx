@@ -85,6 +85,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   const [totalBoards, setTotalBoards] = useState(5);
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState('Planning live lesson structure…');
+  const [isPackageMode, setIsPackageMode] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isWaitingForVoice, setIsWaitingForVoice] = useState(true);
@@ -394,6 +395,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         // 1) Device-first: load the fully prepared lesson package (IndexedDB) and
         //    hydrate engine caches so opening a Ready lesson makes ZERO
         //    structure/board/TTS network calls.
+        let pkgReady = false;
         if (durationMode) {
           const prepKey = buildPrepKey(resolvedUserId, topicKey, durationMode);
           try {
@@ -402,6 +404,10 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             if (pkg?.structure?.boards?.length) {
               lessonPrepService.hydrateLessonPackageCaches(pkg);
               engine.hydrateOfflineBoards(pkg.boards);
+              engine.setOfflinePackageMode(true);
+              setIsPackageMode(true);
+              pkgReady = true;
+
               // Adopt the voice the audio was prepared with so TTS cache keys match
               if (pkg.voice && pkg.voice !== currentVoice) {
                 engine.setVoice(pkg.voice);
@@ -776,7 +782,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
         )}
 
         {/* Sleek Non-Blocking Loading Badge for Initial Board Performance Fetching */}
-        {isLoading && (
+        {isLoading && !isPackageMode && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/90 border border-[#38BDF8]/40 shadow-xl backdrop-blur-md animate-pulse pointer-events-none">
             <div className="w-3.5 h-3.5 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin shrink-0" />
             <span className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
