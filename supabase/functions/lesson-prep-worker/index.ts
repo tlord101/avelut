@@ -388,6 +388,28 @@ async function generateBoard(job: any, structure: any, boardIndex: number): Prom
   const perf = extractJson(content);
   perf.board_number = boardIndex + 1;
   perf.board_id = perf.board_id || `board_${boardIndex + 1}`;
+
+  const combinedActions: any[] = [...(perf.board_actions || [])];
+  const existingIds = new Set(combinedActions.map((a) => a.id).filter(Boolean));
+
+  if (Array.isArray(perf.speech_beats)) {
+    for (const beat of perf.speech_beats) {
+      if (Array.isArray(beat.board_actions)) {
+        for (const act of beat.board_actions) {
+          if (act && act.type) {
+            const actId = act.id || `act_beat_${Math.random().toString(36).slice(2, 8)}`;
+            act.id = actId;
+            if (!existingIds.has(actId)) {
+              existingIds.add(actId);
+              combinedActions.push(act);
+            }
+          }
+        }
+      }
+    }
+  }
+  perf.board_actions = combinedActions;
+
   if (!isValidBoard(perf)) throw new Error(`Invalid board performance for board ${boardIndex + 1}`);
   return perf;
 }
@@ -448,7 +470,8 @@ Deno.serve(async (req) => {
     if (!job) return json({ claimed: false, message: "No queued jobs" });
 
     jobId = job.id;
-    const prefix = job.storage_prefix as string;
+    const rawPrefix = String(job.storage_prefix || "");
+    const prefix = rawPrefix.replace(/^lesson-packages\//, "");
     const voice = job.voice || "Altair";
 
     await admin.from("lesson_prep_jobs").update({

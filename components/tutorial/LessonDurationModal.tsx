@@ -148,7 +148,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[84vh] sm:max-h-[88vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-8 sm:mb-0"
+        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[84vh] sm:max-h-[88vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-[52px] sm:mb-0"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">

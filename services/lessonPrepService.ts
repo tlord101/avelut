@@ -22,28 +22,21 @@ import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { buildTopicKey, buildContentHash, structureCacheKey } from './structurePrefetchService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { logTeachingEvent } from './teachingEventLogger';
+import { supabase } from '../lib/supabaseClient';
+import { setCachedBoardItem } from './teachingEngineService';
 import {
   getLessonStructure,
   getLessonBoard,
   getLessonAudio,
   getLessonMeta,
   saveLessonStructure,
+  saveLessonBoard,
+  saveLessonAudio,
   saveLessonMeta,
   evictOldLessonPackages,
 } from './lessonPackageStore';
 import {
   getMeta as getCheckpointMeta,
-  putMeta as putCheckpointMeta,
-  getStructure as getCheckpointStructure,
-  putStructure as putCheckpointStructure,
-  getBoard as getCheckpointBoard,
-  putBoard as putCheckpointBoard,
-  hasValidBoard as hasCheckpointBoard,
-  getAudio as getCheckpointAudio,
-  putAudio as putCheckpointAudio,
-  hasValidAudio as hasCheckpointAudio,
-  isBoardFullyComplete as isCheckpointBoardComplete,
-  type PrepMeta,
 } from './lessonPrepCheckpointStore';
 
 export type LessonPrepState = 'idle' | 'preparing' | 'paused_offline' | 'ready' | 'failed';
@@ -573,9 +566,8 @@ export class LessonPrepService {
   }
 
   /**
-   * Starts the FULL-TOPIC preparation pipeline for a topic + duration.
-   * Survives navigation and runs to completion. Retries resume from the
-   * on-device package (cached boards/audio are skipped).
+   * Starts cloud preparation via Edge Function `lesson-prep-enqueue`,
+   * listens for realtime updates, downloads and installs package on completion.
    */
   public async startPrep(params: StartPrepParams): Promise<void> {
     loadPersistedStatuses();
@@ -585,351 +577,227 @@ export class LessonPrepService {
     const contentHash = buildContentHash(topicTitle, courseName, syllabusContext);
     const key = buildPrepKey(resolvedUserId, topicKey, durationMode);
 
-    // Check IndexedDB checkpoint meta
-    let checkpointMeta = await getCheckpointMeta(key);
-
-    if (checkpointMeta?.state === 'ready') {
-      const pkg = await this.loadReadyPackage(key, voice);
-      if (pkg) {
-        updateStatus(key, {
-          state: 'ready',
-          step: 3,
-          message: 'Lesson ready!',
-          etaMinutes: '0 min',
-          structure: pkg.structure,
-          board1Perf: pkg.boards[0] || null,
-          audioCached: true,
-          boardIndex: pkg.totalBoards,
-          totalBoards: pkg.totalBoards,
-          progressPercent: 100,
-        });
-        return;
-      }
-    }
-
-    // If already in flight, do not spawn duplicate execution
-    if (activeControllers.has(key)) {
-      return;
-    }
-
-    const resolvedVoice = voice || appSettings?.grok_voice_id || 'Altair';
-
-    // Initialize or load checkpoint metadata
-    const now = Date.now();
-    checkpointMeta = checkpointMeta || {
-      prepKey: key,
-      userId: resolvedUserId,
-      topicKey,
-      topicTitle,
-      courseName,
-      durationMode,
-      voice: resolvedVoice,
-      state: 'idle',
-      totalBoards: 0,
-      nextIndex: 0,
-      completedBoardIndexes: [],
-      structureReady: false,
-      createdAt: now,
-      updatedAt: now,
-      charged: isPrepBilled(key),
-    };
-
-    if (isPrepBilled(key)) {
-      checkpointMeta.charged = true;
-    }
-
-    // Offline check before network execution
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      checkpointMeta.state = 'paused_offline';
-      checkpointMeta.message = checkpointMeta.completedBoardIndexes.length > 0
-        ? `Saved ${checkpointMeta.completedBoardIndexes.length}/${checkpointMeta.totalBoards || '?'} boards on this device. Resume when online.`
-        : 'Connection lost. Progress saved on this device.';
-      await putCheckpointMeta(checkpointMeta);
+    // If local device package is already ready, present it
+    const pkg = await this.loadReadyPackage(key, voice);
+    if (pkg) {
       updateStatus(key, {
-        state: 'paused_offline',
-        step: checkpointMeta.structureReady ? 2 : 1,
-        message: checkpointMeta.message,
-        boardIndex: checkpointMeta.nextIndex + 1,
-        totalBoards: checkpointMeta.totalBoards || undefined,
-        progressPercent: checkpointMeta.totalBoards ? Math.round((checkpointMeta.completedBoardIndexes.length / checkpointMeta.totalBoards) * 100) : 0,
+        state: 'ready',
+        step: 3,
+        message: 'Lesson ready!',
+        etaMinutes: '0 min',
+        structure: pkg.structure,
+        board1Perf: pkg.boards[0] || null,
+        audioCached: true,
+        boardIndex: pkg.totalBoards,
+        totalBoards: pkg.totalBoards,
+        progressPercent: 100,
       });
       return;
     }
 
+    if (activeControllers.has(key)) return;
+
+    const resolvedVoice = voice || appSettings?.grok_voice_id || 'Altair';
     const abortController = new AbortController();
     activeControllers.set(key, abortController);
 
-    checkpointMeta.state = 'preparing';
-    checkpointMeta.message = checkpointMeta.completedBoardIndexes.length > 0
-      ? `Resuming preparation from Board ${checkpointMeta.nextIndex + 1}…`
-      : '1/3 Planning lesson structure…';
-    await putCheckpointMeta(checkpointMeta);
+    // Billed once per key
+    if (!isPrepBilled(key)) {
+      markPrepBilled(key);
+    }
 
     updateStatus(key, {
       state: 'preparing',
-      step: checkpointMeta.structureReady ? 2 : 1,
-      message: checkpointMeta.message,
-      etaMinutes: estimateEta((checkpointMeta.totalBoards || 15) - checkpointMeta.nextIndex),
+      step: 1,
+      message: '1/3 Enqueueing cloud preparation…',
+      etaMinutes: '2–4 minutes',
       startedAt: Date.now(),
       topicTitle,
       courseName,
       durationMode,
       voice: resolvedVoice,
       error: undefined,
-      boardIndex: checkpointMeta.nextIndex + 1,
-      totalBoards: checkpointMeta.totalBoards || undefined,
-      progressPercent: checkpointMeta.totalBoards
-        ? Math.max(5, Math.round((checkpointMeta.completedBoardIndexes.length / checkpointMeta.totalBoards) * 100))
-        : 5,
+      progressPercent: 5,
     });
 
     logTeachingEvent({
       type: 'prefetch_start',
       topic: topicTitle,
       duration: durationMode,
-      metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service_full' },
+      metadata: { userId: resolvedUserId, pipeline: 'cloud_lesson_prep' },
     });
 
     try {
-      // Dynamic import to avoid cycles
-      const { TeachingEngineService } = await import('./teachingEngineService');
-      const engine = new TeachingEngineService(appSettings || {}, userProfile || null, resolvedVoice);
-
-      if (abortController.signal.aborted) throw new Error('Cancelled');
-
-      // ── STEP 1: Structure Checkpoint ───────────────────────────────────────
-      let structure = await getCheckpointStructure(key);
-      if (!structure?.boards?.length) {
-        structure = await getLessonStructure<TeachingStructure>(key);
+      // Get current Supabase session token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error('Please sign in to prepare live lessons.');
       }
 
-      if (!structure?.boards?.length) {
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-          checkpointMeta.state = 'paused_offline';
-          checkpointMeta.message = 'Connection lost. Progress saved on this device.';
-          await putCheckpointMeta(checkpointMeta);
-          updateStatus(key, { state: 'paused_offline', message: checkpointMeta.message });
-          return;
-        }
-
-        structure = await engine.generateTeachingStructure({
-          topic: topicTitle,
+      // Enqueue job on Supabase Edge Function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://eywpksapztzbnthlgfhd.supabase.co';
+      const enqueueRes = await fetch(`${supabaseUrl}/functions/v1/lesson-prep-enqueue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          topicTitle,
           courseName,
           syllabusContext,
           durationMode,
-          isPrefetch: true,
-        });
-
-        if (abortController.signal.aborted) throw new Error('Cancelled');
-      }
-
-      if (!structure?.boards?.length) {
-        throw new Error('Failed to generate lesson structure.');
-      }
-
-      engine.setStructure(structure);
-
-      await putCheckpointStructure(key, structure);
-      await saveLessonStructure(key, structure);
-
-      const total = structure.boards.length;
-      const topic = structure.topic || topicTitle;
-
-      checkpointMeta.structureReady = true;
-      checkpointMeta.totalBoards = total;
-      await putCheckpointMeta(checkpointMeta);
-
-      await saveLessonMeta({
-        key,
-        state: 'preparing',
-        voice: resolvedVoice,
-        topic,
-        topicTitle,
-        courseName,
-        durationMode,
-        boardCount: total,
-        progress: { boardIndex: checkpointMeta.nextIndex, totalBoards: total },
-        audioKeys: structure.boards.map((_, i) => buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice)),
-        createdAt: Date.now(),
+          voice: resolvedVoice,
+          contentHash,
+        }),
       });
 
-      // ── STEPS 2+3: Board-by-Board Resumable Pipeline ────────────────────────
-      for (let i = 0; i < total; i++) {
-        if (abortController.signal.aborted) throw new Error('Cancelled');
-
-        // Check if board + audio are already fully complete on device
-        const isComplete = await isCheckpointBoardComplete(key, i);
-        if (isComplete) {
-          if (!checkpointMeta.completedBoardIndexes.includes(i)) {
-            checkpointMeta.completedBoardIndexes = Array.from(
-              new Set([...checkpointMeta.completedBoardIndexes, i])
-            ).sort((a, b) => a - b);
-            await putCheckpointMeta(checkpointMeta);
-          }
-          continue; // Always skip completed boards
-        }
-
-        // Set effective work index to first incomplete board
-        checkpointMeta.nextIndex = i;
-        await putCheckpointMeta(checkpointMeta);
-
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-          checkpointMeta.state = 'paused_offline';
-          checkpointMeta.message = `Saved ${checkpointMeta.completedBoardIndexes.length}/${total} boards. Resume when online.`;
-          await putCheckpointMeta(checkpointMeta);
-          updateStatus(key, {
-            state: 'paused_offline',
-            step: 2,
-            boardIndex: i + 1,
-            totalBoards: total,
-            message: checkpointMeta.message,
-            progressPercent: Math.round((checkpointMeta.completedBoardIndexes.length / total) * 100),
-          });
-          return;
-        }
-
-        const boardPlan = structure.boards[i];
-        if (!boardPlan) throw new Error(`Missing board plan for board ${i + 1}`);
-
-        // 1) Board JSON Performance
-        let boardRecord = await getCheckpointBoard(key, i);
-        let boardPerf = boardRecord?.performance || null;
-
-        if (!boardPerf) {
-          updateStatus(key, {
-            state: 'preparing',
-            step: 2,
-            boardIndex: i + 1,
-            totalBoards: total,
-            progressPercent: Math.min(64, Math.round(10 + ((i + 1) / total) * 54)),
-            message: `Writing Board ${i + 1} of ${total} content…`,
-            etaMinutes: estimateEta(total - i),
-          });
-
-          try {
-            boardPerf = await engine.fetchSingleBoardFromAI(
-              boardPlan,
-              userProfile?.display_name || 'Student',
-              [],
-              { mode: 'prep' }
-            );
-          } catch (fetchErr: any) {
-            checkpointMeta.state = typeof navigator !== 'undefined' && navigator.onLine === false ? 'paused_offline' : 'failed';
-            checkpointMeta.nextIndex = i;
-            checkpointMeta.lastError = fetchErr?.message || 'Board generation failed';
-            checkpointMeta.message = checkpointMeta.state === 'paused_offline'
-              ? `Saved ${checkpointMeta.completedBoardIndexes.length}/${total} boards. Resume when online.`
-              : 'Preparation paused. Tap retry to resume.';
-            await putCheckpointMeta(checkpointMeta);
-
-            updateStatus(key, {
-              state: checkpointMeta.state,
-              step: 2,
-              boardIndex: i + 1,
-              totalBoards: total,
-              message: checkpointMeta.message,
-              error: checkpointMeta.lastError,
-            });
-            return;
-          }
-
-          if (!boardPerf || (boardPerf as any).isFallback === true) {
-            throw new Error(`Invalid board performance generated for board ${i + 1}`);
-          }
-
-          await putCheckpointBoard(key, i, boardPerf);
-          await saveLessonBoard(key, i, boardPerf);
-        }
-
-        // 2) TTS Audio Payload
-        const speechText = boardPerf.speech?.trim();
-        if (speechText) {
-          const ttsCacheKey = buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice);
-          let audioRec = await getCheckpointAudio(key, i);
-          let audioPayload = audioRec?.payload || null;
-
-          if (!audioPayload) {
-            updateStatus(key, {
-              state: 'preparing',
-              step: 3,
-              boardIndex: i + 1,
-              totalBoards: total,
-              progressPercent: Math.min(96, Math.round(65 + ((i + 1) / total) * 30)),
-              message: `Generating Board ${i + 1} of ${total} speech audio…`,
-              etaMinutes: estimateEta(total - i),
-            });
-
-            try {
-              audioPayload = await unifiedVoiceRouter.fetchSpeech(speechText, {
-                appSettings: appSettings || undefined,
-                voice: resolvedVoice,
-                cacheKey: ttsCacheKey,
-              });
-            } catch (ttsErr: any) {
-              checkpointMeta.state = typeof navigator !== 'undefined' && navigator.onLine === false ? 'paused_offline' : 'failed';
-              checkpointMeta.nextIndex = i;
-              checkpointMeta.lastError = ttsErr?.message || 'TTS audio generation failed';
-              checkpointMeta.message = checkpointMeta.state === 'paused_offline'
-                ? `Saved ${checkpointMeta.completedBoardIndexes.length}/${total} boards. Resume when online.`
-                : 'Preparation paused at speech generation. Tap retry to resume.';
-              await putCheckpointMeta(checkpointMeta);
-
-              updateStatus(key, {
-                state: checkpointMeta.state,
-                step: 3,
-                boardIndex: i + 1,
-                totalBoards: total,
-                message: checkpointMeta.message,
-                error: checkpointMeta.lastError,
-              });
-              return;
-            }
-
-            if (!audioPayload?.audio) {
-              checkpointMeta.state = 'paused_offline';
-              checkpointMeta.nextIndex = i;
-              checkpointMeta.message = `Saved ${checkpointMeta.completedBoardIndexes.length}/${total} boards. Resume when online.`;
-              await putCheckpointMeta(checkpointMeta);
-              updateStatus(key, {
-                state: 'paused_offline',
-                step: 3,
-                boardIndex: i + 1,
-                totalBoards: total,
-                message: checkpointMeta.message,
-              });
-              return;
-            }
-
-            await putCheckpointAudio(key, i, ttsCacheKey, audioPayload);
-            await saveLessonAudio(ttsCacheKey, audioPayload);
-          }
-        }
-
-        // Board fully complete -> update checkpoint
-        checkpointMeta.completedBoardIndexes = Array.from(
-          new Set([...checkpointMeta.completedBoardIndexes, i])
-        ).sort((a, b) => a - b);
-        checkpointMeta.nextIndex = i + 1;
-        await putCheckpointMeta(checkpointMeta);
-
-        updateStatus(key, {
-          state: 'preparing',
-          step: 3,
-          boardIndex: i + 1,
-          totalBoards: total,
-          progressPercent: Math.round(((i + 1) / total) * 100),
-          message: `Saved Board ${i + 1} of ${total} on this device.`,
-        });
+      if (!enqueueRes.ok) {
+        const errJson = await enqueueRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `Enqueue failed with status ${enqueueRes.status}`);
       }
 
-      // ── PIPELINE SUCCESS: Mark Ready ───────────────────────────────────────
-      checkpointMeta.state = 'ready';
-      checkpointMeta.nextIndex = total;
-      checkpointMeta.message = 'Lesson ready';
-      await putCheckpointMeta(checkpointMeta);
+      const enqueueData = await enqueueRes.json();
+      const job = enqueueData.job;
+      if (!job) throw new Error('Cloud prep enqueue returned no job row.');
 
-      const board1Rec = await getCheckpointBoard(key, 0);
-      const board1Perf = board1Rec?.performance || readEnginePerfCache(topic, durationMode, 1);
+      // Poll/Subscribe to job status until ready or failed
+      await new Promise<void>((resolve, reject) => {
+        let isDone = false;
+
+        const checkJob = async () => {
+          if (isDone || abortController.signal.aborted) return;
+          const { data: currentJob, error: pollErr } = await supabase
+            .from('lesson_prep_jobs')
+            .select('*')
+            .eq('prep_key', key)
+            .maybeSingle();
+
+          if (pollErr || !currentJob) return;
+
+          const progress = currentJob.progress_percent || 10;
+          const phase = currentJob.phase || 'queued';
+          const step = phase === 'structure' ? 1 : phase === 'boards' ? 2 : 3;
+
+          updateStatus(key, {
+            state: currentJob.status === 'ready' ? 'ready' : currentJob.status === 'failed' ? 'failed' : 'preparing',
+            step,
+            message: currentJob.message || 'Preparing cloud package…',
+            boardIndex: currentJob.next_board_index ? currentJob.next_board_index + 1 : 1,
+            totalBoards: currentJob.total_boards || 15,
+            progressPercent: currentJob.status === 'ready' ? 95 : progress,
+            error: currentJob.last_error || undefined,
+          });
+
+          if (currentJob.status === 'ready') {
+            isDone = true;
+            cleanup();
+            resolve();
+          } else if (currentJob.status === 'failed') {
+            isDone = true;
+            cleanup();
+            reject(new Error(currentJob.last_error || 'Cloud lesson preparation failed.'));
+          }
+        };
+
+        const pollTimer = setInterval(checkJob, 2000);
+
+        const channel = supabase
+          .channel(`prep_job_${key}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'lesson_prep_jobs',
+              filter: `prep_key=eq.${key}`,
+            },
+            (payload) => {
+              const updated = payload.new as any;
+              if (!updated) return;
+              void checkJob();
+            }
+          )
+          .subscribe();
+
+        const cleanup = () => {
+          clearInterval(pollTimer);
+          supabase.removeChannel(channel);
+        };
+
+        if (abortController.signal.onabort) {
+          abortController.signal.onabort = () => {
+            isDone = true;
+            cleanup();
+            reject(new Error('Cancelled'));
+          };
+        }
+
+        void checkJob();
+      });
+
+      if (abortController.signal.aborted) throw new Error('Cancelled');
+
+      // Job is READY in cloud -> Download files and install into IndexedDB stores
+      updateStatus(key, {
+        state: 'preparing',
+        step: 3,
+        message: 'Downloading lesson package to device…',
+        progressPercent: 96,
+      });
+
+      const cleanPrefix = `${resolvedUserId}/${key}`;
+
+      // Download structure.json
+      const { data: structBlob, error: structErr } = await supabase.storage
+        .from('lesson-packages')
+        .download(`${cleanPrefix}/structure.json`);
+      if (structErr || !structBlob) throw new Error(`Failed to download structure: ${structErr?.message}`);
+      const structureJson: TeachingStructure = JSON.parse(await structBlob.text());
+
+      // Download manifest.json
+      const { data: manifestBlob, error: manifestErr } = await supabase.storage
+        .from('lesson-packages')
+        .download(`${cleanPrefix}/manifest.json`);
+      if (manifestErr || !manifestBlob) throw new Error(`Failed to download manifest: ${manifestErr?.message}`);
+      const manifest: any = JSON.parse(await manifestBlob.text());
+
+      const total = structureJson.boards?.length || manifest.total_boards || 15;
+      const topic = structureJson.topic || topicTitle;
+
+      await saveLessonStructure(key, structureJson);
+
+      // Download each board JSON & audio payload
+      for (let i = 0; i < total; i++) {
+        if (abortController.signal.aborted) throw new Error('Cancelled');
+        const boardNum = i + 1;
+        const pad = String(boardNum).padStart(3, '0');
+
+        // Download board JSON
+        const { data: boardBlob } = await supabase.storage
+          .from('lesson-packages')
+          .download(`${cleanPrefix}/boards/board_${pad}.json`);
+        if (boardBlob) {
+          const boardPerf: TeachingBoardPerformance = JSON.parse(await boardBlob.text());
+          await saveLessonBoard(key, i, boardPerf);
+
+          // Save to engine cache so legacy readers hit it immediately
+          const perfCacheKey = getPerfCacheKey(topic, durationMode, boardNum);
+          setCachedBoardItem(perfCacheKey, boardPerf);
+        }
+
+        // Download audio payload JSON
+        const { data: audioJsonBlob } = await supabase.storage
+          .from('lesson-packages')
+          .download(`${cleanPrefix}/audio/board_${pad}.json`);
+        if (audioJsonBlob) {
+          const audioPayload = JSON.parse(await audioJsonBlob.text());
+          const ttsCacheKey = buildBoardTtsCacheKey(topic, durationMode, boardNum, resolvedVoice);
+          await saveLessonAudio(ttsCacheKey, audioPayload);
+          unifiedVoiceRouter.primeSpeechCache(ttsCacheKey, audioPayload, { voice: resolvedVoice });
+        }
+      }
 
       await saveLessonMeta({
         key,
@@ -941,18 +809,20 @@ export class LessonPrepService {
         durationMode,
         boardCount: total,
         progress: { boardIndex: total - 1, totalBoards: total },
-        audioKeys: structure.boards.map((_, i) => buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice)),
+        audioKeys: structureJson.boards.map((_, i) => buildBoardTtsCacheKey(topic, durationMode, i + 1, resolvedVoice)),
         createdAt: Date.now(),
         readyAt: Date.now(),
       });
 
-      const finalStatus = updateStatus(key, {
+      const installedPkg = await this.loadReadyPackage(key, resolvedVoice);
+
+      updateStatus(key, {
         state: 'ready',
         step: 3,
         message: 'Lesson ready!',
         etaMinutes: '0 min',
-        structure,
-        board1Perf,
+        structure: installedPkg?.structure || structureJson,
+        board1Perf: installedPkg?.boards[0] || null,
         audioCached: true,
         boardIndex: total,
         totalBoards: total,
@@ -963,10 +833,9 @@ export class LessonPrepService {
         type: 'prefetch_complete',
         topic: topicTitle,
         duration: durationMode,
-        metadata: { userId: resolvedUserId, pipeline: 'lesson_prep_service_full', totalBoards: total },
+        metadata: { userId: resolvedUserId, pipeline: 'cloud_lesson_prep_download', totalBoards: total },
       });
 
-      // Dispatch in-app, browser, and push notifications
       dispatchReadyNotifications({
         userId: resolvedUserId,
         topicTitle,
@@ -975,19 +844,16 @@ export class LessonPrepService {
         key,
       });
 
-      // LRU eviction of old device packages (best-effort)
       void evictOldLessonPackages();
     } catch (err: any) {
-      if (err?.message === 'Cancelled' || abortController.signal.aborted) {
-        return;
-      }
+      if (err?.message === 'Cancelled' || abortController.signal.aborted) return;
+      console.error('[LessonPrepService] Cloud prep failed for', key, err);
 
-      console.error('[LessonPrepService] Prep failed for', key, err);
       updateStatus(key, {
         state: 'failed',
         step: 1,
-        message: 'Preparation failed. Tap to retry.',
-        error: err?.message || 'Preparation failed. Tap to retry.',
+        message: 'Preparation failed. Tap Resume preparation to retry.',
+        error: err?.message || 'Preparation failed.',
         etaMinutes: '',
       });
 
