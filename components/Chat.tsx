@@ -26,6 +26,7 @@ import { formatLatexMath } from '../utils/latexFormatter';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
 import { CodeBlock } from './CodeBlock';
+import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
 
@@ -53,7 +54,7 @@ const timeAgo = (timestamp: number): string => {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-// --- REDESIGNED INPUT COMPOSER (Pill layout matching exact screenshot design) ---
+// --- REDESIGNED INPUT COMPOSER ---
 const GrokChatComposer: React.FC<{
   input: string;
   setInput: (val: string) => void;
@@ -129,7 +130,7 @@ const GrokChatComposer: React.FC<{
           />
         </div>
 
-        {/* Bottom Row: + button on left, Mic + Blue action button on right */}
+        {/* Bottom Row */}
         <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
           {/* Left: + (plus) button */}
           <button
@@ -144,9 +145,8 @@ const GrokChatComposer: React.FC<{
             </svg>
           </button>
 
-          {/* Right: Mic + Blue circle action button */}
+          {/* Right: Mic + Action button */}
           <div className="flex items-center gap-2">
-            {/* Microphone Icon Button */}
             <button
               type="button"
               onClick={onToggleVoice}
@@ -165,7 +165,6 @@ const GrokChatComposer: React.FC<{
               </svg>
             </button>
 
-            {/* Blue Circular Action Button */}
             <button
               type="button"
               onClick={hasText ? onSend : onToggleVoice}
@@ -177,12 +176,10 @@ const GrokChatComposer: React.FC<{
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : hasText ? (
-                /* Send up-arrow */
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5M5 12l7-7 7 7" />
                 </svg>
               ) : (
-                /* Exact 4-bar waveform icon matching screenshot */
                 <svg className={`w-5 h-5 fill-current ${voiceStatus === 'listening' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24">
                   <rect x="5.5" y="9" width="2" height="6" rx="1" />
                   <rect x="9.5" y="6" width="2" height="12" rx="1" />
@@ -304,7 +301,6 @@ export const Chat: React.FC<ChatProps> = ({
     });
   }, [activeConversationId, userProfile.uid, onSelectConversation, addToast]);
 
-  // Dynamically configure main App Header for Avelut AI
   useEffect(() => {
     if (!setCustomHeaderConfig) return;
     setCustomHeaderConfig({
@@ -331,7 +327,6 @@ export const Chat: React.FC<ChatProps> = ({
     messages.length,
   ]);
 
-  // Load user conversations
   useEffect(() => {
     let isMounted = true;
     getLocalConversations(userProfile.uid).then((localConvos) => {
@@ -382,7 +377,6 @@ export const Chat: React.FC<ChatProps> = ({
     };
   }, [userProfile.uid]);
 
-  // Fetch student course context for grounding
   useEffect(() => {
     const fetchCourseContext = async () => {
       try {
@@ -407,7 +401,6 @@ export const Chat: React.FC<ChatProps> = ({
     fetchCourseContext();
   }, [userProfile.uid, userProfile.department_id, userProfile.level]);
 
-  // Load messages for active conversation
   useEffect(() => {
     if (!activeConversationId) {
       if (!isLoadingRef.current) {
@@ -549,7 +542,6 @@ export const Chat: React.FC<ChatProps> = ({
 
       const aiMsgId = generateLocalId('msg');
 
-      // Append user message (typing indicator is handled cleanly by single isLoading state)
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== aiMsgId),
         { id: userMsgId, text: currentInput, sender: 'user', timestamp: now },
@@ -579,7 +571,6 @@ export const Chat: React.FC<ChatProps> = ({
 
       update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
-      // Build concise, generic system instruction for Avelut AI
       const baseSystemInstruction = [
         'You are Avelut, a smart, concise, and direct AI assistant.',
         'Respond directly, clearly, and naturally to the user prompt.',
@@ -600,7 +591,6 @@ export const Chat: React.FC<ChatProps> = ({
 
       const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}`;
 
-      // Build conversation history for multi-turn context (last 10 non-empty messages)
       const historyContents = messages
         .filter((m) => m.text && m.text.trim())
         .slice(-10)
@@ -746,7 +736,6 @@ export const Chat: React.FC<ChatProps> = ({
   };
 
   const handleRegenerateMessage = (msgIndex: number) => {
-    // Find the nearest preceding user message
     for (let i = msgIndex - 1; i >= 0; i--) {
       if (messages[i].sender === 'user') {
         void handleSendMessage(messages[i].text);
@@ -754,44 +743,6 @@ export const Chat: React.FC<ChatProps> = ({
       }
     }
   };
-
-  const TypingIndicator: React.FC = () => (
-    <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 font-medium text-sm select-none">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-        <style>{`
-          .dot {
-            fill: #555555;
-            animation: shine 1.8s infinite linear;
-          }
-
-          .c0 { animation-delay: 0s; }
-          .c1 { animation-delay: 0.2s; }
-          .c2 { animation-delay: 0.4s; }
-
-          @keyframes shine {
-            0%, 100% {
-              fill: #555555;
-              opacity: 0.3;
-            }
-            30%, 50% {
-              fill: #ffffff;
-              opacity: 1;
-            }
-          }
-        `}</style>
-        <circle className="dot c0" cx="6" cy="6" r="1.5" />
-        <circle className="dot c0" cx="6" cy="12" r="1.5" />
-        <circle className="dot c0" cx="6" cy="18" r="1.5" />
-        <circle className="dot c1" cx="12" cy="6" r="1.5" />
-        <circle className="dot c1" cx="12" cy="12" r="1.5" />
-        <circle className="dot c1" cx="12" cy="18" r="1.5" />
-        <circle className="dot c2" cx="18" cy="6" r="1.5" />
-        <circle className="dot c2" cx="18" cy="12" r="1.5" />
-        <circle className="dot c2" cx="18" cy="18" r="1.5" />
-      </svg>
-      <span>Thinking...</span>
-    </div>
-  );
 
   return (
     <div className="flex-1 flex flex-col h-full w-full bg-white dark:bg-black overflow-hidden text-neutral-900 dark:text-white">
@@ -807,19 +758,17 @@ export const Chat: React.FC<ChatProps> = ({
                 className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.sender === 'user' ? (
-                  /* Gemini User messages: Simple rounded pill bubble only, NO avatar, NO label, NO timestamp */
                   <div className="max-w-[85%] sm:max-w-[75%]">
                     <div className="px-5 py-3 rounded-full text-[15px] sm:text-[16px] leading-relaxed bg-[#f0f0f0] dark:bg-[#2f2f2f] text-neutral-900 dark:text-white inline-block text-left break-words">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
                   </div>
                 ) : (
-                  /* Gemini AI responses: Plain text (no bubble, no logo, no name, no timestamp) + Action Icon Row */
                   <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">
                     <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-neutral-900 dark:text-neutral-100 prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-p:leading-[1.75] prose-headings:my-4 prose-headings:font-bold prose-headings:tracking-tight prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0">
                       {!msg.text ? (
                         <div className="py-1">
-                          <TypingIndicator />
+                          <ThinkingTypingIndicator label="thinking" />
                         </div>
                       ) : (
                         <ReactMarkdown
@@ -857,10 +806,8 @@ export const Chat: React.FC<ChatProps> = ({
                       )}
                     </div>
 
-                    {/* Gemini Action Icon Row under AI responses */}
                     {msg.text && (
                       <div className="flex items-center gap-1 mt-3 text-neutral-500 dark:text-neutral-400 select-none">
-                        {/* Thumbs Up */}
                         <button
                           type="button"
                           onClick={() => handleToggleLike(msg.id, 'up')}
@@ -875,7 +822,6 @@ export const Chat: React.FC<ChatProps> = ({
                           </svg>
                         </button>
 
-                        {/* Thumbs Down */}
                         <button
                           type="button"
                           onClick={() => handleToggleLike(msg.id, 'down')}
@@ -890,7 +836,6 @@ export const Chat: React.FC<ChatProps> = ({
                           </svg>
                         </button>
 
-                        {/* Regenerate */}
                         <button
                           type="button"
                           onClick={() => handleRegenerateMessage(index)}
@@ -903,7 +848,6 @@ export const Chat: React.FC<ChatProps> = ({
                           </svg>
                         </button>
 
-                        {/* Copy */}
                         <button
                           type="button"
                           onClick={() => handleCopyMessage(msg.text)}
@@ -916,7 +860,6 @@ export const Chat: React.FC<ChatProps> = ({
                           </svg>
                         </button>
 
-                        {/* Share */}
                         <button
                           type="button"
                           onClick={() => handleShareMessage(msg.text)}
@@ -929,7 +872,6 @@ export const Chat: React.FC<ChatProps> = ({
                           </svg>
                         </button>
 
-                        {/* More (⋯) */}
                         <button
                           type="button"
                           onClick={() => addToast('More options', 'info')}
@@ -952,7 +894,7 @@ export const Chat: React.FC<ChatProps> = ({
             {isLoading && (messages.length === 0 || messages[messages.length - 1]?.sender === 'user') && (
               <div className="flex justify-start w-full">
                 <div className="py-1">
-                  <TypingIndicator />
+                  <ThinkingTypingIndicator label="thinking" />
                 </div>
               </div>
             )}
@@ -961,7 +903,7 @@ export const Chat: React.FC<ChatProps> = ({
         )}
       </div>
 
-      {/* INPUT BAR (Grok-style) */}
+      {/* INPUT BAR */}
       <GrokChatComposer
         input={input}
         setInput={setInput}

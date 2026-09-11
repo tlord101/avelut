@@ -11,6 +11,12 @@ import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, g
 import { LimitExceededModal } from './LimitExceededModal';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
+import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
+import {
+  getOrGenerateTopicStructure,
+  saveTopicStructureProgress,
+  TopicStructureData,
+} from '../services/topicStructureService';
 import type { UserProfile } from '../types';
 import type { Notebook, NotebookChapter } from '../services/notebookStorageService';
 
@@ -49,8 +55,29 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitCost, setLimitCost] = useState(1);
+  const [chapterStructure, setChapterStructure] = useState<TopicStructureData | null>(null);
 
-  // Self-load chapter content if missing or passed empty due to race condition
+  // Load or generate chapter structure JSON stored on device
+  useEffect(() => {
+    let isMounted = true;
+    getOrGenerateTopicStructure({
+      topicKey: `nb_${notebook.id}_ch_${chapter.id}`,
+      topicTitle: chapter.title,
+      courseTitle: notebook.title,
+      context: activeContent.slice(0, 500),
+      userProfile,
+      appSettings,
+    }).then((struct) => {
+      if (isMounted && struct) {
+        setChapterStructure(struct);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [notebook.id, chapter.id, chapter.title, notebook.title, activeContent, userProfile, appSettings]);
+
+  // Self-load chapter content if missing
   useEffect(() => {
     if (chapterContent && chapterContent.trim().length > 0) {
       setActiveContent(chapterContent);
@@ -120,6 +147,9 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
   // ── Configure Main App Header for Notebook Chat ──
   useEffect(() => {
     if (setCustomHeaderConfig) {
+      const activeStepNumber = (chapterStructure?.currentStepIndex ?? 0) + 1;
+      const totalSteps = chapterStructure?.steps?.length || 4;
+
       setCustomHeaderConfig({
         hideBottomNav: true,
         leftActions: (
@@ -133,9 +163,14 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
               <i className="bi bi-arrow-left text-base font-bold text-[#2563EB] dark:text-[#3B82F6]"></i>
             </button>
             <div className="min-w-0 flex flex-col justify-center">
-              <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A3A3A3] uppercase tracking-wider block truncate">
-                {notebook.title}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A3A3A3] uppercase tracking-wider block truncate">
+                  {notebook.title}
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#3B82F6] text-[9px] font-extrabold border border-[#2563EB]/20">
+                  Step {activeStepNumber}/{totalSteps}
+                </span>
+              </div>
               <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[140px] sm:max-w-[280px] md:max-w-[400px]">
                 {chapter.title}
               </h2>
@@ -162,7 +197,7 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
         setCustomHeaderConfig(null);
       }
     };
-  }, [setCustomHeaderConfig, onBack, notebook.title, chapter.title, messages.length, handleClearHistory]);
+  }, [setCustomHeaderConfig, onBack, notebook.title, chapter.title, messages.length, handleClearHistory, chapterStructure]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = (textToSend || inputText).trim();
@@ -188,6 +223,26 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
     setInputText('');
     setIsLoading(true);
 
+    // Track and advance chapter structure step progress
+    let currentStepIdx = chapterStructure?.currentStepIndex || 0;
+    const totalSteps = chapterStructure?.steps?.length || 4;
+    const userMsgCount = messages.filter((m) => m.sender === 'user').length;
+
+    if (userMsgCount > 0 && userMsgCount % 2 === 0 && currentStepIdx < totalSteps - 1) {
+      currentStepIdx = currentStepIdx + 1;
+      if (chapterStructure) {
+        const updatedStruct = { ...chapterStructure, currentStepIndex: currentStepIdx };
+        setChapterStructure(updatedStruct);
+        saveTopicStructureProgress(updatedStruct, userProfile?.uid);
+      }
+    }
+
+    const activeStep = chapterStructure?.steps?.[currentStepIdx] || {
+      title: 'Chapter Step',
+      objective: `Master ${chapter.title}`,
+      keyConcepts: ['Core principles'],
+    };
+
     try {
       const ai = createAvelutAI(appSettings, userProfile, {
         endpointPreference: 'openai_compatible_first',
@@ -210,20 +265,22 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
 
       const prompt = `You are an expert, precise, and encouraging academic tutor helping a student understand their textbook material: "${chapter.title}" from "${notebook.title}".
 
+CURRENT STRUCTURED CHAPTER STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}"
+STEP OBJECTIVE: "${activeStep.objective}"
+KEY CONCEPTS: ${activeStep.keyConcepts?.join(', ') || 'Core concepts'}
+
 CRITICAL TUTORING & BITE-SIZED TEACHING RULES:
-1. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 80-120 words per response). Do NOT dump long textbook passages or multi-page walls of text. Teach in bits.
-2. INTERACTIVE TEACHING LOOP: Teach ONE key idea or micro-concept at a time. ALWAYS conclude your response with 1 quick check question, challenge, or thought prompt to test the student's understanding before proceeding.
-3. TYPOGRAPHIC HIERARCHY (Strictly Observe):
-   - Use ### Subheadings for the concept or section title.
-   - Use **bold** for key concepts, essential definitions, and core principles.
-   - Use *italics* for emphasis or specialized terminology.
-   - Use clean bullet points (- ) when listing 2-3 points.
+1. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 80-120 words per response). Teach this step directly.
+2. INTERACTIVE TEACHING LOOP: Teach ONE key idea or micro-concept at a time. ALWAYS conclude your response with 1 quick check question or thought prompt before proceeding.
+3. TYPOGRAPHIC HIERARCHY:
+   - Use ### Subheadings for section titles.
+   - Use **bold** for key concepts and essential definitions.
    - Format all math, formulas, and variables using LaTeX ($...$ inline or $$...$$ block).
 ${isGroundingAvailable
-  ? `4. TEXTBOOK GROUNDING: Base your explanations, definitions, and examples strictly on the TEXTBOOK EXCERPT below. Stick closely to the author's terms, equations, and notations.`
-  : `4. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately and step-by-step.`
+  ? `4. TEXTBOOK GROUNDING: Base your explanations, definitions, and examples strictly on the TEXTBOOK EXCERPT below.`
+  : `4. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately.`
 }
-5. GREETINGS: If the student sends a casual greeting (like "hi" or "hello"), reply warmly and concisely (e.g. "Hello! What concept in ${chapter.title} would you like to master today?").
+5. GREETINGS: Reply warmly and concisely to greetings.
 
 BOOK: ${notebook.title}
 CHAPTER: ${chapter.title}
@@ -276,7 +333,6 @@ ${messageText}`;
         },
       ];
 
-      // Persist full thread to SQLite
       await saveChapterGeneration(notebook.id, chapter.id, userProfile?.uid || 'local', 'chat', finalMessages);
       void deductAICredits(userProfile?.uid, cost, 'Notebook Chat Tutor', appSettings);
     } catch (err) {
@@ -295,7 +351,6 @@ ${messageText}`;
     'Quiz me on this chapter',
   ];
 
-  // Helper to render streaming text
   const renderStreamingContent = (text: string) => {
     const lastPunctuationIdx = Math.max(
       text.lastIndexOf('\n'),
@@ -372,7 +427,7 @@ ${messageText}`;
 
   return (
     <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#F6F6F3] dark:bg-[#0A0A0A] animate-fade-in">
-      {/* Scrollable Messages Area — WhatsApp-style bottom upwards loading */}
+      {/* Scrollable Messages Area */}
       <div 
         ref={messagesContainerRef}
         className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-5 scroll-smooth"
@@ -425,13 +480,11 @@ ${messageText}`;
                           <div className={`relative ${isLongUserMsg && !isExpanded ? 'max-h-[125px] overflow-hidden' : ''}`}>
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
 
-                            {/* Fade Shadow Gradient for Long User Sent Messages */}
                             {isLongUserMsg && !isExpanded && (
                               <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/85 to-transparent pointer-events-none" />
                             )}
                           </div>
 
-                          {/* 3D Arrow Down Expand / Collapse Button */}
                           {isLongUserMsg && (
                             <div className="mt-2 flex justify-center">
                               <button
@@ -445,6 +498,8 @@ ${messageText}`;
                             </div>
                           )}
                         </div>
+                      ) : !msg.text ? (
+                        <ThinkingTypingIndicator label="thinking" />
                       ) : isCurrentlyStreaming ? (
                         renderStreamingContent(msg.text)
                       ) : (
@@ -462,13 +517,7 @@ ${messageText}`;
               })}
 
               {isLoading && !streamingMsgId && (
-                <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#141414] rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit animate-fade-in">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-bounce" />
-                  </div>
-                </div>
+                <ThinkingTypingIndicator label="thinking" />
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -476,7 +525,7 @@ ${messageText}`;
         </div>
       </div>
 
-      {/* Fixed Bottom: Suggestions + Input — floats above bottom nav */}
+      {/* Fixed Bottom Input */}
       <div className="shrink-0 px-3 sm:px-5 pt-2 pb-[calc(76px+env(safe-area-inset-bottom)+8px)]">
         <div className="max-w-4xl mx-auto w-full space-y-2">
           {/* Suggestion Pills */}

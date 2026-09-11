@@ -24,10 +24,8 @@ const triggerHapticFeedback = (type: ToastType) => {
   if ('vibrate' in navigator) {
     try {
       if (type === 'error') {
-        // A double buzz for errors to grab attention
         navigator.vibrate([100, 50, 100]);
       } else {
-        // A single short buzz for success or info
         navigator.vibrate(50);
       }
     } catch (e) {
@@ -56,7 +54,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await CapacitorToast.show({
           text: message,
           duration: finalDuration > 4000 ? 'long' : 'short',
-          position: 'bottom',
+          position: 'top',
         });
       } catch (e) {
         console.warn("Toast plugin failed, falling back to React toast:", e);
