@@ -579,31 +579,26 @@ export const Chat: React.FC<ChatProps> = ({
 
       update(dbRef(db, `chat_conversations/${userProfile.uid}/${currentConvoId}`), { last_updated_at: Date.now() });
 
-      // Build clean, responsive system instruction for Avelut AI
+      // Build concise, generic system instruction for Avelut AI
       const baseSystemInstruction = [
-        'You are Avelut, a smart, versatile, helpful, and friendly conversational AI assistant.',
-        'You can assist with any topic: everyday casual chat, writing, coding, math, science, and general learning.',
+        'You are Avelut, a smart, concise, and direct AI assistant.',
+        'Respond directly, clearly, and naturally to the user prompt.',
         'Guidelines:',
-        '- Keep responses natural, direct, human-like, and clear. Avoid robotic formal speeches, scripted intros, or repeating "I am Avelut, how can I help you?".',
-        '- For simple greetings or casual small talk (e.g., "hi", "hello", "hey", "what\'s up"), reply warmly, naturally, and directly.',
-        '- When formatting equations or mathematical expressions, use standard LaTeX ($...$ for inline, $$...$$ for blocks).',
+        '- Be concise and straightforward. Do not include excessive background context or wordy preambles.',
+        '- For simple greetings, reply directly and naturally.',
+        '- When formatting math or equations, use standard LaTeX ($...$ for inline, $$...$$ for blocks).',
       ].join('\n');
 
       let modeInstruction = '';
       if (selectedMode === 'fast') {
-        modeInstruction = '\nProvide a brief, direct, and concise response.';
+        modeInstruction = '\nKeep your answer extremely brief and to the point.';
       } else if (selectedMode === 'deep') {
-        modeInstruction = '\nProvide a detailed, step-by-step thorough explanation with clear examples.';
+        modeInstruction = '\nProvide a step-by-step explanation with clear details.';
       } else if (selectedMode === 'exam') {
-        modeInstruction = '\nFormat response as practice exam questions with explanations and key takeaways.';
+        modeInstruction = '\nFormat as practice exam question style.';
       }
 
-      let optionalContext = '';
-      if (selectedMode === 'context' && userProfile.department_id) {
-        optionalContext = `\n[Student Background Context - Department: ${userProfile.department_id}, Level: ${userProfile.level || ''}]`;
-      }
-
-      const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}${optionalContext}`;
+      const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}`;
 
       // Build conversation history for multi-turn context (last 10 non-empty messages)
       const historyContents = messages
@@ -761,38 +756,41 @@ export const Chat: React.FC<ChatProps> = ({
   };
 
   const TypingIndicator: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <style>{`
-        .dot {
-          fill: #555555;
-          animation: shine 1.8s infinite linear;
-        }
-
-        .c0 { animation-delay: 0s; }
-        .c1 { animation-delay: 0.2s; }
-        .c2 { animation-delay: 0.4s; }
-
-        @keyframes shine {
-          0%, 100% {
+    <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 font-medium text-sm select-none">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+        <style>{`
+          .dot {
             fill: #555555;
-            opacity: 0.3;
+            animation: shine 1.8s infinite linear;
           }
-          30%, 50% {
-            fill: #888888;
-            opacity: 1;
+
+          .c0 { animation-delay: 0s; }
+          .c1 { animation-delay: 0.2s; }
+          .c2 { animation-delay: 0.4s; }
+
+          @keyframes shine {
+            0%, 100% {
+              fill: #555555;
+              opacity: 0.3;
+            }
+            30%, 50% {
+              fill: #ffffff;
+              opacity: 1;
+            }
           }
-        }
-      `}</style>
-      <circle className="dot c0" cx="6" cy="6" r="1.5" />
-      <circle className="dot c0" cx="6" cy="12" r="1.5" />
-      <circle className="dot c0" cx="6" cy="18" r="1.5" />
-      <circle className="dot c1" cx="12" cy="6" r="1.5" />
-      <circle className="dot c1" cx="12" cy="12" r="1.5" />
-      <circle className="dot c1" cx="12" cy="18" r="1.5" />
-      <circle className="dot c2" cx="18" cy="6" r="1.5" />
-      <circle className="dot c2" cx="18" cy="12" r="1.5" />
-      <circle className="dot c2" cx="18" cy="18" r="1.5" />
-    </svg>
+        `}</style>
+        <circle className="dot c0" cx="6" cy="6" r="1.5" />
+        <circle className="dot c0" cx="6" cy="12" r="1.5" />
+        <circle className="dot c0" cx="6" cy="18" r="1.5" />
+        <circle className="dot c1" cx="12" cy="6" r="1.5" />
+        <circle className="dot c1" cx="12" cy="12" r="1.5" />
+        <circle className="dot c1" cx="12" cy="18" r="1.5" />
+        <circle className="dot c2" cx="18" cy="6" r="1.5" />
+        <circle className="dot c2" cx="18" cy="12" r="1.5" />
+        <circle className="dot c2" cx="18" cy="18" r="1.5" />
+      </svg>
+      <span>Thinking...</span>
+    </div>
   );
 
   return (
