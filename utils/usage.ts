@@ -62,6 +62,15 @@ export const triggerPaystackPurchase = async (options: PaystackPurchaseOptions) 
   };
 
   if (!publicKey) {
+    const isProd = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD;
+    const allowDemo = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ALLOW_DEMO_PAYMENTS === 'true';
+
+    if (isProd && !allowDemo) {
+      addToast('Payment gateway is not configured.', 'error');
+      if (onError) onError(new Error('Paystack public key is missing in production'));
+      return;
+    }
+
     addToast('Demo Mode: Simulating checkout...', 'info');
     setTimeout(async () => {
       const referenceId = 'demo_' + Math.random().toString(36).substring(2, 11);
@@ -171,22 +180,22 @@ export {
 } from './liveTutorialQuota';
 
 export const checkAICredits = (
-  userProfile?: UserProfile | null,
+  userProfile?: UserProfile | string | null,
   cost: number = 1,
   appSettings?: AppSettings | null
-): { allowed: boolean; balance: number; cost: number } => {
+): { allowed: boolean; balance: number; cost: number; hasCredits?: boolean } => {
   if (!userProfile) {
-    return { allowed: false, balance: 0, cost };
+    return { allowed: false, balance: 0, cost, hasCredits: false };
+  }
+
+  // Guard against callers accidentally passing user ID string instead of profile object
+  if (typeof userProfile === 'string') {
+    console.warn('[Credits] checkAICredits received string user_id instead of UserProfile object. Please update caller.');
+    return { allowed: false, balance: 0, cost, hasCredits: false };
   }
 
   if (isExempt(userProfile)) {
-    return { allowed: true, balance: Infinity, cost: 0 };
-  }
-
-  const isSubscriber = isPaidSubscriber(userProfile);
-
-  if (isSubscriber && cost <= 50) {
-    return { allowed: true, balance: Infinity, cost: 0 };
+    return { allowed: true, balance: Infinity, cost: 0, hasCredits: true };
   }
 
   // Strict balance resolution: prioritize ai_credits_balance, then ai_credits, fallback to 0
@@ -198,7 +207,7 @@ export const checkAICredits = (
 
   const allowed = balance >= cost;
 
-  return { allowed, balance, cost };
+  return { allowed, balance, cost, hasCredits: allowed };
 };
 
 export type DeductCreditsResult = {
@@ -219,7 +228,7 @@ export const deductAICredits = async (
     return { success: true, localOnly: true };
   }
 
-  // Prefer server truth when Supabase is configured, then mirror locally.
+  // Server-authoritative debit when Supabase is configured
   if (isSupabaseConfigured) {
     try {
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_user_credits', {
@@ -236,7 +245,7 @@ export const deductAICredits = async (
           updatedBalance = rpcRes.remaining_credits;
         }
       } else {
-        // Fallback: direct update (covers missing/old RPC)
+        // Fallback direct update (covers missing/old RPC)
         const { data: profile, error: selectErr } = await supabase
           .from('profiles')
           .select('ai_credits')
@@ -248,7 +257,11 @@ export const deductAICredits = async (
         }
 
         if (profile) {
-          const newCredits = Math.max(0, (profile.ai_credits ?? 50) - cost);
+          const currentCredits = profile.ai_credits ?? 0;
+          if (currentCredits < cost) {
+            return { success: false, error: 'Insufficient credits' };
+          }
+          const newCredits = Math.max(0, currentCredits - cost);
           const { error: updateErr } = await supabase
             .from('profiles')
             .update({ ai_credits: newCredits, updated_at: new Date().toISOString() })
@@ -262,14 +275,11 @@ export const deductAICredits = async (
         }
       }
 
-      if (typeof updatedBalance === 'number') {
-        saveLocalCredits(userId, updatedBalance, 'free').catch(console.warn);
-        notifyUserCreditsUpdated(userId, updatedBalance);
-      } else if (serverOk) {
-        await recordLocalCreditDeduction(userId, cost, featureName).catch(console.warn);
-      }
-
       if (serverOk) {
+        if (typeof updatedBalance === 'number') {
+          saveLocalCredits(userId, updatedBalance, 'free').catch(console.warn);
+          notifyUserCreditsUpdated(userId, updatedBalance);
+        }
         void supabase.from('usage_records').insert({
           user_id: userId,
           feature: featureName,
@@ -279,19 +289,16 @@ export const deductAICredits = async (
         return { success: true, balance: updatedBalance ?? undefined };
       }
 
-      await recordLocalCreditDeduction(userId, cost, featureName).catch(console.warn);
       const errMsg =
         (rpcErr as any)?.message ||
-        (rpcRes && !rpcRes.success ? String(rpcRes.error || 'RPC failed') : 'Supabase credit sync failed');
-      console.warn('[Credits] Supabase deduction did not succeed:', errMsg);
-      return { success: false, error: errMsg, localOnly: true };
+        (rpcRes && !rpcRes.success ? String(rpcRes.error || 'RPC failed') : 'Supabase credit debit failed');
+      console.warn('[Credits] Supabase deduction failed closed:', errMsg);
+      return { success: false, error: errMsg };
     } catch (err) {
       console.warn('[Credits] Supabase deduction error:', err);
-      await recordLocalCreditDeduction(userId, cost, featureName).catch(console.warn);
       return {
         success: false,
-        error: err instanceof Error ? err.message : 'Supabase credit sync error',
-        localOnly: true,
+        error: err instanceof Error ? err.message : 'Supabase credit debit error',
       };
     }
   }

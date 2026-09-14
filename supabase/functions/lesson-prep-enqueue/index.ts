@@ -94,6 +94,40 @@ Deno.serve(async (req) => {
       return json({ job: existing, reused: true, reason: "in_progress" });
     }
 
+    // Server-authoritative charge if not previously charged for this prepKey
+    if (!existing?.charged) {
+      // 1. Try deducting live tutorial minute pool
+      const periodKey = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+      const { data: minRes } = await admin.rpc("consume_live_tutorial_minutes", {
+        p_user_id: user.id,
+        p_period_key: periodKey,
+        p_minutes: durationMode,
+        p_allowance: 120, // default 120 mins allowance
+      });
+
+      let chargedOk = minRes?.success === true;
+
+      // 2. If minute pool insufficient, deduct AI credit balance
+      if (!chargedOk) {
+        const { data: credRes } = await admin.rpc("deduct_user_credits", {
+          p_user_id: user.id,
+          p_amount: durationMode,
+        });
+
+        if (credRes?.success) {
+          chargedOk = true;
+        } else if (!existing) {
+          // Both minute pool and credit balance insufficient
+          return json(
+            {
+              error: `Insufficient balance or credits. Need ${durationMode} credits to prepare a ${durationMode}-minute lesson.`,
+            },
+            402
+          );
+        }
+      }
+    }
+
     if (existing?.status === "failed") {
       const { data: job, error } = await admin
         .from("lesson_prep_jobs")
@@ -134,6 +168,7 @@ Deno.serve(async (req) => {
       progress_percent: 0,
       message: "Queued for cloud preparation",
       storage_prefix: storagePrefix,
+      charged: true,
       attempt_count: 0,
       max_attempts: 5,
       priority: 100,
