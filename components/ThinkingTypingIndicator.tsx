@@ -21,7 +21,7 @@ export const ThinkingTypingIndicator: React.FC<ThinkingTypingIndicatorProps> = (
   const timeDisplay = seconds === 1 ? '1 second' : `${seconds} seconds`;
 
   return (
-    <div className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-white dark:bg-[#141414] border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs w-fit text-slate-600 dark:text-slate-300 text-xs font-medium select-none ${className}`}>
+    <div className={`flex items-center gap-2 text-slate-600 dark:text-slate-300 text-xs font-medium select-none ${className}`}>
       <div className="shrink-0 w-6 h-6 flex items-center justify-center">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <style>{`
