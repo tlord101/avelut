@@ -306,15 +306,7 @@ export async function commitLiveTutorialStart(
       return { success: true };
     } catch (err: any) {
       console.warn('[liveTutorialQuota] commitLiveTutorialStart exception:', err);
-      // Fallback local update
-      const state = getLiveMinutePoolState(userProfile.uid, periodKey);
-      const next: LiveMinutePoolState = {
-        periodKey,
-        usedMinutes: (state.usedMinutes || 0) + decision.durationMinutes,
-        updatedAt: Date.now(),
-      };
-      writeCachedJson(storageKey(userProfile.uid), next);
-      return { success: true };
+      return { success: false, error: err?.message || 'Exception during minute consumption' };
     }
   }
   return { success: true };

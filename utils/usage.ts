@@ -68,7 +68,7 @@ export const triggerPaystackPurchase = async (options: PaystackPurchaseOptions) 
     if (isProd && !allowDemo) {
       addToast('Payment gateway is not configured.', 'error');
       if (onError) onError(new Error('Paystack public key is missing in production'));
-      return;
+      throw new Error('Paystack public key is missing in production');
     }
 
     addToast('Demo Mode: Simulating checkout...', 'info');
@@ -180,7 +180,7 @@ export {
 } from './liveTutorialQuota';
 
 export const checkAICredits = (
-  userProfile?: UserProfile | string | null,
+  userProfile?: UserProfile | null,
   cost: number = 1,
   appSettings?: AppSettings | null
 ): { allowed: boolean; balance: number; cost: number; hasCredits?: boolean } => {
@@ -190,8 +190,7 @@ export const checkAICredits = (
 
   // Guard against callers accidentally passing user ID string instead of profile object
   if (typeof userProfile === 'string') {
-    console.warn('[Credits] checkAICredits received string user_id instead of UserProfile object. Please update caller.');
-    return { allowed: false, balance: 0, cost, hasCredits: false };
+    throw new Error('[Credits] checkAICredits requires a UserProfile object, not a string UID.');
   }
 
   if (isExempt(userProfile)) {
@@ -304,5 +303,5 @@ export const deductAICredits = async (
   }
 
   await recordLocalCreditDeduction(userId, cost, featureName).catch(console.warn);
-  return { success: true, localOnly: true };
+  return { success: false, error: 'Supabase must be configured to deduct credits', localOnly: true };
 };

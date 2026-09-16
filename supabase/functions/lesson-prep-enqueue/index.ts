@@ -109,9 +109,10 @@ Deno.serve(async (req) => {
 
       // 2. If minute pool insufficient, deduct AI credit balance
       if (!chargedOk) {
+        const creditCost = durationMode === 15 ? 150 : durationMode === 30 ? 350 : 650;
         const { data: credRes } = await admin.rpc("deduct_user_credits", {
           p_user_id: user.id,
-          p_amount: durationMode,
+          p_amount: creditCost,
         });
 
         if (credRes?.success) {
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
           // Both minute pool and credit balance insufficient
           return json(
             {
-              error: `Insufficient balance or credits. Need ${durationMode} credits to prepare a ${durationMode}-minute lesson.`,
+              error: `Insufficient balance or credits. Need ${creditCost} credits to prepare a ${durationMode}-minute lesson.`,
             },
             402
           );
