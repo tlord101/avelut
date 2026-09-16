@@ -6,6 +6,7 @@ import { extractTextFromPdf } from '../services/pdfExtractorService';
 import { readCachedJson } from '../utils/cache';
 import { NotebookDetail } from './NotebookDetail';
 import { useToast } from '../hooks/useToast';
+import { NotebookRowSkeleton } from './Skeleton';
 
 interface MyNotebooksProps {
   userProfile: UserProfile;
@@ -234,7 +235,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-[#FAF9F6] dark:bg-[#141414] border border-neutral-200 dark:border-[#2A2A2A] rounded-2xl animate-pulse" />
+              <NotebookRowSkeleton key={i} />
             ))}
           </div>
         ) : filteredNotebooks.length > 0 ? (

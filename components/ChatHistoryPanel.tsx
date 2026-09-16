@@ -7,6 +7,7 @@ import { PencilIcon } from './icons/PencilIcon';
 import { Avatar } from './Avatar';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { ChatBubbleIcon } from './icons/ChatBubbleIcon';
+import { ChatHistorySkeleton } from './Skeleton';
 
 const timeAgo = (timestamp: number): string => {
   const now = Date.now();
@@ -35,6 +36,7 @@ interface ChatHistoryPanelProps {
   isMobilePanelOpen: boolean;
   onCloseMobilePanel: () => void;
   userProfile: UserProfile;
+  isLoading?: boolean;
 }
 
 export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
@@ -49,6 +51,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
   isMobilePanelOpen,
   onCloseMobilePanel,
   userProfile,
+  isLoading
 }) => {
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, convoId: string } | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -201,7 +204,9 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-4">
-        {conversations.length === 0 ? (
+        {isLoading ? (
+            <ChatHistorySkeleton />
+        ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-2 text-center">
                 <p className="text-sm font-medium text-gray-400">Your history will appear here.</p>
             </div>

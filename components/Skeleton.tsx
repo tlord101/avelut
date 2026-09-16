@@ -361,4 +361,115 @@ export const ProgressSummarySkeleton: React.FC = () => (
     </div>
 );
 
+// ---------------------------------------------------------------------------
+// CHAT HISTORY skeleton
+// ---------------------------------------------------------------------------
+export const ChatHistorySkeleton: React.FC = () => (
+    <div className="space-y-3 mt-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="group flex items-center justify-between gap-3 px-3 py-3 rounded-2xl border border-transparent">
+                <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/3" />
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+// ---------------------------------------------------------------------------
+// MY NOTEBOOKS skeleton
+// ---------------------------------------------------------------------------
+export const NotebookRowSkeleton: React.FC = () => (
+    <div className="w-full flex items-center justify-between p-4 sm:p-5 bg-[#FAF9F6] dark:bg-[#141414] border border-neutral-200/90 dark:border-[#2A2A2A] rounded-2xl gap-3">
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+            <Skeleton className="w-11 h-11 rounded-2xl flex-shrink-0" />
+            <div className="min-w-0 space-y-2 flex-1">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+            </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+            <Skeleton className="w-8 h-8 rounded-full" />
+            <Skeleton className="w-8 h-8 rounded-full" />
+        </div>
+    </div>
+);
+
+// ---------------------------------------------------------------------------
+// PLAYGROUND skeleton
+// ---------------------------------------------------------------------------
+export const PlaygroundCardSkeleton: React.FC = () => (
+    <div className="bg-[#141414] border border-[#2A2A2A] rounded-2xl p-5 flex flex-col justify-between group shadow-sm">
+        <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-3 w-16" />
+            </div>
+            <Skeleton className="h-5 w-3/4" />
+        </div>
+        <div className="mt-5 pt-3 border-t border-[#1C1C1C] flex items-center justify-between">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3 w-20" />
+        </div>
+    </div>
+);
+
+// ---------------------------------------------------------------------------
+// ADMIN TABLE skeleton
+// ---------------------------------------------------------------------------
+export const AdminTableSkeleton: React.FC = () => (
+    <>
+        {Array.from({ length: 5 }).map((_, i) => (
+            <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                <td className="px-6 py-4"><Skeleton className="w-4 h-4 rounded" /></td>
+                <td className="px-6 py-4 flex items-center gap-3">
+                    <SkeletonAvatar size={32} />
+                    <div className="space-y-2">
+                        <Skeleton className="h-3.5 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                    </div>
+                </td>
+                <td className="px-6 py-4"><Skeleton className="h-4 w-16" /></td>
+                <td className="px-6 py-4"><Skeleton className="h-4 w-20" /></td>
+                <td className="px-6 py-4 space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-24" />
+                </td>
+                <td className="px-6 py-4"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                <td className="px-6 py-4 text-right"><Skeleton className="h-8 w-8 inline-block rounded-lg" /></td>
+            </tr>
+        ))}
+    </>
+);
+
+// ---------------------------------------------------------------------------
+// ADMIN STAT CARD skeleton
+// ---------------------------------------------------------------------------
+export const AdminStatCardSkeleton: React.FC = () => (
+    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="flex items-center justify-between relative z-10">
+            <Skeleton className="w-12 h-12 rounded-2xl" />
+            <Skeleton className="w-8 h-8 rounded-full" />
+        </div>
+        <div className="mt-6 relative z-10 space-y-2">
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-3 w-24" />
+        </div>
+    </div>
+);
+
+// ---------------------------------------------------------------------------
+// TRANSACTION ROW skeleton
+// ---------------------------------------------------------------------------
+export const TransactionRowSkeleton: React.FC = () => (
+    <tr className="border-b border-slate-100 dark:border-white/10 text-sm">
+        <td className="py-4 px-4"><Skeleton className="h-4 w-20" /></td>
+        <td className="py-4 px-4"><Skeleton className="h-4 w-24" /></td>
+        <td className="py-4 px-4"><Skeleton className="h-4 w-16" /></td>
+        <td className="py-4 px-4 text-right flex justify-end"><Skeleton className="h-4 w-20" /></td>
+        <td className="py-4 px-4"><Skeleton className="h-5 w-16 rounded-md mx-auto" /></td>
+    </tr>
+);
+
 export default Skeleton;

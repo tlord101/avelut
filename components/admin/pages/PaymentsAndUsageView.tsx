@@ -2,14 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { supabase } from '../../../lib/supabaseClient';
 import type { UserProfile } from '../../../types';
+import { AdminTableSkeleton } from '../../Skeleton';
 
 interface PaymentsAndUsageViewProps {
     paymentLogs: any[];
     aiRequestLogs: any[];
     allUsersList: UserProfile[];
+    isLoading?: boolean;
 }
 
-export const PaymentsAndUsageView: React.FC<PaymentsAndUsageViewProps> = ({ paymentLogs, aiRequestLogs: propsAiLogs, allUsersList }) => {
+export const PaymentsAndUsageView: React.FC<PaymentsAndUsageViewProps> = ({ paymentLogs, aiRequestLogs: propsAiLogs, allUsersList, isLoading }) => {
     const [activeTab, setActiveTab] = useState<'payments' | 'usage'>('payments');
     const [searchQuery, setSearchQuery] = useState('');
     const [supaUsageLogs, setSupaUsageLogs] = useState<any[]>([]);
@@ -171,7 +173,9 @@ export const PaymentsAndUsageView: React.FC<PaymentsAndUsageViewProps> = ({ paym
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                                    {filteredPayments.map((log, i) => {
+                                    {isLoading ? (
+                                        <AdminTableSkeleton />
+                                    ) : filteredPayments.map((log, i) => {
                                         const itemName = log.purchase_type === 'subscription'
                                             ? `${(log.plan_key || log.tier_id || 'Subscription').toUpperCase()} Plan`
                                             : `${log.credit_amount || log.amount || ''} Extra Credits`;
