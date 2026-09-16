@@ -43,46 +43,7 @@ export function useLessonPrepJob({
   }, [activePrepKey]);
 
   /**
-   * Step 1 of live tutorial start: Ensure structure only (short call)
-   */
-  const ensureStructure = useCallback(
-    async (durationMode: LessonDurationMode) => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://eywpksapztzbnthlgfhd.supabase.co';
-        const res = await fetch(`${supabaseUrl}/functions/v1/live-tutorial-ensure-structure`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            topicTitle,
-            courseName,
-            syllabusContext,
-            durationMinutes: durationMode,
-          }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `Failed to generate topic structure (${res.status})`);
-        }
-
-        const data = await res.json();
-        return data.structure;
-      } catch (err) {
-        console.warn('[useLessonPrepJob] ensureStructure warning, proceeding:', err);
-        return null;
-      }
-    },
-    [topicTitle, courseName, syllabusContext]
-  );
-
-  /**
-   * Step 2 of live tutorial start: Start server background prep job
+   * Start live tutorial background prep job via in-app worker
    */
   const startPrepJob = useCallback(
     async (durationMode: LessonDurationMode, voice?: string) => {
@@ -95,10 +56,7 @@ export function useLessonPrepJob({
         return;
       }
 
-      // Step 1: ensure structure
-      await ensureStructure(durationMode);
-
-      // Step 2: enqueue background worker job
+      // Enqueue background worker job
       await lessonPrepService.startPrep({
         userId: resolvedUserId,
         topicTitle,
@@ -110,7 +68,7 @@ export function useLessonPrepJob({
         voice,
       });
     },
-    [resolvedUserId, topicKey, topicTitle, courseName, syllabusContext, userProfile, appSettings, ensureStructure]
+    [resolvedUserId, topicKey, topicTitle, courseName, syllabusContext, userProfile, appSettings]
   );
 
   const cancelJob = useCallback(() => {
@@ -121,7 +79,6 @@ export function useLessonPrepJob({
     status,
     activeDuration,
     setActiveDuration,
-    ensureStructure,
     startPrepJob,
     cancelJob,
   };
