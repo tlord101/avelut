@@ -13,46 +13,15 @@ import VoiceTutorialPage, { VoiceTutorialSessionData } from './VoiceTutorialPage
 import CourseChatTutor from './CourseChatTutor';
 import MyNotebooks from './MyNotebooks';
 import { supabaseDataService } from '../services/supabaseDataService';
-
-// --- UTILITIES ---
-const normalizeLevelValue = (value?: string): string => {
-    if (!value) return '';
-    return value.toLowerCase().replace(/\s+/g, '').replace(/level/g, '').replace(/lvl/g, '');
-};
-
-const normalizeDepartmentValue = (value?: string): string => {
-    if (!value) return '';
-    return value.toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^\w_]/g, '');
-};
-
-const normalizeTopicId = (value: string) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
-
-const sanitizeTopicMetadata = (topic: any, index: number): Topic => {
-    const topicName = (topic?.topic_name || topic?.name || '').toString().trim() || `Topic ${index + 1}`;
-    const rawTopicId = (topic?.topic_id || '').toString().trim();
-    return {
-        topic_name: topicName,
-        topic_id: rawTopicId || normalizeTopicId(topicName),
-        topic_context: (topic?.topic_context || topic?.context || '').toString().trim(),
-        start_point: (topic?.start_point || topic?.start || '').toString().trim(),
-        end_point: (topic?.end_point || topic?.end || '').toString().trim(),
-        is_complete: Boolean(topic?.is_complete),
-    };
-};
-
-const normalizeCourse = (course: any, fallbackCourseId = '', fallbackLevel = ''): Course | null => {
-    if (!course || typeof course !== 'object') return null;
-    const course_name = (course.course_name || '').toString().trim();
-    if (!course_name) return null;
-    const course_id = (course.course_id || fallbackCourseId || course_name.toLowerCase().replace(/\s+/g, '_')).toString();
-    return {
-        ...course,
-        course_id,
-        course_name,
-        level: (course.level || fallbackLevel || '').toString(),
-        topics: Array.isArray(course.topics) ? course.topics : [],
-    } as Course;
-};
+import {
+    normalizeLevelValue,
+    normalizeDepartmentValue,
+    normalizeTopicId,
+    sanitizeTopicMetadata,
+    normalizeCourse,
+    formatDuration,
+    formatLastVisited,
+} from './studyguide/studyGuideUtils';
 
 async function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
