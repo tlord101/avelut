@@ -2,16 +2,18 @@ import React, { useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { UserProfile } from '../../../types';
 import type { AdminTab } from '../AdminLayout';
+import { AdminStatCardSkeleton, PageSkeleton } from '../../Skeleton';
 
 interface DashboardViewProps {
     paymentLogs: any[];
     aiRequestLogs: any[];
     allUsersList: UserProfile[];
     onNavigate: (tab: AdminTab) => void;
+    isLoading?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
-    paymentLogs, aiRequestLogs, allUsersList, onNavigate
+    paymentLogs, aiRequestLogs, allUsersList, onNavigate, isLoading
 }) => {
     const premiumUsersCount = allUsersList.filter(u => u.subscription_status === 'premium').length;
 
@@ -96,7 +98,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return (
         <div className="space-y-6 text-slate-900 dark:text-slate-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {cards.map((card, idx) => (
+                {isLoading ? (
+                    Array.from({ length: 4 }).map((_, i) => <AdminStatCardSkeleton key={i} />)
+                ) : cards.map((card, idx) => (
                     <div key={idx} className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-amber-500/50 transition-all duration-300">
                         <div className="flex items-center justify-between relative z-10">
                             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
@@ -120,6 +124,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm min-h-[350px] flex flex-col">
+                    {isLoading ? <PageSkeleton /> : (
+                        <>
                     <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                         <i className="bi bi-graph-up text-amber-500"></i>
                         <span>Revenue (Last 30 Days)</span>
@@ -138,9 +144,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
+                    </>)}
                 </div>
                 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm min-h-[350px] flex flex-col">
+                    {isLoading ? <PageSkeleton /> : (
+                        <>
                     <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                         <i className="bi bi-people-fill text-amber-500"></i>
                         <span>User Signups (Last 30 Days)</span>
@@ -159,6 +168,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
+                    </>)}
                 </div>
             </div>
         </div>

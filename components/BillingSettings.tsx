@@ -5,6 +5,7 @@ import { VerificationBadge } from './VerificationBadge';
 import { DEFAULT_USAGE_SETTINGS } from '../utils/appSettings';
 import { Browser } from '@capacitor/browser';
 import { isNative } from '../utils/capacitorUtils';
+import { TransactionRowSkeleton } from './Skeleton';
 
 interface BillingSettingsProps {
   userProfile: UserProfile;
@@ -67,7 +68,7 @@ export const BillingSettingsScreen: React.FC<BillingSettingsProps> = ({ userProf
           <div>
             <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider mb-1 block">Account Plan & Balance</span>
             <div className="flex items-baseline gap-3">
-              <span className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white tracking-tight">{userProfile.ai_credits_balance ?? 0}</span>
+              <span className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white tracking-tight">{userProfile.ai_credits_balance ?? '—'}</span>
               <span className="text-sm font-bold text-[#64748B] dark:text-slate-400">Credits</span>
               <span className="text-xs font-bold px-3 py-1 bg-[#F1F5F9] dark:bg-slate-800 text-[#0066FF] rounded-full border border-[#E3E9F1] dark:border-slate-700 capitalize ml-2">
                 {userProfile.subscription_status || 'Free Tier'}
@@ -109,7 +110,22 @@ export const BillingSettingsScreen: React.FC<BillingSettingsProps> = ({ userProf
         </div>
         
         {isLoadingTx ? (
-           <div className="py-8 text-center text-sm text-slate-500">Loading transactions...</div>
+           <div className="overflow-x-auto">
+             <table className="w-full text-left border-collapse">
+               <thead>
+                 <tr className="border-b border-slate-100 dark:border-white/10">
+                   <th className="py-3 px-4 text-xs font-black uppercase tracking-widest text-slate-400">Date</th>
+                   <th className="py-3 px-4 text-xs font-black uppercase tracking-widest text-slate-400">Reference</th>
+                   <th className="py-3 px-4 text-xs font-black uppercase tracking-widest text-slate-400">Tier</th>
+                   <th className="py-3 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Amount</th>
+                   <th className="py-3 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                 {Array.from({ length: 4 }).map((_, i) => <TransactionRowSkeleton key={i} />)}
+               </tbody>
+             </table>
+           </div>
         ) : transactions.length === 0 ? (
            <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-white/5">
              <i className="bi bi-clock text-2xl text-slate-300 mb-3"></i>

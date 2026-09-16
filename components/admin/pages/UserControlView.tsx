@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import type { UserProfile } from '../../../types';
 import { DEFAULT_USAGE_SETTINGS } from '../../../utils/appSettings';
+import { AdminTableSkeleton } from '../../Skeleton';
 
 interface UserControlViewProps {
     allUsersList: UserProfile[];
@@ -209,7 +210,9 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {filteredUsers.length === 0 ? (
+                            {isUsersLoading ? (
+                                <AdminTableSkeleton />
+                            ) : filteredUsers.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-12 text-center">
                                         <i className="bi bi-exclamation-circle text-3xl text-slate-400 mx-auto mb-2 block"></i>

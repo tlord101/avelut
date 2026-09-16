@@ -2800,10 +2800,6 @@ FORMAT:
         ? allUsersList 
         : allUsersList.filter(u => u.department_id && (userProfile.admin_department_ids || []).includes(u.department_id));
 
-    if (isAppSettingsLoading || isInitialDataLoading) {
-        return <div className="flex h-screen items-center justify-center font-bold text-slate-500">Loading Admin Panel...</div>;
-    }
-
     return (
         <AdminLayout
             userProfile={userProfile}
@@ -2816,6 +2812,7 @@ FORMAT:
                     aiRequestLogs={aiRequestLogs} 
                     allUsersList={scopedUsersList} 
                     onNavigate={handleCourseTabNavigate}
+                    isLoading={isInitialDataLoading || isAppSettingsLoading}
                 />
             )}
             
@@ -2864,6 +2861,7 @@ FORMAT:
                     paymentLogs={paymentLogs}
                     aiRequestLogs={aiRequestLogs}
                     allUsersList={scopedUsersList}
+                    isLoading={isLogsLoading || isInitialDataLoading}
                 />
             )}
 

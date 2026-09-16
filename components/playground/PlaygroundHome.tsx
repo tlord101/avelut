@@ -6,6 +6,7 @@ import {
   getSavedFlashcardDecks,
   getSavedCBTExams
 } from '../../services/playgroundStorageService';
+import { PlaygroundCardSkeleton } from '../Skeleton';
 
 export interface PlaygroundHomeProps {
   userProfile?: UserProfile;
@@ -18,13 +19,27 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
   const [activeHomeTab, setActiveHomeTab] = useState<'past' | 'flashcards' | 'cbt'>('past');
   const [savedDecks, setSavedDecks] = useState<FlashcardDeck[]>([]);
   const [savedExams, setSavedExams] = useState<CBTExam[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getPastQuestionPacks().then(setPastPacks);
-    if (userProfile?.uid) {
-      getSavedFlashcardDecks(userProfile.uid).then(setSavedDecks);
-      getSavedCBTExams(userProfile.uid).then(setSavedExams);
-    }
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        const [packs, decks, exams] = await Promise.all([
+          getPastQuestionPacks(),
+          userProfile?.uid ? getSavedFlashcardDecks(userProfile.uid) : Promise.resolve([]),
+          userProfile?.uid ? getSavedCBTExams(userProfile.uid) : Promise.resolve([])
+        ]);
+        setPastPacks(packs);
+        setSavedDecks(decks);
+        setSavedExams(exams);
+      } catch (err) {
+        console.error('PlaygroundHome error fetching data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAllData();
   }, [userProfile?.uid]);
 
   const filteredPacks = useMemo(() => {
@@ -145,7 +160,9 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
         {/* TAB 1: PAST QUESTIONS LIST */}
         {activeHomeTab === 'past' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPacks.map(pack => (
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, i) => <PlaygroundCardSkeleton key={i} />)
+            ) : filteredPacks.map(pack => (
               <div
                 key={pack.id}
                 onClick={() => onNavigateView({ type: 'past_viewer', packId: pack.id })}
@@ -175,7 +192,11 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
         {/* TAB 2: SAVED FLASHCARDS DECKS */}
         {activeHomeTab === 'flashcards' && (
           <div>
-            {savedDecks.length === 0 ? (
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => <PlaygroundCardSkeleton key={i} />)}
+              </div>
+            ) : savedDecks.length === 0 ? (
               <div className="py-12 text-center bg-[#141414] border border-[#2A2A2A] rounded-2xl">
                 <p className="text-sm text-[#A3A3A3] mb-3">No saved flashcard decks found.</p>
                 <button
@@ -215,7 +236,11 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
         {/* TAB 3: SAVED CBT EXAMS */}
         {activeHomeTab === 'cbt' && (
           <div>
-            {savedExams.length === 0 ? (
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => <PlaygroundCardSkeleton key={i} />)}
+              </div>
+            ) : savedExams.length === 0 ? (
               <div className="py-12 text-center bg-[#141414] border border-[#2A2A2A] rounded-2xl">
                 <p className="text-sm text-[#A3A3A3] mb-3">No saved CBT practice exams found.</p>
                 <button
