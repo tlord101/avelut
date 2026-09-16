@@ -1,3 +1,7 @@
+import { MessengerChatList } from "./pages/MessengerChatList";
+import { MessengerFindFriends } from "./pages/MessengerFindFriends";
+import { MessengerNewChat } from "./pages/MessengerNewChat";
+import { MessengerChatInterface } from "./pages/MessengerChatInterface";
 import { auth, db, ensureDirectChat, get, limitToLast, off, onAuthStateChanged, onDisconnect, onValue, push, query, ref as dbRef, remove, serverTimestamp as firebaseServerTimestamp, set, storage, type FirebaseUser, update } from "@/lib/backend";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { readCachedJson, writeCachedJson } from "../../utils/cache";
@@ -1579,133 +1583,15 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
       if (subRoute === 'new') {
         return (
-          <div className="flex h-full w-full bg-[#0A0A0A] text-[#FAFAFA] overflow-hidden flex-col">
-            {/* Header */}
-            <div className="h-16 px-4 bg-[#141414] border-b border-[#2A2A2A] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => navigateToSubRoute('/messenger')}
-                  className="p-2 rounded-full hover:bg-[#1C1C1C] text-[#FAFAFA] transition cursor-pointer"
-                  aria-label="Back"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <div>
-                  <h2 className="text-base font-bold text-[#FAFAFA]">New Chat</h2>
-                  <p className="text-xs text-[#A3A3A3]">{studyPartnersList.length} contacts</p>
-                </div>
-              </div>
-              <button
-                onClick={() => navigateToSubRoute('/messenger')}
-                className="text-sm font-semibold text-[#A3A3A3] hover:text-[#FAFAFA] transition cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-
-            {/* Search Input */}
-            <div className="p-3 bg-[#0A0A0A] border-b border-[#2A2A2A] shrink-0">
-              <div className="relative">
-                <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#B0B0B0]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search study mates..."
-                  value={newChatSearchQuery}
-                  onChange={(e) => setNewChatSearchQuery(e.target.value)}
-                  className="w-full bg-[#1C1C1C] text-sm text-[#FAFAFA] placeholder-[#737373] pl-10 pr-4 py-2.5 rounded-xl border border-[#2A2A2A] focus:outline-none focus:border-[#3A3A3A] transition"
-                />
-              </div>
-            </div>
-
-            {/* Scrollable list */}
-            <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-[#2A2A2A]">
-              {/* Options */}
-              <div className="py-2">
-                <div
-                  onClick={() => addToast('New Group functionality is coming soon!', 'info')}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-[#141414] transition cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#FAFAFA]">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-[#FAFAFA]">New Group</h3>
-                      <p className="text-xs text-[#A3A3A3]">Create a study group</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#1C1C1C] text-[#A3A3A3] border border-[#2A2A2A]">
-                    Coming soon
-                  </span>
-                </div>
-
-                <div
-                  onClick={() => navigateToSubRoute('/messenger/find-friends')}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-[#141414] transition cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#FAFAFA]">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-[#FAFAFA]">Find Friends</h3>
-                      <p className="text-xs text-[#A3A3A3]">Search people & view requests</p>
-                    </div>
-                  </div>
-                  {pendingIncomingCount > 0 ? (
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#FAFAFA] text-[#0A0A0A]">
-                      {pendingIncomingCount} new
-                    </span>
-                  ) : (
-                    <svg className="w-5 h-5 text-[#B0B0B0]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </div>
-              </div>
-
-              {/* Section: Study Mates */}
-              <div className="pt-3 pb-2">
-                <div className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#A3A3A3]">
-                  Study Mates ({filteredStudyMates.length})
-                </div>
-                {filteredStudyMates.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-[#A3A3A3]">
-                    {newChatSearchQuery ? 'No matching study mates found' : 'No study mates connected yet. Tap "Find Friends" above to connect!'}
-                  </div>
-                ) : (
-                  filteredStudyMates.map(mate => (
-                    <div
-                      key={mate.uid}
-                      onClick={() => {
-                        void openChatWithUser(mate);
-                        navigateToSubRoute('/messenger');
-                      }}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-[#141414] transition cursor-pointer select-none"
-                    >
-                      <Avatar className="w-11 h-11 rounded-full object-cover shrink-0 border border-[#2A2A2A]" photo_url={mate.photo_url} display_name={mate.display_name || 'User'} />
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-semibold text-[#FAFAFA] truncate flex items-center gap-1.5">
-                          <span>{mate.display_name}</span>
-                          <VerificationBadge status={mate.subscription_status} />
-                        </h4>
-                        <p className="text-xs text-[#A3A3A3] truncate mt-0.5">{mate.department_id || 'No Department'}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+          <MessengerNewChat
+            studyPartnersList={studyPartnersList}
+            newChatSearchQuery={newChatSearchQuery}
+            setNewChatSearchQuery={setNewChatSearchQuery}
+            filteredStudyMates={filteredStudyMates}
+            openChatWithUser={openChatWithUser}
+            addToast={addToast}
+            navigateToSubRoute={navigateToSubRoute}
+          />
         );
       }
 
