@@ -21,6 +21,7 @@ import { AdminLayout } from './admin/AdminLayout';
 import { DashboardView } from './admin/pages/DashboardView';
 import { AcademicUnitsView } from './admin/pages/AcademicUnitsView';
 import { UserControlView } from './admin/pages/UserControlView';
+import { DatabaseMigrationsView } from './admin/pages/DatabaseMigrationsView';
 import { SystemSettingsView } from './admin/pages/SystemSettingsView';
 import { PaymentsAndUsageView } from './admin/pages/PaymentsAndUsageView';
 import { PastQuestionsView } from './admin/pages/PastQuestionsView';
@@ -70,7 +71,7 @@ const normalizeCourseStatus = (value?: string) => {
     return normalized ? normalized.slice(0, MAX_COURSE_STATUS_LENGTH) : '';
 };
 
-type AdminTab = 'dashboard' | 'schools' | 'questions' | 'users' | 'departments' | 'app' | 'app-updates' | 'payments' | 'notifications' | 'emails' | 'email-configs' | 'usage-settings' | 'usage-analytics' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration';
+type AdminTab = 'dashboard' | 'schools' | 'questions' | 'users' | 'departments' | 'app' | 'app-updates' | 'payments' | 'notifications' | 'emails' | 'email-configs' | 'usage-settings' | 'usage-analytics' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration' | 'database-migrations';
 
 type CourseAdminView =
     | { mode: 'global' }
@@ -81,7 +82,7 @@ type CourseAdminView =
     | { mode: 'manager-list'; departmentId: string; level: string }
     | { mode: 'manager-detail'; departmentId: string; level: string; courseId: string };
 
-const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'schools', 'departments', 'questions', 'users', 'notifications', 'feedback', 'emails', 'app', 'app-updates', 'payments', 'email-configs', 'usage-settings', 'usage-analytics', 'purchase-logs', 'tickets', 'cofounders', 'seo', 'github-integration'];
+const DEFAULT_VISIBLE_TABS: AdminTab[] = ['dashboard', 'schools', 'departments', 'questions', 'users', 'notifications', 'feedback', 'emails', 'app', 'app-updates', 'payments', 'email-configs', 'usage-settings', 'usage-analytics', 'purchase-logs', 'tickets', 'cofounders', 'seo', 'github-integration', 'database-migrations'];
 
 const getCourseAdminView = (pathname: string): CourseAdminView => {
     const segments = pathname.split('/').filter(Boolean);
@@ -2899,6 +2900,7 @@ FORMAT:
             {activeTab === 'seo' && <SEOSettingsView />}
             {activeTab === 'feedback' && <FeedbackView />}
             {activeTab === 'github-integration' && <GitHubIntegrationView />}
+            {activeTab === 'database-migrations' && <DatabaseMigrationsView />}
         </AdminLayout>
     );
 };

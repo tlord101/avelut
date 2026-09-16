@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Menu, Bell } from 'lucide-react';
 import type { UserProfile } from '../../types';
 
-export type AdminTab = 'dashboard' | 'schools' | 'departments' | 'questions' | 'users' | 'payments' | 'usage-analytics' | 'app' | 'app-updates' | 'email-configs' | 'notifications' | 'emails' | 'usage-settings' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration';
+export type AdminTab = 'dashboard' | 'schools' | 'departments' | 'questions' | 'users' | 'payments' | 'usage-analytics' | 'app' | 'app-updates' | 'email-configs' | 'notifications' | 'emails' | 'usage-settings' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration' | 'database-migrations';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -21,6 +21,7 @@ const SIDEBAR_ITEMS = [
     { id: 'notifications', label: 'Push Notifications', iconClass: 'bi bi-bell-fill' },
     { id: 'emails', label: 'SMTP Emails', iconClass: 'bi bi-envelope-fill' },
     { id: 'app', label: 'System Settings', iconClass: 'bi bi-gear-fill' },
+    { id: 'database-migrations', label: 'Database / Migrations', iconClass: 'bi bi-database-fill' },
     { id: 'app-updates', label: 'App Updates', iconClass: 'bi bi-phone-fill' },
     { id: 'tickets', label: 'Support Tickets', iconClass: 'bi bi-inbox-fill' },
     { id: 'cofounders', label: 'Co-Founders', iconClass: 'bi bi-person-badge-fill' },
