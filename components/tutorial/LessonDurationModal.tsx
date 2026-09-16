@@ -3,6 +3,7 @@ import type { UserProfile, AppSettings } from '../../types';
 import {
   evaluateLiveTutorialStart,
   getLiveMinutesRemaining,
+  fetchLiveMinutePoolFromServer,
   type LiveDurationMinutes,
 } from '../../utils/liveTutorialQuota';
 import { useLessonPrep } from '../../hooks/useLessonPrep';
@@ -81,6 +82,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   appSettings,
 }) => {
   const [selected, setSelected] = useState<LessonDurationMode>(initialMode);
+  const [serverPoolTrigger, setServerPoolTrigger] = React.useState(0);
 
   const effectiveProfile = useMemo(() => {
     if (userProfile && (userProfile.uid || (userProfile as any).id)) return userProfile;
@@ -97,8 +99,16 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
 
   const pool = useMemo(
     () => getLiveMinutesRemaining(effectiveProfile, appSettings),
-    [effectiveProfile, appSettings]
+    [effectiveProfile, appSettings, serverPoolTrigger]
   );
+
+  React.useEffect(() => {
+    if (isOpen && effectiveProfile?.uid && pool.periodKey) {
+      fetchLiveMinutePoolFromServer(effectiveProfile.uid, pool.periodKey).then(() => {
+        setServerPoolTrigger(prev => prev + 1);
+      }).catch(console.warn);
+    }
+  }, [isOpen, effectiveProfile?.uid, pool.periodKey]);
 
   const { statuses: prepStatuses, isAnyPreparing, startPrep } = useLessonPrep({
     topicTitle,
