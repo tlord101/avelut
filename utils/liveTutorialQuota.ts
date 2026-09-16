@@ -12,6 +12,7 @@
 import type { UserProfile, AppSettings } from '../types';
 import { DEFAULT_USAGE_SETTINGS } from './appSettings';
 import { readCachedJson, writeCachedJson } from './cache';
+import { supabase } from '../lib/supabaseClient';
 
 export type LiveDurationMinutes = 15 | 30 | 60;
 
@@ -112,6 +113,38 @@ export function getLiveMinutePoolState(userId: string, periodKey: string): LiveM
     return { periodKey, usedMinutes: 0, updatedAt: Date.now() };
   }
   return raw;
+}
+
+export async function fetchLiveMinutePoolFromServer(
+  userId: string,
+  periodKey: string
+): Promise<number> {
+  if (!userId) return 0;
+  try {
+    const { data, error } = await supabase
+      .from('live_minute_pools')
+      .select('used_minutes')
+      .eq('user_id', userId)
+      .eq('period_key', periodKey)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[liveTutorialQuota] fetchLiveMinutePoolFromServer error:', error);
+      return getLiveMinutePoolState(userId, periodKey).usedMinutes;
+    }
+
+    const usedMinutes = data?.used_minutes ?? 0;
+    const nextState: LiveMinutePoolState = {
+      periodKey,
+      usedMinutes,
+      updatedAt: Date.now(),
+    };
+    writeCachedJson(storageKey(userId), nextState);
+    return usedMinutes;
+  } catch (err) {
+    console.warn('[liveTutorialQuota] fetchLiveMinutePoolFromServer exception:', err);
+    return getLiveMinutePoolState(userId, periodKey).usedMinutes;
+  }
 }
 
 export function getLiveMinutesRemaining(
@@ -242,21 +275,49 @@ export async function commitLiveTutorialStart(
   userProfile: UserProfile,
   decision: LiveTutorialStartDecision,
   appSettings?: AppSettings | null
-): Promise<void> {
-  if (!decision.allowed || !userProfile.uid) return;
-  if (isExempt(userProfile)) return;
+): Promise<{ success: boolean; error?: string }> {
+  if (!decision.allowed || !userProfile.uid) return { success: false, error: 'Not allowed' };
+  if (isExempt(userProfile)) return { success: true };
 
   if (decision.payment === 'included') {
-    const { periodKey } = getLiveMinuteAllowance(userProfile, appSettings);
-    const state = getLiveMinutePoolState(userProfile.uid, periodKey);
-    const next: LiveMinutePoolState = {
-      periodKey,
-      usedMinutes: (state.usedMinutes || 0) + decision.durationMinutes,
-      updatedAt: Date.now(),
-    };
-    writeCachedJson(storageKey(userProfile.uid), next);
+    const { periodKey, allowance } = getLiveMinuteAllowance(userProfile, appSettings);
+    try {
+      const { data, error } = await supabase.rpc('consume_live_tutorial_minutes', {
+        p_user_id: userProfile.uid,
+        p_period_key: periodKey,
+        p_minutes: decision.durationMinutes,
+        p_allowance: allowance,
+      });
+
+      if (error || data?.success === false) {
+        const errMsg = data?.error || error?.message || 'Failed to consume live tutorial minutes';
+        console.warn('[liveTutorialQuota] commitLiveTutorialStart RPC error:', errMsg);
+        return { success: false, error: errMsg };
+      }
+
+      const usedMinutes = data?.used_minutes;
+      if (typeof usedMinutes === 'number') {
+        writeCachedJson(storageKey(userProfile.uid), {
+          periodKey,
+          usedMinutes,
+          updatedAt: Date.now(),
+        });
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.warn('[liveTutorialQuota] commitLiveTutorialStart exception:', err);
+      // Fallback local update
+      const state = getLiveMinutePoolState(userProfile.uid, periodKey);
+      const next: LiveMinutePoolState = {
+        periodKey,
+        usedMinutes: (state.usedMinutes || 0) + decision.durationMinutes,
+        updatedAt: Date.now(),
+      };
+      writeCachedJson(storageKey(userProfile.uid), next);
+      return { success: true };
+    }
   }
-  // payment === 'credits' → caller charges decision.creditCost via deductAICredits
+  return { success: true };
 }
 
 export function hasLiveTutorialAccess(

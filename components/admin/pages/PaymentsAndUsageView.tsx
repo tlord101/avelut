@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { supabase } from '../../../lib/supabaseClient';
 import type { UserProfile } from '../../../types';
 
 interface PaymentsAndUsageViewProps {
@@ -8,9 +9,33 @@ interface PaymentsAndUsageViewProps {
     allUsersList: UserProfile[];
 }
 
-export const PaymentsAndUsageView: React.FC<PaymentsAndUsageViewProps> = ({ paymentLogs, aiRequestLogs, allUsersList }) => {
+export const PaymentsAndUsageView: React.FC<PaymentsAndUsageViewProps> = ({ paymentLogs, aiRequestLogs: propsAiLogs, allUsersList }) => {
     const [activeTab, setActiveTab] = useState<'payments' | 'usage'>('payments');
     const [searchQuery, setSearchQuery] = useState('');
+    const [supaUsageLogs, setSupaUsageLogs] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchSupabaseUsage = async () => {
+            try {
+                const { data } = await supabase.from('usage_records').select('*').limit(5000);
+                if (Array.isArray(data)) {
+                    setSupaUsageLogs(data.map(r => ({
+                        timestamp: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+                        feature: r.feature,
+                        model: r.model || 'qwen3.7-flash',
+                        use_personal_token: false,
+                    })));
+                }
+            } catch (err) {
+                console.warn('[PaymentsAndUsageView] Supabase usage fetch warning:', err);
+            }
+        };
+        void fetchSupabaseUsage();
+    }, []);
+
+    const aiRequestLogs = useMemo(() => {
+        return [...(propsAiLogs || []), ...supaUsageLogs];
+    }, [propsAiLogs, supaUsageLogs]);
 
     const filteredPayments = paymentLogs.filter(log => {
         const query = searchQuery.toLowerCase();

@@ -15,48 +15,31 @@ import { uploadToR2, isR2Configured } from '../services/cloudflareR2Service';
 import { useTheme } from '../contexts/ThemeContext';
 import { TypingIndicator } from './TypingIndicator';
 import { getMultipleUserProfiles } from '../services/userProfileService';
-
-const REACTION_EMOJIS = ['🔥', '😂', '😍', '👏', '😮', '😭', '👍', '❤️'];
-
-// ================= REPLICA ICONS =================
-
-const DoubleCheckIcon = ({ color = "#8696a0" }: { color?: string }) => (
-  <i className="bi bi-check2-all inline-block text-base" style={{ color }} />
-);
-
-const AttachmentIcon = () => (
-  <i className="bi bi-paperclip text-lg text-slate-500 dark:text-[#A3A3A3]" />
-);
-
-const CameraIcon = () => (
-  <i className="bi bi-camera text-lg text-slate-500 dark:text-[#A3A3A3]" />
-);
-
-const SendIcon = () => (
-  <i className="bi bi-send-fill text-base" />
-);
-
-const TrashIcon = () => (
-  <i className="bi bi-trash text-lg text-rose-500" />
-);
-
-const LockIcon = ({ locked }: { locked: boolean }) => (
-  <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock-fill'} text-lg text-slate-500 dark:text-[#A3A3A3]`} />
-);
-
-const formatLastSeen = (value?: number) => {
-  if (!value) return 'Last seen recently';
-  const diffMs = Date.now() - value;
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMinutes < 1) return 'Last seen just now';
-  if (diffMinutes < 60) return `Last seen ${diffMinutes}m ago`;
-  if (diffHours < 24) return `Last seen ${diffHours}h ago`;
-  if (diffDays < 7) return `Last seen ${diffDays}d ago`;
-  return `Last seen ${new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
-};
+import {
+  REACTION_EMOJIS,
+  DoubleCheckIcon,
+  AttachmentIcon,
+  CameraIcon,
+  SendIcon,
+  TrashIcon,
+  LockIcon,
+  formatLastSeen,
+  formatChatTimestamp,
+  getUnreadCount,
+  getLastMessagePreview,
+  getLastMessageSenderId,
+  createFallbackChatUser,
+  ensureArray,
+  getMessengerCacheKey,
+  resolveDisplayImageUrl,
+  resolveImageDisplayUrl,
+  extractImageCaption,
+  generateMicroThumbnail,
+} from './messenger/messengerUtils';
+import { ProgressiveImageBubble } from './messenger/ProgressiveImageBubble';
+import { VoiceNotePlayer } from './messenger/VoiceNotePlayer';
+import { AvelutMessageInput } from './messenger/AvelutMessageInput';
+import { ForwardModal } from './messenger/ForwardModal';
 
 const formatChatTimestamp = (ts?: number) => {
   if (!ts) return '';

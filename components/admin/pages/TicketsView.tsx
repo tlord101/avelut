@@ -1,5 +1,6 @@
 import { db, onValue, ref as dbRef, remove, update } from '@/lib/backend';
 import React, { useEffect, useState } from 'react';
+import { supabase } from '../../../lib/supabaseClient';
 import { useToast } from '../../../hooks/useToast';
 
 interface Ticket {
@@ -19,22 +20,53 @@ export const TicketsView: React.FC = () => {
     const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
     useEffect(() => {
-        const ticketsRef = dbRef(db, 'contact_tickets');
-        const unsubscribe = onValue(ticketsRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                const parsed: Ticket[] = Object.keys(data).map(key => ({
-                    id: key,
-                    ...data[key]
-                })).sort((a, b) => b.createdAt - a.createdAt);
-                setTickets(parsed);
-            } else {
-                setTickets([]);
-            }
-            setIsLoading(false);
-        });
+        const fetchAllTickets = async () => {
+            try {
+                let rtdbTickets: Ticket[] = [];
+                const ticketsRef = dbRef(db, 'contact_tickets');
+                onValue(ticketsRef, async (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        rtdbTickets = Object.keys(data).map(key => ({
+                            id: key,
+                            ...data[key]
+                        }));
+                    }
 
-        return () => unsubscribe();
+                    // Query Supabase reports table for support tickets
+                    let supaTickets: Ticket[] = [];
+                    try {
+                        const { data: reports } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+                        if (Array.isArray(reports)) {
+                            supaTickets = reports.map((r: any) => ({
+                                id: r.id,
+                                name: r.reporter_id || r.user_name || 'User',
+                                email: r.email || r.user_email || '',
+                                subject: r.title || r.type || 'Support Request',
+                                message: r.details || r.content || '',
+                                status: r.status || 'unread',
+                                createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+                            }));
+                        }
+                    } catch (err) {
+                        console.warn('[TicketsView] Supabase reports fetch warning:', err);
+                    }
+
+                    const combined = [...rtdbTickets, ...supaTickets];
+                    const map = new Map<string, Ticket>();
+                    combined.forEach(t => map.set(t.id, t));
+                    const sorted = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+
+                    setTickets(sorted);
+                    setIsLoading(false);
+                });
+            } catch (err) {
+                console.error("Error fetching tickets:", err);
+                setIsLoading(false);
+            }
+        };
+
+        void fetchAllTickets();
     }, []);
 
     const updateTicketStatus = async (id: string, status: Ticket['status']) => {
