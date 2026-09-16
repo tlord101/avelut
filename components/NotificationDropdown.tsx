@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import type { Notification } from '../types';
-import { NotificationTypeIcon, resolveNotificationRoute, timeAgo } from './Notifications';
+import { NotificationTypeIcon, resolveNotificationRoute, timeAgo } from '../utils/notificationUtils';
 
 interface NotificationDropdownProps {
   isOpen: boolean;
