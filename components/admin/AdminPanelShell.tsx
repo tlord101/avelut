@@ -34,6 +34,23 @@ import { FeedbackView } from "../admin/pages/FeedbackView";
 import { GitHubIntegrationView } from "../admin/pages/GitHubIntegrationView";
 import { AppVersionUpdateView } from "../admin/pages/AppVersionUpdateView";
 
+export type AdminTab = 'dashboard' | 'schools' | 'departments' | 'questions' | 'users' | 'payments' | 'usage-analytics' | 'app' | 'app-updates' | 'email-configs' | 'notifications' | 'emails' | 'usage-settings' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration' | 'database-migrations';
+
+export const DEFAULT_VISIBLE_TABS: AdminTab[] = [
+    'dashboard', 'schools', 'departments', 'questions', 'users', 'payments',
+    'usage-analytics', 'app', 'app-updates', 'email-configs', 'notifications',
+    'emails', 'usage-settings', 'purchase-logs', 'tickets', 'cofounders',
+    'seo', 'feedback', 'github-integration', 'database-migrations'
+];
+
+interface AdminPanelProps {
+    userProfile: UserProfile;
+    initialTab?: AdminTab;
+    allowedTabs?: AdminTab[];
+    pathname?: string;
+    onNavigate?: (path: string) => void;
+}
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({
         userProfile,
         initialTab = 'departments',
