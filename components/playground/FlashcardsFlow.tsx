@@ -1,9 +1,5 @@
+import { MarkdownContent } from '../MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import { formatLatexMath } from '../../utils/latexFormatter';
 import { createAvelutAI } from '../../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../../utils/usage';
 import { useToast } from '../../hooks/useToast';
@@ -198,12 +194,7 @@ export const FlashcardsStudy: React.FC<FlashcardsStudyProps> = ({ deckId, userPr
   }, [deckId, userProfile?.uid]);
 
   const renderMarkdownText = (text: string) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-    >
-      {formatLatexMath(text)}
-    </ReactMarkdown>
+    <div className="dark min-w-0"><MarkdownContent content={text} className="[&>p]:my-0" /></div>
   );
 
   if (!activeDeck || !activeDeck.cards.length) {

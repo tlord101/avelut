@@ -33,6 +33,26 @@ import { SEOSettingsView } from "../admin/pages/SEOSettingsView";
 import { FeedbackView } from "../admin/pages/FeedbackView";
 import { GitHubIntegrationView } from "../admin/pages/GitHubIntegrationView";
 import { AppVersionUpdateView } from "../admin/pages/AppVersionUpdateView";
+import {
+    LEVELS,
+    DEFAULT_SEMESTER,
+    MAX_SKIPPED_USERS_PREVIEW,
+    normalizeLevel,
+    normalizeTopicId,
+    getCourseAdminView,
+    buildCourseManagerPath,
+    matchesCourseIdentifier,
+    sanitizeTopicMetadata,
+    selectPrimaryPdfUrl,
+    getUniqueIds,
+    getCourseMergeKey,
+    mergeCourseRecord,
+    upsertCourseInList,
+    normalizeCourseList,
+    mergeCourseListsIntoTarget,
+    sanitizeCourseFromRegistrationForm,
+} from "./courseAdminUtils";
+
 
 export type AdminTab = 'dashboard' | 'schools' | 'departments' | 'questions' | 'users' | 'payments' | 'usage-analytics' | 'app' | 'app-updates' | 'email-configs' | 'notifications' | 'emails' | 'usage-settings' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration' | 'database-migrations';
 

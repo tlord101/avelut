@@ -1,10 +1,5 @@
+import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { formatLatexMath } from '../utils/latexFormatter';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, getChapterContent } from '../services/notebookStorageService';
@@ -492,9 +487,7 @@ RULES:
                 </div>
 
                 <div className="text-sm font-medium text-[#0F172A] dark:text-slate-100 leading-relaxed mb-4">
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {formatLatexMath(q.question)}
-                  </ReactMarkdown>
+                  <MarkdownContent content={q.question} className="[&>p]:my-0" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
@@ -518,9 +511,7 @@ RULES:
                           {String.fromCharCode(65 + optIdx)}.
                         </span>
                         <div className="flex-1">
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                            {formatLatexMath(opt)}
-                          </ReactMarkdown>
+                          <MarkdownContent content={opt} className="[&>p]:my-0" />
                         </div>
                       </div>
                     );
@@ -532,9 +523,7 @@ RULES:
                   <span className="font-bold text-[#0F172A] dark:text-white block mb-1">
                     <i className="bi bi-info-circle mr-1 text-[#0066FF] dark:text-blue-400"></i> Solution Explanation:
                   </span>
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {formatLatexMath(q.explanation)}
-                  </ReactMarkdown>
+                  <MarkdownContent content={q.explanation} className="[&>p]:my-0" />
                 </div>
               </div>
             );
@@ -591,9 +580,7 @@ RULES:
               {chapter.title}
             </span>
             <div className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white leading-relaxed mt-2 mb-6">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {formatLatexMath(currentQ.question)}
-              </ReactMarkdown>
+              <MarkdownContent content={currentQ.question} className="[&>p]:my-0" />
             </div>
 
             {/* Options List */}
@@ -622,13 +609,7 @@ RULES:
                       {String.fromCharCode(65 + idx)}
                     </span>
                     <div className="flex-1 text-sm">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{ p: ({ node, ...props }) => <span {...props} /> }}
-                      >
-                        {formatLatexMath(option)}
-                      </ReactMarkdown>
+                      <MarkdownContent content={option} className="[&>p]:my-0" />
                     </div>
                   </button>
                 );

@@ -1,9 +1,5 @@
+import { MarkdownContent } from '../MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import { formatLatexMath } from '../../utils/latexFormatter';
 import { createAvelutAI } from '../../utils/inference';
 import { checkAICredits, deductAICredits } from '../../utils/usage';
 import type { UserProfile, AppSettings } from '../../types';
@@ -106,12 +102,7 @@ ${q.prompt}`;
   };
 
   const renderMarkdownText = (text: string) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-    >
-      {formatLatexMath(text)}
-    </ReactMarkdown>
+    <div className="dark min-w-0"><MarkdownContent content={text} className="[&>p]:my-0" /></div>
   );
 
   if (!currentPack) {
@@ -195,7 +186,7 @@ ${q.prompt}`;
                       }`}>
                         {opt.id.toUpperCase()}
                       </span>
-                      <span className="text-sm sm:text-base">{renderMarkdownText(opt.text)}</span>
+                      <div className="text-sm sm:text-base min-w-0">{renderMarkdownText(opt.text)}</div>
                     </div>
                   </button>
                 );

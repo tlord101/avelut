@@ -1,3 +1,5 @@
+import { MarkdownContent } from '../MarkdownContent';
+
 import {
   ChatContainerContent,
   ChatContainerRoot,
@@ -39,14 +41,12 @@ export const MessageComponent = memo(
       >
         {isAssistant ? (
           <div className="group flex w-full flex-col gap-0">
-            <MessageContent
-              className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
-              markdown
-            >
-              {message.parts
+            <MarkdownContent
+              className="w-full min-w-0 flex-1"
+              content={message.parts
                 .map((part) => (part.type === "text" ? part.text : null))
                 .join("")}
-            </MessageContent>
+            />
             <MessageActions
               className={cn(
                 "-ml-2.5 flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100",

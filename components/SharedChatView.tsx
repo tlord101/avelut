@@ -1,9 +1,6 @@
+import { MarkdownContent } from './MarkdownContent';
 import { db, get, ref as dbRef, set, update } from '@/lib/backend';
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 
 interface Message {
     id: string;
@@ -190,37 +187,20 @@ export const SharedChatView: React.FC<SharedChatViewProps> = ({ shareId, user })
                                 </div>
                             )}
 
-                            <div className="flex flex-col max-w-[85%] sm:max-w-lg md:max-w-xl">
+                            <div className="flex flex-col min-w-0 max-w-[85%] sm:max-w-lg md:max-w-xl">
                                 <div className={`p-4 rounded-2xl border ${message.sender === 'user' ? 'bg-blue-600 text-white border-blue-500 rounded-br-none' : 'bg-slate-900 text-slate-200 border-slate-800 rounded-bl-none'}`}>
                                     {message.image_url && (
                                         <div className="mb-3">
                                             <img src={message.image_url} alt="Shared visualization" className="rounded-lg w-full" />
                                         </div>
                                     )}
-                                    <div className="text-sm prose prose-invert prose-sm max-w-none">
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm, remarkMath]}
-                                            rehypePlugins={[rehypeKatex]}
-                                            components={{
-                                                h1: ({node, ...props}: any) => <h1 className="text-lg font-bold text-white mb-2 mt-1" {...props} />,
-                                                h2: ({node, ...props}: any) => <h2 className="text-base font-bold text-white mb-1.5 mt-2" {...props} />,
-                                                p: ({node, ...props}: any) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
-                                                strong: ({node, ...props}: any) => <strong className="font-bold text-white bg-slate-800 px-1 py-0.5 rounded" {...props} />,
-                                                code: ({node, inline, ...props}: any) => 
-                                                    inline ? (
-                                                        <code className="bg-slate-800 text-slate-100 px-1 py-0.5 rounded text-xs" {...props} />
-                                                    ) : (
-                                                        <code className="block bg-slate-950 text-slate-200 p-3 rounded-lg overflow-x-auto my-2 text-xs font-mono" {...props} />
-                                                    ),
-                                                pre: ({node, ...props}: any) => <pre className="bg-slate-950 rounded-lg overflow-hidden my-2" {...props} />,
-                                                ul: ({node, ...props}: any) => <ul className="list-disc list-outside space-y-1 my-2 pl-4" {...props} />,
-                                                ol: ({node, ...props}: any) => <ol className="list-decimal list-outside space-y-1 my-2 pl-4" {...props} />,
-                                                li: ({node, ...props}: any) => <li className="pl-0.5 text-slate-300" {...props} />,
-                                            }}
-                                        >
-                                            {message.text || ''}
-                                        </ReactMarkdown>
-                                    </div>
+                                    {message.sender === 'user' ? (
+                                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.text || ''}</p>
+                                    ) : (
+                                        <div className="dark min-w-0">
+                                            <MarkdownContent content={message.text || ''} />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

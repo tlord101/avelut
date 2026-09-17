@@ -1,11 +1,6 @@
+import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatLatexMath } from '../utils/latexFormatter';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost, hasLiveTutorialAccess } from '../utils/usage';
 import { readCachedJson, writeCachedJson, clearCachedKey } from '../utils/cache';
@@ -583,103 +578,12 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const renderStreamingContent = (text: string) => {
-    const lastPunctuationIdx = Math.max(
-      text.lastIndexOf('\n'),
-      text.lastIndexOf('. '),
-      text.lastIndexOf('? '),
-      text.lastIndexOf('! ')
-    );
-
-    if (lastPunctuationIdx !== -1 && lastPunctuationIdx < text.length - 1) {
-      const completedPart = text.slice(0, lastPunctuationIdx + (text[lastPunctuationIdx] === '\n' ? 1 : 2));
-      const activePart = text.slice(lastPunctuationIdx + (text[lastPunctuationIdx] === '\n' ? 1 : 2));
-
-      return (
-        <div className="space-y-1 font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em]">
-          {completedPart && (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-              components={markdownComponents(false)}
-            >
-              {formatLatexMath(completedPart)}
-            </ReactMarkdown>
-          )}
-          {activePart && (
-            <div className="inline-block text-[#002D62] dark:text-[#60A5FA] font-medium tracking-normal animate-fade-in transition-all duration-300">
-              <span>{activePart}</span>
-              <span className="inline-block w-2 h-4 sm:w-2.5 sm:h-5 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-1 font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em]">
-        {text && (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
-            components={markdownComponents(false)}
-          >
-            {formatLatexMath(text)}
-          </ReactMarkdown>
-        )}
-      </div>
-    );
-  };
-
-  const markdownComponents = (isUser: boolean) => ({
-    h1: ({ node, ...props }: any) => (
-      <h1 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight" {...props} />
-    ),
-    h2: ({ node, ...props }: any) => (
-      <h2 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-white mt-3.5 mb-1.5 tracking-tight border-b border-[#E3E9F1] dark:border-[#2A2A2A] pb-1" {...props} />
-    ),
-    h3: ({ node, ...props }: any) => (
-      <h3 className="text-base sm:text-lg font-semibold text-[#0066FF] dark:text-[#60A5FA] mt-3 mb-1" {...props} />
-    ),
-    h4: ({ node, ...props }: any) => (
-      <h4 className="text-sm sm:text-base font-semibold text-[#0F172A] dark:text-white mt-2.5 mb-1" {...props} />
-    ),
-    p: ({ node, ...props }: any) => <p className="mb-3 last:mb-0 leading-[1.75]" {...props} />,
-    strong: ({ node, ...props }: any) => (
-      <strong className={isUser ? 'font-black text-white' : 'font-black text-[#0F172A] dark:text-white'} {...props} />
-    ),
-    em: ({ node, ...props }: any) => (
-      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-slate-300'} {...props} />
-    ),
-    code: ({ node, inline, ...props }: any) =>
-      inline ? (
-        <code className={`px-1.5 py-0.5 rounded-md font-mono text-xs ${isUser ? 'bg-white/20 text-white' : 'bg-brand-50 dark:bg-brand-950/50 text-[#0066FF] dark:text-brand-300 border border-brand-100 dark:border-brand-900/50'}`} {...props} />
-      ) : (
-        <code className="block overflow-x-auto rounded-2xl bg-[#0F172A] dark:bg-[#0A0A0A] text-slate-100 p-4 text-xs font-mono my-2.5 border border-slate-700/60" {...props} />
-      ),
-    blockquote: ({ node, ...props }: any) => (
-      <blockquote className={`border-l-4 p-3 rounded-r-xl my-2.5 text-xs sm:text-sm leading-relaxed ${isUser ? 'border-brand-300 bg-white/10 text-white' : 'border-[#0066FF] bg-brand-50/70 dark:bg-brand-950/40 text-slate-800 dark:text-slate-200'}`} {...props} />
-    ),
-    ul: ({ node, ...props }: any) => <ul className="mb-3 last:mb-0 list-disc pl-5 space-y-1.5 marker:text-[#0066FF] leading-[1.7]" {...props} />,
-    ol: ({ node, ...props }: any) => <ol className="mb-3 last:mb-0 list-decimal pl-5 space-y-1.5 marker:text-[#0066FF] font-medium leading-[1.7]" {...props} />,
-    li: ({ node, ...props }: any) => <li className="leading-[1.75]" {...props} />,
-    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-brand-200 underline' : 'text-[#0066FF] underline hover:text-[#002D62]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
-    table: ({ node, ...props }: any) => (
-      <div className="w-full my-3.5 overflow-x-auto [scrollbar-width:thin] rounded-2xl border border-[#E3E9F1] dark:border-[#2A2A2A] shadow-2xs">
-        <table className="min-w-full border-collapse text-xs sm:text-sm text-left" {...props} />
-      </div>
-    ),
-    thead: ({ node, ...props }: any) => (
-      <thead className="bg-[#F1F5F9] dark:bg-[#1C1C1C] text-[#2563EB] dark:text-[#3B82F6] border-b border-[#E3E9F1] dark:border-[#2A2A2A] font-bold" {...props} />
-    ),
-    th: ({ node, ...props }: any) => (
-      <th className="p-3 font-bold border-r last:border-r-0 border-[#E3E9F1] dark:border-[#2A2A2A] whitespace-nowrap" {...props} />
-    ),
-    td: ({ node, ...props }: any) => (
-      <td className="p-3 border-t border-r last:border-r-0 border-[#E3E9F1] dark:border-[#2A2A2A] bg-white dark:bg-[#141414] text-[#0F172A] dark:text-[#FAFAFA]" {...props} />
-    ),
-  });
-
+  const renderStreamingContent = (text: string) => (
+    <div className="min-w-0">
+      <MarkdownContent content={text} />
+      <span aria-hidden="true" className="inline-block w-2 h-4 ml-1 bg-blue-600 dark:bg-blue-400 rounded-sm animate-pulse align-middle" />
+    </div>
+  );
   return (
     <div className="w-full h-full flex flex-col bg-[#F6F6F3] dark:bg-[#0A0A0A] overflow-hidden select-none relative">
       {/* Hidden File Inputs */}
@@ -801,13 +705,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                     </div>
                   ) : (
                     <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={markdownComponents(false)}
-                      >
-                        {formatLatexMath(message.text)}
-                      </ReactMarkdown>
+                      <MarkdownContent content={message.text} />
                     </div>
                   )}
                 </div>

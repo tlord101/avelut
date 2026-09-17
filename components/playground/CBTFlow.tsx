@@ -1,9 +1,5 @@
+import { MarkdownContent } from '../MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import { formatLatexMath } from '../../utils/latexFormatter';
 import { createAvelutAI } from '../../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../../utils/usage';
 import { useToast } from '../../hooks/useToast';
@@ -259,12 +255,7 @@ export const CBTExamTaker: React.FC<CBTExamTakerProps> = ({ examId, userProfile,
   };
 
   const renderMarkdownText = (text: string) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-    >
-      {formatLatexMath(text)}
-    </ReactMarkdown>
+    <div className="dark min-w-0"><MarkdownContent content={text} className="[&>p]:my-0" /></div>
   );
 
   const formatTimer = (secs: number) => {
@@ -334,7 +325,7 @@ export const CBTExamTaker: React.FC<CBTExamTakerProps> = ({ examId, userProfile,
 
                     return (
                       <div key={opt.id} className={`p-3 rounded-xl border text-sm flex items-center justify-between ${style}`}>
-                        <span>{opt.id.toUpperCase()}. {renderMarkdownText(opt.text)}</span>
+                        <div>{opt.id.toUpperCase()}. {renderMarkdownText(opt.text)}</div>
                         {isCorrectOpt && <span className="text-xs font-bold text-emerald-400">Correct Answer</span>}
                         {isUserSelected && !isCorrectOpt && <span className="text-xs font-bold text-rose-400">Your Selection</span>}
                       </div>
@@ -407,7 +398,7 @@ export const CBTExamTaker: React.FC<CBTExamTakerProps> = ({ examId, userProfile,
                   }`}>
                     {opt.id.toUpperCase()}
                   </span>
-                  <span className="text-sm sm:text-base">{renderMarkdownText(opt.text)}</span>
+                  <div className="text-sm sm:text-base min-w-0">{renderMarkdownText(opt.text)}</div>
                 </button>
               );
             })}

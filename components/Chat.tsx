@@ -19,14 +19,10 @@ import {
 import { getCachedAIResponse, setCachedAIResponse } from '../services/aiCacheService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import remarkBreaks from 'remark-breaks';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { formatLatexMath } from '../utils/latexFormatter';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
-import { CodeBlock } from './CodeBlock';
+import { MarkdownContent } from './MarkdownContent';
 import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
@@ -826,96 +822,13 @@ export const Chat: React.FC<ChatProps> = ({
                   </div>
                 ) : (
                   <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">
-                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.8] tracking-[-0.011em] font-normal text-neutral-900 dark:text-neutral-100 prose prose-neutral dark:prose-invert max-w-none">
+                    <div className="w-full min-w-0">
                       {!msg.text ? (
                         <div className="py-1">
                           <ThinkingTypingIndicator label="thinking" />
                         </div>
                       ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
-                          rehypePlugins={[rehypeKatex]}
-                          components={{
-                            p({ children }) {
-                              return <p className="my-4 leading-[1.8] text-neutral-900 dark:text-neutral-100">{children}</p>;
-                            },
-                            h1({ children }) {
-                              return <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white mt-7 mb-3.5 leading-snug">{children}</h1>;
-                            },
-                            h2({ children }) {
-                              return <h2 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-white mt-6 mb-3 leading-snug">{children}</h2>;
-                            },
-                            h3({ children }) {
-                              return <h3 className="text-base sm:text-lg font-semibold tracking-tight text-neutral-900 dark:text-white mt-5 mb-2.5 leading-snug">{children}</h3>;
-                            },
-                            h4({ children }) {
-                              return <h4 className="text-sm sm:text-base font-semibold tracking-tight text-neutral-900 dark:text-white mt-4 mb-2 leading-snug">{children}</h4>;
-                            },
-                            ul({ children }) {
-                              return <ul className="list-disc pl-6 my-4 space-y-2 text-neutral-900 dark:text-neutral-100">{children}</ul>;
-                            },
-                            ol({ children }) {
-                              return <ol className="list-decimal pl-6 my-4 space-y-2 text-neutral-900 dark:text-neutral-100">{children}</ol>;
-                            },
-                            li({ children }) {
-                              return <li className="leading-[1.75]">{children}</li>;
-                            },
-                            blockquote({ children }) {
-                              return (
-                                <blockquote className="border-l-4 border-neutral-300 dark:border-neutral-700 pl-4 py-1.5 my-4 italic text-neutral-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-900/50 rounded-r-lg">
-                                  {children}
-                                </blockquote>
-                              );
-                            },
-                            table({ children }) {
-                              return (
-                                <div className="overflow-x-auto my-5 rounded-xl border border-neutral-200 dark:border-neutral-800">
-                                  <table className="w-full text-left text-sm border-collapse">{children}</table>
-                                </div>
-                              );
-                            },
-                            thead({ children }) {
-                              return <thead className="bg-neutral-100 dark:bg-neutral-800/80 font-semibold text-neutral-900 dark:text-white">{children}</thead>;
-                            },
-                            th({ children }) {
-                              return <th className="p-3 border-b border-neutral-200 dark:border-neutral-700 font-semibold">{children}</th>;
-                            },
-                            td({ children }) {
-                              return <td className="p-3 border-b border-neutral-100 dark:border-neutral-800/60 text-neutral-800 dark:text-neutral-200">{children}</td>;
-                            },
-                            hr() {
-                              return <hr className="my-6 border-neutral-200 dark:border-neutral-800" />;
-                            },
-                            code({ node, inline, className, children, ...props }: any) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              const codeString = String(children || '').replace(/\n$/, '');
-
-                              if (!inline && (match || codeString.includes('\n'))) {
-                                return (
-                                  <div className="my-4">
-                                    <CodeBlock
-                                      language={match ? match[1] : 'code'}
-                                      value={codeString}
-                                    />
-                                  </div>
-                                );
-                              }
-                              return (
-                                <code
-                                  className="bg-neutral-100 dark:bg-neutral-800 text-[#0066FF] dark:text-[#38bdf8] font-mono px-1.5 py-0.5 rounded text-[13px] font-medium"
-                                  {...props}
-                                >
-                                  {children}
-                                </code>
-                              );
-                            },
-                            pre({ children }) {
-                              return <>{children}</>;
-                            },
-                          }}
-                        >
-                          {formatLatexMath(msg.text)}
-                        </ReactMarkdown>
+                        <MarkdownContent content={msg.text} />
                       )}
                     </div>
 

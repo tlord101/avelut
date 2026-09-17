@@ -1,10 +1,5 @@
+import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { formatLatexMath } from '../utils/latexFormatter';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, getChapterContent } from '../services/notebookStorageService';
@@ -351,80 +346,12 @@ ${messageText}`;
     'Quiz me on this chapter',
   ];
 
-  const renderStreamingContent = (text: string) => {
-    const lastPunctuationIdx = Math.max(
-      text.lastIndexOf('\n'),
-      text.lastIndexOf('. '),
-      text.lastIndexOf('? '),
-      text.lastIndexOf('! ')
-    );
-
-    if (lastPunctuationIdx !== -1 && lastPunctuationIdx < text.length - 1) {
-      const completedPart = text.slice(0, lastPunctuationIdx + (text[lastPunctuationIdx] === '\n' ? 1 : 2));
-      const activePart = text.slice(lastPunctuationIdx + (text[lastPunctuationIdx] === '\n' ? 1 : 2));
-
-      return (
-        <div className="space-y-1">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
-            components={markdownComponents(false)}
-          >
-            {formatLatexMath(completedPart)}
-          </ReactMarkdown>
-          {activePart && (
-            <div className="inline-block text-[#0F172A] dark:text-brand-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
-              <span>{activePart}</span>
-              <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="inline-block text-[#0F172A] dark:text-brand-300 font-semibold text-[17px] sm:text-[18px] tracking-normal animate-fade-in transition-all duration-300">
-        <span>{text}</span>
-        <span className="inline-block w-2 h-4 ml-1 bg-[#0066FF] rounded-xs animate-pulse align-middle" />
-      </div>
-    );
-  };
-
-  const markdownComponents = (isUser: boolean) => ({
-    h1: ({ node, ...props }: any) => (
-      <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white mt-5 mb-3 tracking-tight" {...props} />
-    ),
-    h2: ({ node, ...props }: any) => (
-      <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white mt-4 mb-2 tracking-tight border-b border-[#E3E9F1] dark:border-[#2A2A2A] pb-1.5" {...props} />
-    ),
-    h3: ({ node, ...props }: any) => (
-      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#3B82F6] mt-3.5 mb-1.5" {...props} />
-    ),
-    h4: ({ node, ...props }: any) => (
-      <h4 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white mt-3 mb-1" {...props} />
-    ),
-    p: ({ node, ...props }: any) => <p className="mb-4 last:mb-0 text-[17px] sm:text-[18px] leading-relaxed text-[#0F172A] dark:text-slate-100" {...props} />,
-    strong: ({ node, ...props }: any) => (
-      <strong className={isUser ? 'font-black text-white' : 'font-black text-[#0F172A] dark:text-white'} {...props} />
-    ),
-    em: ({ node, ...props }: any) => (
-      <em className={isUser ? 'italic text-white/90' : 'italic text-[#334155] dark:text-[#A3A3A3]'} {...props} />
-    ),
-    code: ({ node, inline, ...props }: any) =>
-      inline ? (
-        <code className={`px-1.5 py-0.5 rounded font-mono text-sm ${isUser ? 'bg-white/20 text-white' : 'bg-neutral-100 dark:bg-[#1C1C1C] text-[#2563EB] dark:text-[#3B82F6] border border-neutral-200 dark:border-[#2A2A2A]'}`} {...props} />
-      ) : (
-        <code className="block overflow-x-auto rounded-2xl bg-[#0A0A0A] dark:bg-[#141414] text-slate-100 p-4 text-sm font-mono my-3 border border-[#2A2A2A]" {...props} />
-      ),
-    blockquote: ({ node, ...props }: any) => (
-      <blockquote className={`border-l-4 p-3.5 rounded-r-xl my-3 text-base sm:text-[17px] leading-relaxed ${isUser ? 'border-[#3B82F6] bg-white/10 text-white' : 'border-[#2563EB] dark:border-[#3B82F6] bg-neutral-100 dark:bg-[#1C1C1C] text-slate-800 dark:text-slate-200'}`} {...props} />
-    ),
-    ul: ({ node, ...props }: any) => <ul className="mb-4 last:mb-0 list-disc pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#2563EB] dark:marker:text-[#3B82F6] text-[#0F172A] dark:text-slate-100" {...props} />,
-    ol: ({ node, ...props }: any) => <ol className="mb-4 last:mb-0 list-decimal pl-5 space-y-2 text-[17px] sm:text-[18px] marker:text-[#2563EB] dark:marker:text-[#3B82F6] text-[#0F172A] dark:text-slate-100 font-medium" {...props} />,
-    li: ({ node, ...props }: any) => <li className="leading-relaxed" {...props} />,
-    a: ({ node, ...props }: any) => <a className={`${isUser ? 'text-blue-200 underline' : 'text-[#2563EB] dark:text-[#3B82F6] underline hover:text-[#1D4ED8]'}`} target="_blank" rel="noopener noreferrer" {...props} />,
-  });
-
+  const renderStreamingContent = (text: string) => (
+    <div className="min-w-0">
+      <MarkdownContent content={text} />
+      <span aria-hidden="true" className="inline-block w-2 h-4 ml-1 bg-blue-600 dark:bg-blue-400 rounded-sm animate-pulse align-middle" />
+    </div>
+  );
   return (
     <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#F6F6F3] dark:bg-[#0A0A0A] animate-fade-in">
       {/* Scrollable Messages Area */}
@@ -503,13 +430,7 @@ ${messageText}`;
                       ) : isCurrentlyStreaming ? (
                         renderStreamingContent(msg.text)
                       ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                          components={markdownComponents(false)}
-                        >
-                          {formatLatexMath(msg.text)}
-                        </ReactMarkdown>
+                        <MarkdownContent content={msg.text} />
                       )}
                     </div>
                   </div>

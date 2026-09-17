@@ -1,10 +1,5 @@
+import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { formatLatexMath } from '../utils/latexFormatter';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, getChapterContent } from '../services/notebookStorageService';
@@ -277,9 +272,7 @@ RULES:
           {/* Card Text Content */}
           <div className="my-auto py-4 text-center">
             <div className="text-base sm:text-xl font-bold text-[#0F172A] dark:text-white leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {formatLatexMath(isFlipped ? currentCard.back : currentCard.front)}
-              </ReactMarkdown>
+              <MarkdownContent content={isFlipped ? currentCard.back : currentCard.front} className="[&>p]:my-0" />
             </div>
 
             {showHint && currentCard.hint && !isFlipped && (
