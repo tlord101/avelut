@@ -2,7 +2,7 @@ import { formatLatexMath } from './latexFormatter';
 
 // Protect fenced/indented code, code spans, link destinations and existing math.
 // An unfinished fence stays literal while a response is streaming.
-const literalPattern = /(^[ \t]*(?:`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*(?:`{3,}|~{3,})[ \t]*(?=\n|$)|$(?![\s\S]))|^(?: {4}|\t)[^\n]*(?:\n|$)|(`+)[\s\S]*?\2(?!`)|!?\[[^\]\n]*\]\([^\n)]*\)|\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$/gm;
+const literalPattern = /(^[ \t]*(?:`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*(?:`{3,}|~{3,})[ \t]*(?=\n|$)|$(?![\s\S])))|^(?: {4}|\t)[^\n]*(?:\n|$)|(`+)[\s\S]*?\2(?!`)|!?\[[^\]\n]*\]\([^\n)]*\)|\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$/gm;
 
 function transformProse(content: string, transform: (text: string) => string, preserveMath: boolean): string {
   let result = '';

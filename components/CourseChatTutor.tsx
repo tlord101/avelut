@@ -284,7 +284,9 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       '   - Use a clear ### Subheading for Step 1 title.',
       '   - Use **bold** for key concepts, essential terms, and definitions.',
       '   - Use *italics* for emphasis or subtle terminology.',
+      '   - Highlight critical terms with ==this== or <mark>this</mark>.',
       '   - Format all math, formulas, and symbols with LaTeX ($...$ inline, $$...$$ block).',
+      '   - Use code fences for code examples.',
       '4. ANALOGY: Use an intuitive everyday Nigerian analogy (e.g. POS charges, Danfo bus speeds, NEPA power vs. generator, market prices).',
       '5. Provide your response directly without meta commentary or emojis.',
     ].join('\n');
@@ -452,7 +454,9 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       '4. TYPOGRAPHIC HIERARCHY:',
       '   - Use ### Subheadings to organize sections or step titles.',
       '   - Use **bold** for crucial terms and definitions.',
+      '   - Highlight critical terms with ==this== or <mark>this</mark>.',
       '   - Format all math, equations, and variables with LaTeX ($...$ inline or $$...$$ block).',
+      '   - Use code fences for code examples.',
       '5. PRACTICAL EXAMPLES: Use relatable Nigerian real-world scenarios when illustrating ideas.',
       '6. DIRECT RESPONSE: Provide response directly without meta commentary or emojis.',
     ].join('\n');

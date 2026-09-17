@@ -637,6 +637,12 @@ export const Chat: React.FC<ChatProps> = ({
         '- Be concise and straightforward. Do not include excessive background context or wordy preambles.',
         '- For simple greetings, reply directly and naturally.',
         '- When formatting math or equations, use standard LaTeX ($...$ for inline, $$...$$ for blocks).',
+        '- When explaining concepts:',
+        '  * Use ## and ### headings for sections',
+        '  * Use **bold** for key terms and *italics* for emphasis',
+        '  * Highlight critical terms with ==this== or <mark>this</mark>',
+        '  * Use bullet lists and numbered steps for readability',
+        '  * Use code fences with syntax highlighting for code/examples',
       ].join('\n');
 
       let modeInstruction = '';
