@@ -1,1 +1,1 @@
-export { StudyGuide } from './studyguide/StudyGuideShell';
+PLACEHOLDER
