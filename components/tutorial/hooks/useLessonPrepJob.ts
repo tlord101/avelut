@@ -16,6 +16,7 @@ export interface UseLessonPrepJobParams {
   userId?: string;
   userProfile?: UserProfile | null;
   appSettings?: AppSettings | null;
+  durationMode?: LessonDurationMode | null;
 }
 
 export function useLessonPrepJob({
@@ -25,19 +26,29 @@ export function useLessonPrepJob({
   userId,
   userProfile,
   appSettings,
+  durationMode,
 }: UseLessonPrepJobParams) {
   const resolvedUserId = userId || userProfile?.uid || 'anon';
   const topicKey = buildTopicKey(topicTitle, courseName);
   const contentHash = buildContentHash(topicTitle, courseName, syllabusContext);
 
-  const [activeDuration, setActiveDuration] = useState<LessonDurationMode>(30);
-  const activePrepKey = buildPrepKey(resolvedUserId, topicKey, activeDuration);
+  const [activeDuration, setActiveDuration] = useState<LessonDurationMode>(durationMode || 30);
+
+  useEffect(() => {
+    if (durationMode) {
+      setActiveDuration(durationMode);
+    }
+  }, [durationMode]);
+
+  const effectiveDuration = durationMode || activeDuration || 30;
+  const activePrepKey = buildPrepKey(resolvedUserId, topicKey, effectiveDuration);
 
   const [status, setStatus] = useState<LessonPrepStatus>(() =>
     lessonPrepService.getStatus(activePrepKey)
   );
 
   useEffect(() => {
+    setStatus(lessonPrepService.getStatus(activePrepKey));
     const unsub = lessonPrepService.subscribe(activePrepKey, (s) => setStatus(s));
     return unsub;
   }, [activePrepKey]);
@@ -46,13 +57,27 @@ export function useLessonPrepJob({
    * Start live tutorial background prep job via in-app worker
    */
   const startPrepJob = useCallback(
-    async (durationMode: LessonDurationMode, voice?: string) => {
-      setActiveDuration(durationMode);
-      const key = buildPrepKey(resolvedUserId, topicKey, durationMode);
+    async (targetDuration: LessonDurationMode, voice?: string) => {
+      setActiveDuration(targetDuration);
+      const key = buildPrepKey(resolvedUserId, topicKey, targetDuration);
+
+      // Optimistically update status immediately so UI displays progress instantly
+      setStatus({
+        state: 'preparing',
+        step: 1,
+        progressPercent: 10,
+        message: 'Planning lesson structure…',
+      });
 
       // Check if already ready locally
       const pkg = await lessonPrepService.loadReadyPackage(key, voice);
       if (pkg) {
+        setStatus({
+          state: 'ready',
+          step: 3,
+          progressPercent: 100,
+          message: 'Lesson is ready on device!',
+        });
         return;
       }
 
@@ -62,7 +87,7 @@ export function useLessonPrepJob({
         topicTitle,
         courseName,
         syllabusContext,
-        durationMode,
+        durationMode: targetDuration,
         userProfile,
         appSettings,
         voice,
@@ -77,7 +102,7 @@ export function useLessonPrepJob({
 
   return {
     status,
-    activeDuration,
+    activeDuration: effectiveDuration,
     setActiveDuration,
     startPrepJob,
     cancelJob,

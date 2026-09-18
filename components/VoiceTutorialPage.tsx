@@ -61,6 +61,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
   const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
   const [isPlayerActive, setIsPlayerActive] = useState(false);
+  const [isOpeningLesson, setIsOpeningLesson] = useState(false);
 
   const sessionIdentity = useMemo(() => {
     const topicId = initialSessionData?.topic?.topic_id || '';
@@ -84,6 +85,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     userId: userProfile?.uid,
     userProfile,
     appSettings: resolvedAppSettings,
+    durationMode: selectedDurationMode,
   });
 
   // Reset duration mode & progress only when the topic changes
@@ -93,7 +95,19 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     setResumeProgress(null);
     setIsDurationModalOpen(true);
     setIsPlayerActive(false);
+    setIsOpeningLesson(false);
   }, [sessionIdentity]);
+
+  // Prevent blank screen: if duration modal was dismissed without selection, return or reopen
+  useEffect(() => {
+    if (!isDurationModalOpen && !selectedDurationMode && !isPlayerActive && !isOpeningLesson) {
+      if (onBack) {
+        onBack();
+      } else {
+        setIsDurationModalOpen(true);
+      }
+    }
+  }, [isDurationModalOpen, selectedDurationMode, isPlayerActive, isOpeningLesson, onBack]);
 
   // Check for existing progress
   useEffect(() => {
@@ -134,19 +148,28 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   };
 
   const handleOpenLesson = async (mode: LessonDurationMode) => {
+    setIsOpeningLesson(true);
     setIsDurationModalOpen(false);
     setSelectedDurationMode(mode);
     setStartBoardIndex(0);
 
-    const resolvedUserId = userProfile?.uid || 'anon';
-    const topicKey = topicKeyFromTitle(topicTitle, courseName);
-    const key = `${resolvedUserId}::${topicKey}::${mode}`;
+    try {
+      const resolvedUserId = userProfile?.uid || 'anon';
+      const topicKey = topicKeyFromTitle(topicTitle, courseName);
+      const key = `${resolvedUserId}::${topicKey}::${mode}`;
 
-    const pkg = await lessonPrepService.loadReadyPackage(key);
-    if (pkg) {
-      lessonPrepService.hydrateLessonPackageCaches(pkg);
+      const pkg = await lessonPrepService.loadReadyPackage(key);
+      if (pkg) {
+        lessonPrepService.hydrateLessonPackageCaches(pkg);
+      }
+      setIsPlayerActive(true);
+    } catch (err: any) {
+      console.error('[VoiceTutorialPage] openLesson error:', err);
+      // Fallback to active player if cache reading fails
+      setIsPlayerActive(true);
+    } finally {
+      setIsOpeningLesson(false);
     }
-    setIsPlayerActive(true);
   };
 
   const handleResumeSession = () => {
@@ -204,25 +227,8 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         )}
       />
 
-      {/* BACKGROUND PREP PROGRESS VIEW */}
-      {!isDurationModalOpen && !isPlayerActive && prepStatus.state === 'preparing' && selectedDurationMode && (
-        <LessonPrepProgressView
-          status={prepStatus}
-          topicTitle={topicTitle}
-          courseName={courseName}
-          durationMinutes={selectedDurationMode}
-          onOpenLesson={() => handleOpenLesson(selectedDurationMode)}
-          onCancelJob={cancelJob}
-          onLeaveBackground={() => {
-            if (onBack) onBack();
-            else if (onNavigate) onNavigate('chat');
-          }}
-          onRetry={() => handlePrepareLesson(selectedDurationMode)}
-        />
-      )}
-
-      {/* READY OPEN / PLAYER SESSION VIEW */}
-      {!isDurationModalOpen && (isPlayerActive || prepStatus.state === 'ready') && selectedDurationMode && (
+      {/* 1. READY OPEN / PLAYER SESSION VIEW */}
+      {!isDurationModalOpen && isPlayerActive && selectedDurationMode && (
         <TeachingEngineSessionView
           key={`${topicTitle}_${courseName || ''}_${selectedDurationMode}_${startBoardIndex}`}
           topicTitle={topicTitle}
@@ -235,6 +241,32 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
           startBoardIndex={startBoardIndex}
           onClose={onBack}
           setCustomHeaderConfig={setCustomHeaderConfig}
+        />
+      )}
+
+      {/* 2. BACKGROUND PREP PROGRESS / LOADING / READY / FAILED VIEW */}
+      {!isDurationModalOpen && !isPlayerActive && selectedDurationMode && (
+        <LessonPrepProgressView
+          status={
+            isOpeningLesson
+              ? {
+                  state: 'preparing',
+                  step: 3,
+                  progressPercent: 95,
+                  message: 'Loading lesson boards & audio package…',
+                }
+              : prepStatus
+          }
+          topicTitle={topicTitle}
+          courseName={courseName}
+          durationMinutes={selectedDurationMode}
+          onOpenLesson={() => handleOpenLesson(selectedDurationMode)}
+          onCancelJob={cancelJob}
+          onLeaveBackground={() => {
+            if (onBack) onBack();
+            else if (onNavigate) onNavigate('chat');
+          }}
+          onRetry={() => handlePrepareLesson(selectedDurationMode)}
         />
       )}
     </div>
