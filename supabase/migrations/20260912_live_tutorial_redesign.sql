@@ -16,6 +16,19 @@ CREATE TABLE IF NOT EXISTS public.topic_teaching_structures (
   updated_at        timestamptz DEFAULT now()
 );
 
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid();
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS duration_minutes int NOT NULL DEFAULT 30;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS duration_mode int DEFAULT 30;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS course_name text DEFAULT '';
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS content_hash text;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS board_count int NOT NULL DEFAULT 0;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+UPDATE public.topic_teaching_structures 
+SET duration_minutes = COALESCE(duration_minutes, duration_mode, 30) 
+WHERE duration_minutes IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_teaching_structures_unique
   ON public.topic_teaching_structures (topic_key, duration_minutes, COALESCE(course_name, ''));
 

@@ -5,6 +5,7 @@
 -- Project Reference: eywpksapztzbnthlgfhd
 -- This script is completely idempotent: safe to run on empty or partially populated databases.
 -- It creates all tables, functions, triggers, policies, indexes, and registers all 13 migrations.
+-- All evolved columns are guarded with ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
 -- ==============================================================================
 
 -- ==============================================================================
@@ -141,11 +142,23 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
     updated_by TEXT
 );
 
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS key TEXT;
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS value JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS value_json JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS updated_by TEXT;
+UPDATE public.app_settings SET value = value_json WHERE value IS NULL AND value_json IS NOT NULL;
+UPDATE public.app_settings SET value_json = value WHERE value_json IS NULL AND value IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS public.app_kv (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.app_kv ADD COLUMN IF NOT EXISTS key TEXT;
+ALTER TABLE public.app_kv ADD COLUMN IF NOT EXISTS value JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.app_kv ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ==============================================================================
 -- 5. ACADEMIC HIERARCHY & MATERIALS
@@ -154,7 +167,9 @@ CREATE TABLE IF NOT EXISTS public.schools (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     code TEXT,
+    short_name TEXT,
     state TEXT,
+    country TEXT DEFAULT 'Nigeria',
     lga TEXT,
     website TEXT,
     logo_url TEXT,
@@ -164,24 +179,45 @@ CREATE TABLE IF NOT EXISTS public.schools (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS short_name TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'Nigeria';
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS lga TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS website TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE TABLE IF NOT EXISTS public.colleges (
     id TEXT PRIMARY KEY,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    short_name TEXT,
     code TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.colleges ADD COLUMN IF NOT EXISTS short_name TEXT;
+ALTER TABLE public.colleges ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE public.colleges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS public.departments (
     id TEXT PRIMARY KEY,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
     college_id TEXT REFERENCES public.colleges(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
+    short_name TEXT,
     code TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.departments ADD COLUMN IF NOT EXISTS short_name TEXT;
+ALTER TABLE public.departments ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE public.departments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS public.courses (
     id TEXT PRIMARY KEY,
@@ -197,11 +233,18 @@ CREATE TABLE IF NOT EXISTS public.courses (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 3;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS semester INTEGER DEFAULT 1;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE TABLE IF NOT EXISTS public.topics (
     id TEXT PRIMARY KEY,
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
+    title TEXT,
+    topic_name TEXT,
     topic_order INTEGER DEFAULT 0,
+    overview_json JSONB,
     description TEXT,
     content TEXT,
     estimated_minutes INTEGER DEFAULT 30,
@@ -210,28 +253,78 @@ CREATE TABLE IF NOT EXISTS public.topics (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS topic_name TEXT;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS topic_order INTEGER DEFAULT 0;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS overview_json JSONB;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS estimated_minutes INTEGER DEFAULT 30;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.topics ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.topics SET title = topic_name WHERE title IS NULL AND topic_name IS NOT NULL;
+UPDATE public.topics SET topic_name = title WHERE topic_name IS NULL AND title IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS public.past_questions (
     id TEXT PRIMARY KEY,
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
+    department_id TEXT,
+    level TEXT,
     year TEXT NOT NULL,
     semester INTEGER DEFAULT 1,
     exam_type TEXT DEFAULT 'main',
     questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    questions_json JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS department_id TEXT;
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS level TEXT;
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS semester INTEGER DEFAULT 1;
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS exam_type TEXT DEFAULT 'main';
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS questions_json JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.past_questions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.past_questions SET questions = questions_json WHERE (questions IS NULL OR questions = '[]'::jsonb) AND questions_json IS NOT NULL AND questions_json != '[]'::jsonb;
+UPDATE public.past_questions SET questions_json = questions WHERE (questions_json IS NULL OR questions_json = '[]'::jsonb) AND questions IS NOT NULL AND questions != '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS public.materials (
     id TEXT PRIMARY KEY,
     course_id TEXT,
+    course_code TEXT,
+    department_id TEXT,
+    school_id TEXT,
+    level TEXT,
     topic_id TEXT,
     title TEXT NOT NULL,
     file_url TEXT NOT NULL,
-    file_type TEXT,
+    file_type TEXT DEFAULT 'pdf',
+    file_size_bytes BIGINT,
     file_size BIGINT,
+    page_count INTEGER,
     uploaded_by TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    uploader_name TEXT,
+    download_count INTEGER DEFAULT 0,
+    is_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS course_code TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS department_id TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS school_id TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS level TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS topic_id TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS file_type TEXT DEFAULT 'pdf';
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS file_size BIGINT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS page_count INTEGER;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS uploader_name TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS download_count INTEGER DEFAULT 0;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ==============================================================================
 -- 6. USER PROGRESS, ACTIVITY & SUBSCRIPTIONS
@@ -242,49 +335,117 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
     course_id TEXT,
     topic_id TEXT,
     completed BOOLEAN DEFAULT FALSE,
-    score NUMERIC,
+    completed_boards INTEGER DEFAULT 0,
+    total_boards INTEGER DEFAULT 10,
+    is_mastered BOOLEAN DEFAULT FALSE,
+    score NUMERIC DEFAULT 0,
     time_spent_seconds INTEGER DEFAULT 0,
+    last_studied_at TIMESTAMPTZ DEFAULT NOW(),
     last_accessed_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, topic_id)
 );
 
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS completed_boards INTEGER DEFAULT 0;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS total_boards INTEGER DEFAULT 10;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS is_mastered BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS score NUMERIC DEFAULT 0;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS time_spent_seconds INTEGER DEFAULT 0;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS last_studied_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.user_progress SET completed = is_mastered WHERE completed IS FALSE AND is_mastered IS TRUE;
+
 CREATE TABLE IF NOT EXISTS public.exam_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    department_id TEXT,
     course_id TEXT,
     exam_type TEXT,
     score NUMERIC,
     total_questions INTEGER,
     time_taken_seconds INTEGER,
     answers JSONB DEFAULT '[]'::jsonb,
+    questions_json JSONB DEFAULT '[]'::jsonb,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS department_id TEXT;
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS time_taken_seconds INTEGER;
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS answers JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS questions_json JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.exam_history ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.exam_history SET created_at = timestamp WHERE created_at IS NULL AND timestamp IS NOT NULL;
+UPDATE public.exam_history SET timestamp = created_at WHERE timestamp IS NULL AND created_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.usage_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     feature TEXT NOT NULL,
-    cost INTEGER NOT NULL,
+    cost INTEGER NOT NULL DEFAULT 0,
+    credits_spent INTEGER NOT NULL DEFAULT 0,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
     model TEXT,
+    provider TEXT,
+    details_json JSONB,
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS cost INTEGER DEFAULT 0;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS credits_spent INTEGER DEFAULT 0;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS prompt_tokens INTEGER DEFAULT 0;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS completion_tokens INTEGER DEFAULT 0;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS provider TEXT;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS details_json JSONB;
+ALTER TABLE public.usage_records ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+UPDATE public.usage_records SET cost = credits_spent WHERE (cost IS NULL OR cost = 0) AND credits_spent > 0;
+UPDATE public.usage_records SET credits_spent = cost WHERE (credits_spent IS NULL OR credits_spent = 0) AND cost > 0;
+
 CREATE TABLE IF NOT EXISTS public.subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    plan_id TEXT NOT NULL,
-    status TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+    plan_id TEXT NOT NULL DEFAULT 'free',
+    plan_type TEXT DEFAULT 'free',
+    status TEXT NOT NULL DEFAULT 'active',
     reference TEXT,
+    paystack_reference TEXT,
     amount NUMERIC,
     currency TEXT DEFAULT 'NGN',
-    starts_at TIMESTAMPTZ,
+    daily_topic_allowance INTEGER DEFAULT 1,
+    topics_used_today INTEGER DEFAULT 0,
+    last_reset_date DATE DEFAULT CURRENT_DATE,
+    unlocked_topics_pack INTEGER DEFAULT 0,
+    starts_at TIMESTAMPTZ DEFAULT NOW(),
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS plan_id TEXT DEFAULT 'free';
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS plan_type TEXT DEFAULT 'free';
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS paystack_reference TEXT;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS amount NUMERIC;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'NGN';
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS daily_topic_allowance INTEGER DEFAULT 1;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS topics_used_today INTEGER DEFAULT 0;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS last_reset_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS unlocked_topics_pack INTEGER DEFAULT 0;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.subscriptions SET plan_id = plan_type WHERE plan_id IS NULL AND plan_type IS NOT NULL;
+UPDATE public.subscriptions SET plan_type = plan_id WHERE plan_type IS NULL AND plan_id IS NOT NULL;
+UPDATE public.subscriptions SET reference = paystack_reference WHERE reference IS NULL AND paystack_reference IS NOT NULL;
+UPDATE public.subscriptions SET paystack_reference = reference WHERE paystack_reference IS NULL AND reference IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.live_minute_pools (
     user_id TEXT NOT NULL,
@@ -294,6 +455,9 @@ CREATE TABLE IF NOT EXISTS public.live_minute_pools (
     PRIMARY KEY (user_id, period_key)
 );
 
+ALTER TABLE public.live_minute_pools ADD COLUMN IF NOT EXISTS used_minutes INTEGER DEFAULT 0;
+ALTER TABLE public.live_minute_pools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- ==============================================================================
 -- 7. MESSENGER, CHATS, NOTIFICATIONS & SOCIAL
 -- ==============================================================================
@@ -301,6 +465,7 @@ CREATE TABLE IF NOT EXISTS public.chats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     direct_key TEXT,
     is_group BOOLEAN DEFAULT FALSE,
+    title TEXT,
     name TEXT,
     created_by UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -308,6 +473,11 @@ CREATE TABLE IF NOT EXISTS public.chats (
 );
 
 ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS direct_key TEXT;
+ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 CREATE UNIQUE INDEX IF NOT EXISTS chats_direct_key_unique ON public.chats (direct_key) WHERE direct_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.chat_members (
@@ -323,8 +493,21 @@ CREATE TABLE IF NOT EXISTS public.chat_members (
     is_pinned BOOLEAN DEFAULT FALSE,
     is_archived BOOLEAN DEFAULT FALSE,
     joined_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (chat_id, user_id)
 );
+
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS other_user_id UUID;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS last_message_text TEXT;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS last_message_sender_id UUID;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS last_message_is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS unread_count INTEGER DEFAULT 0;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -340,10 +523,25 @@ CREATE TABLE IF NOT EXISTS public.messages (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS text TEXT DEFAULT '';
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS media_url TEXT;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS media_type TEXT;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reply_to UUID;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_delivered BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+
 -- Legacy messenger compatibility tables
 CREATE TABLE IF NOT EXISTS public.messenger_conversations (
     id TEXT PRIMARY KEY,
     participant_ids TEXT[] NOT NULL DEFAULT '{}',
+    user1_id UUID,
+    user2_id UUID,
+    last_message_preview TEXT,
+    last_message_sender UUID,
+    last_message_time TIMESTAMPTZ DEFAULT NOW(),
+    unread_user1 INTEGER DEFAULT 0,
+    unread_user2 INTEGER DEFAULT 0,
     last_message JSONB,
     unread_counts JSONB DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -354,55 +552,118 @@ CREATE TABLE IF NOT EXISTS public.messenger_messages (
     id TEXT PRIMARY KEY,
     conversation_id TEXT,
     sender_id TEXT NOT NULL,
+    recipient_id UUID,
+    message_type TEXT DEFAULT 'text',
+    text_content TEXT,
     text TEXT,
     media_url TEXT,
-    media_type TEXT,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT,
     read_by JSONB DEFAULT '{}'::jsonb,
+    is_delivered BOOLEAN DEFAULT FALSE,
+    is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS public.study_partners (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
     partner_id UUID NOT NULL,
     status TEXT NOT NULL DEFAULT 'accepted',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, partner_id)
+    PRIMARY KEY (user_id, partner_id)
 );
 
+ALTER TABLE public.study_partners ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.study_partners ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'accepted';
+ALTER TABLE public.study_partners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE TABLE IF NOT EXISTS public.notifications (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    type TEXT DEFAULT 'general',
+    title TEXT,
+    message TEXT,
+    body TEXT,
     link TEXT,
+    action_url TEXT,
     is_read BOOLEAN DEFAULT FALSE,
+    data JSONB DEFAULT '{}'::jsonb,
+    metadata_json JSONB DEFAULT '{}'::jsonb,
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'general';
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS action_url TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS link TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS metadata_json JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.notifications SET message = body WHERE message IS NULL AND body IS NOT NULL;
+UPDATE public.notifications SET body = message WHERE body IS NULL AND message IS NOT NULL;
+UPDATE public.notifications SET action_url = link WHERE action_url IS NULL AND link IS NOT NULL;
+UPDATE public.notifications SET link = action_url WHERE link IS NULL AND action_url IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS public.user_blocks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    blocker_id UUID NOT NULL,
+    id UUID DEFAULT gen_random_uuid(),
+    user_id UUID,
+    blocker_id UUID,
     blocked_id UUID NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(blocker_id, blocked_id)
+    PRIMARY KEY (blocked_id)
 );
+
+ALTER TABLE public.user_blocks ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.user_blocks ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.user_blocks ADD COLUMN IF NOT EXISTS blocker_id UUID;
+ALTER TABLE public.user_blocks ADD COLUMN IF NOT EXISTS blocked_id UUID;
+ALTER TABLE public.user_blocks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.user_blocks SET user_id = blocker_id WHERE user_id IS NULL AND blocker_id IS NOT NULL;
+UPDATE public.user_blocks SET blocker_id = user_id WHERE blocker_id IS NULL AND user_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_id UUID NOT NULL,
+    reporter_id UUID,
+    reported_id UUID,
     reported_user_id UUID,
-    content_type TEXT NOT NULL,
+    chat_id UUID,
+    content_type TEXT,
     content_id TEXT,
-    reason TEXT NOT NULL,
+    reason TEXT,
+    type TEXT,
+    title TEXT,
+    details TEXT,
     description TEXT,
+    context_data JSONB,
     status TEXT DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS reporter_id UUID;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS reported_id UUID;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS reported_user_id UUID;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS chat_id UUID;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS reason TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS content_type TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS content_id TEXT;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS context_data JSONB;
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+UPDATE public.reports SET reported_id = reported_user_id WHERE reported_id IS NULL AND reported_user_id IS NOT NULL;
+UPDATE public.reports SET reported_user_id = reported_id WHERE reported_user_id IS NULL AND reported_id IS NOT NULL;
+UPDATE public.reports SET reason = details WHERE reason IS NULL AND details IS NOT NULL;
+UPDATE public.reports SET details = reason WHERE details IS NULL AND reason IS NOT NULL;
 
 -- ==============================================================================
 -- 8. LIVE TUTORIAL, LESSON PREP & TEACHING ENGINE
@@ -411,29 +672,103 @@ CREATE TABLE IF NOT EXISTS public.topic_teaching_structures (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     topic_key TEXT NOT NULL,
     topic_title TEXT NOT NULL,
-    course_name TEXT,
-    duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (15, 30, 60)),
+    course_name TEXT DEFAULT '',
+    duration_minutes INTEGER NOT NULL DEFAULT 30,
+    duration_mode INTEGER DEFAULT 30,
     content_hash TEXT,
     structure_json JSONB NOT NULL,
-    board_count INTEGER NOT NULL,
+    board_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure all columns exist on topic_teaching_structures BEFORE creating indexes
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS topic_key TEXT;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS topic_title TEXT;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS course_name TEXT DEFAULT '';
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS duration_mode INTEGER DEFAULT 30;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS content_hash TEXT;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS structure_json JSONB;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS board_count INTEGER DEFAULT 0;
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.topic_teaching_structures ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE public.topic_teaching_structures 
+SET duration_minutes = COALESCE(duration_minutes, duration_mode, 30) 
+WHERE duration_minutes IS NULL;
+
+UPDATE public.topic_teaching_structures 
+SET duration_mode = COALESCE(duration_mode, duration_minutes, 30) 
+WHERE duration_mode IS NULL;
+
+UPDATE public.topic_teaching_structures 
+SET course_name = '' 
+WHERE course_name IS NULL;
+
+-- If topic_key was the primary key in 20260908, drop PK constraint and make id the primary key
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+        WHERE tc.table_schema = 'public'
+          AND tc.table_name = 'topic_teaching_structures'
+          AND tc.constraint_type = 'PRIMARY KEY'
+          AND ccu.column_name = 'topic_key'
+    ) THEN
+        ALTER TABLE public.topic_teaching_structures DROP CONSTRAINT topic_teaching_structures_pkey;
+        UPDATE public.topic_teaching_structures SET id = gen_random_uuid() WHERE id IS NULL;
+        ALTER TABLE public.topic_teaching_structures ALTER COLUMN id SET NOT NULL;
+        ALTER TABLE public.topic_teaching_structures ADD PRIMARY KEY (id);
+    END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_teaching_structures_unique
     ON public.topic_teaching_structures (topic_key, duration_minutes, COALESCE(course_name, ''));
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_teaching_structures_cols
+    ON public.topic_teaching_structures (topic_key, duration_minutes, course_name);
+
 CREATE TABLE IF NOT EXISTS public.user_topic_views (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    topic_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    topic_key TEXT,
+    topic_title TEXT,
+    course_name TEXT DEFAULT 'General',
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    topic_id TEXT,
     course_id TEXT,
-    duration_mode SMALLINT NOT NULL DEFAULT 15,
-    last_board_index INTEGER NOT NULL DEFAULT 0,
-    completed BOOLEAN NOT NULL DEFAULT FALSE,
-    last_viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(user_id, topic_id, duration_mode)
+    duration_mode SMALLINT DEFAULT 15,
+    last_board_index INTEGER DEFAULT 0,
+    completed BOOLEAN DEFAULT FALSE,
+    last_viewed_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all columns exist on user_topic_views
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS topic_key TEXT;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS topic_title TEXT;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS course_name TEXT DEFAULT 'General';
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS topic_id TEXT;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS course_id TEXT;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS duration_mode SMALLINT DEFAULT 15;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS last_board_index INTEGER DEFAULT 0;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.user_topic_views ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE public.user_topic_views SET topic_key = COALESCE(topic_key, topic_id) WHERE topic_key IS NULL;
+UPDATE public.user_topic_views SET topic_id = COALESCE(topic_id, topic_key) WHERE topic_id IS NULL;
+UPDATE public.user_topic_views SET last_seen_at = COALESCE(last_seen_at, last_viewed_at, NOW()) WHERE last_seen_at IS NULL;
+UPDATE public.user_topic_views SET last_viewed_at = COALESCE(last_viewed_at, last_seen_at, NOW()) WHERE last_viewed_at IS NULL;
+
+-- Unique index supporting application upsert { onConflict: 'user_id,topic_key' }
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_topic_views_user_topic_key
+    ON public.user_topic_views (user_id, topic_key);
 
 CREATE TABLE IF NOT EXISTS public.lesson_prep_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -442,7 +777,7 @@ CREATE TABLE IF NOT EXISTS public.lesson_prep_jobs (
     topic_title TEXT NOT NULL,
     course_name TEXT,
     syllabus_context TEXT,
-    duration_mode SMALLINT NOT NULL CHECK (duration_mode IN (15, 30, 60)),
+    duration_mode SMALLINT NOT NULL DEFAULT 15 CHECK (duration_mode IN (15, 30, 60)),
     voice TEXT NOT NULL DEFAULT 'Altair',
     content_hash TEXT,
     model_version TEXT NOT NULL DEFAULT 'v1',
@@ -471,20 +806,25 @@ CREATE TABLE IF NOT EXISTS public.lesson_prep_jobs (
     failed_at TIMESTAMPTZ
 );
 
+ALTER TABLE public.lesson_prep_jobs ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 100;
+ALTER TABLE public.lesson_prep_jobs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.lesson_prep_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.lesson_prep_jobs ADD COLUMN IF NOT EXISTS charged BOOLEAN DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS public.lesson_packages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     prep_key TEXT NOT NULL UNIQUE,
     user_id TEXT NOT NULL,
     topic_title TEXT NOT NULL,
     course_name TEXT,
-    duration_mode SMALLINT NOT NULL,
-    voice TEXT NOT NULL,
+    duration_mode SMALLINT NOT NULL DEFAULT 15,
+    voice TEXT NOT NULL DEFAULT 'Altair',
     content_hash TEXT,
     model_version TEXT NOT NULL DEFAULT 'v1',
-    total_boards INTEGER NOT NULL,
-    storage_prefix TEXT NOT NULL,
-    structure_path TEXT NOT NULL,
-    manifest_path TEXT NOT NULL,
+    total_boards INTEGER NOT NULL DEFAULT 0,
+    storage_prefix TEXT NOT NULL DEFAULT '',
+    structure_path TEXT NOT NULL DEFAULT '',
+    manifest_path TEXT NOT NULL DEFAULT '',
     package_bytes BIGINT,
     checksum_sha256 TEXT,
     status TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('ready', 'expired', 'deleted')),
@@ -492,6 +832,9 @@ CREATE TABLE IF NOT EXISTS public.lesson_packages (
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.lesson_packages ADD COLUMN IF NOT EXISTS ready_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.lesson_packages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS public.lesson_package_boards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -564,6 +907,19 @@ CREATE TABLE IF NOT EXISTS public.theory_solutions (
 -- ==============================================================================
 -- 10. RPC FUNCTIONS (Stored Procedures)
 -- ==============================================================================
+
+-- Drop existing overloads to avoid PostgREST ambiguities
+DROP FUNCTION IF EXISTS public.deduct_user_credits(UUID, INTEGER);
+DROP FUNCTION IF EXISTS public.deduct_user_credits(text, int);
+DROP FUNCTION IF EXISTS public.increment_user_credits(UUID, INTEGER);
+DROP FUNCTION IF EXISTS public.increment_user_credits(text, int);
+DROP FUNCTION IF EXISTS public.increment_user_credits(text, int, text);
+DROP FUNCTION IF EXISTS public.increment_user_xp(UUID, INTEGER);
+DROP FUNCTION IF EXISTS public.increment_user_xp(text, int);
+DROP FUNCTION IF EXISTS public.update_daily_streak(text);
+DROP FUNCTION IF EXISTS public.update_daily_streak(UUID);
+DROP FUNCTION IF EXISTS public.claim_lesson_prep_job(text);
+DROP FUNCTION IF EXISTS public.claim_lesson_prep_job(text, int);
 
 -- Deduct User AI Credits (safe for UUID or text user ids)
 CREATE OR REPLACE FUNCTION public.deduct_user_credits(p_user_id text, p_amount int)
@@ -900,7 +1256,7 @@ BEGIN
 END;
 $$;
 
--- Updated at trigger function
+-- Trigger function for updated_at
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -1068,16 +1424,33 @@ CREATE POLICY messages_update ON public.messages FOR UPDATE USING (auth.uid() = 
 
 -- Study Partners & Notifications
 DROP POLICY IF EXISTS study_partners_all ON public.study_partners;
+DROP POLICY IF EXISTS study_partners_own ON public.study_partners;
 CREATE POLICY study_partners_all ON public.study_partners FOR ALL USING (auth.uid() = user_id OR auth.uid() = partner_id);
 
 DROP POLICY IF EXISTS notifications_all ON public.notifications;
-CREATE POLICY notifications_all ON public.notifications FOR ALL USING (auth.uid()::text = user_id OR user_id = 'all');
+DROP POLICY IF EXISTS notifications_own ON public.notifications;
+DROP POLICY IF EXISTS notifications_select ON public.notifications;
+DROP POLICY IF EXISTS notifications_insert ON public.notifications;
+DROP POLICY IF EXISTS notifications_update ON public.notifications;
+DROP POLICY IF EXISTS notifications_delete ON public.notifications;
+DROP POLICY IF EXISTS "Anyone can insert notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can delete their own notifications" ON public.notifications;
+
+CREATE POLICY notifications_select ON public.notifications FOR SELECT USING (auth.uid()::text = user_id::text OR auth.role() = 'anon');
+CREATE POLICY notifications_insert ON public.notifications FOR INSERT WITH CHECK (true);
+CREATE POLICY notifications_update ON public.notifications FOR UPDATE USING (auth.uid()::text = user_id::text);
+CREATE POLICY notifications_delete ON public.notifications FOR DELETE USING (auth.uid()::text = user_id::text);
 
 DROP POLICY IF EXISTS user_blocks_all ON public.user_blocks;
-CREATE POLICY user_blocks_all ON public.user_blocks FOR ALL USING (auth.uid() = blocker_id);
+DROP POLICY IF EXISTS user_blocks_own ON public.user_blocks;
+CREATE POLICY user_blocks_all ON public.user_blocks FOR ALL USING (auth.uid() = user_id OR auth.uid() = blocker_id);
 
 DROP POLICY IF EXISTS reports_insert ON public.reports;
 CREATE POLICY reports_insert ON public.reports FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS reports_select ON public.reports;
+CREATE POLICY reports_select ON public.reports FOR SELECT USING (true);
 
 -- Teaching structures & Views
 DROP POLICY IF EXISTS topic_teaching_structures_read ON public.topic_teaching_structures;
@@ -1087,7 +1460,12 @@ DROP POLICY IF EXISTS topic_teaching_structures_write ON public.topic_teaching_s
 CREATE POLICY topic_teaching_structures_write ON public.topic_teaching_structures FOR ALL TO authenticated, anon, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS user_topic_views_own ON public.user_topic_views;
-CREATE POLICY user_topic_views_own ON public.user_topic_views FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Allow public read on user_topic_views" ON public.user_topic_views;
+DROP POLICY IF EXISTS "Allow public insert/update on user_topic_views" ON public.user_topic_views;
+CREATE POLICY user_topic_views_own ON public.user_topic_views 
+    FOR ALL TO authenticated, anon, service_role 
+    USING (auth.uid()::text = user_id::text OR auth.role() = 'anon' OR auth.role() = 'service_role')
+    WITH CHECK (auth.uid()::text = user_id::text OR auth.role() = 'anon' OR auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS live_minute_pools_own ON public.live_minute_pools;
 CREATE POLICY live_minute_pools_own ON public.live_minute_pools FOR ALL USING (auth.uid()::text = user_id);
@@ -1143,7 +1521,7 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon;
 
 GRANT EXECUTE ON FUNCTION public.exec_sql(text) TO authenticated, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.deduct_user_credits(text, int) TO authenticated, anon, service_role;
