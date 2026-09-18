@@ -15,6 +15,7 @@ export interface UnifiedSpeechOptions {
   cacheKey?: string;
   isPrivate?: boolean;
   appSettings?: AppSettings;
+  mode?: number;
   onStart?: () => void;
   onReady?: () => void;
   onTimeUpdate?: (currentTime: number, charIndex: number, spokenWord: string) => void;
@@ -162,6 +163,17 @@ export class UnifiedVoiceRouter {
       cacheKey: options.cacheKey,
       isPrivate: options.isPrivate,
     });
+  }
+
+  /**
+   * Synthesizes/fetches speech payload for caching and offline lesson packages.
+   * Alias for fetchSpeech.
+   */
+  public async synthesizeSpeech(
+    text: string,
+    options: UnifiedSpeechOptions = {}
+  ): Promise<GrokTtsResponsePayload | AlibabaAudioResponsePayload | null> {
+    return this.fetchSpeech(text, options);
   }
 
   /**

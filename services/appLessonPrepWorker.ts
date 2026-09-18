@@ -623,11 +623,20 @@ export class AppLessonPrepWorker {
             charged: billed,
           });
 
-          const audioPayload = await unifiedVoiceRouter.synthesizeSpeech(perf.speech, {
-            voice: resolvedVoice,
-            mode: durationMode,
-            cacheKey: ttsCacheKey,
-          });
+          let audioPayload: any = null;
+          const speechText = (perf.speech || '').trim();
+          if (speechText) {
+            try {
+              audioPayload = await unifiedVoiceRouter.synthesizeSpeech(speechText, {
+                voice: resolvedVoice,
+                mode: durationMode,
+                cacheKey: ttsCacheKey,
+                appSettings,
+              });
+            } catch (ttsErr) {
+              console.warn(`[AppLessonPrepWorker] TTS synthesis failed for Board ${i + 1}:`, ttsErr);
+            }
+          }
 
           if (audioPayload) {
             await putCheckpointAudio(prepKey, i, ttsCacheKey, audioPayload);
