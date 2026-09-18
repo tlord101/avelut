@@ -1,12 +1,22 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Database, Play, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Eye } from 'lucide-react';
-import { getMigrationStatus, executeMigrations, MigrationFile, AppliedMigration, ensureMigrationTable } from '../../../services/migrationRunner';
+import { Database, Play, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Eye, Copy, Check, ExternalLink } from 'lucide-react';
+import {
+    getMigrationStatus,
+    executeMigrations,
+    MigrationFile,
+    AppliedMigration,
+    BOOTSTRAP_SQL,
+    getAllMigrationsSql
+} from '../../../services/migrationRunner';
 
 export const DatabaseMigrationsView: React.FC = () => {
     const [pending, setPending] = useState<MigrationFile[]>([]);
     const [applied, setApplied] = useState<AppliedMigration[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
+    const [isExecSqlAvailable, setIsExecSqlAvailable] = useState<boolean>(true);
+    const [copiedBootstrap, setCopiedBootstrap] = useState(false);
+    const [copiedAll, setCopiedAll] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const [showConfirm, setShowConfirm] = useState(false);
     const [confirmText, setConfirmText] = useState('');
@@ -15,10 +25,10 @@ export const DatabaseMigrationsView: React.FC = () => {
     const loadStatus = async () => {
         setIsLoading(true);
         try {
-            await ensureMigrationTable();
-            const { pending, applied } = await getMigrationStatus();
+            const { pending, applied, isExecSqlAvailable } = await getMigrationStatus();
             setPending(pending);
             setApplied(applied);
+            setIsExecSqlAvailable(isExecSqlAvailable);
         } catch (error) {
             console.error('Failed to load migration status:', error);
         } finally {
@@ -33,6 +43,26 @@ export const DatabaseMigrationsView: React.FC = () => {
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [logs]);
+
+    const handleCopyBootstrap = async () => {
+        try {
+            await navigator.clipboard.writeText(BOOTSTRAP_SQL);
+            setCopiedBootstrap(true);
+            setTimeout(() => setCopiedBootstrap(false), 3000);
+        } catch (err) {
+            console.error('Failed to copy bootstrap SQL:', err);
+        }
+    };
+
+    const handleCopyAllMigrations = async () => {
+        try {
+            await navigator.clipboard.writeText(getAllMigrationsSql());
+            setCopiedAll(true);
+            setTimeout(() => setCopiedAll(false), 3000);
+        } catch (err) {
+            console.error('Failed to copy all migrations SQL:', err);
+        }
+    };
 
     const handleRun = async (dryRun: boolean) => {
         if (!dryRun) {
@@ -89,7 +119,8 @@ export const DatabaseMigrationsView: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setShowConfirm(true)}
-                        disabled={isLoading || isRunning || pending.length === 0}
+                        disabled={isLoading || isRunning || pending.length === 0 || !isExecSqlAvailable}
+                        title={!isExecSqlAvailable ? 'Please run Bootstrap SQL in Supabase first' : undefined}
                         className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-xl font-black text-sm transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
                     >
                         <Play className="w-4 h-4" />
@@ -97,6 +128,62 @@ export const DatabaseMigrationsView: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* One-Time Bootstrap Notice */}
+            {!isExecSqlAvailable && (
+                <div className="p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                            <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                                One-Time Database Setup Required
+                            </h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                Supabase PostgREST does not permit direct schema modifications from web client requests without the 
+                                <code className="mx-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded font-mono text-xs">public.exec_sql</code>
+                                helper function. Run the one-time bootstrap script in your Supabase SQL Editor to enable automatic web migrations.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                        <a
+                            href="https://supabase.com/dashboard/project/eywpksapztzbnthlgfhd/sql"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl transition flex items-center gap-2 shadow-sm"
+                        >
+                            <span>Open Supabase SQL Editor</span>
+                            <ExternalLink className="w-4 h-4" />
+                        </a>
+                        <button
+                            type="button"
+                            onClick={handleCopyBootstrap}
+                            className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-sm rounded-xl transition flex items-center gap-2"
+                        >
+                            {copiedBootstrap ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            <span>{copiedBootstrap ? 'Copied Bootstrap SQL!' : 'Copy Bootstrap SQL'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCopyAllMigrations}
+                            className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-sm rounded-xl transition flex items-center gap-2"
+                        >
+                            {copiedAll ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            <span>{copiedAll ? 'Copied All Migrations SQL!' : 'Copy All 13 Migrations SQL'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => loadStatus()}
+                            disabled={isLoading}
+                            className="px-4 py-2.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-sm rounded-xl transition flex items-center gap-1.5"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Check Again</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

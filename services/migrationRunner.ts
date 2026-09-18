@@ -1617,7 +1617,79 @@ CREATE OR REPLACE FUNCTION public.exec_sql(query text) RETURNS void LANGUAGE plp
   }
 ];
 
+export const BOOTSTRAP_SQL = `-- ==============================================================================
+-- 1. Create exec_sql RPC function (Required for Web-based Migrations)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.exec_sql(query text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  EXECUTE query;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.exec_sql(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.exec_sql(text) TO authenticated, anon, service_role;
+
+-- ==============================================================================
+-- 2. Create schema_migrations tracking table
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
+  id text PRIMARY KEY,
+  applied_at timestamptz DEFAULT now(),
+  checksum text,
+  success boolean DEFAULT true,
+  details text
+);
+
+ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "schema_migrations_read" ON public.schema_migrations;
+CREATE POLICY "schema_migrations_read" ON public.schema_migrations FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "schema_migrations_write" ON public.schema_migrations;
+CREATE POLICY "schema_migrations_write" ON public.schema_migrations FOR ALL TO authenticated, anon, service_role USING (true) WITH CHECK (true);
+`;
+
+export function getAllMigrationsSql(): string {
+  return [
+    BOOTSTRAP_SQL,
+    '-- ==============================================================================',
+    '-- PENDING MIGRATIONS',
+    '-- ==============================================================================',
+    ...EMBEDDED_MIGRATIONS.map((m) => `-- >>> [${m.id}] ${m.title}\n${m.sql.trim()}`)
+  ].join('\n\n');
+}
+
+export async function checkExecSqlAvailability(): Promise<{
+  available: boolean;
+  message?: string;
+}> {
+  try {
+    const { error } = await supabase.rpc('exec_sql', { query: 'SELECT 1;' });
+    if (error) {
+      if (error.code === 'PGRST202' || error.message?.includes('Could not find the function')) {
+        return {
+          available: false,
+          message: 'RPC function "public.exec_sql" does not exist in the database schema cache.',
+        };
+      }
+      return { available: false, message: error.message };
+    }
+    return { available: true };
+  } catch (err: any) {
+    return { available: false, message: err?.message || String(err) };
+  }
+}
+
 export async function ensureMigrationTable(): Promise<boolean> {
+  const check = await checkExecSqlAvailability();
+  if (!check.available) {
+    return false;
+  }
+
   try {
     const { error } = await supabase.rpc('exec_sql', {
       query: `
@@ -1631,17 +1703,12 @@ export async function ensureMigrationTable(): Promise<boolean> {
         ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "schema_migrations_read" ON public.schema_migrations;
         CREATE POLICY "schema_migrations_read" ON public.schema_migrations FOR SELECT USING (true);
+        DROP POLICY IF EXISTS "schema_migrations_write" ON public.schema_migrations;
+        CREATE POLICY "schema_migrations_write" ON public.schema_migrations FOR ALL TO authenticated, anon, service_role USING (true) WITH CHECK (true);
       `
     });
 
-    if (error) {
-      const { error: selectErr } = await supabase.from('schema_migrations').select('id').limit(1);
-      if (selectErr && selectErr.code === '42P01') {
-        console.warn('[MigrationRunner] schema_migrations table does not exist.');
-        return false;
-      }
-    }
-    return true;
+    return !error;
   } catch (e) {
     console.warn('[MigrationRunner] ensureMigrationTable exception:', e);
     return false;
@@ -1651,23 +1718,29 @@ export async function ensureMigrationTable(): Promise<boolean> {
 export async function getMigrationStatus(): Promise<{
   applied: AppliedMigration[];
   pending: MigrationFile[];
+  isExecSqlAvailable: boolean;
 }> {
-  await ensureMigrationTable();
+  const { available } = await checkExecSqlAvailability();
+  if (available) {
+    await ensureMigrationTable();
+  }
 
   let applied: AppliedMigration[] = [];
-  try {
-    const { data } = await supabase.from('schema_migrations').select('*');
-    if (Array.isArray(data)) {
-      applied = data as AppliedMigration[];
+  if (available) {
+    try {
+      const { data } = await supabase.from('schema_migrations').select('*');
+      if (Array.isArray(data)) {
+        applied = data as AppliedMigration[];
+      }
+    } catch (e) {
+      console.warn('[MigrationRunner] Failed to select schema_migrations:', e);
     }
-  } catch (e) {
-    console.warn('[MigrationRunner] Failed to select schema_migrations:', e);
   }
 
   const appliedIds = new Set(applied.filter((a) => a.success).map((a) => a.id));
   const pending = EMBEDDED_MIGRATIONS.filter((m) => !appliedIds.has(m.id));
 
-  return { applied, pending };
+  return { applied, pending, isExecSqlAvailable: available };
 }
 
 export async function executeMigrations(options?: {
@@ -1677,8 +1750,28 @@ export async function executeMigrations(options?: {
   const logs: string[] = [];
   logs.push(`[${new Date().toLocaleTimeString()}] Starting schema migration runner (${isDryRun ? 'DRY RUN' : 'EXECUTE MODE'})...`);
 
-  const { applied, pending } = await getMigrationStatus();
+  const { applied, pending, isExecSqlAvailable } = await getMigrationStatus();
   logs.push(`Found ${applied.length} applied migrations, ${pending.length} pending migrations.`);
+
+  if (!isDryRun && !isExecSqlAvailable) {
+    logs.push('\n[ERROR] One-Time Database Setup Required:');
+    logs.push('  The Postgres function "public.exec_sql" does not exist in Supabase.');
+    logs.push('  Supabase REST API prohibits arbitrary DDL without this function.');
+    logs.push('');
+    logs.push('  👉 Open your Supabase SQL Editor:');
+    logs.push('  https://supabase.com/dashboard/project/eywpksapztzbnthlgfhd/sql');
+    logs.push('');
+    logs.push('  1. Click "Copy Bootstrap SQL" in the banner above.');
+    logs.push('  2. Paste it into the Supabase SQL Editor and click "Run".');
+    logs.push('  3. Return here and run the migrations again.');
+
+    return {
+      success: false,
+      appliedCount: 0,
+      skippedCount: pending.length,
+      logs,
+    };
+  }
 
   if (pending.length === 0) {
     logs.push('Database schema is already fully up to date! Nothing to apply.');
@@ -1721,12 +1814,14 @@ export async function executeMigrations(options?: {
       const errMsg = err?.message || String(err);
       logs.push(`  [ERROR] Failed to apply ${m.id}: ${errMsg}`);
 
-      await supabase.from('schema_migrations').upsert({
-        id: m.id,
-        applied_at: new Date().toISOString(),
-        success: false,
-        details: `Error: ${errMsg}`,
-      });
+      try {
+        await supabase.from('schema_migrations').upsert({
+          id: m.id,
+          applied_at: new Date().toISOString(),
+          success: false,
+          details: `Error: ${errMsg}`,
+        });
+      } catch {}
 
       return {
         success: false,
