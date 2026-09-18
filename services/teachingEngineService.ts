@@ -219,6 +219,10 @@ export class TeachingEngineService {
     this.setStructure(structure);
   }
 
+  public hydrateStructure(structure: TeachingStructure): void {
+    this.setStructure(structure);
+  }
+
   public getCurrentBoardPerformance(): TeachingBoardPerformance | null {
     return this.currentBoardPerformance;
   }

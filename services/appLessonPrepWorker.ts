@@ -516,7 +516,13 @@ export class AppLessonPrepWorker {
         userProfile || null,
         resolvedVoice
       );
-      engine.hydrateStructure(structure);
+      if (typeof engine.hydrateStructure === 'function') {
+        engine.hydrateStructure(structure);
+      } else if (typeof (engine as any).setStructure === 'function') {
+        (engine as any).setStructure(structure);
+      } else {
+        (engine as any).currentStructure = structure;
+      }
 
       const completedSummaries: string[] = [];
 
