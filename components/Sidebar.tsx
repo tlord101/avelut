@@ -1,10 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { NavItem, UserProfile, ChatConversation } from '../types';
 import { navigationItems, adminNavigationItems } from '../constants';
 import { Avatar } from './Avatar';
 import { VerificationBadge } from './VerificationBadge';
+import { useToast } from '../hooks/useToast';
+import { deleteLocalConversation, getLocalMessages } from '../services/chatStorageService';
+import { Capacitor } from '@capacitor/core';
 
-interface SidebarProps {
+export interface SidebarProps {
   activeItem: string;
   onItemClick: (id: string) => void;
   userProfile: UserProfile | null;
@@ -18,6 +21,8 @@ interface SidebarProps {
   recentConversations?: ChatConversation[];
   onSelectConversation?: (id: string) => void;
   onNewChat?: () => void;
+  onDeleteConversation?: (id: string) => void;
+  onPinConversation?: (id: string, isPinned: boolean) => void;
   activeConversationId?: string | null;
   quickLinks?: NavItem[];
   brandTitle?: string;
@@ -26,6 +31,32 @@ interface SidebarProps {
   overlayRef?: React.RefObject<HTMLDivElement | null>;
   sidebarRef?: React.RefObject<HTMLElement | null>;
 }
+
+const PINNED_STORAGE_PREFIX = 'avelut_pinned_chats_';
+
+const getStoredPinnedIds = (userId?: string): Set<string> => {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(`${PINNED_STORAGE_PREFIX}${userId || 'anon'}`);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+};
+
+const saveStoredPinnedIds = (pinnedIds: Set<string>, userId?: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      `${PINNED_STORAGE_PREFIX}${userId || 'anon'}`,
+      JSON.stringify(Array.from(pinnedIds))
+    );
+  } catch (err) {
+    console.warn('[Sidebar] Failed to save pinned chats:', err);
+  }
+};
 
 const timeAgo = (timestamp: number): string => {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -37,6 +68,10 @@ const timeAgo = (timestamp: number): string => {
   return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
+/**
+ * Normalized Navigation Item Container
+ * Uniform hover/active state layout across Avelut, Study Guide, Messages, Playground, Visual Solver
+ */
 const LinkRow: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -47,22 +82,303 @@ const LinkRow: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+    className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer select-none group relative ${
       active
-        ? 'bg-neutral-100 dark:bg-white/10 text-neutral-900 dark:text-white font-medium'
-        : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-white/5'
+        ? 'bg-neutral-100 dark:bg-white/10 text-neutral-950 dark:text-white font-semibold shadow-xs'
+        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/70 dark:hover:bg-white/5 hover:text-neutral-900 dark:hover:text-white'
     }`}
   >
-    <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-neutral-700 dark:text-neutral-300">
+    <span
+      className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${
+        active
+          ? 'text-[#0066FF] dark:text-[#38BDF8]'
+          : 'text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-900 dark:group-hover:text-white'
+      }`}
+    >
       {icon}
     </span>
-    <span className="text-[15px] truncate flex-1">{label}</span>
+    <span className="text-[14px] sm:text-[15px] truncate flex-1 tracking-tight">{label}</span>
     {badge != null && badge > 0 && (
-      <span className="bg-neutral-900 text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center">
+      <span className="bg-[#0066FF] text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center shadow-xs">
         {badge > 99 ? '99+' : badge}
       </span>
     )}
   </button>
+);
+
+interface ActiveMenuState {
+  convo: ChatConversation;
+  isPinned: boolean;
+  anchorY?: number;
+  anchorX?: number;
+}
+
+/**
+ * Responsive 3-Dot Options Context Menu:
+ * Floating popover on desktop, bottom sheet on mobile (<640px).
+ */
+const ChatContextMenu: React.FC<{
+  menuState: ActiveMenuState;
+  onClose: () => void;
+  onTogglePin: (convoId: string) => void;
+  onShare: (convo: ChatConversation) => void;
+  onForward: (convo: ChatConversation) => void;
+  onDelete: (convoId: string) => void;
+}> = ({ menuState, onClose, onTogglePin, onShare, onForward, onDelete }) => {
+  const { convo, isPinned, anchorY = 200, anchorX = 200 } = menuState;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Dismiss on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Compute desktop popover position
+  const desktopStyle = useMemo<React.CSSProperties>(() => {
+    if (isMobile) return {};
+    const top = Math.min(anchorY - 20, window.innerHeight - 260);
+    const left = Math.min(anchorX + 10, window.innerWidth - 230);
+    return {
+      top: `${Math.max(16, top)}px`,
+      left: `${Math.max(16, left)}px`,
+    };
+  }, [isMobile, anchorY, anchorX]);
+
+  return (
+    <div
+      className={`fixed inset-0 z-[160] select-none ${
+        isMobile
+          ? 'bg-black/60 backdrop-blur-xs flex items-end justify-center p-0 animate-fade-in'
+          : 'bg-transparent'
+      }`}
+      onClick={onClose}
+    >
+      {/* Desktop click-away backdrop */}
+      {!isMobile && (
+        <div className="fixed inset-0 z-[160]" onClick={onClose} aria-hidden="true" />
+      )}
+
+      <div
+        ref={menuRef}
+        onClick={(e) => e.stopPropagation()}
+        style={desktopStyle}
+        className={`z-[161] bg-white dark:bg-[#1C1C1C] border border-neutral-200 dark:border-neutral-800 shadow-2xl transition-all ${
+          isMobile
+            ? 'w-full max-w-lg rounded-t-3xl p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-3 animate-in slide-in-from-bottom duration-200'
+            : 'absolute w-56 rounded-2xl p-1.5 space-y-0.5'
+        }`}
+      >
+        {/* Mobile Drag Pill & Header */}
+        {isMobile && (
+          <div className="flex flex-col items-center pb-2 border-b border-neutral-100 dark:border-white/10">
+            <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-700 mb-3" />
+            <div className="w-full flex items-center justify-between px-1">
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white truncate flex-1 pr-3">
+                {convo.title || 'Chat Options'}
+              </h3>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                <i className="bi bi-x-lg text-xs"></i>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action 1: Pin / Unpin */}
+        <button
+          type="button"
+          onClick={() => {
+            onTogglePin(convo.id);
+            onClose();
+          }}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer`}
+        >
+          <div className="w-5 h-5 flex items-center justify-center shrink-0 text-[#0066FF] dark:text-[#38BDF8]">
+            {isPinned ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.283.284-.53.5-.664.672C10.553 2.82 10.5 3 10.5 3.5V5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1.077l-1.423 7.115a.5.5 0 0 1-.49.405.5.5 0 0 1-.49-.405L6.577 7H5.5a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1V3.5c0-.5-.053-.68-.19-.849-.134-.172-.38-.388-.664-.672C4.342 1.174 4 0.68 4 .5a.5.5 0 0 1 .146-.354z"/>
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+              </svg>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="block truncate">{isPinned ? 'Unpin Chat' : 'Pin Chat'}</span>
+            {isMobile && (
+              <span className="block text-[11px] text-neutral-400 truncate">
+                {isPinned ? 'Move to recents' : 'Keep at the top of sidebar'}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Action 2: Share Chat */}
+        <button
+          type="button"
+          onClick={() => {
+            onShare(convo);
+            onClose();
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+        >
+          <div className="w-5 h-5 flex items-center justify-center shrink-0 text-emerald-500">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="block truncate">Share Chat</span>
+            {isMobile && (
+              <span className="block text-[11px] text-neutral-400 truncate">
+                Export transcript or share via link
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Action 3: Forward Chat */}
+        <button
+          type="button"
+          onClick={() => {
+            onForward(convo);
+            onClose();
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+        >
+          <div className="w-5 h-5 flex items-center justify-center shrink-0 text-indigo-500">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="block truncate">Forward Chat</span>
+            {isMobile && (
+              <span className="block text-[11px] text-neutral-400 truncate">
+                Send to Study Partner in Messages
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Action 4: Delete Chat with Confirmation State */}
+        {!confirmDelete ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 cursor-pointer"
+          >
+            <div className="w-5 h-5 flex items-center justify-center shrink-0 text-rose-500">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block truncate">Delete Chat</span>
+              {isMobile && (
+                <span className="block text-[11px] text-rose-400/80 truncate">
+                  Permanently remove conversation
+                </span>
+              )}
+            </div>
+          </button>
+        ) : (
+          <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl space-y-2 border border-rose-200 dark:border-rose-900/50 animate-fade-in">
+            <p className="text-[12px] font-semibold text-rose-700 dark:text-rose-300 leading-tight">
+              Delete this chat?
+            </p>
+            <p className="text-[11px] text-rose-600/80 dark:text-rose-400">
+              This action cannot be undone.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-1.5 px-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete(convo.id);
+                  onClose();
+                }}
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ConversationRow: React.FC<{
+  convo: ChatConversation;
+  isActive: boolean;
+  isPinned: boolean;
+  onSelect: () => void;
+  onOptionsClick: (e: React.MouseEvent, convo: ChatConversation) => void;
+}> = ({ convo, isActive, isPinned, onSelect, onOptionsClick }) => (
+  <div
+    onClick={onSelect}
+    className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all duration-150 cursor-pointer select-none ${
+      isActive
+        ? 'bg-neutral-100 dark:bg-white/10 text-neutral-900 dark:text-white font-medium shadow-xs'
+        : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-white/5'
+    }`}
+  >
+    <div className="flex-1 min-w-0 pr-2">
+      <div className="flex items-center gap-1.5">
+        {isPinned && (
+          <svg className="w-3 h-3 text-[#0066FF] dark:text-[#38BDF8] shrink-0" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.283.284-.53.5-.664.672C10.553 2.82 10.5 3 10.5 3.5V5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1.077l-1.423 7.115a.5.5 0 0 1-.49.405.5.5 0 0 1-.49-.405L6.577 7H5.5a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1V3.5c0-.5-.053-.68-.19-.849-.134-.172-.38-.388-.664-.672C4.342 1.174 4 0.68 4 .5a.5.5 0 0 1 .146-.354z"/>
+          </svg>
+        )}
+        <span className="block text-[13.5px] truncate leading-snug font-medium">
+          {convo.title || 'New Chat'}
+        </span>
+      </div>
+      <span className="block text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+        {timeAgo(convo.last_updated_at)}
+      </span>
+    </div>
+
+    {/* 3-Dot Options Button: accessible on touch / hover */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOptionsClick(e, convo);
+      }}
+      className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-white/10 transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100 shrink-0 cursor-pointer"
+      aria-label="Chat options"
+      title="More options"
+    >
+      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+      </svg>
+    </button>
+  </div>
 );
 
 const SidebarPanel: React.FC<{
@@ -74,6 +390,8 @@ const SidebarPanel: React.FC<{
   recentConversations?: ChatConversation[];
   onSelectConversation?: (id: string) => void;
   onNewChat?: () => void;
+  onDeleteConversation?: (id: string) => void;
+  onPinConversation?: (id: string, isPinned: boolean) => void;
   activeConversationId?: string | null;
   unreadMessagesCount: number;
   brandTitle: string;
@@ -87,13 +405,182 @@ const SidebarPanel: React.FC<{
   recentConversations,
   onSelectConversation,
   onNewChat,
+  onDeleteConversation,
+  onPinConversation,
   activeConversationId,
   unreadMessagesCount,
   brandTitle,
   onClose,
 }) => {
+  const { addToast } = useToast();
   const links = quickLinks && quickLinks.length > 0 ? quickLinks : navItems;
   const showRecents = activeItem === 'chat' && Array.isArray(recentConversations);
+
+  // Pinned state persistence
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() =>
+    getStoredPinnedIds(userProfile?.uid)
+  );
+  const [isPinnedCollapsed, setIsPinnedCollapsed] = useState<boolean>(false);
+
+  // Sync pinned ids when user profile changes
+  useEffect(() => {
+    setPinnedIds(getStoredPinnedIds(userProfile?.uid));
+  }, [userProfile?.uid]);
+
+  // Context menu state
+  const [activeMenu, setActiveMenu] = useState<ActiveMenuState | null>(null);
+
+  const togglePinChat = useCallback(
+    (convoId: string) => {
+      setPinnedIds((prev) => {
+        const next = new Set(prev);
+        const willPin = !next.has(convoId);
+        if (willPin) {
+          next.add(convoId);
+          addToast('Chat pinned to top', 'success');
+        } else {
+          next.delete(convoId);
+          addToast('Chat unpinned', 'info');
+        }
+        saveStoredPinnedIds(next, userProfile?.uid);
+        onPinConversation?.(convoId, willPin);
+        return next;
+      });
+    },
+    [userProfile?.uid, onPinConversation, addToast]
+  );
+
+  const handleShareChat = useCallback(
+    async (convo: ChatConversation) => {
+      try {
+        const uid = userProfile?.uid || 'anon';
+        const messages = await getLocalMessages(convo.id, uid);
+        const transcript = messages
+          .filter((m) => m.sender !== 'system')
+          .map((m) => `${m.sender === 'user' ? '👤 Student' : '🤖 Avelut'}:\n${m.text}`)
+          .join('\n\n');
+
+        const sharePayload = {
+          title: convo.title || 'Avelut AI Chat',
+          text: transcript ? `Chat: ${convo.title}\n\n${transcript}` : `Avelut Chat: ${convo.title}`,
+          dialogTitle: 'Share Chat',
+        };
+
+        if (Capacitor.isNativePlatform()) {
+          try {
+            const { Share } = await import('@capacitor/share');
+            await Share.share(sharePayload);
+            addToast('Shared successfully!', 'success');
+            return;
+          } catch (capErr: any) {
+            if (capErr?.message?.includes('canceled') || capErr?.message?.includes('closed')) return;
+          }
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.share) {
+          try {
+            await navigator.share(sharePayload);
+            addToast('Shared successfully!', 'success');
+            return;
+          } catch (navErr: any) {
+            if (navErr?.name === 'AbortError') return;
+          }
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(sharePayload.text);
+          addToast('Chat transcript copied to clipboard!', 'info');
+        }
+      } catch (err) {
+        console.error('[Sidebar] Share chat error:', err);
+        addToast('Could not share chat.', 'error');
+      }
+    },
+    [userProfile?.uid, addToast]
+  );
+
+  const handleForwardChat = useCallback(
+    async (convo: ChatConversation) => {
+      try {
+        const uid = userProfile?.uid || 'anon';
+        const messages = await getLocalMessages(convo.id, uid);
+        const excerpt = messages
+          .slice(-3)
+          .map((m) => `${m.sender === 'user' ? 'Me' : 'Avelut'}: ${m.text.slice(0, 100)}`)
+          .join('\n');
+
+        const forwardPackage = {
+          type: 'chat_forward',
+          conversationId: convo.id,
+          title: convo.title,
+          excerpt,
+          timestamp: Date.now(),
+        };
+
+        localStorage.setItem('pending_forward_chat', JSON.stringify(forwardPackage));
+        addToast('Chat prepared. Select a partner to forward to!', 'info');
+        onItemClick('messenger');
+      } catch (err) {
+        console.error('[Sidebar] Forward chat error:', err);
+        addToast('Could not prepare chat forward.', 'error');
+      }
+    },
+    [userProfile?.uid, onItemClick, addToast]
+  );
+
+  const handleDeleteChat = useCallback(
+    async (convoId: string) => {
+      try {
+        const uid = userProfile?.uid || 'anon';
+        await deleteLocalConversation(convoId, uid);
+        setPinnedIds((prev) => {
+          if (!prev.has(convoId)) return prev;
+          const next = new Set(prev);
+          next.delete(convoId);
+          saveStoredPinnedIds(next, uid);
+          return next;
+        });
+        if (onDeleteConversation) {
+          onDeleteConversation(convoId);
+        }
+        addToast('Chat deleted', 'info');
+      } catch (err) {
+        console.error('[Sidebar] Delete conversation error:', err);
+        addToast('Failed to delete chat.', 'error');
+      }
+    },
+    [userProfile?.uid, onDeleteConversation, addToast]
+  );
+
+  const handleOpenOptions = useCallback(
+    (e: React.MouseEvent, convo: ChatConversation) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setActiveMenu({
+        convo,
+        isPinned: pinnedIds.has(convo.id),
+        anchorY: rect.bottom,
+        anchorX: rect.left,
+      });
+    },
+    [pinnedIds]
+  );
+
+  // Divide conversations into Pinned and Recents
+  const { pinnedConversations, unpinnedConversations } = useMemo(() => {
+    if (!recentConversations || !Array.isArray(recentConversations)) {
+      return { pinnedConversations: [], unpinnedConversations: [] };
+    }
+    const pinned: ChatConversation[] = [];
+    const unpinned: ChatConversation[] = [];
+    recentConversations.forEach((c) => {
+      if (pinnedIds.has(c.id)) {
+        pinned.push(c);
+      } else {
+        unpinned.push(c);
+      }
+    });
+    return { pinnedConversations: pinned, unpinnedConversations: unpinned };
+  }, [recentConversations, pinnedIds]);
 
   const extraNavLinks: NavItem[] = [
     {
@@ -153,11 +640,16 @@ const SidebarPanel: React.FC<{
   ];
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-[#171717] text-neutral-900 dark:text-white">
+    <div className="h-full flex flex-col bg-white dark:bg-[#171717] text-neutral-900 dark:text-white select-none">
+      {/* Top Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
         <h1 className="text-[22px] font-semibold tracking-tight">{brandTitle}</h1>
         <div className="flex items-center gap-1">
-          <button type="button" className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10" aria-label="Search">
+          <button
+            type="button"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
+            aria-label="Search"
+          >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -166,7 +658,7 @@ const SidebarPanel: React.FC<{
             <button
               type="button"
               onClick={onClose}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10 transition cursor-pointer"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
               aria-label="Close sidebar"
               title="Close sidebar"
             >
@@ -178,6 +670,7 @@ const SidebarPanel: React.FC<{
         </div>
       </div>
 
+      {/* Main Navigation (Normalized Container Styles) */}
       <nav className="px-2 flex-shrink-0 space-y-0.5">
         {links.map((item) => (
           <LinkRow
@@ -191,43 +684,120 @@ const SidebarPanel: React.FC<{
         ))}
       </nav>
 
+      {/* History & Conversations: Pinned + Recents */}
       {showRecents ? (
-        <div className="flex-1 min-h-0 flex flex-col mt-5 px-2">
-          <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Recents</span>
-            {onNewChat && (
-              <button type="button" onClick={onNewChat} className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">New</button>
+        <div className="flex-1 min-h-0 flex flex-col mt-4 px-2 overflow-hidden">
+          {/* Scrollable conversation container */}
+          <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-4 space-y-3">
+            {/* 1. Dedicated & Collapsible Pinned Chats Section */}
+            {pinnedConversations.length > 0 && (
+              <div className="flex-shrink-0 px-1">
+                <div className="flex items-center justify-between px-2.5 py-1 mb-1 text-neutral-500 dark:text-neutral-400">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
+                    <svg className="w-3.5 h-3.5 text-[#0066FF] dark:text-[#38BDF8]" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.283.284-.53.5-.664.672C10.553 2.82 10.5 3 10.5 3.5V5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1.077l-1.423 7.115a.5.5 0 0 1-.49.405.5.5 0 0 1-.49-.405L6.577 7H5.5a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1V3.5c0-.5-.053-.68-.19-.849-.134-.172-.38-.388-.664-.672C4.342 1.174 4 0.68 4 .5a.5.5 0 0 1 .146-.354z"/>
+                    </svg>
+                    <span>Pinned</span>
+                    <span className="text-[10px] bg-neutral-100 dark:bg-white/10 px-1.5 py-0.2 rounded-full font-bold text-neutral-600 dark:text-neutral-300">
+                      {pinnedConversations.length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPinnedCollapsed((prev) => !prev)}
+                    className="p-1 rounded-md hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
+                    aria-label={isPinnedCollapsed ? 'Expand pinned chats' : 'Collapse pinned chats'}
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                        isPinnedCollapsed ? '-rotate-90' : 'rotate-0'
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                </div>
+                {!isPinnedCollapsed && (
+                  <div className="space-y-0.5">
+                    {pinnedConversations.map((convo) => (
+                      <ConversationRow
+                        key={convo.id}
+                        convo={convo}
+                        isActive={activeConversationId === convo.id}
+                        isPinned={true}
+                        onSelect={() => onSelectConversation?.(convo.id)}
+                        onOptionsClick={handleOpenOptions}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-          </div>
-          <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden space-y-0.5 pb-4">
-            {(!recentConversations || recentConversations.length === 0) ? (
-              <p className="px-3 py-6 text-[13px] text-neutral-400 text-center">Your history will appear here.</p>
-            ) : (
-              recentConversations.map((c) => (
+
+            {/* 2. Recents Section */}
+            <div className="flex-shrink-0 px-1">
+              <div className="flex items-center justify-between px-2.5 py-1 mb-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                  <span>Recents</span>
+                  {unpinnedConversations.length > 0 && (
+                    <span className="text-[10px] bg-neutral-100 dark:bg-white/10 px-1.5 py-0.2 rounded-full font-bold text-neutral-600 dark:text-neutral-300">
+                      {unpinnedConversations.length}
+                    </span>
+                  )}
+                </div>
+                {onNewChat && (
+                  <button
+                    type="button"
+                    onClick={onNewChat}
+                    className="text-[12px] font-semibold text-[#0066FF] dark:text-[#38BDF8] hover:underline cursor-pointer"
+                  >
+                    New
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-0.5">
+                {unpinnedConversations.length === 0 && pinnedConversations.length === 0 ? (
+                  <p className="px-3 py-6 text-[13px] text-neutral-400 text-center">
+                    Your history will appear here.
+                  </p>
+                ) : (
+                  unpinnedConversations.map((convo) => (
+                    <ConversationRow
+                      key={convo.id}
+                      convo={convo}
+                      isActive={activeConversationId === convo.id}
+                      isPinned={false}
+                      onSelect={() => onSelectConversation?.(convo.id)}
+                      onOptionsClick={handleOpenOptions}
+                    />
+                  ))
+                )}
+              </div>
+
+              {recentConversations && recentConversations.length > 8 && (
                 <button
-                  key={c.id}
                   type="button"
-                  onClick={() => onSelectConversation?.(c.id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl transition-colors ${
-                    activeConversationId === c.id
-                      ? 'bg-neutral-100 dark:bg-white/10'
-                      : 'hover:bg-neutral-50 dark:hover:bg-white/5'
-                  }`}
+                  onClick={() => onItemClick('history')}
+                  className="w-full text-left px-3 py-2 text-[12px] font-medium text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
                 >
-                  <span className="block text-[14px] text-neutral-800 dark:text-neutral-100 truncate leading-snug">{c.title || 'New Chat'}</span>
-                  <span className="block text-[11px] text-neutral-400 mt-0.5">{timeAgo(c.last_updated_at)}</span>
+                  See all history…
                 </button>
-              ))
-            )}
-            {recentConversations && recentConversations.length > 8 && (
-              <button type="button" onClick={() => onItemClick('history')} className="w-full text-left px-3 py-2 text-[13px] text-neutral-400 hover:text-neutral-600">See all…</button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       ) : (
+        /* Standard Navigation for non-chat views */
         <div className="flex-1 min-h-0 flex flex-col mt-4 px-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="px-3 mb-2">
-            <span className="text-[12px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Navigation</span>
+            <span className="text-[12px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+              Navigation
+            </span>
           </div>
           <div className="space-y-0.5 pb-4">
             {extraNavLinks.map((item) => (
@@ -243,19 +813,32 @@ const SidebarPanel: React.FC<{
         </div>
       )}
 
-      <div className="flex-shrink-0 px-3 pb-4 pt-2 border-t border-neutral-100 dark:border-white/10 space-y-3">
-        {onNewChat && activeItem === 'chat' && (
-          <button type="button" onClick={onNewChat} className="w-full flex items-center justify-center gap-2 h-11 rounded-full bg-[#0066FF] text-white text-[15px] font-medium shadow-sm active:scale-[0.98] transition-transform">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-            Chat
-          </button>
-        )}
-        <button type="button" onClick={() => onItemClick('settings')} className="w-full flex items-center gap-3 p-2 rounded-2xl hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors text-left">
-          <Avatar display_name={userProfile?.display_name || null} photo_url={userProfile?.photo_url} className="w-9 h-9 flex-shrink-0" />
+      {/* Floating Context Menu / Bottom Sheet */}
+      {activeMenu && (
+        <ChatContextMenu
+          menuState={activeMenu}
+          onClose={() => setActiveMenu(null)}
+          onTogglePin={togglePinChat}
+          onShare={handleShareChat}
+          onForward={handleForwardChat}
+          onDelete={handleDeleteChat}
+        />
+      )}
+
+      {/* Bottom Profile Footer (Redundant Chat button removed to maximize vertical space) */}
+      <div className="flex-shrink-0 px-3 pb-4 pt-2 border-t border-neutral-100 dark:border-white/10">
+        <button
+          type="button"
+          onClick={() => onItemClick('settings')}
+          className="w-full flex items-center gap-3 p-2 rounded-2xl hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors text-left cursor-pointer"
+        >
+          <Avatar
+            display_name={userProfile?.display_name || null}
+            photo_url={userProfile?.photo_url}
+            className="w-9 h-9 flex-shrink-0"
+          />
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-medium truncate flex items-center gap-1">
+            <p className="text-[14px] font-medium truncate flex items-center gap-1 text-neutral-900 dark:text-white">
               {userProfile?.display_name || 'Profile'}
               <VerificationBadge status={userProfile?.subscription_status} />
             </p>
@@ -281,6 +864,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   recentConversations,
   onSelectConversation,
   onNewChat,
+  onDeleteConversation,
+  onPinConversation,
   activeConversationId,
   quickLinks,
   brandTitle = 'Avelut',
@@ -300,11 +885,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <div className={`fixed inset-0 z-[130] md:hidden ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div ref={overlayRef as any} className="absolute inset-0 bg-black/40" onClick={onCloseMobileSidebar} aria-hidden="true" />
-        <aside 
+      {/* Mobile Drawer */}
+      <div
+        className={`fixed inset-0 z-[130] md:hidden ${
+          isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div
+          ref={overlayRef as any}
+          className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+          onClick={onCloseMobileSidebar}
+          aria-hidden="true"
+        />
+        <aside
           ref={sidebarRef as any}
-          className={`absolute top-0 left-0 h-full w-[88vw] max-w-[360px] bg-white dark:bg-[#171717] shadow-2xl ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          className={`absolute top-0 left-0 h-full w-[88vw] max-w-[360px] bg-white dark:bg-[#171717] shadow-2xl transition-transform duration-300 ease-out ${
+            isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
         >
           <SidebarPanel
             activeItem={activeItem}
@@ -313,8 +910,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             navItems={navItems}
             quickLinks={quickLinks}
             recentConversations={recentConversations}
-            onSelectConversation={(id) => { onSelectConversation?.(id); onCloseMobileSidebar(); }}
-            onNewChat={() => { onNewChat?.(); onCloseMobileSidebar(); }}
+            onSelectConversation={(id) => {
+              onSelectConversation?.(id);
+              onCloseMobileSidebar();
+            }}
+            onNewChat={() => {
+              onNewChat?.();
+              onCloseMobileSidebar();
+            }}
+            onDeleteConversation={onDeleteConversation}
+            onPinConversation={onPinConversation}
             activeConversationId={activeConversationId}
             unreadMessagesCount={unreadMessagesCount}
             brandTitle={brandTitle}
@@ -323,6 +928,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </aside>
       </div>
 
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-shrink-0 w-[280px] h-full border-r border-neutral-200 dark:border-white/10 bg-white dark:bg-[#171717]">
         <div className="w-full h-full">
           <SidebarPanel
@@ -334,6 +940,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             recentConversations={recentConversations}
             onSelectConversation={onSelectConversation}
             onNewChat={onNewChat}
+            onDeleteConversation={onDeleteConversation}
+            onPinConversation={onPinConversation}
             activeConversationId={activeConversationId}
             unreadMessagesCount={unreadMessagesCount}
             brandTitle={brandTitle}
@@ -364,3 +972,5 @@ export const FloatingMenuButton: React.FC<{
     </button>
   );
 };
+
+export default Sidebar;

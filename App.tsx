@@ -1838,6 +1838,12 @@ const App: React.FC = () => {
                     setActiveConversationId(null);
                     setActiveItem('chat');
                 }}
+                onDeleteConversation={(id) => {
+                    setRecentConversations(prev => prev.filter(c => c.id !== id));
+                    if (activeConversationId === id) {
+                        setActiveConversationId(null);
+                    }
+                }}
                 overlayRef={overlayRef}
                 sidebarRef={sidebarRef}
             />
