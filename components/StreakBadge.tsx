@@ -2,10 +2,12 @@ import React from 'react';
 import type { UserProfile } from '../types';
 import { isStreakActiveToday } from '../utils/streaks';
 
-interface StreakBadgeProps {
-  userProfile: UserProfile;
-  /** 'sm' = inline badge (next to name), 'md' = slightly larger (chat header), 'lg' = dashboard */
-  size?: 'sm' | 'md' | 'lg';
+export interface StreakBadgeProps {
+  userProfile?: Partial<UserProfile> | null;
+  streak?: number;
+  activeToday?: boolean;
+  /** 'xs' = ultra-compact, 'sm' = inline badge (next to name), 'md' = slightly larger (chat header), 'lg' = dashboard */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   /** When true, always show even if streak is 0 */
   showAlways?: boolean;
 }
@@ -18,18 +20,22 @@ interface StreakBadgeProps {
  */
 export const StreakBadge: React.FC<StreakBadgeProps> = ({
   userProfile,
+  streak: directStreak,
+  activeToday: directActiveToday,
   size = 'sm',
   showAlways = false,
 }) => {
-  const streak = userProfile.current_streak ?? 0;
-  const active = isStreakActiveToday(userProfile);
+  const streak = directStreak !== undefined ? directStreak : (userProfile?.current_streak ?? 0);
+  const active = directActiveToday !== undefined
+    ? directActiveToday
+    : (userProfile ? isStreakActiveToday(userProfile as UserProfile) : streak > 0);
 
   // Don't render if streak is 0 and showAlways is false
   if (streak === 0 && !showAlways) return null;
 
-  const iconSize = size === 'sm' ? 'w-3.5 h-3.5' : size === 'md' ? 'w-4 h-4' : 'w-5 h-5';
-  const textSize = size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-[11px]' : 'text-xs';
-  const gapClass = size === 'sm' ? 'gap-0.5' : 'gap-1';
+  const iconSize = size === 'xs' ? 'w-3 h-3' : size === 'sm' ? 'w-3.5 h-3.5' : size === 'md' ? 'w-4 h-4' : 'w-5 h-5';
+  const textSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-[11px]' : 'text-xs';
+  const gapClass = size === 'xs' ? 'gap-0.5' : size === 'sm' ? 'gap-0.5' : 'gap-1';
 
   return (
     <span

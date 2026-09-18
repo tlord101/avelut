@@ -108,7 +108,7 @@ export const MessengerFindFriends: React.FC<MessengerFindFriendsProps> = ({
                     <div className="flex items-center gap-1.5">
                       <h4 className="font-bold text-[#FAFAFA] text-sm truncate">{user.display_name}</h4>
                       <VerificationBadge user={user} size="xs" />
-                      <StreakBadge streak={user.current_streak} size="xs" />
+                      <StreakBadge userProfile={user} streak={user.current_streak} size="xs" />
                     </div>
                     <p className="text-xs text-[#A3A3A3] truncate mt-0.5">{user.department_id || 'Student'}</p>
                   </div>

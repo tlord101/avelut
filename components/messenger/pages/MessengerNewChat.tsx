@@ -105,7 +105,7 @@ export const MessengerNewChat: React.FC<MessengerNewChatProps> = ({
                   <h4 className="text-sm font-semibold text-[#FAFAFA] truncate flex items-center gap-1.5">
                     <span>{mate.display_name}</span>
                     <VerificationBadge user={mate} size="xs" />
-                    <StreakBadge streak={mate.current_streak} size="xs" />
+                    <StreakBadge userProfile={mate} streak={mate.current_streak} size="xs" />
                   </h4>
                   <p className="text-xs text-[#A3A3A3] truncate mt-0.5">{mate.department_id || 'No Department'}</p>
                 </div>

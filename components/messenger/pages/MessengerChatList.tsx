@@ -185,7 +185,7 @@ export const MessengerChatList: React.FC<MessengerChatListProps> = ({
                       <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
                         <h3 className="font-semibold text-sm sm:text-[15px] text-[#FAFAFA] truncate tracking-tight">{c.otherUser?.display_name || 'Unknown User'}</h3>
                         <VerificationBadge user={c.otherUser} size="sm" />
-                        <StreakBadge streak={c.otherUser?.current_streak} size="xs" />
+                        <StreakBadge userProfile={c.otherUser} streak={c.otherUser?.current_streak} size="xs" />
                       </div>
                       <span className="text-[11px] sm:text-xs text-[#737373] whitespace-nowrap ml-2 font-medium">
                         {formatChatTimestamp(c.timestamp)}
