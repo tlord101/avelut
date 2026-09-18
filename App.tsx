@@ -668,10 +668,14 @@ const App: React.FC = () => {
                             return;
                         }
                         currentClipboardSigRef.current = sig;
-                        const blobUrl = URL.createObjectURL(blob);
-                        setPendingSharedImage(blobUrl);
-                        setSharedImagePreview(blobUrl);
-                        setShowSharedImagePrompt(true);
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const dataUrl = reader.result as string;
+                            setPendingSharedImage(dataUrl);
+                            setSharedImagePreview(dataUrl);
+                            setShowSharedImagePrompt(true);
+                        };
+                        reader.readAsDataURL(blob);
                         return;
                     }
                 }
