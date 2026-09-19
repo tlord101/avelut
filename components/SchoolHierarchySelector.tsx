@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabaseDataService } from '../services/supabaseDataService';
-import { NIGERIAN_FACULTIES } from '../lib/academic-constants';
+
 import type { School, College, Department } from '../types';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { createAvelutAI, getResponseText } from '../utils/inference';
@@ -157,7 +157,7 @@ const CustomSearchableSelect: React.FC<CustomSearchableSelectProps> = ({
               </div>
             ) : filteredOptions.length === 0 && !showAddNew ? (
               <div className="p-4 text-sm text-[#64748B] dark:text-gray-400 text-center">
-                No matching options found.
+                {onAddNew ? "No options recorded yet. Type above to add a new one." : "No matching options found."}
               </div>
             ) : (
               filteredOptions.map((opt) => {
@@ -274,27 +274,6 @@ export const SchoolHierarchySelector: React.FC<SchoolHierarchySelectorProps> = (
     const localMatches = schools
       .filter(s => s.name.toLowerCase().includes(q) || (s.short_name && s.short_name.toLowerCase().includes(q)))
       .map(s => ({ id: s.id, name: s.name, short_name: s.short_name }));
-    
-    // Quick acronym / common name resolver before calling AI
-    const acronyms: Record<string, { id: string; name: string }> = {
-      'unilag': { id: 'unilag', name: 'University of Lagos' },
-      'fupre': { id: 'fupre', name: 'Federal University of Petroleum Resources Effurun' },
-      'uniben': { id: 'uniben', name: 'University of Benin' },
-      'oau': { id: 'oau', name: 'Obafemi Awolowo University' },
-      'ui': { id: 'ui', name: 'University of Ibadan' },
-      'unn': { id: 'unn', name: 'University of Nigeria Nsukka' },
-      'futa': { id: 'futa', name: 'Federal University of Technology Akure' },
-      'futo': { id: 'futo', name: 'Federal University of Technology Owerri' },
-      'abu': { id: 'abu', name: 'Ahmadu Bello University Zaria' },
-      'lasu': { id: 'lasu', name: 'Lagos State University' },
-      'covenant': { id: 'covenant', name: 'Covenant University' },
-    };
-
-    if (acronyms[q]) {
-      const match = acronyms[q];
-      const exists = localMatches.some(m => m.id === match.id);
-      if (!exists) localMatches.unshift({ id: match.id, name: match.name, short_name: q.toUpperCase() });
-    }
 
     try {
       const ai = createAvelutAI(appSettings, null);
@@ -348,12 +327,24 @@ Return ONLY a valid JSON array of up to 4 university names (e.g. ["University of
     type: 'College/Faculty' | 'Department', 
     existingList: Option[]
   ): Promise<{ id: string; name: string; isDuplicate: boolean }> => {
-    const cleanInput = inputName.trim().toLowerCase();
+    const cleanInput = inputName.trim().toLowerCase().replace(/\s+/g, ' ');
+    const strippedInput = cleanInput
+      .replace(/^(faculty of|college of|school of|department of)\s+/i, '')
+      .trim();
     
     // 1. Direct or fuzzy local match check
     for (const item of existingList) {
-      const itemName = item.name.toLowerCase();
-      if (itemName === cleanInput || itemName.includes(cleanInput) || cleanInput.includes(itemName)) {
+      const itemName = item.name.toLowerCase().replace(/\s+/g, ' ');
+      const strippedItemName = itemName
+        .replace(/^(faculty of|college of|school of|department of)\s+/i, '')
+        .trim();
+
+      if (
+        itemName === cleanInput ||
+        strippedItemName === strippedInput ||
+        strippedItemName.includes(strippedInput) ||
+        strippedInput.includes(strippedItemName)
+      ) {
         return { id: item.id, name: item.name, isDuplicate: true };
       }
     }
@@ -432,33 +423,12 @@ Return ONLY valid JSON.`;
   const schoolOptions = useMemo(() => schools.map(s => ({ id: s.id, name: s.name, short_name: s.short_name })), [schools]);
   
   const collegesOptions = useMemo(() => {
-    const options: Option[] = colleges.map(c => ({ id: c.id, name: c.name }));
-    const existingNames = new Set(options.map(o => o.name.toLowerCase()));
-    
-    // Inject Nigerian standard faculties if not present
-    NIGERIAN_FACULTIES.forEach(fac => {
-      if (!existingNames.has(fac.name.toLowerCase())) {
-        options.push({ id: fac.id, name: fac.name });
-      }
-    });
-    return options;
+    return colleges.map(c => ({ id: c.id, name: c.name }));
   }, [colleges]);
 
   const departmentOptions = useMemo(() => {
-    const options: Option[] = departments.map(d => ({ id: d.id, name: d.name }));
-    const existingNames = new Set(options.map(o => o.name.toLowerCase()));
-
-    // Try to find the matching predefined faculty to inject standard departments
-    const predefinedFaculty = NIGERIAN_FACULTIES.find(fac => fac.id === collegeId);
-    if (predefinedFaculty) {
-      predefinedFaculty.departments.forEach(deptName => {
-        if (!existingNames.has(deptName.toLowerCase())) {
-          options.push({ id: sanitizeId(deptName), name: deptName });
-        }
-      });
-    }
-    return options;
-  }, [departments, collegeId]);
+    return departments.map(d => ({ id: d.id, name: d.name }));
+  }, [departments]);
 
   const handleOptionSelected = async (level: 'school'|'college'|'department', opt: Option) => {
     const id = opt.id;
