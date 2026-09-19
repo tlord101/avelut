@@ -53,29 +53,29 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
   userProfile,
   isLoading
 }) => {
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, convoId: string } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, convo: ChatConversation } | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
+    const [confirmDelete, setConfirmDelete] = useState(false);
     const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-    const openContextMenu = (e: React.MouseEvent, convoId: string) => {
+    const openContextMenu = (e: React.MouseEvent, convo: ChatConversation) => {
         e.preventDefault();
         setContextMenu({
             x: e.clientX,
             y: e.clientY,
-            convoId,
+            convo,
         });
+        setConfirmDelete(false);
     };
 
     useEffect(() => {
-        const handleClickOutside = () => setContextMenu(null);
-        if (contextMenu) {
-            window.addEventListener('click', handleClickOutside);
-        }
-        return () => {
-            window.removeEventListener('click', handleClickOutside);
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setContextMenu(null);
         };
-    }, [contextMenu]);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     const handleRenameSubmit = () => {
         if (renamingId && renameValue.trim()) {
@@ -90,10 +90,11 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
         setContextMenu(null);
     };
 
-    const handleTouchStart = (e: React.TouchEvent, convoId: string) => {
+    const handleTouchStart = (e: React.TouchEvent, convo: ChatConversation) => {
         const touch = e.touches[0];
         longPressTimer.current = setTimeout(() => {
-            setContextMenu({ x: touch.clientX, y: touch.clientY, convoId });
+            setContextMenu({ x: touch.clientX, y: touch.clientY, convo });
+            setConfirmDelete(false);
         }, 500);
     };
 
@@ -139,8 +140,8 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
             ) : (
                 <div
                     onClick={() => isMobile ? handleMobileSelect(convo.id) : onSelectConversation(convo.id)}
-                    onContextMenu={(e) => openContextMenu(e, convo.id)}
-                    onTouchStart={(e) => handleTouchStart(e, convo.id)}
+                    onContextMenu={(e) => openContextMenu(e, convo)}
+                    onTouchStart={(e) => handleTouchStart(e, convo)}
                     onTouchEnd={handleTouchEnd}
                     className={`w-full text-left p-3.5 rounded-2xl transition-all duration-200 cursor-pointer flex justify-between items-center group relative overflow-hidden ${
                       activeConversationId === convo.id
@@ -160,7 +161,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
                       </p>
                   </div>
                   <button
-                    onClick={(e) => { e.stopPropagation(); openContextMenu(e, convo.id); }}
+                    onClick={(e) => { e.stopPropagation(); openContextMenu(e, convo); }}
                     className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
                     aria-label="More options"
                   >
@@ -213,41 +214,9 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
         ) : (
             <ul className="space-y-3 mt-4">
                 {conversations.map((convo) => (
-                    <li
-                        key={convo.id}
-                        className={`group flex items-center justify-between gap-3 px-3 py-3 rounded-2xl border transition-colors cursor-pointer ${activeConversationId === convo.id ? 'bg-white dark:bg-black border-lime-200 shadow-sm' : 'bg-transparent border-transparent hover:bg-white dark:bg-black/60'}`}
-                        onClick={() => isMobile ? handleMobileSelect(convo.id) : onSelectConversation(convo.id)}
-                    >
-                        <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold leading-tight truncate ${activeConversationId === convo.id ? 'text-emerald' : 'text-charcoal'}`}>
-                                {convo.title}
-                            </p>
-                            <p className="text-[12px] text-gray-400 mt-1">
-                                {timeAgo(convo.last_updated_at)}
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteConversation(convo.id);
-                                }}
-                                className="p-2 text-gray-400 hover:text-red-600 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-red-50"
-                                aria-label={`Delete ${convo.title}`}
-                            >
-                                <TrashIcon className="w-4 h-4" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); openContextMenu(e, convo.id); }}
-                                className="p-2 text-gray-400 hover:text-charcoal opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-gray-100"
-                                aria-label="More options"
-                            >
-                                <MoreVerticalIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </li>
+                    <React.Fragment key={convo.id}>
+                        {renderConvoItem(convo, isMobile)}
+                    </React.Fragment>
                 ))}
             </ul>
         )}
@@ -291,6 +260,81 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
               {content(true)}
           </div>
       </div>
+
+      {/* Floating Context Menu */}
+      {contextMenu && (
+        <div
+            className="fixed inset-0 z-[160] bg-transparent"
+            onClick={() => setContextMenu(null)}
+        >
+            <div className="fixed inset-0 z-[160]" onClick={() => setContextMenu(null)} aria-hidden="true" />
+            <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    top: `${Math.max(16, Math.min(contextMenu.y - 20, window.innerHeight - 150))}px`,
+                    left: `${Math.max(16, Math.min(contextMenu.x + 10, window.innerWidth - 180))}px`,
+                }}
+                className="z-[161] bg-white dark:bg-[#1C1C1C] border border-neutral-200 dark:border-neutral-800 shadow-2xl transition-all absolute w-48 rounded-2xl p-1.5 space-y-0.5"
+            >
+                {/* Rename Action */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        startRename(contextMenu.convo);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+                >
+                    <div className="w-5 h-5 flex items-center justify-center shrink-0 text-indigo-500">
+                        <PencilIcon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <span className="block truncate">Rename</span>
+                    </div>
+                </button>
+
+                {/* Delete Action with Confirmation */}
+                {!confirmDelete ? (
+                    <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 cursor-pointer"
+                    >
+                        <div className="w-5 h-5 flex items-center justify-center shrink-0 text-rose-500">
+                            <TrashIcon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <span className="block truncate">Delete</span>
+                        </div>
+                    </button>
+                ) : (
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl space-y-2 border border-rose-200 dark:border-rose-900/50 animate-fade-in">
+                        <p className="text-[12px] font-semibold text-rose-700 dark:text-rose-300 leading-tight">
+                            Delete this chat?
+                        </p>
+                        <div className="flex items-center gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmDelete(false)}
+                                className="flex-1 py-1.5 px-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onDeleteConversation(contextMenu.convo.id);
+                                    setContextMenu(null);
+                                }}
+                                className="flex-1 py-1.5 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
     </>
   );
 };

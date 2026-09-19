@@ -533,6 +533,12 @@ const SidebarPanel: React.FC<{
       try {
         const uid = userProfile?.uid || 'anon';
         await deleteLocalConversation(convoId, uid);
+        if (userProfile?.uid) {
+            import('../lib/backend').then(({ db, ref, remove }) => {
+                remove(ref(db, `chat_conversations/${userProfile.uid}/${convoId}`)).catch(console.error);
+                remove(ref(db, `chat_messages/${convoId}`)).catch(console.error);
+            }).catch(console.error);
+        }
         setPinnedIds((prev) => {
           if (!prev.has(convoId)) return prev;
           const next = new Set(prev);
