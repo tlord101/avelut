@@ -320,6 +320,7 @@ export async function bulkUpsertRemoteConversations(conversations: LocalConversa
         title = excluded.title,
         last_updated_at = MAX(conversations.last_updated_at, excluded.last_updated_at),
         sync_status = 'synced'
+      WHERE conversations.is_deleted = 0
     `;
     await runStatement(sql, [
       convo.id,
@@ -344,6 +345,7 @@ export async function bulkUpsertRemoteMessages(messages: LocalMessage[]): Promis
         attachments_json = excluded.attachments_json,
         image_url = excluded.image_url,
         sync_status = 'synced'
+      WHERE messages.is_deleted = 0
     `;
     await runStatement(sql, [
       msg.id,
