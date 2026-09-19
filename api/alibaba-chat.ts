@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       messages,
       temperature: body.temperature ?? 0.7,
       max_tokens: body.max_tokens ?? 4096,
+      include_reasoning: false,
     };
 
     if (body.stream) {
