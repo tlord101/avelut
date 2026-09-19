@@ -56,7 +56,7 @@
     "@capgo/capacitor-updater": "^8.50.1",
     "@fontsource-variable/geist": "^5.2.9",
     "@pinecone-database/pinecone": "^7.2.0",
-    "@supabase/supabase-js": "^2.112.4",
+    "@supabase/supabase-js": "^2.116.0",
     "ai": "^6.0.191",
     "capacitor-plugin-send-intent": "^0.0.2",
     "class-variance-authority": "^0.7.1",

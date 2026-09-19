@@ -1,4 +1,4 @@
-import { FirebaseUser, db, push, ref as dbRef, set, update } from '@/lib/backend';
+import { AuthUser, db, push, ref as dbRef, set, update, supabase } from '@/lib/backend';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
@@ -79,7 +79,7 @@ export const cleanupNativeNotifications = async (): Promise<void> => {
  * Safe to call on web — it no-ops if not running natively.
  */
 export const initNativeNotifications = async (
-  user: FirebaseUser | null,
+  user: AuthUser | null,
   addToast: AddToastFn,
   setActiveItem: SetActiveItemFn,
   setPendingChatId: SetPendingChatIdFn

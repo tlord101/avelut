@@ -1,4 +1,4 @@
-import { auth, db, equalTo, functions, get, getDownloadURL, orderByChild, query, ref as dbRef, ref as storageRef, storage, type FirebaseUser, update, uploadBytes, uploadBytesResumable } from '@/lib/backend';
+import { auth, db, equalTo, functions, get, getDownloadURL, orderByChild, query, ref as dbRef, ref as storageRef, storage, type AuthUser, update, uploadBytes, uploadBytesResumable } from '@/lib/backend';
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile } from '../types';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
@@ -9,7 +9,7 @@ import { SchoolHierarchySelector } from './SchoolHierarchySelector';
 
 
 interface UserProfileProps {
-  user: FirebaseUser | null;
+  user: AuthUser | null;
   userProfile: UserProfile;
   onProfileUpdate: (updatedData: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
 }

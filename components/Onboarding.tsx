@@ -1,9 +1,9 @@
-import { type FirebaseUser } from '@/lib/backend';
+import { type AuthUser } from '@/lib/backend';
 import React, { useState } from 'react';
 import { SchoolHierarchySelector } from './SchoolHierarchySelector';
 
 interface OnboardingProps {
-  user: FirebaseUser;
+  user: AuthUser;
   onOnboardingComplete: (profileData: { schoolId: string; collegeId: string; departmentId: string; level: string }) => void;
 }
 
