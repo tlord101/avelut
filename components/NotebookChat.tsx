@@ -1,12 +1,11 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, getChapterContent } from '../services/notebookStorageService';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
-import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
 import { ChatLimitBanner } from './ChatLimitBanner';
 import {
   getOrGenerateTopicStructure,
@@ -21,7 +20,6 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: number;
-  reasoningText?: string;
 }
 
 interface NotebookChatProps {
@@ -308,7 +306,6 @@ ${messageText}`;
         id: assistantMsgId,
         sender: 'assistant',
         text: '',
-        reasoningText: '',
         timestamp: Date.now(),
       }]);
 
@@ -322,20 +319,15 @@ ${messageText}`;
       });
 
       let streamedText = '';
-      let streamedReasoning = '';
       for await (const chunk of responseStream) {
         const chunkText = getResponseText(chunk);
-        const chunkReasoning = getResponseReasoningText(chunk);
-        if (chunkReasoning) {
-          streamedReasoning += chunkReasoning;
-        }
         if (chunkText) {
           streamedText += chunkText;
         }
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
-              ? { ...m, text: streamedText, reasoningText: streamedReasoning }
+              ? { ...m, text: streamedText }
               : m
           )
         );
@@ -347,7 +339,6 @@ ${messageText}`;
           id: assistantMsgId,
           sender: 'assistant' as const,
           text: streamedText || 'I could not generate an explanation for that. Please rephrase your question.',
-          reasoningText: streamedReasoning,
           timestamp: Date.now(),
         },
       ];
@@ -449,39 +440,17 @@ ${messageText}`;
                             </div>
                           )}
                         </div>
-                      ) : !msg.text ? (
-                        <ThinkingTypingIndicator
-                          label="thinking"
-                          reasoningText={msg.reasoningText}
-                          isStreaming={isCurrentlyStreaming}
-                        />
+                      ) : isCurrentlyStreaming ? (
+                        renderStreamingContent(msg.text)
                       ) : (
-                        <>
-                          {msg.reasoningText && (
-                            <div className="mb-2">
-                              <ThinkingTypingIndicator
-                                label="thought process"
-                                reasoningText={msg.reasoningText}
-                                defaultExpanded={false}
-                                isStreaming={false}
-                              />
-                            </div>
-                          )}
-                          {isCurrentlyStreaming ? (
-                            renderStreamingContent(msg.text)
-                          ) : (
-                            <MarkdownContent content={msg.text} />
-                          )}
-                        </>
+                        <MarkdownContent content={msg.text} />
                       )}
                     </div>
                   </div>
                 );
               })}
 
-              {isLoading && !streamingMsgId && (
-                <ThinkingTypingIndicator label="thinking" />
-              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
