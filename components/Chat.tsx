@@ -125,6 +125,7 @@ const GrokChatComposer: React.FC<{
   onToggleVoice: () => void;
   onAttach: () => void;
   onSend: () => void;
+  autoFocus?: boolean;
 }> = ({
   input,
   setInput,
@@ -133,9 +134,20 @@ const GrokChatComposer: React.FC<{
   onToggleVoice,
   onAttach,
   onSend,
+  autoFocus,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus && textareaRef.current) {
+      textareaRef.current.focus();
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -614,7 +626,7 @@ export const Chat: React.FC<ChatProps> = ({
           if (exists) {
             return prev.map((m) => (m.id === aiMsgId ? { ...m, text, reasoningText } : m));
           } else {
-            return [...prev, { id: aiMsgId, text, reasoningText, sender: 'bot', timestamp: now + 1 }];
+            return [...prev, { id: aiMsgId, text, reasoningText, sender: 'bot', timestamp: Date.now() }];
           }
         });
       };
@@ -942,13 +954,6 @@ export const Chat: React.FC<ChatProps> = ({
                 )}
               </div>
             ))}
-            {isLoading && (messages.length === 0 || messages[messages.length - 1]?.sender === 'user') && (
-              <div className="flex justify-start w-full">
-                <div className="py-1">
-                  <ThinkingTypingIndicator label="thinking" />
-                </div>
-              </div>
-            )}
             <div ref={messagesEndRef} className="h-2" />
           </div>
         )}
@@ -977,6 +982,7 @@ export const Chat: React.FC<ChatProps> = ({
         onToggleVoice={toggleVoice}
         onAttach={() => {}}
         onSend={() => handleSendMessage()}
+        autoFocus={true}
       />
 
       <LimitExceededModal
