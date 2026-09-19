@@ -371,6 +371,7 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
       messages,
       temperature: params?.config?.temperature ?? 0.7,
       max_tokens: params?.config?.maxOutputTokens ?? 4096,
+      include_reasoning: false,
     };
 
     if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
@@ -466,6 +467,7 @@ async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings):
     stream_options: { include_usage: true },
     temperature: params?.config?.temperature ?? 0.7,
     max_tokens: params?.config?.maxOutputTokens ?? 4096,
+      include_reasoning: false,
   };
 
   if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
@@ -661,6 +663,7 @@ async function callAlibabaQwen(
       messages,
       temperature: params?.config?.temperature ?? 0.7,
       max_tokens: params?.config?.maxOutputTokens ?? 4096,
+      include_reasoning: false,
     };
 
     if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
@@ -746,6 +749,7 @@ async function* callAlibabaQwenStream(
     stream_options: { include_usage: true },
     temperature: params?.config?.temperature ?? 0.7,
     max_tokens: params?.config?.maxOutputTokens ?? 4096,
+      include_reasoning: false,
   };
 
   if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
