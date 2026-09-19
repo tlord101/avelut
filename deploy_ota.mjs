@@ -35,6 +35,14 @@ async function deployOTA() {
         zip.addLocalFolder("./dist");
         zip.writeZip("./dist.zip");
 
+        console.log("Ensuring 'ota-releases' bucket exists...");
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const bucketExists = buckets?.some(b => b.name === 'ota-releases');
+        if (!bucketExists) {
+            console.log("Bucket not found. Creating 'ota-releases' bucket...");
+            await supabase.storage.createBucket('ota-releases', { public: true });
+        }
+
         console.log("Uploading OTA package to Supabase Storage...");
         const zipBuffer = fs.readFileSync("./dist.zip");
         const objectPath = `app_releases/ota/${otaVersion}.zip`;
