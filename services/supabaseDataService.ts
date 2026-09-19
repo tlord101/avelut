@@ -602,12 +602,13 @@ class SupabaseDataService {
       const payload = {
         topic_key: structKey,
         topic_title: topicTitle,
-        course_name: courseName || 'General',
+        course_name: courseName || '',
+        duration_minutes: durationMode,
         duration_mode: durationMode,
         structure_json: structure,
         updated_at: new Date().toISOString(),
       };
-      const { error } = await supabase.from('topic_teaching_structures').upsert(payload, { onConflict: 'topic_key' });
+      const { error } = await supabase.from('topic_teaching_structures').upsert(payload, { onConflict: 'topic_key,duration_minutes,course_name' });
       if (error) {
         console.warn('[SupabaseDataService] Error saving topic teaching structure to Supabase:', error.message);
       }
@@ -629,6 +630,8 @@ class SupabaseDataService {
         .from('topic_teaching_structures')
         .select('structure_json')
         .eq('topic_key', structKey)
+        .eq('duration_minutes', durationMode)
+        .eq('course_name', courseName || '')
         .maybeSingle();
 
       if (error || !data || !data.structure_json) return null;
