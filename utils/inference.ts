@@ -204,36 +204,6 @@ export const getResponseText = (response: any): string => {
 };
 
 /**
- * Safe helper to extract reasoning/thinking text from an AI model response or streaming chunk.
- */
-export const getResponseReasoningText = (response: any): string => {
-  if (!response) return '';
-  const reasoning = response.reasoningText;
-  if (typeof reasoning === 'function') {
-    return reasoning();
-  }
-  if (typeof reasoning === 'string') {
-    return reasoning;
-  }
-  if (response?.candidates?.[0]?.content?.parts?.[0]?.reasoning !== undefined) {
-    return response.candidates[0].content.parts[0].reasoning;
-  }
-  if (response?.choices?.[0]?.delta?.reasoning_content !== undefined) {
-    return response.choices[0].delta.reasoning_content || '';
-  }
-  if (response?.choices?.[0]?.delta?.reasoning !== undefined) {
-    return response.choices[0].delta.reasoning || '';
-  }
-  if (response?.choices?.[0]?.message?.reasoning_content !== undefined) {
-    return response.choices[0].message.reasoning_content || '';
-  }
-  if (response?.choices?.[0]?.message?.reasoning !== undefined) {
-    return response.choices[0].message.reasoning || '';
-  }
-  return '';
-};
-
-/**
  * Convert contents/parts to standard OpenAI/Alibaba chat messages
  * Supports both text and multi-modal image content
  */
@@ -538,22 +508,17 @@ async function* callOpenRouterQwenStream(params: any, appSettings: AppSettings):
 
             const delta = parsed?.choices?.[0]?.delta;
             let deltaText = delta?.content || '';
-            let reasoningText = delta?.reasoning || delta?.reasoning_content || '';
-            if (!reasoningText && parsed?.choices?.[0]?.message?.reasoning) {
-              reasoningText = parsed.choices[0].message.reasoning;
-            }
             let finishReason = parsed?.choices?.[0]?.finish_reason || null;
 
             const usage = parsed?.usage || parsed?.response?.usage;
 
-            if (deltaText || reasoningText || finishReason || usage) {
+            if (deltaText || finishReason || usage) {
               yield {
                 text: () => deltaText,
-                reasoningText: () => reasoningText,
                 candidates: [
                   {
                     content: {
-                      parts: [{ text: deltaText, reasoning: reasoningText }],
+                      parts: [{ text: deltaText }],
                       role: 'model',
                     },
                     finishReason,
@@ -812,23 +777,16 @@ async function* callAlibabaQwenStream(
             const parsed = JSON.parse(jsonStr);
             const delta = parsed?.choices?.[0]?.delta;
             let deltaText = delta?.content || '';
-            let reasoningText = delta?.reasoning || delta?.reasoning_content || '';
-            if (!reasoningText && parsed?.choices?.[0]?.message?.reasoning_content) {
-              reasoningText = parsed.choices[0].message.reasoning_content;
-            } else if (!reasoningText && parsed?.choices?.[0]?.message?.reasoning) {
-              reasoningText = parsed.choices[0].message.reasoning;
-            }
             let finishReason = parsed?.choices?.[0]?.finish_reason || null;
             const usage = parsed?.usage || parsed?.response?.usage;
 
-            if (deltaText || reasoningText || finishReason || usage) {
+            if (deltaText || finishReason || usage) {
               yield {
                 text: () => deltaText,
-                reasoningText: () => reasoningText,
                 candidates: [
                   {
                     content: {
-                      parts: [{ text: deltaText, reasoning: reasoningText }],
+                      parts: [{ text: deltaText }],
                       role: 'model',
                     },
                     finishReason,

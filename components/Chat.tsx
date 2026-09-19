@@ -1,6 +1,6 @@
 import { db, get, off, onValue, push, ref as dbRef, remove, serverTimestamp, set, update } from '@/lib/backend';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { createAvelutAI, getResponseText } from '../utils/inference';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
 import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
@@ -23,7 +23,6 @@ import remarkBreaks from 'remark-breaks';
 import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MarkdownContent } from './MarkdownContent';
-import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
 import { ChatLimitBanner } from './ChatLimitBanner';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
@@ -608,13 +607,13 @@ export const Chat: React.FC<ChatProps> = ({
         { id: userMsgId, text: currentInput, sender: 'user', timestamp: now },
       ]);
 
-      const updateOrAppendAiMessage = (text: string, reasoningText?: string) => {
+      const updateOrAppendAiMessage = (text: string) => {
         setMessages((prev) => {
           const exists = prev.some((m) => m.id === aiMsgId);
           if (exists) {
-            return prev.map((m) => (m.id === aiMsgId ? { ...m, text, reasoningText } : m));
+            return prev.map((m) => (m.id === aiMsgId ? { ...m, text } : m));
           } else {
-            return [...prev, { id: aiMsgId, text, reasoningText, sender: 'bot', timestamp: now + 1 }];
+            return [...prev, { id: aiMsgId, text, sender: 'bot', timestamp: now + 1 }];
           }
         });
       };
@@ -682,7 +681,6 @@ export const Chat: React.FC<ChatProps> = ({
 
       const cachedReply = await getCachedAIResponse(currentInput, aiModel, selectedMode);
       let responseText = cachedReply || '';
-      let reasoningText = '';
 
       if (responseText) {
         updateOrAppendAiMessage(responseText);
@@ -694,21 +692,17 @@ export const Chat: React.FC<ChatProps> = ({
         }
 
         // Show thinking indicator immediately for this bot message
-        updateOrAppendAiMessage('', '');
+        updateOrAppendAiMessage('');
 
         try {
           const responseStream = await ai.models.generateContentStream(aiParams);
 
           for await (const chunk of responseStream) {
             const chunkText = getResponseText(chunk);
-            const chunkReasoning = getResponseReasoningText(chunk);
-            if (chunkReasoning) {
-              reasoningText += chunkReasoning;
-            }
             if (chunkText) {
               responseText += chunkText;
             }
-            updateOrAppendAiMessage(responseText, reasoningText);
+            updateOrAppendAiMessage(responseText);
           }
         } catch (streamErr: any) {
           console.warn('Streaming failed or not supported, falling back to generateContent:', streamErr);
@@ -726,7 +720,7 @@ export const Chat: React.FC<ChatProps> = ({
           }
 
           responseText = (aiResult.data || '').trim();
-          updateOrAppendAiMessage(responseText, reasoningText);
+          updateOrAppendAiMessage(responseText);
         }
 
         if (responseText) {
@@ -841,29 +835,7 @@ export const Chat: React.FC<ChatProps> = ({
                 ) : (
                   <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">
                     <div className="w-full min-w-0">
-                      {!msg.text ? (
-                        <div className="py-1">
-                          <ThinkingTypingIndicator
-                            label="thinking"
-                            reasoningText={msg.reasoningText}
-                            isStreaming={isLoading}
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          {msg.reasoningText && (
-                            <div className="mb-2">
-                              <ThinkingTypingIndicator
-                                label="thought process"
-                                reasoningText={msg.reasoningText}
-                                defaultExpanded={false}
-                                isStreaming={false}
-                              />
-                            </div>
-                          )}
-                          <MarkdownContent content={msg.text} />
-                        </>
-                      )}
+                      <MarkdownContent content={msg.text} />
                     </div>
 
                     {msg.text && (
@@ -951,13 +923,7 @@ export const Chat: React.FC<ChatProps> = ({
                 )}
               </div>
             ))}
-            {isLoading && (messages.length === 0 || messages[messages.length - 1]?.sender === 'user') && (
-              <div className="flex justify-start w-full">
-                <div className="py-1">
-                  <ThinkingTypingIndicator label="thinking" />
-                </div>
-              </div>
-            )}
+
             <div ref={messagesEndRef} className="h-2" />
           </div>
         )}
