@@ -1,4 +1,4 @@
-import { auth, db, push, ref as dbRef, serverTimestamp as firebaseServerTimestamp, set } from '@/lib/backend';
+import { auth, db, push, ref as dbRef, serverTimestamp as serverTimestamp, set } from '@/lib/backend';
 import React, { useState, useEffect } from 'react';
 import type { Notification } from '../types';
 import { NotificationBellIcon } from './icons/NotificationBellIcon';
@@ -63,7 +63,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ notifications, onM
             await set(newMessageRef, {
                 sender_id: currentUserId,
                 text: replyText.trim(),
-                timestamp: firebaseServerTimestamp(),
+                timestamp: serverTimestamp(),
                 status: 'sent'
             });
 

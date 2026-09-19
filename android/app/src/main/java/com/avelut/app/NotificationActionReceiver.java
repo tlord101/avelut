@@ -9,15 +9,6 @@ import androidx.core.app.RemoteInput;
 import android.app.NotificationManager;
 import androidx.core.app.NotificationCompat;
 
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ServerValue;
-
-import java.util.HashMap;
-import java.util.Map;
-
 public class NotificationActionReceiver extends BroadcastReceiver {
 
     @Override
@@ -38,38 +29,16 @@ public class NotificationActionReceiver extends BroadcastReceiver {
             uriBuilder.appendQueryParameter("chatId", chatId);
         }
 
-        // Native Inline Reply Logic
-        if ("reply_action".equals(actionId) && !replyText.isEmpty() && chatId != null && !chatId.isEmpty()) {
-            FirebaseAuth auth = FirebaseAuth.getInstance();
-            FirebaseUser user = auth.getCurrentUser();
-            if (user != null) {
-                String uid = user.getUid();
-                DatabaseReference msgRef = FirebaseDatabase.getInstance().getReference("messages").child(chatId).push();
-                Map<String, Object> msg = new HashMap<>();
-                msg.put("senderId", uid);
-                msg.put("text", replyText);
-                msg.put("timestamp", ServerValue.TIMESTAMP);
-                msg.put("isRead", false);
-                msgRef.setValue(msg);
-
-                // Update notification to show "Reply sent"
-                NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-                if (notificationManager != null) {
-                    NotificationCompat.Builder repliedNotification = new NotificationCompat.Builder(context, "avelut_notifications")
-                            .setSmallIcon(R.drawable.ic_stat_name)
-                            .setContentText("Reply sent")
-                            .setGroup("avelut_messages")
-                            .setAutoCancel(true)
-                            .setPriority(NotificationCompat.PRIORITY_HIGH);
-                    notificationManager.notify(chatId.hashCode(), repliedNotification.build());
-                }
-                return; // Stop here, do not launch the app
-            }
-        }
-
-        // Only attach replyText for actual inline-reply actions (fallback if native auth failed)
+        // Always pass inline reply to JS to handle via Supabase instead of direct native Firebase DB insertion
         if ("reply_action".equals(actionId) && !replyText.isEmpty()) {
             uriBuilder.appendQueryParameter("replyText", replyText);
+
+            // Optionally, immediately dismiss the notification to give a better UX,
+            // since the JS app will do the actual sending
+            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null && chatId != null) {
+                notificationManager.cancel(chatId.hashCode());
+            }
         }
 
         Uri deepLinkUri = uriBuilder.build();

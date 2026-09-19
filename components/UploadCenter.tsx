@@ -1,4 +1,4 @@
-import { auth as firebaseAuth, createUserWithEmailAndPassword, db, deleteObject, firebaseSignOut, get, getDownloadURL, onAuthStateChanged, onValue, push, ref as dbRef, ref as storageRef, remove, set, signInWithEmailAndPassword, storage, update, uploadBytes } from '@/lib/backend';
+import { auth as auth, createUserWithEmailAndPassword, db, deleteObject, signOut, get, getDownloadURL, onAuthStateChanged, onValue, push, ref as dbRef, ref as storageRef, remove, set, signInWithEmailAndPassword, storage, update, uploadBytes } from '@/lib/backend';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createAvelutAI, getResponseText, Type } from '../utils/inference';
 import { useToast } from '../hooks/useToast';
@@ -187,7 +187,7 @@ export const UploadCenter: React.FC = () => {
   const ai = useMemo(() => createAvelutAI(appSettings, null), [appSettings]);
   const [pathname, setPathname] = useState(() => getWindowPathname());
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [user, setUser] = useState(firebaseAuth.currentUser);
+  const [user, setUser] = useState(auth.currentUser);
   const [profile, setProfile] = useState<UploaderProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
@@ -242,7 +242,7 @@ export const UploadCenter: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthLoading(false);
       if (!currentUser) {
@@ -384,7 +384,7 @@ export const UploadCenter: React.FC = () => {
     setIsSubmitting(true);
     try {
       if (authMode === 'signup') {
-        const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const displayName = createUserDisplayName(email.trim());
         await set(dbRef(db, `uploaders/${credential.user.uid}`), {
           uid: credential.user.uid,
@@ -395,7 +395,7 @@ export const UploadCenter: React.FC = () => {
         addToast('Uploader account created.', 'success');
         navigate('/upload-center');
       } else {
-        const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
         const profileSnapshot = await get(dbRef(db, `uploaders/${credential.user.uid}`));
         if (!profileSnapshot.exists()) {
           const displayName = createUserDisplayName(credential.user.email || email.trim());
@@ -419,7 +419,7 @@ export const UploadCenter: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await firebaseSignOut(firebaseAuth);
+      await signOut(auth);
       setProfile(null);
       navigate('/upload-center');
     } catch (error: any) {
@@ -439,7 +439,7 @@ export const UploadCenter: React.FC = () => {
   };
 
   const handleFileUpload = async (course: Course, courseKey: string, deptPath: string, files: FileList | File[], type: 'textbook'|'past_question', year?: string) => {
-    const currentUser = firebaseAuth.currentUser;
+    const currentUser = auth.currentUser;
     if (!currentUser || !profile) return addToast('Please sign in again.', 'error');
     if (!ai) return addToast('AI features unavailable.', 'error');
     if (!appSettings.upload_center_uploads_enabled) return addToast('Uploads are disabled.', 'error');

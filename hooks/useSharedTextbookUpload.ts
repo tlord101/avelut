@@ -1,4 +1,4 @@
-import { auth as firebaseAuth, db, get, getDownloadURL, push, ref as dbRef, ref as storageRef, set, storage, update, uploadBytes } from '@/lib/backend';
+import { auth as auth, db, get, getDownloadURL, push, ref as dbRef, ref as storageRef, set, storage, update, uploadBytes } from '@/lib/backend';
 import { useState, useMemo } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { createAvelutAI, getResponseText, Type } from '../utils/inference';
@@ -98,7 +98,7 @@ export const useSharedTextbookUpload = () => {
     const [isUploadingCourseKey, setIsUploadingCourseKey] = useState<string>('');
 
     const uploadTextbook = async (course: Course, courseKey: string, files: FileList | File[], isUploader: boolean = false, deptPath?: string) => {
-        const currentUser = firebaseAuth.currentUser;
+        const currentUser = auth.currentUser;
         if (!currentUser) {
             addToast('Please sign in again.', 'error');
             return false;

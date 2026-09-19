@@ -2,7 +2,7 @@ import { MessengerChatList } from "./pages/MessengerChatList";
 import { MessengerFindFriends } from "./pages/MessengerFindFriends";
 import { MessengerNewChat } from "./pages/MessengerNewChat";
 import { MessengerChatInterface } from "./pages/MessengerChatInterface";
-import { auth, db, ensureDirectChat, get, limitToLast, off, onAuthStateChanged, onDisconnect, onValue, push, query, ref as dbRef, remove, serverTimestamp as firebaseServerTimestamp, set, storage, type FirebaseUser, update } from "@/lib/backend";
+import { auth, db, ensureDirectChat, get, limitToLast, off, onAuthStateChanged, onDisconnect, onValue, push, query, ref as dbRef, remove, serverTimestamp as serverTimestamp, set, storage, type AuthUser, update } from "@/lib/backend";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { readCachedJson, writeCachedJson } from "../../utils/cache";
 import type { UserProfile } from "../../types";
@@ -26,7 +26,7 @@ import { AvelutMessageInput } from "../messenger/AvelutMessageInput";
 import { ForwardModal } from "../messenger/ForwardModal";
 
 export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: string | null; onNavigate?: (tab: string) => void; setCustomHeaderConfig?: (config: any) => void }> = ({ userProfile, initialChatId = null, onNavigate, setCustomHeaderConfig }) => {
-      const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
+      const [firebaseUser, setAuthUser] = useState<AuthUser | null>(auth.currentUser);
       const [activeChat, setActiveChat] = useState<{ chatId: string, otherUser: UserProfile } | null>(null);
       const [chats, setChats] = useState<any[]>(() => ensureArray(readCachedJson<any[]>(getMessengerCacheKey(userProfile.uid, 'chats'), [])));
       const [allUsers, setAllUsers] = useState<UserProfile[]>(() => ensureArray<UserProfile>(readCachedJson<UserProfile[]>(getMessengerCacheKey(userProfile.uid, 'all_users'), [])));
@@ -433,7 +433,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
 
       useEffect(() => {
         const unsub = onAuthStateChanged(auth, user => {
-          setFirebaseUser(user);
+          setAuthUser(user);
           setIsLoading(false);
         });
         return unsub;
@@ -491,7 +491,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
         const syncPresence = async (online: boolean) => {
           await update(presenceRef, {
             is_online: online,
-            last_seen: firebaseServerTimestamp()
+            last_seen: serverTimestamp()
           });
         };
 
@@ -503,7 +503,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
             const presenceDisconnect = onDisconnect(presenceRef);
             await presenceDisconnect.update({
               is_online: false,
-              last_seen: firebaseServerTimestamp()
+              last_seen: serverTimestamp()
             });
             await syncPresence(true);
           }
@@ -1191,7 +1191,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
           const msgRef = push(dbRef(db, `messages/${chatId}`));
           const clientTimestamp = Date.now();
           optimisticId = msgRef.key || `${clientTimestamp}`;
-          const data: any = { senderId: firebaseUser.uid, text, type, timestamp: firebaseServerTimestamp(), ...extraData };
+          const data: any = { senderId: firebaseUser.uid, text, type, timestamp: serverTimestamp(), ...extraData };
 
           if (replyingTo) {
             data.replyTo = {
@@ -1318,7 +1318,7 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
               senderId: firebaseUser.uid,
               text,
               type,
-              timestamp: firebaseServerTimestamp(),
+              timestamp: serverTimestamp(),
               is_forwarded: true,
             });
           }
