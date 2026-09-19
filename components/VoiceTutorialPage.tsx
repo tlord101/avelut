@@ -7,6 +7,7 @@ import { InsufficientCreditsModal } from './tutorial/InsufficientCreditsModal';
 import { LessonPrepProgressView } from './tutorial/LessonPrepProgressView';
 import { TeachingEngineSessionView } from './tutorial/TeachingEngineSessionView';
 import { useLessonPrepJob } from './tutorial/hooks/useLessonPrepJob';
+import { unifiedVoiceRouter } from '../services/voice/UnifiedVoiceRouter';
 import {
   evaluateLiveTutorialStart,
   type LiveDurationMinutes,
@@ -108,6 +109,13 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       }
     }
   }, [isDurationModalOpen, selectedDurationMode, isPlayerActive, isOpeningLesson, onBack]);
+
+  // Global audio cleanup on unmount or tab switch
+  useEffect(() => {
+    return () => {
+       unifiedVoiceRouter.stopAll();
+    };
+  }, []);
 
   // Check for existing progress
   useEffect(() => {
@@ -230,10 +238,15 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
           status={
             isOpeningLesson
               ? {
+                  key: 'loading',
                   state: 'preparing',
                   step: 3,
                   progressPercent: 95,
                   message: 'Loading lesson boards & audio package…',
+                  etaMinutes: '0 min',
+                  updatedAt: Date.now(),
+                  durationMode: selectedDurationMode,
+                  topicTitle,
                 }
               : prepStatus
           }

@@ -273,6 +273,7 @@ export interface TeachingQuestion {
   waitForAnswer: boolean;
   expectedConcepts?: string[];
   options?: string[];
+  correctAnswer?: string;
   hint?: string;
 }
 
@@ -286,6 +287,7 @@ export interface TeachingBoardPerformance {
   svg_illustration?: string | null;
   question?: TeachingQuestion | null;
   question_flag?: 0 | 1;
+  correction_speech?: string | null;
 }
 
 export interface StudentAnswerEvaluation {

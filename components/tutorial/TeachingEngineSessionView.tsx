@@ -503,10 +503,56 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   const handleSubmitAnswer = async (answerToSubmit: string) => {
     if (!answerToSubmit.trim() || isSubmittingAnswer || !engineRef.current) return;
     setIsSubmittingAnswer(true);
-    await engineRef.current.evaluateStudentAnswer({
-      topic: topicTitle,
-      studentAnswer: answerToSubmit.trim(),
-    });
+    unifiedVoiceRouter.stopAll();
+
+    const perf = currentBoardPerfRef.current;
+    if (perf?.question?.correctAnswer) {
+       if (answerToSubmit.trim() === perf.question.correctAnswer.trim()) {
+          // Instant Correct
+          setActiveQuestion(null);
+          setIsSubmittingAnswer(false);
+          handleNextBoard();
+       } else {
+          // Wrong Answer - Instant Local Evaluation with Correction Speech
+          const correction = perf.correction_speech || `The correct answer was actually ${perf.question.correctAnswer}. Let's keep moving.`;
+          setEvaluationFeedback({
+            isCorrect: false,
+            score: 'misconception',
+            spokenFeedback: correction,
+          });
+
+          unifiedVoiceRouter.playSpeech(correction, {
+             appSettings: appSettingsRef.current,
+             voice: currentVoice,
+             speed: 1.05,
+             cacheKey: `tts_perf_${structure?.topic || 'topic'}_${durationMode || 30}_${perf.board_number}_${currentVoice}_correction`,
+             onStart: () => setIsSpeaking(true),
+             onEnd: () => {
+                setIsSpeaking(false);
+                // In a useEffect, a closure over 'disposed' handles unmount tracking correctly.
+                // We'll use a local check if 'disposed' variable is available, otherwise just call handleNextBoard.
+                // To be safe we will check for engineRef.current which is nullified on close.
+                if (engineRef.current) {
+                   setActiveQuestion(null);
+                   handleNextBoard();
+                }
+             },
+             onError: () => {
+                setIsSpeaking(false);
+                if (engineRef.current) {
+                   setActiveQuestion(null);
+                   handleNextBoard();
+                }
+             }
+          });
+       }
+    } else {
+      // Fallback to slow remote check if missing correctAnswer
+      await engineRef.current.evaluateStudentAnswer({
+        topic: topicTitle,
+        studentAnswer: answerToSubmit.trim(),
+      });
+    }
   };
 
   const handleOpenAsk = () => {
