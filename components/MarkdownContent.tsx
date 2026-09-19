@@ -47,7 +47,9 @@ const components: Components = {
 };
 
 /** Pure presentation shared by live, restored and shared AI responses. */
-export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content, className = '' }) => (
+// Memoized with React.memo to prevent re-parsing markdown AST and re-rendering heavy KaTeX components
+// when parent component updates (such as input typing or streaming ticks) occur with unchanged content.
+export const MarkdownContent: React.FC<MarkdownContentProps> = React.memo(({ content, className = '' }) => (
   <div className={`font-reading text-[15.5px] sm:text-[16.5px] leading-[1.8] tracking-[-0.011em] text-neutral-900 dark:text-neutral-100 prose prose-neutral dark:prose-invert max-w-none min-w-0 break-words font-normal select-text [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden ${className}`}>
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
@@ -57,6 +59,6 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content, class
       {prepareMarkdown(content)}
     </ReactMarkdown>
   </div>
-);
+));
 
 export default MarkdownContent;
