@@ -1584,13 +1584,19 @@ export const Messenger: React.FC<{ userProfile: UserProfile; initialChatId?: str
       if (subRoute === 'new') {
         return (
           <MessengerNewChat
-            studyPartnersList={studyPartnersList}
+            allUsers={safeAllUsers}
+            currentUser={userProfile}
+            studyPartners={safeStudyPartners}
+            partnerRequests={safePartnerRequests}
             newChatSearchQuery={newChatSearchQuery}
             setNewChatSearchQuery={setNewChatSearchQuery}
-            filteredStudyMates={filteredStudyMates}
             openChatWithUser={openChatWithUser}
+            sendPartnerRequest={sendPartnerRequest}
+            acceptPartnerRequest={acceptPartnerRequest}
+            declinePartnerRequest={declinePartnerRequest}
             addToast={addToast}
             navigateToSubRoute={navigateToSubRoute}
+            onNavigate={onNavigate}
           />
         );
       }
