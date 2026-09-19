@@ -134,11 +134,11 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[env(safe-area-inset-bottom,1.5rem)] sm:pb-4 animate-fade-in"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[86vh] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-[52px] sm:mb-0"
+        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[86vh] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
