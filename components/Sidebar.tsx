@@ -888,12 +888,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Drawer */}
       <div
         className={`fixed inset-0 z-[130] md:hidden ${
-          isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          isMobileSidebarOpen ? '' : 'pointer-events-none'
         }`}
       >
         <div
           ref={overlayRef as any}
-          className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+          className={`absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity ${
+            isMobileSidebarOpen ? 'opacity-100' : 'opacity-0'
+          }`}
           onClick={onCloseMobileSidebar}
           aria-hidden="true"
         />

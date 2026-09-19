@@ -704,7 +704,9 @@ const App: React.FC = () => {
             const deltaX = touch.clientX - globalTouchStartRef.current.x;
             const deltaY = touch.clientY - globalTouchStartRef.current.y;
             if (deltaX > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-                setIsMobileSidebarOpen(true);
+                if (activeItem !== 'study_guide') {
+                    setIsMobileSidebarOpen(true);
+                }
             }
         }
         globalTouchStartRef.current = null;
@@ -787,7 +789,7 @@ const App: React.FC = () => {
         isOpen: isMobileSidebarOpen,
         onOpen: () => setIsMobileSidebarOpen(true),
         onClose: () => setIsMobileSidebarOpen(false),
-        enabled: true,
+        enabled: activeItem !== 'study_guide',
     });
     const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
