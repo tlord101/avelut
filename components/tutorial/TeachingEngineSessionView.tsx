@@ -752,16 +752,6 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           </div>
         ) : (
           <>
-            {/* Top-Left Exit Button always available on board surface */}
-            <button
-              onClick={handleCloseSession}
-              type="button"
-              className="absolute top-3 sm:top-4 left-3 sm:left-4 z-40 w-9 h-9 rounded-full bg-[#141414] hover:bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
-              title="Exit Lesson"
-            >
-              <i className="bi bi-arrow-left text-sm"></i>
-            </button>
-
             {sessionError && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 backdrop-blur-md w-[90%] max-w-lg shadow-lg">
                 <i className="bi bi-exclamation-triangle-fill text-rose-500 text-lg shrink-0"></i>
@@ -786,8 +776,8 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
             />
 
             {/* In-Board Progress Bar directly on the Blackboard Surface */}
-            {boardElements.length === 0 && isLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 z-20 pointer-events-auto animate-fade-in text-center">
+            {isLoading && boardIndex === startBoardIndex && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 z-20 pointer-events-auto animate-fade-in text-center bg-black/40 backdrop-blur-sm">
                 <div className="max-w-sm w-full flex flex-col items-center space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#38BDF8] shadow-lg">
                     <div className="w-6 h-6 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
@@ -832,16 +822,6 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           </>
         )}
 
-        {/* Sleek Non-Blocking Loading Badge when board elements already exist but next board is loading */}
-        {isLoading && !isPackageMode && boardElements.length > 0 && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/90 border border-[#38BDF8]/40 shadow-xl backdrop-blur-md animate-pulse pointer-events-none">
-            <div className="w-3.5 h-3.5 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin shrink-0" />
-            <span className="text-xs sm:text-sm font-semibold tracking-wide text-slate-200">
-              {statusMessage || 'Lecturer writing board content & speech…'}
-            </span>
-          </div>
-        )}
-
         {/* Question Overlay - shown ONLY when question_flag === 1 (or interactive question exists) */}
         {activeQuestion && !finalTest && (currentBoardPerf?.question_flag === 1 || (!currentBoardPerf?.question_flag && activeQuestion.waitForAnswer)) && (
           <QuestionOverlay
@@ -861,7 +841,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           <button
             onClick={handleOpenAsk}
             type="button"
-            className="absolute bottom-6 right-6 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/25 shadow-2xl backdrop-blur-xl flex items-center justify-center text-white transition-all cursor-pointer z-30 ring-1 ring-white/15"
+            className="absolute bottom-[calc(90px+env(safe-area-inset-bottom,0px))] md:bottom-8 right-4 md:right-8 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/25 shadow-2xl backdrop-blur-xl flex items-center justify-center text-white transition-all cursor-pointer z-30 ring-1 ring-white/15"
             title="Ask Lecturer (pauses lesson)"
           >
             <i className="bi bi-mic-fill text-xl sm:text-2xl text-white"></i>
