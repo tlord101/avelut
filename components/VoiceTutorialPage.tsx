@@ -121,7 +121,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
   }, [userProfile?.uid, topicTitle, courseName]);
 
-  const handlePrepareLesson = async (mode: LessonDurationMode) => {
+  const handleContinueLesson = async (mode: LessonDurationMode) => {
     const decision = evaluateLiveTutorialStart(userProfile, mode as LiveDurationMinutes, resolvedAppSettings);
 
     if (!decision.allowed) {
@@ -136,40 +136,20 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
 
     setSelectedDurationMode(mode);
-    setIsDurationModalOpen(false);
-
-    try {
-      await startPrepJob(mode);
-      addToast('Preparing lesson in background. You can close the app — we\'ll notify you when ready!', 'info');
-    } catch (err: any) {
-      console.error('[VoiceTutorialPage] startPrep error:', err);
-      addToast(err?.message || 'Failed to start lesson preparation.', 'error');
-    }
-  };
-
-  const handleOpenLesson = async (mode: LessonDurationMode) => {
-    setIsOpeningLesson(true);
-    setIsDurationModalOpen(false);
-    setSelectedDurationMode(mode);
     setStartBoardIndex(0);
+    setIsDurationModalOpen(false);
+    setIsPlayerActive(true);
 
+    // Warm up package cache in background if already prepared
     try {
       const resolvedUserId = userProfile?.uid || 'anon';
       const topicKey = topicKeyFromTitle(topicTitle, courseName);
       const key = `${resolvedUserId}::${topicKey}::${mode}`;
-
       const pkg = await lessonPrepService.loadReadyPackage(key);
       if (pkg) {
         lessonPrepService.hydrateLessonPackageCaches(pkg);
       }
-      setIsPlayerActive(true);
-    } catch (err: any) {
-      console.error('[VoiceTutorialPage] openLesson error:', err);
-      // Fallback to active player if cache reading fails
-      setIsPlayerActive(true);
-    } finally {
-      setIsOpeningLesson(false);
-    }
+    } catch (_) {}
   };
 
   const handleResumeSession = () => {
@@ -183,7 +163,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 
   const handleCloseModal = () => {
     setIsDurationModalOpen(false);
-    if (!selectedDurationMode && !isPlayerActive && prepStatus.state !== 'preparing') {
+    if (!selectedDurationMode && !isPlayerActive) {
       if (onBack) onBack();
     }
   };
@@ -196,9 +176,9 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         courseName={courseName}
         syllabusContext={syllabusContext}
         onClose={handleCloseModal}
-        onConfirm={handleOpenLesson}
-        onPrepare={handlePrepareLesson}
-        onOpen={handleOpenLesson}
+        onConfirm={handleContinueLesson}
+        onContinue={handleContinueLesson}
+        onOpen={handleContinueLesson}
         initialMode={selectedDurationMode || 30}
         resumeAvailable={Boolean(resumeProgress)}
         resumeLabel={resumeProgress ? formatResumeLabel(resumeProgress) : undefined}
@@ -220,7 +200,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         }}
         onTryShorter={(shorterMode) => {
           setShowCreditsModal(false);
-          void handlePrepareLesson(shorterMode);
+          void handleContinueLesson(shorterMode);
         }}
         affordableModes={([15, 30, 60] as const).filter(
           (m) => evaluateLiveTutorialStart(userProfile, m as LiveDurationMinutes, resolvedAppSettings).allowed
@@ -260,13 +240,13 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
           topicTitle={topicTitle}
           courseName={courseName}
           durationMinutes={selectedDurationMode}
-          onOpenLesson={() => handleOpenLesson(selectedDurationMode)}
+          onOpenLesson={() => handleContinueLesson(selectedDurationMode)}
           onCancelJob={cancelJob}
           onLeaveBackground={() => {
             if (onBack) onBack();
             else if (onNavigate) onNavigate('chat');
           }}
-          onRetry={() => handlePrepareLesson(selectedDurationMode)}
+          onRetry={() => handleContinueLesson(selectedDurationMode)}
         />
       )}
     </div>

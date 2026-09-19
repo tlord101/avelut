@@ -6,8 +6,6 @@ import {
   fetchLiveMinutePoolFromServer,
   type LiveDurationMinutes,
 } from '../../utils/liveTutorialQuota';
-import { useLessonPrep } from '../../hooks/useLessonPrep';
-import { requestNotificationPermission } from '../../services/lessonPrepService';
 
 export type LessonDurationMode = 15 | 30 | 60;
 
@@ -42,8 +40,7 @@ export const LESSON_DURATION_OPTIONS: LessonDurationOption[] = [
     title: 'Full lecture',
     subtitle: '~60 minutes',
     boardsCount: 30,
-    description:
-      'Real lecturer style — chapters, deep dives, pauses, resume anytime.',
+    description: 'Real lecturer style — chapters, deep dives, pauses, resume anytime.',
     icon: 'bi-mortarboard',
   },
 ];
@@ -55,6 +52,7 @@ export interface LessonDurationModalProps {
   syllabusContext?: string;
   onClose: () => void;
   onConfirm?: (mode: LessonDurationMode) => void;
+  onContinue?: (mode: LessonDurationMode) => void;
   onPrepare?: (mode: LessonDurationMode) => void;
   onOpen?: (mode: LessonDurationMode) => void;
   initialMode?: LessonDurationMode;
@@ -72,6 +70,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   syllabusContext,
   onClose,
   onConfirm,
+  onContinue,
   onPrepare,
   onOpen,
   initialMode = 15,
@@ -82,7 +81,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   appSettings,
 }) => {
   const [selected, setSelected] = useState<LessonDurationMode>(initialMode);
-  const [serverPoolTrigger, setServerPoolTrigger] = React.useState(0);
+  const [serverPoolTrigger, setServerPoolTrigger] = useState(0);
 
   const effectiveProfile = useMemo(() => {
     if (userProfile && (userProfile.uid || (userProfile as any).id)) return userProfile;
@@ -105,49 +104,30 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   React.useEffect(() => {
     if (isOpen && effectiveProfile?.uid && pool.periodKey) {
       fetchLiveMinutePoolFromServer(effectiveProfile.uid, pool.periodKey).then(() => {
-        setServerPoolTrigger(prev => prev + 1);
+        setServerPoolTrigger((prev) => prev + 1);
       }).catch(console.warn);
     }
   }, [isOpen, effectiveProfile?.uid, pool.periodKey]);
-
-  const { statuses: prepStatuses, isAnyPreparing, startPrep } = useLessonPrep({
-    topicTitle,
-    courseName,
-    syllabusContext,
-    userId: effectiveProfile?.uid,
-    userProfile: effectiveProfile,
-    appSettings,
-  });
 
   if (!isOpen) return null;
 
   const periodLabel = pool.period === 'week' ? 'this week' : 'this month';
 
-  const handleActionClick = (e: React.MouseEvent, mode: LessonDurationMode, state: string) => {
-    e.stopPropagation();
-    setSelected(mode);
+  const selectedDecision = evaluateLiveTutorialStart(
+    effectiveProfile,
+    selected as LiveDurationMinutes,
+    appSettings
+  );
 
-    if (state === 'ready') {
-      if (onOpen) onOpen(mode);
-      else if (onConfirm) onConfirm(mode);
-      return;
-    }
-
-    if (state === 'preparing') {
-      // Already preparing — do nothing or show toast
-      return;
-    }
-
-    // Request notification permission once on user tap
-    requestNotificationPermission();
-
-    // Trigger Prepare / Retry
-    if (onPrepare) {
-      onPrepare(mode);
-    } else {
-      void startPrep(mode).catch((err) => {
-        console.error('[LessonDurationModal] startPrep error:', err);
-      });
+  const handleContinueClick = () => {
+    if (onContinue) {
+      onContinue(selected);
+    } else if (onConfirm) {
+      onConfirm(selected);
+    } else if (onOpen) {
+      onOpen(selected);
+    } else if (onPrepare) {
+      onPrepare(selected);
     }
   };
 
@@ -158,7 +138,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[84vh] sm:max-h-[88vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-[52px] sm:mb-0"
+        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[86vh] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white mb-[52px] sm:mb-0"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
@@ -168,7 +148,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-black dark:text-white">Choose Lesson Duration</h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Prepare in background &bull; Open when ready</p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Board-first live interactive lecture</p>
             </div>
           </div>
           <button
@@ -195,24 +175,13 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
           </div>
         </div>
 
-        {/* Reassuring notice while any prep is running */}
-        {isAnyPreparing && (
-          <div className="px-5 py-2.5 bg-neutral-100 dark:bg-[#1C1C1C] border-b border-neutral-200 dark:border-[#2A2A2A] flex items-center justify-between text-xs text-neutral-700 dark:text-[#FAFAFA]">
-            <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 border-2 border-neutral-500 dark:border-[#A3A3A3] border-t-transparent rounded-full animate-spin shrink-0"></div>
-              <span className="font-semibold">Preparing lesson in background. You can leave anytime!</span>
-            </div>
-            <span className="text-[10px] text-neutral-500 dark:text-[#A3A3A3] font-medium shrink-0">~2–4 min</span>
-          </div>
-        )}
-
         {/* Resume Previous Progress Option */}
         {resumeAvailable && onResume && (
           <div className="px-5 pt-3">
             <button
               type="button"
               onClick={onResume}
-              className="w-full p-3 sm:p-4 rounded-2xl border-2 border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-left hover:border-black dark:hover:border-white transition-all shadow-sm"
+              className="w-full p-3 sm:p-4 rounded-2xl border-2 border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-left hover:border-black dark:hover:border-white transition-all shadow-sm cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
@@ -228,8 +197,8 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
           </div>
         )}
 
-        {/* Duration Options with Dedicated Actions */}
-        <div className="p-4 sm:p-5 space-y-3 max-h-[46vh] sm:max-h-[52vh] overflow-y-auto">
+        {/* Duration Options */}
+        <div className="p-4 sm:p-5 space-y-3 overflow-y-auto max-h-[50vh]">
           {LESSON_DURATION_OPTIONS.map((opt) => {
             const isSelected = selected === opt.minutes;
             const optDecision = evaluateLiveTutorialStart(
@@ -238,8 +207,6 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
               appSettings
             );
             const canAfford = optDecision.allowed;
-            const prepStatus = prepStatuses[opt.minutes];
-            const state = prepStatus?.state || 'idle';
 
             const priceBadge =
               optDecision.payment === 'included'
@@ -252,199 +219,68 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
               <div
                 key={opt.minutes}
                 onClick={() => setSelected(opt.minutes)}
-                className={`p-4 rounded-2xl border-2 transition-all flex flex-col gap-3 ${
-                  !canAfford && state !== 'ready'
-                    ? 'border-neutral-200 dark:border-[#2A2A2A] bg-neutral-50 dark:bg-[#1C1C1C]/40 opacity-75'
-                    : state === 'ready'
-                      ? 'border-emerald-500/80 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm'
-                      : state === 'preparing'
-                        ? 'border-[#3A3A3A] bg-neutral-100 dark:bg-[#1C1C1C]'
-                        : isSelected
-                          ? 'border-black dark:border-[#3A3A3A] bg-neutral-50 dark:bg-[#1C1C1C] shadow-sm'
-                          : 'border-neutral-200 dark:border-[#2A2A2A] bg-white dark:bg-[#141414] hover:border-neutral-300 dark:hover:border-[#3A3A3A]'
-                }`}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                  isSelected
+                    ? 'border-black dark:border-white bg-neutral-50 dark:bg-[#141414] shadow-sm'
+                    : 'border-neutral-200 dark:border-[#2A2A2A] bg-white dark:bg-[#0A0A0A] hover:border-neutral-300 dark:hover:border-[#3A3A3A]'
+                } ${!canAfford ? 'opacity-70' : ''}`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
-                        state === 'ready'
-                          ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black'
-                          : state === 'preparing'
-                            ? 'bg-neutral-800 text-white dark:bg-[#FAFAFA] dark:text-black'
-                            : isSelected && canAfford
-                              ? 'bg-black text-white dark:bg-[#FAFAFA] dark:text-black'
-                              : 'bg-neutral-100 dark:bg-[#1C1C1C] text-black dark:text-[#FAFAFA] border border-neutral-200 dark:border-[#2A2A2A]'
-                      }`}
-                    >
-                      <i className={`bi ${opt.icon} text-base`}></i>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
-                        <span className="text-[10px] font-semibold text-neutral-500 dark:text-[#A3A3A3] bg-neutral-100 dark:bg-[#1C1C1C] px-2 py-0.5 rounded-md">
-                          {opt.subtitle} ({opt.boardsCount} boards)
-                        </span>
-
-                        {/* State badges */}
-                        {state === 'ready' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-check-circle-fill text-emerald-600 dark:text-emerald-400"></i> Ready
-                          </span>
-                        )}
-                        {state === 'preparing' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-neutral-700 dark:text-[#FAFAFA] bg-neutral-100 dark:bg-[#1C1C1C] border border-neutral-300 dark:border-[#3A3A3A] px-2 py-0.5 rounded-md animate-pulse">
-                            <i className="bi bi-hourglass-split"></i> Preparing
-                          </span>
-                        )}
-                        {state === 'paused_offline' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-wifi-off text-amber-600 dark:text-amber-400"></i> Paused Offline
-                          </span>
-                        )}
-                        {state === 'failed' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded-md">
-                            <i className="bi bi-exclamation-circle-fill text-rose-600 dark:text-rose-400"></i> Paused
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-[11px] sm:text-xs text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
-                        {opt.description}
-                      </p>
-
-                      <p className="text-[10px] font-bold mt-1 text-neutral-600 dark:text-neutral-300">
-                        {priceBadge}
-                      </p>
-                    </div>
+                <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                  <div
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                      isSelected
+                        ? 'bg-black text-white dark:bg-white dark:text-black'
+                        : 'bg-neutral-100 dark:bg-[#1C1C1C] text-black dark:text-white border border-neutral-200 dark:border-[#2A2A2A]'
+                    }`}
+                  >
+                    <i className={`bi ${opt.icon} text-base`}></i>
                   </div>
 
-                  {/* Primary Action Button Per Duration Row */}
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    {state === 'ready' ? (
-                      <button
-                        type="button"
-                        onClick={(e) => handleActionClick(e, opt.minutes, 'ready')}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white cursor-pointer"
-                      >
-                        <i className="bi bi-play-fill text-base"></i>
-                        <span>Open lesson</span>
-                      </button>
-                    ) : state === 'preparing' ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 cursor-not-allowed"
-                      >
-                        <div className="w-3 h-3 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin"></div>
-                        <span>Preparing…</span>
-                      </button>
-                    ) : state === 'paused_offline' || state === 'failed' || (typeof prepStatus?.boardIndex === 'number' && prepStatus.boardIndex > 1) ? (
-                      <button
-                        type="button"
-                        onClick={(e) => handleActionClick(e, opt.minutes, state)}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 bg-brand-600 hover:bg-brand-500 active:scale-95 text-white transition-all shadow-sm cursor-pointer"
-                      >
-                        <i className="bi bi-arrow-clockwise"></i>
-                        <span>Resume preparation</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={!canAfford}
-                        onClick={(e) => canAfford && handleActionClick(e, opt.minutes, 'idle')}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm ${
-                          canAfford
-                            ? 'bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 cursor-pointer'
-                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <span>Prepare lesson</span>
-                        <i className="bi bi-arrow-right text-xs"></i>
-                      </button>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
+                      <span className="text-[10px] font-semibold text-neutral-500 dark:text-[#A3A3A3] bg-neutral-100 dark:bg-[#1C1C1C] px-2 py-0.5 rounded-md">
+                        {opt.subtitle} ({opt.boardsCount} boards)
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
+                      {opt.description}
+                    </p>
+                    <p className="text-[10px] font-bold mt-1 text-neutral-600 dark:text-neutral-300">
+                      {priceBadge}
+                    </p>
                   </div>
                 </div>
 
-                {/* Progress Details When Preparing */}
-                {state === 'preparing' && (
-                  <div className="bg-neutral-100/80 dark:bg-[#1C1C1C] border border-neutral-200/80 dark:border-[#2A2A2A] rounded-xl p-2.5 text-xs text-neutral-900 dark:text-[#FAFAFA] space-y-1.5 animate-fade-in">
-                    <div className="flex items-center justify-between text-[11px] font-semibold">
-                      <span className="flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] animate-ping"></span>
-                        {prepStatus?.message || '1/3 Planning lesson structure…'}
-                      </span>
-                      <span className="text-[10px] text-[#2563EB] dark:text-[#3B82F6]">
-                        {prepStatus?.etaMinutes || '~2–4 min'}
-                      </span>
-                    </div>
-
-                    {/* Progress Bar (board-level i/N when available) */}
-                    <div className="w-full bg-neutral-200 dark:bg-[#2A2A2A] rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-[#2563EB] dark:bg-[#3B82F6] h-1.5 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${
-                            typeof prepStatus?.progressPercent === 'number'
-                              ? prepStatus.progressPercent
-                              : prepStatus?.step === 3
-                                ? 90
-                                : prepStatus?.step === 2
-                                  ? 60
-                                  : 30
-                          }%`,
-                        }}
-                      ></div>
-                    </div>
-
-                    {typeof prepStatus?.boardIndex === 'number' && prepStatus?.totalBoards ? (
-                      <p className="text-[10px] font-bold text-brand-700 dark:text-brand-300/90">
-                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} saved on device
-                      </p>
-                    ) : null}
-
-                    <p className="text-[10px] text-neutral-600 dark:text-[#A3A3A3] leading-relaxed">
-                      &bull; This usually takes about 2–4 minutes.<br />
-                      &bull; You can leave this page and keep using the app.<br />
-                      &bull; We’ll notify you when this lesson is ready.
-                    </p>
+                {/* Radio indicator */}
+                <div className="shrink-0">
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isSelected
+                        ? 'border-black dark:border-white bg-black dark:bg-white'
+                        : 'border-neutral-300 dark:border-neutral-700 bg-transparent'
+                    }`}
+                  >
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-white dark:bg-black" />}
                   </div>
-                )}
-
-                {/* Offline or Error Banner */}
-                {(state === 'paused_offline' || state === 'failed') && (
-                  <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-xl p-2.5 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                    <p className="text-[11px] font-bold flex items-center gap-1.5">
-                      <i className="bi bi-shield-check text-amber-600 dark:text-amber-400"></i>
-                      <span>{prepStatus?.message || 'Preparation saved on this device.'}</span>
-                    </p>
-                    {typeof prepStatus?.boardIndex === 'number' && prepStatus?.totalBoards ? (
-                      <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-300">
-                        Board {Math.min(prepStatus.boardIndex, prepStatus.totalBoards)} of {prepStatus.totalBoards} saved on device. No work was lost.
-                      </p>
-                    ) : null}
-                    <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                      Tap "Resume preparation" to pick up right where it left off.
-                    </p>
-                  </div>
-                )}
+                </div>
               </div>
             );
           })}
         </div>
 
-        {/* Footer (No global Start lesson button) */}
+        {/* Footer: Single Primary Continue Button */}
         <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-            Lessons run automatically after preparation finishes.
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+            {selectedDecision.allowed ? `Ready to start ~${selected}m live tutorial` : selectedDecision.message}
           </p>
           <button
-            onClick={onClose}
+            onClick={handleContinueClick}
             type="button"
-            className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 transition-colors"
+            className="px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
           >
-            Close
+            <span>Continue</span>
+            <i className="bi bi-arrow-right text-xs"></i>
           </button>
         </div>
       </div>

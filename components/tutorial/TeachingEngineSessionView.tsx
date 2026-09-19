@@ -548,6 +548,27 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     setIsProcessingAsk(false);
   };
 
+  const handleRetry = useCallback(async () => {
+    setSessionError(null);
+    setIsLoading(true);
+    setStatusMessage('Retrying live lecture…');
+    if (engineRef.current) {
+      if (!structure) {
+        await engineRef.current.generateTeachingStructure({
+          topic: topicTitle,
+          courseName,
+          syllabusContext,
+          durationMode,
+        });
+      } else {
+        await engineRef.current.loadBoardPerformance({
+          boardIndex: boardIndexRef.current,
+          completedBoardsSummary: completedTitlesRef.current,
+        });
+      }
+    }
+  }, [topicTitle, courseName, syllabusContext, durationMode, structure]);
+
   // Header configuration sync
   useEffect(() => {
     if (setCustomHeaderConfig) {
@@ -633,33 +654,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     <div className="flex flex-col h-full w-full bg-[#000000] text-white select-none overflow-hidden relative">
       <main className="flex-1 relative flex flex-col min-h-0 w-full overflow-hidden p-1.5 sm:p-3">
         {/* Render Final Test View or Board View */}
-        {!isReadyToStart ? (
-          <div className="w-full h-full bg-[#000000] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 flex flex-col items-center justify-center animate-fade-in relative">
-            <h2 className="absolute top-8 text-xl sm:text-2xl font-bold text-white text-center px-4">{topicTitle}</h2>
-            <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-              <div className="w-10 h-10 border-4 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
-              <div className="space-y-1.5">
-                <p className="text-white font-bold text-base sm:text-lg">Preparing your live lesson…</p>
-                <p className="text-slate-300 text-xs sm:text-sm">
-                  {statusMessage || 'Planning lesson structure & generating Board 1 speech…'}
-                </p>
-              </div>
-              <div className="bg-[#111111] border border-[#222222] rounded-2xl p-3.5 text-xs text-slate-400 space-y-1.5 text-left w-full shadow-lg">
-                <p>&bull; This usually takes about 2–4 minutes.</p>
-                <p>&bull; You can leave this page and keep using the app.</p>
-                <p>&bull; We’ll notify you as soon as this lesson is ready.</p>
-              </div>
-            </div>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="absolute bottom-8 px-6 py-2.5 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] text-slate-300 font-bold text-sm transition-colors cursor-pointer"
-              >
-                Back to Lessons
-              </button>
-            )}
-          </div>
-        ) : finalTest ? (
+        {finalTest ? (
           <div className="w-full h-full bg-[#0F172A] rounded-2xl sm:rounded-3xl border border-[#222222] p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
             <div className="max-w-2xl w-full flex flex-col gap-6">
               <div className="text-center border-b border-[#222222] pb-4">
@@ -757,6 +752,16 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           </div>
         ) : (
           <>
+            {/* Top-Left Exit Button always available on board surface */}
+            <button
+              onClick={handleCloseSession}
+              type="button"
+              className="absolute top-3 sm:top-4 left-3 sm:left-4 z-40 w-9 h-9 rounded-full bg-[#141414] hover:bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
+              title="Exit Lesson"
+            >
+              <i className="bi bi-arrow-left text-sm"></i>
+            </button>
+
             {sessionError && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 backdrop-blur-md w-[90%] max-w-lg shadow-lg">
                 <i className="bi bi-exclamation-triangle-fill text-rose-500 text-lg shrink-0"></i>
@@ -769,6 +774,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
                 </button>
               </div>
             )}
+
             <TeachingBoard
               elements={boardElements}
               activeHighlights={activeHighlights}
@@ -779,39 +785,47 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
               isWaitingForVoice={isWaitingForVoice}
             />
 
-            {/* Centered Board Loading Card when Whiteboard is still empty */}
+            {/* In-Board Progress Bar directly on the Blackboard Surface */}
             {boardElements.length === 0 && isLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-sm z-20 animate-fade-in text-center">
-                <div className="max-w-md w-full bg-[#111111] border border-[#262626] rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5">
-                  <div className="w-14 h-14 rounded-2xl bg-[#38BDF8]/10 border border-[#38BDF8]/30 flex items-center justify-center mx-auto text-[#38BDF8]">
-                    <div className="w-7 h-7 border-3 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 z-20 pointer-events-auto animate-fade-in text-center">
+                <div className="max-w-sm w-full flex flex-col items-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#38BDF8] shadow-lg">
+                    <div className="w-6 h-6 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
                   </div>
-                  <div>
-                    <span className="px-3 py-1 rounded-full bg-[#1C1C1C] border border-[#2A2A2A] text-xs font-semibold text-[#38BDF8] uppercase tracking-wider">
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                       {courseName || 'Live Tutorial'}
                     </span>
-                    <h3 className="text-lg sm:text-xl font-bold text-white mt-3 leading-snug">
+                    <h2 className="text-lg sm:text-xl font-bold text-[#FAFAFA] tracking-tight">
                       {topicTitle}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-300 mt-1.5">
-                      {statusMessage || 'Lecturer writing board content & speech…'}
+                    </h2>
+                  </div>
+
+                  {/* Centered In-Board Progress Bar */}
+                  <div className="w-64 sm:w-80 space-y-2 pt-1">
+                    <div className="w-full bg-[#1C1C1C] border border-[#2A2A2A] h-2 rounded-full overflow-hidden p-0.5">
+                      <div className="bg-[#0066FF] h-full rounded-full animate-pulse w-3/4 transition-all duration-300" />
+                    </div>
+                    <p className="text-xs text-[#A3A3A3] font-medium tracking-wide">
+                      {statusMessage || 'Planning live lesson…'}
                     </p>
                   </div>
 
-                  {/* Animated Progress Bar */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-400">
-                      <span className="text-[#38BDF8]">Live Lecture Engine</span>
-                      <span>Board {boardIndex + 1} of {totalBoards}</span>
+                  {/* Retry Button — shown only on failure */}
+                  {sessionError && (
+                    <div className="pt-2 flex flex-col items-center gap-2">
+                      <p className="text-xs text-rose-400 max-w-xs">{sessionError}</p>
+                      <button
+                        onClick={handleRetry}
+                        type="button"
+                        className="px-4 py-2 rounded-xl bg-[#141414] hover:bg-[#1C1C1C] border border-[#2A2A2A] text-xs font-bold text-[#FAFAFA] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <i className="bi bi-arrow-clockwise"></i>
+                        <span>Retry</span>
+                      </button>
                     </div>
-                    <div className="w-full bg-[#1C1C1C] h-2.5 rounded-full overflow-hidden border border-[#2A2A2A] p-0.5">
-                      <div className="bg-[#38BDF8] h-full rounded-full animate-pulse w-3/4 transition-all duration-500" />
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 font-medium">
-                    AI tutor is sketching diagrams and synthesizing spoken explanations for this board.
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -828,8 +842,8 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           </div>
         )}
 
-        {/* Question Overlay */}
-        {activeQuestion && !finalTest && (
+        {/* Question Overlay - shown ONLY when question_flag === 1 (or interactive question exists) */}
+        {activeQuestion && !finalTest && (currentBoardPerf?.question_flag === 1 || (!currentBoardPerf?.question_flag && activeQuestion.waitForAnswer)) && (
           <QuestionOverlay
             question={activeQuestion}
             evaluationFeedback={evaluationFeedback}

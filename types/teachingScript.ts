@@ -285,6 +285,7 @@ export interface TeachingBoardPerformance {
   board_actions: BoardAction[];
   svg_illustration?: string | null;
   question?: TeachingQuestion | null;
+  question_flag?: 0 | 1;
 }
 
 export interface StudentAnswerEvaluation {

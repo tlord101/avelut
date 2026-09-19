@@ -1,12 +1,13 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createAvelutAI, getResponseText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, getChapterContent } from '../services/notebookStorageService';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useToast } from '../hooks/useToast';
 import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
+import { ChatLimitBanner } from './ChatLimitBanner';
 import {
   getOrGenerateTopicStructure,
   saveTopicStructureProgress,
@@ -20,6 +21,7 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  reasoningText?: string;
 }
 
 interface NotebookChatProps {
@@ -49,6 +51,7 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showLimitBanner, setShowLimitBanner] = useState(false);
   const [limitCost, setLimitCost] = useState(1);
   const [chapterStructure, setChapterStructure] = useState<TopicStructureData | null>(null);
 
@@ -202,7 +205,7 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
     setLimitCost(cost);
     const creditCheck = checkAICredits(userProfile, cost, appSettings);
     if (!creditCheck.allowed) {
-      setShowLimitModal(true);
+      setShowLimitBanner(true);
       return;
     }
 
@@ -258,30 +261,38 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
 
       const isGroundingAvailable = excerptToUse.length > 0;
 
+      // Extract a focused segment corresponding to the active step rather than sending 14k raw characters
+      let focusedExcerpt = '';
+      if (isGroundingAvailable) {
+        const stepOffset = Math.floor((currentStepIdx / Math.max(1, totalSteps)) * excerptToUse.length);
+        const rawSlice = excerptToUse.slice(stepOffset, stepOffset + 2200);
+        focusedExcerpt = rawSlice.trim() || excerptToUse.slice(0, 2200);
+      }
+
       const prompt = `You are an expert, precise, and encouraging academic tutor helping a student understand their textbook material: "${chapter.title}" from "${notebook.title}".
 
 CURRENT STRUCTURED CHAPTER STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}"
 STEP OBJECTIVE: "${activeStep.objective}"
 KEY CONCEPTS: ${activeStep.keyConcepts?.join(', ') || 'Core concepts'}
 
-CRITICAL TUTORING & BITE-SIZED TEACHING RULES:
-1. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 80-120 words per response). Teach this step directly.
-2. INTERACTIVE TEACHING LOOP: Teach ONE key idea or micro-concept at a time. ALWAYS conclude your response with 1 quick check question or thought prompt before proceeding.
-3. TYPOGRAPHIC HIERARCHY:
+CRITICAL TUTORING & PROGRESSIVE TEACHING RULES:
+1. PROGRESSIVE IN-DEPTH TEACHING: You are guiding the student through STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}". Teach this step thoroughly and in depth, focusing on "${activeStep.objective}".
+2. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 90-130 words per turn). Teach ONE micro-concept at a time.
+3. INTERACTIVE TEACHING LOOP: Conclude your response with 1 quick check question or thought prompt before proceeding to verify understanding.
+4. TYPOGRAPHIC HIERARCHY:
    - Use ### Subheadings for section titles.
    - Use **bold** for key concepts and essential definitions.
    - Format all math, formulas, and variables using LaTeX ($...$ inline or $$...$$ block).
 ${isGroundingAvailable
-  ? `4. TEXTBOOK GROUNDING: Base your explanations, definitions, and examples strictly on the TEXTBOOK EXCERPT below.`
-  : `4. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately.`
+  ? `5. TEXTBOOK GROUNDING: Base your explanations and definitions on the focused step excerpt below.`
+  : `5. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately.`
 }
-5. GREETINGS: Reply warmly and concisely to greetings.
+6. GREETINGS: Reply warmly and concisely to greetings.
 
 BOOK: ${notebook.title}
-CHAPTER: ${chapter.title}
-PAGES: ${chapter.startPage} to ${chapter.endPage}
+CHAPTER: ${chapter.title} (Pages ${chapter.startPage}-${chapter.endPage})
 
-${isGroundingAvailable ? `TEXTBOOK EXCERPT (EXTRACTED FROM PAGES ${chapter.startPage}-${chapter.endPage}):\n${excerptToUse.slice(0, 14000)}` : `(No raw text excerpt available for this chapter)`}
+${isGroundingAvailable ? `RELEVANT CHAPTER EXCERPT (STEP ${currentStepIdx + 1}):\n${focusedExcerpt}` : `(Grounding from curriculum)`}
 
 CONVERSATION HISTORY:
 ${nextMessagesWithUser.slice(-6).map((m) => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n')}
@@ -297,6 +308,7 @@ ${messageText}`;
         id: assistantMsgId,
         sender: 'assistant',
         text: '',
+        reasoningText: '',
         timestamp: Date.now(),
       }]);
 
@@ -310,11 +322,22 @@ ${messageText}`;
       });
 
       let streamedText = '';
+      let streamedReasoning = '';
       for await (const chunk of responseStream) {
         const chunkText = getResponseText(chunk);
-        streamedText += chunkText;
+        const chunkReasoning = getResponseReasoningText(chunk);
+        if (chunkReasoning) {
+          streamedReasoning += chunkReasoning;
+        }
+        if (chunkText) {
+          streamedText += chunkText;
+        }
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsgId ? { ...m, text: streamedText } : m))
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, text: streamedText, reasoningText: streamedReasoning }
+              : m
+          )
         );
       }
 
@@ -324,6 +347,7 @@ ${messageText}`;
           id: assistantMsgId,
           sender: 'assistant' as const,
           text: streamedText || 'I could not generate an explanation for that. Please rephrase your question.',
+          reasoningText: streamedReasoning,
           timestamp: Date.now(),
         },
       ];
@@ -426,11 +450,29 @@ ${messageText}`;
                           )}
                         </div>
                       ) : !msg.text ? (
-                        <ThinkingTypingIndicator label="thinking" />
-                      ) : isCurrentlyStreaming ? (
-                        renderStreamingContent(msg.text)
+                        <ThinkingTypingIndicator
+                          label="thinking"
+                          reasoningText={msg.reasoningText}
+                          isStreaming={isCurrentlyStreaming}
+                        />
                       ) : (
-                        <MarkdownContent content={msg.text} />
+                        <>
+                          {msg.reasoningText && (
+                            <div className="mb-2">
+                              <ThinkingTypingIndicator
+                                label="thought process"
+                                reasoningText={msg.reasoningText}
+                                defaultExpanded={false}
+                                isStreaming={false}
+                              />
+                            </div>
+                          )}
+                          {isCurrentlyStreaming ? (
+                            renderStreamingContent(msg.text)
+                          ) : (
+                            <MarkdownContent content={msg.text} />
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -462,6 +504,17 @@ ${messageText}`;
                   {pill}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* LIMIT REACHED BANNER */}
+          {showLimitBanner && (
+            <div className="w-full pb-1">
+              <ChatLimitBanner
+                title="Free tier limit reached"
+                subtitle="Try again later or upgrade to Pro for much higher limits and premium features."
+                actionText="Upgrade to Pro"
+              />
             </div>
           )}
 

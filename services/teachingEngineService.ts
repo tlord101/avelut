@@ -36,6 +36,7 @@ import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';
 import { normalizeBoardActions } from './boardActionNormalize';
 import { AppSettings, UserProfile } from '../types';
+import type { LessonDurationMode } from '../components/tutorial/LessonDurationModal';
 import { logTeachingEvent } from './teachingEventLogger';
 import { getLessonBoard, saveLessonBoard, getLessonAudio, saveLessonAudio } from './lessonPackageStore';
 
@@ -146,6 +147,14 @@ export class TeachingEngineService {
   // Offline (device-prepared) boards hydrated at open time — zero network playback
   private offlineBoards = new Map<number, TeachingBoardPerformance>();
   private offlinePackageMode = false;
+
+  // Context from the student's most recent answer evaluation to adapt next board
+  private lastStudentAnswerContext: {
+    question: string;
+    studentAnswer: string;
+    isCorrect: boolean;
+    feedback?: string;
+  } | null = null;
 
   /**
    * Hydrate the engine with the full board set from a device lesson package
@@ -701,6 +710,14 @@ export class TeachingEngineService {
     };
   }
 
+  public hasInteractiveQuestion(perf: TeachingBoardPerformance | null): boolean {
+    if (!perf) return false;
+    return Boolean(
+      perf.question_flag === 1 ||
+      (perf.question && perf.question.waitForAnswer)
+    );
+  }
+
   /**
    * REQUEST 2: Generate Detailed Teaching Performance for ONE Board
    * Uses 1-board-ahead prefetch cache when available.
@@ -735,8 +752,10 @@ export class TeachingEngineService {
       this.listeners.forEach((l) => l.onBoardLoaded?.(cached));
       this.emitLegacySegment(cached);
 
-      // Trigger prefetch for Board N+1
-      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      // Trigger prefetch for Board N+1 ONLY if current board has NO question
+      if (!this.hasInteractiveQuestion(cached)) {
+        this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      }
       return cached;
     }
 
@@ -749,8 +768,10 @@ export class TeachingEngineService {
       this.listeners.forEach((l) => l.onBoardLoaded?.(offlinePerf));
       this.emitLegacySegment(offlinePerf);
 
-      // Stage Board N+1 from the offline package (its audio is already primed)
-      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      // Stage Board N+1 from offline package ONLY if current board has NO question
+      if (!this.hasInteractiveQuestion(offlinePerf)) {
+        this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      }
       return offlinePerf;
     }
 
@@ -768,7 +789,9 @@ export class TeachingEngineService {
       this.currentBoardPerformance = cachedPerf;
       this.listeners.forEach((l) => l.onBoardLoaded?.(cachedPerf));
       this.emitLegacySegment(cachedPerf);
-      this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      if (!this.hasInteractiveQuestion(cachedPerf)) {
+        this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+      }
       return cachedPerf;
     }
 
@@ -796,8 +819,10 @@ export class TeachingEngineService {
         this.listeners.forEach((l) => l.onBoardLoaded?.(performance));
         this.emitLegacySegment(performance);
 
-        // Trigger background prefetch for Board N+1
-        this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+        // Trigger background prefetch for Board N+1 ONLY if current board has NO question
+        if (performance && !this.hasInteractiveQuestion(performance)) {
+          this.prefetchNextBoard(requestedIndex + 1, params.studentName, params.completedBoardsSummary, sessionTag);
+        }
 
         return performance;
       } catch (err: any) {
@@ -922,11 +947,15 @@ export class TeachingEngineService {
     if (!ai) throw new Error('AI client could not be initialized');
 
     const resolvedStudentName = studentName || this.userProfile?.display_name || 'Student';
-    const activeTopic = this.currentStructure?.topic || boardPlan?.topic || 'Academic Concept';
+    const activeTopic = this.currentStructure?.topic || (boardPlan as any)?.topic || 'Academic Concept';
+    const activeDuration: LessonDurationMode =
+      this.currentStructure?.duration_minutes === 15 || this.currentStructure?.duration_minutes === 60
+        ? (this.currentStructure.duration_minutes as LessonDurationMode)
+        : 30;
     const activeStructure = this.currentStructure || {
       topic: activeTopic,
       boards: [boardPlan],
-      duration_minutes: 30,
+      duration_minutes: activeDuration,
     };
 
     const prompt = buildSingleBoardPrompt({
@@ -935,7 +964,10 @@ export class TeachingEngineService {
       currentBoardPlan: boardPlan,
       studentName: resolvedStudentName,
       completedBoardsSummary,
+      durationMode: activeDuration,
+      studentAnswerContext: this.lastStudentAnswerContext,
     });
+    this.lastStudentAnswerContext = null;
 
     let performance: TeachingBoardPerformance | null = null;
 
@@ -1379,6 +1411,15 @@ export class TeachingEngineService {
       this.setRuntimeState('FEEDBACK');
       this.listeners.forEach((l) => l.onAnswerEvaluated?.(evaluation));
 
+      if (this.currentBoardPerformance?.question) {
+        this.lastStudentAnswerContext = {
+          question: this.currentBoardPerformance.question.question,
+          studentAnswer: params.studentAnswer,
+          isCorrect: evaluation.isCorrect,
+          feedback: evaluation.spokenFeedback,
+        };
+      }
+
       if (evaluation.spokenFeedback) {
         unifiedVoiceRouter.playSpeech(evaluation.spokenFeedback, {
           appSettings: this.appSettings,
@@ -1397,6 +1438,14 @@ export class TeachingEngineService {
       };
       this.setRuntimeState('FEEDBACK');
       this.listeners.forEach((l) => l.onAnswerEvaluated?.(fallback));
+      if (this.currentBoardPerformance?.question) {
+        this.lastStudentAnswerContext = {
+          question: this.currentBoardPerformance.question.question,
+          studentAnswer: params.studentAnswer,
+          isCorrect: fallback.isCorrect,
+          feedback: fallback.spokenFeedback,
+        };
+      }
       return fallback;
     }
   }

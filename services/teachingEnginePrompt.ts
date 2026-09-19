@@ -164,6 +164,12 @@ export function buildSingleBoardPrompt(params: {
   studentName?: string;
   completedBoardsSummary?: string[];
   durationMode?: LessonDurationMode;
+  studentAnswerContext?: {
+    question: string;
+    studentAnswer: string;
+    isCorrect: boolean;
+    feedback?: string;
+  } | null;
 }): string {
   const {
     topic,
@@ -172,6 +178,7 @@ export function buildSingleBoardPrompt(params: {
     studentName,
     completedBoardsSummary,
     durationMode = 30,
+    studentAnswerContext,
   } = params;
   const name = studentName || 'Student';
   const profile = getDurationProfile(durationMode);
@@ -186,7 +193,10 @@ TARGET SPEECH LENGTH: ${profile.speechWordRange} (~2 minutes of active speech)
 LESSON CONTEXT:
 Learning Goal: ${fullStructure.learning_goal}
 Completed Boards So Far: ${completedBoardsSummary?.length ? completedBoardsSummary.join(' -> ') : 'None (This is Board 1)'}
-
+${studentAnswerContext ? `PREVIOUS STUDENT INTERACTION:
+Student answered: "${studentAnswerContext.studentAnswer}" to question: "${studentAnswerContext.question}".
+Result: ${studentAnswerContext.isCorrect ? 'Correct' : 'Needs reinforcement'}.
+Briefly acknowledge or bridge from this in the opening speech beat if appropriate.\n` : ''}
 CURRENT BOARD PLAN TO PERFORM:
 Title: ${currentBoardPlan.title}
 Chapter: ${currentBoardPlan.chapter || 'n/a'}
@@ -220,6 +230,12 @@ CORE DESIGN RULES:
 - Attach draws to beats so the figure builds while you talk.
 - mannerism: attention | emphasis | transition | reflection_pause | encouragement | check_understanding | null
 - pauseAfterMs for reflection (especially ${durationMode === 60 ? '8000-25000 on 60m mode' : '1000-4000'})
+
+5. SPARSE QUESTION RULES & QUESTION_FLAG (0 or 1):
+- SPARSE INTERACTION: Most boards should explain concepts and diagrams continuously without interrupting the student.
+- Set "question_flag": 0 for explanation boards. When question_flag is 0, "question" MUST be null.
+- Set "question_flag": 1 ONLY if this board is an explicit comprehension check or prediction step (question_required is true).
+- When question_flag is 1, "question" must be a valid interactive question object.
 
 JSON OUTPUT SCHEMA:
 {
@@ -263,6 +279,7 @@ JSON OUTPUT SCHEMA:
     }
   ],
   "svg_illustration": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 200\" width=\"100%\" height=\"100%\"><defs><style>.bg{fill:transparent;}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:1;}.path-structural{stroke:#cbd5e1;stroke-width:1.5;fill:none;}.path-accent{stroke:#38bdf8;stroke-width:2;fill:none;}.fill-node{fill:#0f172a;stroke:#38bdf8;stroke-width:2;}.fill-accent{fill:rgba(56,189,248,0.18);stroke:#38bdf8;stroke-width:1.5;}.text-label{font-family:sans-serif;font-size:10px;fill:#ffffff;}.text-muted{font-family:sans-serif;font-size:8px;fill:#94a3b8;}.text-title{font-family:sans-serif;font-size:11px;fill:#38bdf8;font-weight:bold;}</style></defs><!-- Precise coordinate nodes, lines, and text labels --></svg>",
+  "question_flag": ${currentBoardPlan.question_required ? 1 : 0},
   "question": ${currentBoardPlan.question_required
     ? `{
     "id": "q_board_${currentBoardPlan.board_number}",

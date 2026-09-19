@@ -89,6 +89,7 @@ export interface Message {
   audioDuration?: number; // Duration in seconds
   // FIX: Add optional conversation_id for AI Chat messages.
   conversation_id?: string;
+  reasoningText?: string;
 }
 
 // Types for the new Exam System

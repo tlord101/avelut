@@ -1,6 +1,6 @@
 import { db, get, off, onValue, push, ref as dbRef, remove, serverTimestamp, set, update } from '@/lib/backend';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { createAvelutAI, getResponseText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
 import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
@@ -24,6 +24,7 @@ import { Avatar } from './Avatar';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MarkdownContent } from './MarkdownContent';
 import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
+import { ChatLimitBanner } from './ChatLimitBanner';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
 
@@ -281,6 +282,7 @@ export const Chat: React.FC<ChatProps> = ({
   const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
   const [courseContext, setCourseContext] = useState<string>('');
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showLimitBanner, setShowLimitBanner] = useState(false);
   const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -530,7 +532,7 @@ export const Chat: React.FC<ChatProps> = ({
     const cost = getFeatureCost('chat_interaction', appSettings);
     const creditCheck = checkAICredits(userProfile, cost, appSettings);
     if (!creditCheck.allowed) {
-      setShowLimitModal(true);
+      setShowLimitBanner(true);
       return;
     }
 
@@ -606,13 +608,13 @@ export const Chat: React.FC<ChatProps> = ({
         { id: userMsgId, text: currentInput, sender: 'user', timestamp: now },
       ]);
 
-      const updateOrAppendAiMessage = (text: string) => {
+      const updateOrAppendAiMessage = (text: string, reasoningText?: string) => {
         setMessages((prev) => {
           const exists = prev.some((m) => m.id === aiMsgId);
           if (exists) {
-            return prev.map((m) => (m.id === aiMsgId ? { ...m, text } : m));
+            return prev.map((m) => (m.id === aiMsgId ? { ...m, text, reasoningText } : m));
           } else {
-            return [...prev, { id: aiMsgId, text, sender: 'bot', timestamp: now + 1 }];
+            return [...prev, { id: aiMsgId, text, reasoningText, sender: 'bot', timestamp: now + 1 }];
           }
         });
       };
@@ -680,6 +682,7 @@ export const Chat: React.FC<ChatProps> = ({
 
       const cachedReply = await getCachedAIResponse(currentInput, aiModel, selectedMode);
       let responseText = cachedReply || '';
+      let reasoningText = '';
 
       if (responseText) {
         updateOrAppendAiMessage(responseText);
@@ -690,13 +693,22 @@ export const Chat: React.FC<ChatProps> = ({
           return;
         }
 
+        // Show thinking indicator immediately for this bot message
+        updateOrAppendAiMessage('', '');
+
         try {
           const responseStream = await ai.models.generateContentStream(aiParams);
 
           for await (const chunk of responseStream) {
             const chunkText = getResponseText(chunk);
-            responseText += chunkText;
-            updateOrAppendAiMessage(responseText);
+            const chunkReasoning = getResponseReasoningText(chunk);
+            if (chunkReasoning) {
+              reasoningText += chunkReasoning;
+            }
+            if (chunkText) {
+              responseText += chunkText;
+            }
+            updateOrAppendAiMessage(responseText, reasoningText);
           }
         } catch (streamErr: any) {
           console.warn('Streaming failed or not supported, falling back to generateContent:', streamErr);
@@ -714,7 +726,7 @@ export const Chat: React.FC<ChatProps> = ({
           }
 
           responseText = (aiResult.data || '').trim();
-          updateOrAppendAiMessage(responseText);
+          updateOrAppendAiMessage(responseText, reasoningText);
         }
 
         if (responseText) {
@@ -831,10 +843,26 @@ export const Chat: React.FC<ChatProps> = ({
                     <div className="w-full min-w-0">
                       {!msg.text ? (
                         <div className="py-1">
-                          <ThinkingTypingIndicator label="thinking" />
+                          <ThinkingTypingIndicator
+                            label="thinking"
+                            reasoningText={msg.reasoningText}
+                            isStreaming={isLoading}
+                          />
                         </div>
                       ) : (
-                        <MarkdownContent content={msg.text} />
+                        <>
+                          {msg.reasoningText && (
+                            <div className="mb-2">
+                              <ThinkingTypingIndicator
+                                label="thought process"
+                                reasoningText={msg.reasoningText}
+                                defaultExpanded={false}
+                                isStreaming={false}
+                              />
+                            </div>
+                          )}
+                          <MarkdownContent content={msg.text} />
+                        </>
                       )}
                     </div>
 
@@ -934,6 +962,18 @@ export const Chat: React.FC<ChatProps> = ({
           </div>
         )}
       </div>
+
+      {/* LIMIT REACHED BANNER */}
+      {showLimitBanner && (
+        <div className="px-3 sm:px-6 pb-2 w-full">
+          <ChatLimitBanner
+            title="Free tier limit reached"
+            subtitle="Try again later or upgrade to Pro for much higher limits and premium features."
+            actionText="Upgrade to Pro"
+            onNavigate={onNavigate}
+          />
+        </div>
+      )}
 
       {/* INPUT BAR */}
       <GrokChatComposer

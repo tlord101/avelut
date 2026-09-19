@@ -1,7 +1,7 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createAvelutAI, getResponseText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost, hasLiveTutorialAccess } from '../utils/usage';
 import { readCachedJson, writeCachedJson, clearCachedKey } from '../utils/cache';
 import { LimitExceededModal } from './LimitExceededModal';
@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { XIcon } from './icons/XIcon';
 import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
+import { ChatLimitBanner } from './ChatLimitBanner';
 import {
   getOrGenerateTopicStructure,
   saveTopicStructureProgress,
@@ -53,6 +54,7 @@ export interface CourseChatTutorMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  reasoningText?: string;
   attachments?: Array<{
     id: string;
     name: string;
@@ -95,6 +97,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showLimitBanner, setShowLimitBanner] = useState(false);
   const [limitCost, setLimitCost] = useState(1);
   const [topicStructure, setTopicStructure] = useState<TopicStructureData | null>(null);
 
@@ -351,7 +354,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setLimitCost(cost);
     const creditCheck = checkAICredits(userProfile, cost, appSettings);
     if (!creditCheck.allowed) {
-      setShowLimitModal(true);
+      setShowLimitBanner(true);
       return;
     }
 
@@ -492,17 +495,26 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     };
 
     let streamedText = '';
+    let streamedReasoning = '';
     try {
       const responseStream = await ai.models.generateContentStream(aiParams);
 
       for await (const chunk of responseStream) {
         const chunkText = getResponseText(chunk);
+        const chunkReasoning = getResponseReasoningText(chunk);
+        if (chunkReasoning) {
+          streamedReasoning += chunkReasoning;
+        }
         if (chunkText) {
           streamedText += chunkText;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === aiMsgId ? { ...m, text: streamedText } : m))
-          );
         }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMsgId
+              ? { ...m, text: streamedText, reasoningText: streamedReasoning }
+              : m
+          )
+        );
       }
     } catch (streamErr: any) {
       console.warn('[CourseChatTutor] Stream failed or interrupted, falling back to generateContent:', streamErr);
@@ -702,15 +714,33 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                       )}
                     </div>
                   ) : !message.text ? (
-                    <ThinkingTypingIndicator label="thinking" />
-                  ) : isCurrentlyStreaming ? (
-                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
-                      {renderStreamingContent(message.text)}
-                    </div>
+                    <ThinkingTypingIndicator
+                      label="thinking"
+                      reasoningText={message.reasoningText}
+                      isStreaming={isCurrentlyStreaming}
+                    />
                   ) : (
-                    <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
-                      <MarkdownContent content={message.text} />
-                    </div>
+                    <>
+                      {message.reasoningText && (
+                        <div className="mb-2">
+                          <ThinkingTypingIndicator
+                            label="thought process"
+                            reasoningText={message.reasoningText}
+                            defaultExpanded={false}
+                            isStreaming={false}
+                          />
+                        </div>
+                      )}
+                      {isCurrentlyStreaming ? (
+                        <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
+                          {renderStreamingContent(message.text)}
+                        </div>
+                      ) : (
+                        <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
+                          <MarkdownContent content={message.text} />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -724,7 +754,17 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       {/* ── Fullscreen Bottom Input Bar ── */}
       <footer className="shrink-0 px-3 sm:px-6 pt-2 pb-[max(14px,env(safe-area-inset-bottom))] bg-[#F6F6F3]/90 dark:bg-[#0A0A0A]/90 backdrop-blur-md z-20">
         <div className="max-w-4xl mx-auto w-full space-y-2">
-          
+          {/* LIMIT REACHED BANNER */}
+          {showLimitBanner && (
+            <div className="w-full pb-1">
+              <ChatLimitBanner
+                title="Free tier limit reached"
+                subtitle="Try again later or upgrade to Pro for much higher limits and premium features."
+                actionText="Upgrade to Pro"
+              />
+            </div>
+          )}
+
           {/* Multi-Image Attachment Preview Chips */}
           {attachments.length > 0 && (
             <div className="w-full flex items-center gap-2 overflow-x-auto py-1 px-1 no-scrollbar animate-fade-in">
