@@ -235,7 +235,7 @@ CORE DESIGN RULES:
 - SPARSE INTERACTION: Most boards should explain concepts and diagrams continuously without interrupting the student.
 - Set "question_flag": 0 for explanation boards. When question_flag is 0, "question" MUST be null.
 - Set "question_flag": 1 ONLY if this board is an explicit comprehension check or prediction step (question_required is true).
-- When question_flag is 1, "question" must be a valid interactive question object.
+- When question_flag is 1, "question" must be a valid interactive question object. It MUST include 2-4 short multiple-choice "options", a "correctAnswer" that exactly matches one of the options, and a "correction_speech" (1-2 sentences of gentle correction explaining why it's wrong and what the correct answer is).
 
 JSON OUTPUT SCHEMA:
 {
@@ -287,9 +287,11 @@ JSON OUTPUT SCHEMA:
     "question": "Clear spoken question",
     "waitForAnswer": true,
     "expectedConcepts": ["concept1"],
-    "options": ["Option A", "Option B", "Option C"]
+    "options": ["Option A", "Option B", "Option C"],
+    "correctAnswer": "Option A"
   }`
-    : 'null'}
+    : 'null'},
+  "correction_speech": ${currentBoardPlan.question_required ? '"Ah, not quite. The correct answer is Option A, because..."' : 'null'}
 }`;
 }
 

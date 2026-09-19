@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { TeachingQuestion, StudentAnswerEvaluation } from '../../../types/teachingScript';
 
 export interface QuestionOverlayProps {
@@ -10,8 +10,9 @@ export interface QuestionOverlayProps {
 }
 
 /**
- * Lightweight floating classroom question overlay.
- * Appears seamlessly over the board with voice answering, text input, quick chips, and conversational feedback.
+ * Fast, lightweight floating classroom question overlay.
+ * Shows only options; no manual text input, no question text re-displayed.
+ * Uses sound-reactive UI for correction audio.
  */
 export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
   question,
@@ -20,52 +21,12 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
   onSubmitAnswer,
   onDismiss,
 }) => {
-  const [inputText, setInputText] = useState('');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
 
-  // Voice recognition support
-  const handleToggleVoice = () => {
-    if (isListening) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((res: any) => res[0].transcript)
-          .join(' ');
-        setInputText(transcript);
-      };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch {
-      setIsListening(false);
-    }
-  };
-
-  const handleSubmit = (ans?: string) => {
-    const finalAns = ans || inputText.trim();
-    if (!finalAns || isSubmittingAnswer) return;
-    if (ans) setSelectedOption(ans);
-    onSubmitAnswer(finalAns);
+  const handleSubmit = (ans: string) => {
+    if (!ans || isSubmittingAnswer) return;
+    setSelectedOption(ans);
+    onSubmitAnswer(ans);
   };
 
   return (
@@ -78,7 +39,7 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
               Q
             </span>
             <span className="text-xs font-bold uppercase tracking-wider text-[#38BDF8]">
-              Check Your Understanding
+              {evaluationFeedback ? 'Lecturer Note' : 'Select an Answer'}
             </span>
           </div>
 
@@ -94,14 +55,9 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
           )}
         </div>
 
-        {/* Question Text */}
-        <h3 className="text-sm sm:text-base font-bold text-white leading-relaxed mb-4">
-          {question.question}
-        </h3>
-
         {/* Quick Options */}
         {question.options && question.options.length > 0 && !evaluationFeedback && (
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
             {question.options.map((option, idx) => {
               const isSelected = selectedOption === option;
               return (
@@ -126,75 +82,32 @@ export const QuestionOverlay: React.FC<QuestionOverlayProps> = ({
           </div>
         )}
 
-        {/* Input Controls (Voice + Text) */}
-        {!evaluationFeedback && (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              placeholder="Speak or type your answer..."
-              disabled={isSubmittingAnswer}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-[#222222] border border-[#334155] focus:border-[#38BDF8] focus:outline-none text-xs sm:text-sm text-white placeholder-slate-400 font-medium"
-            />
-
-            <button
-              onClick={handleToggleVoice}
-              type="button"
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-                isListening
-                  ? 'bg-rose-500 text-white animate-pulse'
-                  : 'bg-[#222222] hover:bg-[#334155] text-[#38BDF8] border border-[#334155]'
-              }`}
-              title="Speak answer aloud"
-            >
-              <i className={`bi ${isListening ? 'bi-mic-fill' : 'bi-mic'}`}></i>
-            </button>
-
-            <button
-              onClick={() => handleSubmit()}
-              disabled={!inputText.trim() || isSubmittingAnswer}
-              type="button"
-              className="px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-brand-600 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-            >
-              {isSubmittingAnswer ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                'Send'
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Conversational Evaluation Feedback & Next Button */}
-        {evaluationFeedback && (
-          <div className="mt-2 p-4 rounded-2xl bg-[#222222] border border-[#334155] animate-in fade-in duration-300 space-y-3">
-            <div className="flex items-center gap-2">
-              <i
-                className={`bi ${
-                  evaluationFeedback.isCorrect
-                    ? 'bi-check-circle-fill text-[#34D399]'
-                    : 'bi-info-circle-fill text-[#38BDF8]'
-                } text-base`}
-              ></i>
-              <span className="text-xs font-bold uppercase tracking-wider text-white">
-                {evaluationFeedback.isCorrect ? 'Spot On!' : 'Lecturer Note:'}
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
-              {evaluationFeedback.spokenFeedback}
-            </p>
-            {onDismiss && (
-              <button
-                onClick={onDismiss}
-                type="button"
-                className="w-full py-2.5 px-4 rounded-xl bg-[#0066FF] hover:bg-brand-600 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-              >
-                <span>Continue to Next Concept</span>
-                <i className="bi bi-arrow-right text-xs"></i>
-              </button>
-            )}
+        {/* Sound-Reactive Correction Evaluation Feedback */}
+        {evaluationFeedback && !evaluationFeedback.isCorrect && (
+          <div className="mt-2 p-6 rounded-2xl bg-[#222222] border border-[#334155] animate-in fade-in duration-300 flex flex-col items-center justify-center space-y-4">
+             {/* Simple CSS Audio wave animation */}
+             <div className="flex items-center justify-center gap-1.5 h-12">
+               {[1, 2, 3, 4, 5].map((i) => (
+                 <div
+                   key={i}
+                   className="w-1.5 bg-[#38BDF8] rounded-full animate-[soundWave_1s_ease-in-out_infinite]"
+                   style={{
+                     height: '100%',
+                     animationDelay: `${i * 0.1}s`,
+                     animationDuration: `${0.8 + (i % 3) * 0.2}s`
+                   }}
+                 />
+               ))}
+             </div>
+             <style>{`
+               @keyframes soundWave {
+                 0%, 100% { transform: scaleY(0.3); opacity: 0.7; }
+                 50% { transform: scaleY(1); opacity: 1; }
+               }
+             `}</style>
+             <p className="text-xs sm:text-sm text-slate-300 text-center font-medium">
+               Listen to the lecturer's correction...
+             </p>
           </div>
         )}
       </div>

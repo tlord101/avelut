@@ -643,8 +643,33 @@ export class AppLessonPrepWorker {
             await saveLessonAudio(ttsCacheKey, audioPayload);
             unifiedVoiceRouter.primeSpeechCache(ttsCacheKey, audioPayload, { voice: resolvedVoice });
           }
+
+          // Generate correction speech audio if present
+          if (perf.correction_speech?.trim()) {
+             const correctionCacheKey = `${ttsCacheKey}_correction`;
+             try {
+               const correctionPayload = await unifiedVoiceRouter.synthesizeSpeech(perf.correction_speech.trim(), {
+                 voice: resolvedVoice,
+                 mode: durationMode,
+                 cacheKey: correctionCacheKey,
+                 appSettings,
+               });
+               if (correctionPayload) {
+                 await saveLessonAudio(correctionCacheKey, correctionPayload);
+                 unifiedVoiceRouter.primeSpeechCache(correctionCacheKey, correctionPayload, { voice: resolvedVoice });
+               }
+             } catch (ttsErr) {
+                console.warn(`[AppLessonPrepWorker] TTS synthesis failed for correction on Board ${i + 1}:`, ttsErr);
+             }
+          }
         } else {
           unifiedVoiceRouter.primeSpeechCache(ttsCacheKey, audioRecord.payload, { voice: resolvedVoice });
+          // If we are loading from checkpoint/cache, make sure to prime the correction speech too if needed
+          if (perf.correction_speech?.trim()) {
+            const correctionCacheKey = `${ttsCacheKey}_correction`;
+            // The audio record logic above doesn't explicitly store correction speech in the checkpoint,
+            // but saveLessonAudio does cache it across reloads. It will be fetched by the UI if needed.
+          }
         }
       }
 
