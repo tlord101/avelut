@@ -345,7 +345,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                             }`}
                         >
                             <i className="bi bi-journal-bookmark text-sm"></i>
-                            <span>My Notebooks</span>
+                            <span>Notebooks</span>
                         </button>
                     </div>
                 ),

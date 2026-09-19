@@ -175,7 +175,7 @@ export const MyNotebooks: React.FC<MyNotebooksProps> = ({
               <span>Study Notes & Textbooks</span>
             </div>
             <h3 className="text-lg sm:text-xl font-black text-black dark:text-[#FAFAFA] tracking-tight">
-              My Notebooks & Offline Materials
+              Notebooks & Offline Materials
             </h3>
             <p className="text-xs text-neutral-600 dark:text-[#A3A3A3] leading-relaxed">
               Upload any textbook, handout, or lecture note PDF (up to 200MB). Extracted completely on your device with 0 AI cost.

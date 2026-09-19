@@ -302,7 +302,7 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
       {(matchSearch('Study Partners', 'Find classmates & manage connection requests') ||
         matchSearch('Study History & AI Logs', 'Past conversations, tutorials, and notes') ||
         matchSearch('Study Guide & Courses', 'Browse curriculum, syllabus & unit progress') ||
-        matchSearch('My Notebooks', 'Saved study notes and summaries')) && (
+        matchSearch('Notebooks', 'Saved study notes and summaries')) && (
         <div className="bg-white dark:bg-[#111111] mt-2.5 divide-y divide-neutral-100 dark:divide-white/5">
           {matchSearch('Study Partners', 'Find classmates & manage connection requests') && (
             <SettingsRow
@@ -328,10 +328,10 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
               onClick={() => onNavigate('study_guide')}
             />
           )}
-          {matchSearch('My Notebooks', 'Saved study notes and summaries') && (
+          {matchSearch('Notebooks', 'Saved study notes and summaries') && (
             <SettingsRow
               icon={<i className="bi bi-journal-text text-lg" />}
-              title="My Notebooks"
+              title="Notebooks"
               subtitle="Saved study notes and summaries"
               onClick={() => onNavigate('notebooks')}
             />

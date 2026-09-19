@@ -67,7 +67,7 @@ export const TopicSummaryNotebookModal: React.FC<TopicSummaryNotebookModalProps>
       });
 
       setIsSaved(true);
-      addToast('Saved to My Notebooks successfully!', 'success');
+      addToast('Saved to Notebooks successfully!', 'success');
     } catch (err) {
       console.error('Failed to save to notebook:', err);
       addToast('Failed to save note to Notebook.', 'error');
@@ -262,7 +262,7 @@ export const TopicSummaryNotebookModal: React.FC<TopicSummaryNotebookModalProps>
               }`}
             >
               <i className={`bi ${isSaved ? 'bi-check-circle-fill' : isSaving ? 'bi-hourglass-split animate-spin' : 'bi-journal-bookmark-fill'}`}></i>
-              <span>{isSaved ? 'Saved in My Notebooks' : isSaving ? 'Saving...' : 'Save to My Notebooks'}</span>
+              <span>{isSaved ? 'Saved in Notebooks' : isSaving ? 'Saving...' : 'Save to Notebooks'}</span>
             </button>
           </div>
         </footer>
