@@ -457,16 +457,7 @@ ${messageText}`;
                         />
                       ) : (
                         <>
-                          {msg.reasoningText && (
-                            <div className="mb-2">
-                              <ThinkingTypingIndicator
-                                label="thought process"
-                                reasoningText={msg.reasoningText}
-                                defaultExpanded={false}
-                                isStreaming={false}
-                              />
-                            </div>
-                          )}
+
                           {isCurrentlyStreaming ? (
                             renderStreamingContent(msg.text)
                           ) : (

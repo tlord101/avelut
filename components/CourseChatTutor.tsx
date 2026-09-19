@@ -721,16 +721,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                     />
                   ) : (
                     <>
-                      {message.reasoningText && (
-                        <div className="mb-2">
-                          <ThinkingTypingIndicator
-                            label="thought process"
-                            reasoningText={message.reasoningText}
-                            defaultExpanded={false}
-                            isStreaming={false}
-                          />
-                        </div>
-                      )}
+
                       {isCurrentlyStreaming ? (
                         <div className="w-full font-reading text-[15.5px] sm:text-[16.5px] leading-[1.75] tracking-[-0.011em] font-normal text-[#24292F] dark:text-[#E2E8F0]">
                           {renderStreamingContent(message.text)}
