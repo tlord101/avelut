@@ -82,24 +82,24 @@ const LinkRow: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer select-none group relative ${
+    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-full text-left transition-all duration-150 cursor-pointer select-none group relative ${
       active
-        ? 'bg-neutral-100 dark:bg-white/10 text-neutral-950 dark:text-white font-semibold shadow-xs'
-        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/70 dark:hover:bg-white/5 hover:text-neutral-900 dark:hover:text-white'
+        ? 'bg-[#1C1C1C] text-white font-medium'
+        : 'text-neutral-400 hover:bg-white/5 hover:text-white'
     }`}
   >
     <span
       className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${
         active
-          ? 'text-[#0066FF] dark:text-[#38BDF8]'
-          : 'text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-900 dark:group-hover:text-white'
+          ? 'text-white'
+          : 'text-neutral-500 group-hover:text-white'
       }`}
     >
       {icon}
     </span>
     <span className="text-[14px] sm:text-[15px] truncate flex-1 tracking-tight">{label}</span>
     {badge != null && badge > 0 && (
-      <span className="bg-[#0066FF] text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center shadow-xs">
+      <span className="bg-[#0066FF] text-white text-[10px] font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center">
         {badge > 99 ? '99+' : badge}
       </span>
     )}
@@ -174,7 +174,7 @@ const ChatContextMenu: React.FC<{
         ref={menuRef}
         onClick={(e) => e.stopPropagation()}
         style={desktopStyle}
-        className={`z-[161] bg-white dark:bg-[#1C1C1C] border border-neutral-200 dark:border-neutral-800 shadow-2xl transition-all ${
+        className={`z-[161] bg-[#1C1C1C] border border-neutral-800 transition-all ${
           isMobile
             ? 'w-full max-w-lg rounded-t-3xl p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-3 animate-in slide-in-from-bottom duration-200'
             : 'absolute w-56 rounded-2xl p-1.5 space-y-0.5'
@@ -206,7 +206,7 @@ const ChatContextMenu: React.FC<{
             onTogglePin(convo.id);
             onClose();
           }}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-white/10 text-neutral-200 cursor-pointer`}
         >
           <div className="w-5 h-5 flex items-center justify-center shrink-0 text-[#0066FF] dark:text-[#38BDF8]">
             {isPinned ? (
@@ -236,7 +236,7 @@ const ChatContextMenu: React.FC<{
             onShare(convo);
             onClose();
           }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-white/10 text-neutral-200 cursor-pointer"
         >
           <div className="w-5 h-5 flex items-center justify-center shrink-0 text-emerald-500">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -260,7 +260,7 @@ const ChatContextMenu: React.FC<{
             onForward(convo);
             onClose();
           }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-white/10 text-neutral-200 cursor-pointer"
         >
           <div className="w-5 h-5 flex items-center justify-center shrink-0 text-indigo-500">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -282,7 +282,7 @@ const ChatContextMenu: React.FC<{
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-rose-950/40 text-rose-400 cursor-pointer"
           >
             <div className="w-5 h-5 flex items-center justify-center shrink-0 text-rose-500">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -299,18 +299,18 @@ const ChatContextMenu: React.FC<{
             </div>
           </button>
         ) : (
-          <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl space-y-2 border border-rose-200 dark:border-rose-900/50 animate-fade-in">
-            <p className="text-[12px] font-semibold text-rose-700 dark:text-rose-300 leading-tight">
+          <div className="p-2.5 bg-rose-950/40 rounded-xl space-y-2 border border-rose-900/50 animate-fade-in">
+            <p className="text-[12px] font-semibold text-rose-300 leading-tight">
               Delete this chat?
             </p>
-            <p className="text-[11px] text-rose-600/80 dark:text-rose-400">
+            <p className="text-[11px] text-rose-400">
               This action cannot be undone.
             </p>
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setConfirmDelete(false)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 transition-colors"
+                className="flex-1 py-1.5 px-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-neutral-800 text-[11px] font-semibold text-neutral-300 hover:bg-neutral-700 transition-colors"
               >
                 Cancel
               </button>
@@ -320,7 +320,7 @@ const ChatContextMenu: React.FC<{
                   onDelete(convo.id);
                   onClose();
                 }}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition-colors cursor-pointer"
               >
                 Delete
               </button>
@@ -343,8 +343,8 @@ const ConversationRow: React.FC<{
     onClick={onSelect}
     className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all duration-150 cursor-pointer select-none ${
       isActive
-        ? 'bg-neutral-100 dark:bg-white/10 text-neutral-900 dark:text-white font-medium shadow-xs'
-        : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-white/5'
+        ? 'bg-[#1C1C1C] text-white font-medium'
+        : 'text-neutral-300 hover:bg-white/5'
     }`}
   >
     <div className="flex-1 min-w-0 pr-2">
@@ -646,14 +646,14 @@ const SidebarPanel: React.FC<{
   ];
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-[#171717] text-neutral-900 dark:text-white select-none">
+    <div className="h-full flex flex-col bg-black text-white select-none">
       {/* Top Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
         <h1 className="text-[22px] font-semibold tracking-tight">{brandTitle}</h1>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-white/10 transition-colors"
             aria-label="Search"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -664,7 +664,7 @@ const SidebarPanel: React.FC<{
             <button
               type="button"
               onClick={onClose}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-500 hover:bg-white/10 transition-colors cursor-pointer"
               aria-label="Close sidebar"
               title="Close sidebar"
             >
@@ -905,7 +905,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
         <aside
           ref={sidebarRef as any}
-          className={`absolute top-0 left-0 h-full w-[88vw] max-w-[360px] bg-white dark:bg-[#171717] shadow-2xl transition-transform duration-300 ease-out ${
+          className={`absolute top-0 left-0 h-full w-full bg-black transition-transform duration-300 ease-out ${
             isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -935,7 +935,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-shrink-0 w-[280px] h-full border-r border-neutral-200 dark:border-white/10 bg-white dark:bg-[#171717]">
+      <aside className="hidden md:flex flex-shrink-0 w-[280px] h-full border-r border-white/5 bg-black">
         <div className="w-full h-full">
           <SidebarPanel
             activeItem={activeItem}
@@ -970,7 +970,7 @@ export const FloatingMenuButton: React.FC<{
       type="button"
       onClick={onClick}
       aria-label="Open menu"
-      className={`fixed top-[max(0.75rem,env(safe-area-inset-top))] left-3 z-[110] w-10 h-10 rounded-full bg-white/70 dark:bg-black/50 backdrop-blur-md border border-black/5 dark:border-white/10 shadow-sm flex items-center justify-center text-neutral-800 dark:text-white hover:bg-white/90 dark:hover:bg-black/70 active:scale-95 transition-all md:hidden ${className}`}
+      className={`fixed top-[max(0.75rem,env(safe-area-inset-top))] left-3 z-[110] w-10 h-10 rounded-full bg-white/70 dark:bg-black/50 backdrop-blur-md border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-800 dark:text-white hover:bg-white/90 dark:hover:bg-black/70 active:scale-95 transition-all md:hidden ${className}`}
     >
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
         <path d="M4 9h16M4 15h16" />
