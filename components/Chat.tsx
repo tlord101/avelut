@@ -851,16 +851,7 @@ export const Chat: React.FC<ChatProps> = ({
                         </div>
                       ) : (
                         <>
-                          {msg.reasoningText && (
-                            <div className="mb-2">
-                              <ThinkingTypingIndicator
-                                label="thought process"
-                                reasoningText={msg.reasoningText}
-                                defaultExpanded={false}
-                                isStreaming={false}
-                              />
-                            </div>
-                          )}
+
                           <MarkdownContent content={msg.text} />
                         </>
                       )}
