@@ -431,7 +431,31 @@ const App: React.FC = () => {
     useOTAUpdater();
     useGlobalRefresh();
     const [currentPath, setCurrentPath] = useState(getWindowPathname());
-    const [user, setUser] = useState<FirebaseUser | null>(() => firebaseAuth.currentUser);
+    const [user, setUser] = useState<FirebaseUser | null>(() => {
+        if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
+        if (typeof window !== 'undefined') {
+            const lastUid = window.localStorage?.getItem('avelut_last_uid');
+            if (lastUid) return { uid: lastUid } as FirebaseUser;
+            try {
+
+                let sbToken = null;
+                for (let i = 0; i < window.localStorage.length; i++) {
+                    const key = window.localStorage.key(i);
+                    if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                        sbToken = window.localStorage.getItem(key);
+                        break;
+                    }
+                }
+                if (sbToken) {
+                    const parsed = JSON.parse(sbToken);
+                    if (parsed && parsed.user && parsed.user.id) {
+                        return { uid: parsed.user.id } as FirebaseUser;
+                    }
+                }
+            } catch (e) {}
+        }
+        return null;
+    });
     const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
         if (typeof window !== 'undefined') {
             const lastUid = window.localStorage?.getItem('avelut_last_uid') || firebaseAuth.currentUser?.uid;
@@ -1701,6 +1725,10 @@ const App: React.FC = () => {
     }
 
     if (!user) {
+        if (isAuthChecking || isLoading) {
+            return <div key="app-loader-state-no-user"><AppLoader /></div>;
+        }
+
         if (currentPath === '/about') {
             return (
                     <Suspense fallback={<AppLoader />}>
