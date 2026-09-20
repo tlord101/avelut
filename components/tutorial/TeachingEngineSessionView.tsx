@@ -11,6 +11,8 @@ import {
 import { TeachingEngineService } from '../../services/teachingEngineService';
 import { BoardStateManager } from '../../services/boardStateManager';
 import { TeachingBoard } from './live-teaching/TeachingBoard';
+import { TeachingControls } from './live-teaching/TeachingControls';
+import { TeachingHeader } from './live-teaching/TeachingHeader';
 import { QuestionOverlay } from './live-teaching/QuestionOverlay';
 import { LecturerAskModal } from './live-teaching/LecturerAskModal';
 import { LiveTutorialVoiceSelectorModal } from './LiveTutorialVoiceSelectorModal';
@@ -619,72 +621,19 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   useEffect(() => {
     if (setCustomHeaderConfig) {
       setCustomHeaderConfig({
-        leftActions: (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              onClick={handleCloseSession}
-              type="button"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
-              title="Exit Classroom"
-            >
-              <i className="bi bi-arrow-left text-sm sm:text-base"></i>
-            </button>
-            <div className="min-w-0 flex items-center gap-2">
-              <h1 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[150px] sm:max-w-md">
-                {topicTitle}
-              </h1>
-            </div>
-          </div>
-        ),
-        rightActions: (
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {!finalTest && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222] text-[10px] sm:text-xs font-mono text-slate-300">
-                <span className="text-[#38BDF8] font-bold">{String(boardIndex + 1).padStart(2, '0')}</span>
-                <span className="text-slate-500">/</span>
-                <span className="text-slate-400">{String(totalBoards).padStart(2, '0')}</span>
-              </div>
-            )}
-            <button
-              onClick={() => setShowVoiceModal(true)}
-              type="button"
-              className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] hover:bg-[#1A1A1A] border border-[#222222] text-[11px] font-bold text-[#60A5FA] transition-colors cursor-pointer"
-              title={`Lecturer: ${currentVoice}`}
-            >
-              <i className="bi bi-person-voice text-xs"></i>
-              <span className="hidden sm:inline">{currentVoice}</span>
-            </button>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222]">
-              <span
-                className={`w-2 h-2 rounded-full transition-all ${
-                  isSpeaking ? 'bg-[#34D399] animate-pulse' : 'bg-slate-500'
-                }`}
-              />
-              <span className="text-[10px] sm:text-xs font-bold text-slate-200 tracking-wider">
-                {finalTest ? 'TEST' : isAnsweringOnBoard ? 'ANSWER' : isSpeaking ? 'LIVE' : showAskModal ? 'PAUSED' : 'READY'}
-              </span>
-            </div>
-          </div>
-        ),
+        hideTitle: true,
+        leftActions: null,
+        rightActions: null,
+        hideDefaultRightActions: true,
+        hideProfileAvatar: true,
         hideBottomNav: true,
-        className: 'bg-[#000000] border-b border-[#222222]',
+        className: 'hidden', // Completely hide the app header
       });
     }
     return () => {
       if (setCustomHeaderConfig) setCustomHeaderConfig(null);
     };
-  }, [
-    setCustomHeaderConfig,
-    topicTitle,
-    boardIndex,
-    totalBoards,
-    isSpeaking,
-    currentVoice,
-    handleCloseSession,
-    isAnsweringOnBoard,
-    showAskModal,
-    finalTest,
-  ]);
+  }, [setCustomHeaderConfig]);
 
   // Calculate score for final mini test
   const calculateScore = () => {
@@ -696,8 +645,26 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     return correct;
   };
 
+  const handleReplayAudio = useCallback(() => {
+    if (engineRef.current && currentBoardPerfRef.current && !isLoadingBoardRef.current) {
+       setIsAudioReady(false);
+       engineRef.current.playBoardSpeech(currentBoardPerfRef.current);
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-full w-full bg-[#000000] text-white select-none overflow-hidden relative">
+      {!finalTest && (
+         <TeachingHeader
+           topicTitle={topicTitle}
+           segmentNumber={boardIndex + 1}
+           totalSegments={totalBoards}
+           isSpeaking={isSpeaking}
+           currentVoice={currentVoice}
+           onOpenVoiceSelector={() => setShowVoiceModal(true)}
+           onClose={handleCloseSession}
+         />
+      )}
       <main className="flex-1 relative flex flex-col min-h-0 w-full overflow-hidden p-1.5 sm:p-3">
         {/* Render Final Test View or Board View */}
         {finalTest ? (
@@ -882,18 +849,19 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           />
         )}
 
-        {/* Ask Lecturer Mic FAB */}
-        {!finalTest && (
-          <button
-            onClick={handleOpenAsk}
-            type="button"
-            className="absolute bottom-[calc(90px+env(safe-area-inset-bottom,0px))] md:bottom-8 right-4 md:right-8 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/25 shadow-2xl backdrop-blur-xl flex items-center justify-center text-white transition-all cursor-pointer z-30 ring-1 ring-white/15"
-            title="Ask Lecturer (pauses lesson)"
-          >
-            <i className="bi bi-mic-fill text-xl sm:text-2xl text-white"></i>
-          </button>
-        )}
       </main>
+
+      {!finalTest && (
+        <TeachingControls
+          isSpeaking={isSpeaking}
+          isLoadingSegment={isLoading}
+          isAskingActive={showAskModal || isAnsweringOnBoard}
+          onReplayAudio={handleReplayAudio}
+          onOpenAskModal={handleOpenAsk}
+          onNextSegment={handleNextBoard}
+          isLastSegment={boardIndex === totalBoards - 1}
+        />
+      )}
 
       <LiveTutorialVoiceSelectorModal
         isOpen={showVoiceModal}
