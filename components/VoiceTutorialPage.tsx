@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+/**
+ * VoiceTutorialPage.tsx
+ *
+ * Phase 5: Wire-up entry point for the Avelut Live Tutorial.
+ *
+ * Flow:
+ *  1. LessonDurationModal → student picks 15 / 30 / 60 min
+ *  2. Credit check (evaluateLiveTutorialStart)
+ *  3. AvelutLiveClassroomView starts instantly — no background prep job
+ *
+ * Legacy TeachingEngineSessionView, LessonPrepProgressView, and
+ * useLessonPrepJob are fully replaced by the new real-time pipeline.
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppSettings } from '../hooks/useAppSettings';
-import { useToast } from '../hooks/useToast';
 import type { UserProfile, Course, Topic } from '../types';
 import { LessonDurationModal, type LessonDurationMode } from './tutorial/LessonDurationModal';
 import { InsufficientCreditsModal } from './tutorial/InsufficientCreditsModal';
-import { LessonPrepProgressView } from './tutorial/LessonPrepProgressView';
-import { TeachingEngineSessionView } from './tutorial/TeachingEngineSessionView';
-import { useLessonPrepJob } from './tutorial/hooks/useLessonPrepJob';
-import { unifiedVoiceRouter } from '../services/voice/UnifiedVoiceRouter';
+import { AvelutLiveClassroomView } from './tutorial/live-classroom/AvelutLiveClassroomView';
 import {
   evaluateLiveTutorialStart,
   type LiveDurationMinutes,
@@ -18,7 +28,8 @@ import {
   formatResumeLabel,
   type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
-import { lessonPrepService } from '../services/lessonPrepService';
+
+// ─── Exported Types ───────────────────────────────────────────────────────────
 
 export interface VoiceTutorialSessionData {
   course: Course;
@@ -38,6 +49,8 @@ export interface VoiceTutorialPageProps {
   setCustomHeaderConfig?: (config: any) => void;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   userProfile,
   appSettings: propAppSettings,
@@ -48,23 +61,25 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 }) => {
   const { settings: hookAppSettings } = useAppSettings();
   const resolvedAppSettings = propAppSettings || hookAppSettings;
-  const { addToast } = useToast();
 
-  const [showCreditsModal, setShowCreditsModal] = useState(false);
-  const [creditCheckData, setCreditCheckData] = useState<any>(null);
-
-  const topicTitle = initialSessionData?.topic?.topic_name || initialSessionData?.customPrompt || 'Live Tutorial';
+  // ── Derived topic / course info ──────────────────────────────────────────
+  const topicTitle =
+    initialSessionData?.topic?.topic_name ||
+    initialSessionData?.customPrompt ||
+    'Live Tutorial';
   const courseName = initialSessionData?.course?.course_name || 'Academic Topic';
   const syllabusContext = initialSessionData?.syllabusContext;
 
-  const [selectedDurationMode, setSelectedDurationMode] = useState<LessonDurationMode | null>(null);
-  const [isDurationModalOpen, setIsDurationModalOpen] = useState<boolean>(true);
-  const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
-  const [startBoardIndex, setStartBoardIndex] = useState<number>(0);
+  // ── UI State ─────────────────────────────────────────────────────────────
+  const [selectedDuration, setSelectedDuration] = useState<LessonDurationMode | null>(null);
+  const [isDurationModalOpen, setIsDurationModalOpen] = useState(true);
   const [isPlayerActive, setIsPlayerActive] = useState(false);
-  const [isOpeningLesson, setIsOpeningLesson] = useState(false);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [creditCheckData, setCreditCheckData] = useState<any>(null);
+  const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
 
-  const sessionIdentity = useMemo(() => {
+  // ── Stable session identity: reset when topic changes ───────────────────
+  const sessionId = useMemo(() => {
     const topicId = initialSessionData?.topic?.topic_id || '';
     const courseId = initialSessionData?.course?.course_id || '';
     return `${courseId}::${topicId}::${topicTitle}::${courseName}`;
@@ -75,53 +90,18 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     courseName,
   ]);
 
-  const {
-    status: prepStatus,
-    startPrepJob,
-    cancelJob,
-  } = useLessonPrepJob({
-    topicTitle,
-    courseName,
-    syllabusContext,
-    userId: userProfile?.uid,
-    userProfile,
-    appSettings: resolvedAppSettings,
-    durationMode: selectedDurationMode,
-  });
-
-  // Reset duration mode & progress only when the topic changes
   useEffect(() => {
-    setSelectedDurationMode(null);
-    setStartBoardIndex(0);
-    setResumeProgress(null);
+    setSelectedDuration(null);
     setIsDurationModalOpen(true);
     setIsPlayerActive(false);
-    setIsOpeningLesson(false);
-  }, [sessionIdentity]);
+    setResumeProgress(null);
+  }, [sessionId]);
 
-  // Prevent blank screen: if duration modal was dismissed without selection, return or reopen
+  // ── Check for saved progress (resume banner) ─────────────────────────────
   useEffect(() => {
-    if (!isDurationModalOpen && !selectedDurationMode && !isPlayerActive && !isOpeningLesson) {
-      if (onBack) {
-        onBack();
-      } else {
-        setIsDurationModalOpen(true);
-      }
-    }
-  }, [isDurationModalOpen, selectedDurationMode, isPlayerActive, isOpeningLesson, onBack]);
-
-  // Global audio cleanup on unmount or tab switch
-  useEffect(() => {
-    return () => {
-       unifiedVoiceRouter.stopAll();
-    };
-  }, []);
-
-  // Check for existing progress
-  useEffect(() => {
-    const userId = userProfile?.uid || 'anon';
-    const topicKey = topicKeyFromTitle(topicTitle, courseName);
-    const progress = getLiveTeachingProgress(userId, topicKey);
+    const uid = userProfile?.uid || 'anon';
+    const key = topicKeyFromTitle(topicTitle, courseName);
+    const progress = getLiveTeachingProgress(uid, key);
     if (progress && !progress.isCompleted && progress.boardIndex > 0) {
       setResumeProgress(progress);
     } else {
@@ -129,8 +109,20 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
   }, [userProfile?.uid, topicTitle, courseName]);
 
-  const handleContinueLesson = async (mode: LessonDurationMode) => {
-    const decision = evaluateLiveTutorialStart(userProfile, mode as LiveDurationMinutes, resolvedAppSettings);
+  // ── Blank-screen guard ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isDurationModalOpen && !selectedDuration && !isPlayerActive) {
+      onBack ? onBack() : setIsDurationModalOpen(true);
+    }
+  }, [isDurationModalOpen, selectedDuration, isPlayerActive, onBack]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleStartLesson = async (mode: LessonDurationMode) => {
+    const decision = evaluateLiveTutorialStart(
+      userProfile,
+      mode as LiveDurationMinutes,
+      resolvedAppSettings,
+    );
 
     if (!decision.allowed) {
       setCreditCheckData({
@@ -143,58 +135,47 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       return;
     }
 
-    setSelectedDurationMode(mode);
-    setStartBoardIndex(0);
+    // Instant start — no background prep job
+    setSelectedDuration(mode);
     setIsDurationModalOpen(false);
     setIsPlayerActive(true);
-
-    // Warm up package cache in background if already prepared
-    try {
-      const resolvedUserId = userProfile?.uid || 'anon';
-      const topicKey = topicKeyFromTitle(topicTitle, courseName);
-      const key = `${resolvedUserId}::${topicKey}::${mode}`;
-      const pkg = await lessonPrepService.loadReadyPackage(key);
-      if (pkg) {
-        lessonPrepService.hydrateLessonPackageCaches(pkg);
-      }
-    } catch (_) {}
   };
 
-  const handleResumeSession = () => {
-    if (resumeProgress) {
-      setSelectedDurationMode(resumeProgress.durationMode);
-      setStartBoardIndex(resumeProgress.boardIndex);
-      setIsDurationModalOpen(false);
-      setIsPlayerActive(true);
-    }
+  const handleResume = () => {
+    if (!resumeProgress) return;
+    setSelectedDuration(resumeProgress.durationMode);
+    setIsDurationModalOpen(false);
+    setIsPlayerActive(true);
   };
 
   const handleCloseModal = () => {
     setIsDurationModalOpen(false);
-    if (!selectedDurationMode && !isPlayerActive) {
-      if (onBack) onBack();
-    }
+    if (!selectedDuration && !isPlayerActive) onBack?.();
   };
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-full h-full min-h-screen bg-[#0A0A0A] text-[#FAFAFA]">
+      {/* Duration / entry modal */}
       <LessonDurationModal
         isOpen={isDurationModalOpen}
         topicTitle={topicTitle}
         courseName={courseName}
         syllabusContext={syllabusContext}
         onClose={handleCloseModal}
-        onConfirm={handleContinueLesson}
-        onContinue={handleContinueLesson}
-        onOpen={handleContinueLesson}
-        initialMode={selectedDurationMode || 30}
+        onConfirm={handleStartLesson}
+        onContinue={handleStartLesson}
+        onOpen={handleStartLesson}
+        initialMode={selectedDuration || 30}
         resumeAvailable={Boolean(resumeProgress)}
         resumeLabel={resumeProgress ? formatResumeLabel(resumeProgress) : undefined}
-        onResume={handleResumeSession}
+        onResume={handleResume}
         userProfile={userProfile}
         appSettings={resolvedAppSettings}
       />
 
+      {/* Insufficient credits */}
       <InsufficientCreditsModal
         isOpen={showCreditsModal}
         onClose={() => setShowCreditsModal(false)}
@@ -208,58 +189,26 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         }}
         onTryShorter={(shorterMode) => {
           setShowCreditsModal(false);
-          void handleContinueLesson(shorterMode);
+          void handleStartLesson(shorterMode);
         }}
         affordableModes={([15, 30, 60] as const).filter(
-          (m) => evaluateLiveTutorialStart(userProfile, m as LiveDurationMinutes, resolvedAppSettings).allowed
+          (m) =>
+            evaluateLiveTutorialStart(userProfile, m as LiveDurationMinutes, resolvedAppSettings)
+              .allowed,
         )}
       />
 
-      {/* 1. READY OPEN / PLAYER SESSION VIEW */}
-      {!isDurationModalOpen && isPlayerActive && selectedDurationMode && (
-        <TeachingEngineSessionView
-          key={`${topicTitle}_${courseName || ''}_${selectedDurationMode}_${startBoardIndex}`}
+      {/* ── LIVE CLASSROOM (Phase 3) ─────────────────────────────────── */}
+      {!isDurationModalOpen && isPlayerActive && (
+        <AvelutLiveClassroomView
+          key={`${topicTitle}::${courseName}::${selectedDuration}`}
           topicTitle={topicTitle}
           courseName={courseName}
           syllabusContext={syllabusContext}
-          userId={userProfile?.uid}
           userProfile={userProfile}
           appSettings={resolvedAppSettings}
-          durationMode={selectedDurationMode}
-          startBoardIndex={startBoardIndex}
           onClose={onBack}
           setCustomHeaderConfig={setCustomHeaderConfig}
-        />
-      )}
-
-      {/* 2. BACKGROUND PREP PROGRESS / LOADING / READY / FAILED VIEW */}
-      {!isDurationModalOpen && !isPlayerActive && selectedDurationMode && (
-        <LessonPrepProgressView
-          status={
-            isOpeningLesson
-              ? {
-                  key: 'loading',
-                  state: 'preparing',
-                  step: 3,
-                  progressPercent: 95,
-                  message: 'Loading lesson boards & audio package…',
-                  etaMinutes: '0 min',
-                  updatedAt: Date.now(),
-                  durationMode: selectedDurationMode,
-                  topicTitle,
-                }
-              : prepStatus
-          }
-          topicTitle={topicTitle}
-          courseName={courseName}
-          durationMinutes={selectedDurationMode}
-          onOpenLesson={() => handleContinueLesson(selectedDurationMode)}
-          onCancelJob={cancelJob}
-          onLeaveBackground={() => {
-            if (onBack) onBack();
-            else if (onNavigate) onNavigate('chat');
-          }}
-          onRetry={() => handleContinueLesson(selectedDurationMode)}
         />
       )}
     </div>

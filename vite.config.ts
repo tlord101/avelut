@@ -43,6 +43,16 @@ export default defineConfig(({ command, mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          // Dev WebSocket proxy: /api/qwen-realtime → local Node.js proxy → DashScope
+          // In production this route is handled by api/qwen-realtime.ts (Vercel function)
+          '/api/qwen-realtime': {
+            target: 'ws://localhost:3001',
+            ws: true,
+            changeOrigin: true,
+            rewrite: () => '/qwen-realtime',
+          },
+        },
       },
       plugins: [
         react(),
