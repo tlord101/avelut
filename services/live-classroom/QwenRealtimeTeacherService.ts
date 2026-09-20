@@ -46,7 +46,7 @@ export class QwenRealtimeTeacherService {
   // ── Audio — input (mic → WS) ────────────────────────────────────────────
   private inputAudioCtx: AudioContext | null = null;
   private micStream: MediaStream | null = null;
-  private processorNode: ScriptProcessorNode | null = null;
+  private processorNode: AudioNode | null = null;
   private isMuted = false;
 
   // ── Audio — output (WS → speaker) ──────────────────────────────────────
@@ -99,7 +99,7 @@ export class QwenRealtimeTeacherService {
       });
 
       await this.connectWebSocket();
-      this.startMicRecording();
+      await this.startMicRecording();
     } catch (err: any) {
       console.error('[QwenRealtime] startSession failed:', err);
       this.setState('error');
@@ -458,16 +458,13 @@ export class QwenRealtimeTeacherService {
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
 
-  private startMicRecording(): void {
+  private async startMicRecording(): Promise<void> {
     if (!this.inputAudioCtx || !this.micStream) return;
 
     const source = this.inputAudioCtx.createMediaStreamSource(this.micStream);
-    this.processorNode = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
 
-    this.processorNode.onaudioprocess = (e) => {
+    const handleAudioData = (data: Float32Array) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
-
-      const data = e.inputBuffer.getChannelData(0);
 
       // Compute RMS for UI visualisation
       let sum = 0;
@@ -482,7 +479,9 @@ export class QwenRealtimeTeacherService {
       }
       const bytes = new Uint8Array(pcm16.buffer);
       let bin = '';
-      bytes.forEach(b => (bin += String.fromCharCode(b)));
+      for (let i = 0; i < bytes.length; i++) {
+        bin += String.fromCharCode(bytes[i]);
+      }
 
       this.sendJson({
         event_id: `aud_in_${Date.now()}`,
@@ -491,8 +490,50 @@ export class QwenRealtimeTeacherService {
       });
     };
 
-    source.connect(this.processorNode);
-    this.processorNode.connect(this.inputAudioCtx.destination);
+    // 1. Try modern AudioWorkletNode first (prevents ScriptProcessorNode deprecation warning)
+    if (this.inputAudioCtx.audioWorklet) {
+      try {
+        const workletCode = `
+          class PCM16RecorderProcessor extends AudioWorkletProcessor {
+            process(inputs) {
+              const input = inputs[0];
+              if (input && input[0]) {
+                this.port.postMessage(input[0]);
+              }
+              return true;
+            }
+          }
+          registerProcessor('pcm16-recorder-processor', PCM16RecorderProcessor);
+        `;
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(blob);
+        await this.inputAudioCtx.audioWorklet.addModule(workletUrl);
+        URL.revokeObjectURL(workletUrl);
+
+        const workletNode = new AudioWorkletNode(this.inputAudioCtx, 'pcm16-recorder-processor');
+        workletNode.port.onmessage = (e) => {
+          if (e.data && e.data instanceof Float32Array) {
+            handleAudioData(e.data);
+          }
+        };
+
+        source.connect(workletNode);
+        workletNode.connect(this.inputAudioCtx.destination);
+        this.processorNode = workletNode;
+        return;
+      } catch (workletErr) {
+        console.warn('[QwenRealtime] AudioWorklet init failed, falling back to ScriptProcessor:', workletErr);
+      }
+    }
+
+    // 2. Fallback: ScriptProcessorNode for legacy browser/webview compatibility
+    const scriptProcessor = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
+    scriptProcessor.onaudioprocess = (e) => {
+      handleAudioData(e.inputBuffer.getChannelData(0));
+    };
+    source.connect(scriptProcessor);
+    scriptProcessor.connect(this.inputAudioCtx.destination);
+    this.processorNode = scriptProcessor;
   }
 
   // ── Audio output (WebSocket → speaker) ───────────────────────────────────
