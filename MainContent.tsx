@@ -1,5 +1,6 @@
 import { FirebaseUser } from '@/lib/backend';
 import React, { Suspense, lazy } from 'react';
+import AvelutAI from './components/AvelutAI';
 import { writeCachedJson } from './utils/cache';
 import type { UserProfile, UserProgress, DashboardData, AppSettings, ChatConversation } from './types';
 import {
@@ -25,7 +26,6 @@ const UserProfilePage = lazy(() => import('./components/UserProfile').then(modul
 const BillingSettingsPage = lazy(() => import('./components/BillingSettings').then(module => ({ default: module.BillingSettingsScreen })));
 const Help = lazy(() => import('./components/Help'));
 const Messenger = lazy(() => import('./components/Messenger').then(module => ({ default: module.Messenger })));
-const AvelutAI = lazy(() => import('./components/AvelutAI'));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(module => ({ default: module.AdminPanel })));
 const Onboarding = lazy(() => import('./components/Onboarding').then(module => ({ default: module.Onboarding })));
 const History = lazy(() => import('./components/History').then(module => ({ default: module.History })));
@@ -52,6 +52,7 @@ const skeletonMap: Record<string, React.ReactNode> = {
 
 const getSkeletonFallback = (activeItem: string): React.ReactNode => {
     if (activeItem.startsWith('public_profile_')) return <PublicProfileSkeleton />;
+    if (activeItem === 'chat' || activeItem === 'dashboard') return <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white dark:bg-black"></div>;
     return skeletonMap[activeItem] ?? <PageSkeleton />;
 };
 
