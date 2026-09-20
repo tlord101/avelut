@@ -1612,6 +1612,9 @@ const App: React.FC = () => {
     ];
 
     if (!userProfile && (isAuthChecking || isLoading || (isProfileLoading && user))) {
+        if (currentPath === '/' || currentPath === '/chat') {
+            return <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white dark:bg-black"></div>;
+        }
         return <div key="app-loader-state"><AppLoader /></div>;
     }
 

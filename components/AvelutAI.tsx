@@ -27,6 +27,7 @@ export default function AvelutAI({
   onSelectConversation,
 }: AvelutAIProps) {
   useEffect(() => {
+
     if (!userProfile?.uid || !onConversationsUpdate) return;
     let isMounted = true;
 

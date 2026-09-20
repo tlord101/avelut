@@ -47,6 +47,7 @@ const CollapsibleUserMessage: React.FC<{ text: string }> = ({ text }) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+
     const el = contentRef.current;
     if (el) {
       const overflow = el.scrollHeight > 135;
@@ -140,6 +141,7 @@ const GrokChatComposer: React.FC<{
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+
     if (autoFocus && textareaRef.current) {
       textareaRef.current.focus();
       const timer = setTimeout(() => {
@@ -150,6 +152,7 @@ const GrokChatComposer: React.FC<{
   }, [autoFocus]);
 
   useEffect(() => {
+
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
@@ -310,6 +313,7 @@ export const Chat: React.FC<ChatProps> = ({
   isLoadingRef.current = isLoading;
 
   useEffect(() => {
+
     if (propActiveConversationId !== undefined) {
       if (propActiveConversationId === null && isLoadingRef.current) {
         return;
@@ -375,6 +379,7 @@ export const Chat: React.FC<ChatProps> = ({
   }, [activeConversationId, userProfile.uid, onSelectConversation, addToast]);
 
   useEffect(() => {
+
     if (!setCustomHeaderConfig) return;
     setCustomHeaderConfig({
       hideTitle: true,
@@ -401,6 +406,7 @@ export const Chat: React.FC<ChatProps> = ({
   ]);
 
   useEffect(() => {
+
     let isMounted = true;
     getLocalConversations(userProfile.uid).then((localConvos) => {
       if (isMounted && localConvos.length > 0) {
@@ -451,6 +457,7 @@ export const Chat: React.FC<ChatProps> = ({
   }, [userProfile.uid]);
 
   useEffect(() => {
+
     const fetchCourseContext = async () => {
       try {
         const progressRef = dbRef(db, `user_progress/${userProfile.uid}`);
@@ -475,6 +482,7 @@ export const Chat: React.FC<ChatProps> = ({
   }, [userProfile.uid, userProfile.department_id, userProfile.level]);
 
   useEffect(() => {
+
     if (!activeConversationId) {
       if (!isLoadingRef.current) {
         setMessages([]);
@@ -534,10 +542,12 @@ export const Chat: React.FC<ChatProps> = ({
   }, [activeConversationId]);
 
   useEffect(() => {
+
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   const handleSendMessage = async (customText?: string) => {
+
     const textToSend = customText || input;
     if (!textToSend.trim() || isLoading) return;
 
