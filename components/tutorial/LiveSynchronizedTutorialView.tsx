@@ -5,7 +5,9 @@ import { EquationStepAnimator } from './EquationStepAnimator';
 import { StudentLassoTool } from './StudentLassoTool';
 import { InteractiveMicroCheck } from './InteractiveMicroCheck';
 import { TopicSummaryNotebookModal, TopicSummaryData } from './TopicSummaryNotebookModal';
-import { LiveTutorialSyncEngine } from '../../services/liveTutorialSyncEngine';
+import { GrokRealtimeTeacher } from '../../services/grok_realtime/GrokRealtimeTeacher';
+import { BoardController } from '../../services/grok_realtime/BoardController';
+import { BoardStateManager } from '../../services/boardStateManager';
 import { LiveTutorVoiceBridge } from '../../services/liveTutorVoiceBridge';
 import { PedagogicalStateMachine } from '../../services/pedagogicalStateMachine';
 import { parseLessonScript, ParsedLessonScript } from '../../utils/lessonScriptParser';
@@ -37,7 +39,8 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
   const effectiveUserName = userName || auth.currentUser?.displayName?.split(' ')[0] || 'Friend';
 
   // Engine Instances
-  const syncEngineRef = useRef(new LiveTutorialSyncEngine());
+  const realtimeTeacherRef = useRef<GrokRealtimeTeacher | null>(null);
+  const boardStateManagerRef = useRef(new BoardStateManager());
   const stateMachineRef = useRef(new PedagogicalStateMachine(studentId, topicId, topicComplexity));
   const voiceBridgeRef = useRef<LiveTutorVoiceBridge | null>(null);
 
@@ -93,184 +96,78 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
 
   // Initialize Warm Friendly Lesson Script & Audio Sync Engine
   useEffect(() => {
-    const defaultSampleScript: ParsedLessonScript = {
-      speechText: `Hello ${effectiveUserName}! Great to have you here today. Let's explore ${topicTitle} together step-by-step. We will unpack foundational principles, structural tables, and deep illustrations so everything becomes completely clear and intuitive. Let's look at our first concept map on the whiteboard!`,
-      topicTitle,
-      stepNumber: 1,
-      totalSteps: 4,
-      mode: 'understanding',
-      cues: [
-        // 1. Structured Academic Table
-        {
-          timeMs: 500,
-          action: 'DRAW_TABLE',
-          data: {
-            x: 25,
-            y: 25,
-            width: 480,
-            headers: ['Concept Area', 'Operational Mechanism', 'Core Principle'],
-            rows: [
-              ['Fundamental Baseline', 'Direct Binding Authority', 'Mandatory Precedent Ratio'],
-              ['Operational Mechanism', 'Bilateral Consideration', 'Consensus ad Idem Rule'],
-              ['Risk & Exception', 'Force Majeure Doctrine', 'Strict Objective Standard'],
-            ],
-            activeRowIndex: 0,
-            color: '#002D62',
-          },
-        },
-        // 2. Key Takeaway & Terminology Card
-        {
-          timeMs: 4500,
-          action: 'DRAW_TAKEAWAY',
-          data: {
-            x: 25,
-            y: 190,
-            width: 480,
-            title: 'Key Takeaway for Alex',
-            keywords: ['Prima Facie Rule', 'Strict Standard', 'Burden of Proof'],
-            summary: 'The baseline condition must be verified before proceeding to structural exceptions.',
-            color: '#0066FF',
-          },
-        },
-        // 3. Process Flowchart
-        {
-          timeMs: 8000,
-          action: 'DRAW_FLOWCHART',
-          data: {
-            x: 25,
-            y: 320,
-            nodes: [
-              { title: '1. Inception', subtitle: 'Event Trigger' },
-              { title: '2. Analysis', subtitle: 'Scrutiny Test' },
-              { title: '3. Outcome', subtitle: 'Final Verdict' },
-            ],
-            activeNodeIndex: 1,
-            color: '#0066FF',
-          },
-        },
-        // 4. Focus Highlight Ring
-        {
-          timeMs: 11000,
-          action: 'HIGHLIGHT_FOCUS',
-          data: { x: 20, y: 185, w: 490, h: 120, color: '#0066FF' },
-        },
-      ],
-      diagnosticQuestion: {
-        question: `Hello ${effectiveUserName}! Before we delve into ${topicTitle}, what is the foundational threshold required to shift the evidential burden?`,
-        options: [
-          'Establishing Prima Facie Causation',
-          'Subjective Discretion of the Parties',
-          'Informal Mutual Waiver',
-          'Lapse of Statutory Time',
-        ],
-        correctIndex: 0,
-        explanation: 'The claimant must first establish prima facie causation before any procedural burden shifts.',
+    // Setup Realtime AI Teacher with Board Controller
+    const boardController = new BoardController(boardStateManagerRef.current);
+
+    const teacher = new GrokRealtimeTeacher(boardController, {
+      initialContext: `We are learning about ${topicTitle}. Start the lesson naturally and write the topic on the board.`,
+      onInterruption: () => {
+        setInterruptionQuery("Hold on, the tutor is listening...");
+        setTutorClarificationText(null);
       },
-    };
-
-    const script = initialScript ? parseLessonScript(initialScript) : defaultSampleScript;
-    setParsedScript(script);
-
-    // Adaptive Duration: Simple (7m), Standard (10m), Complex (14m)
-    const totalDuration = stateMachineRef.current.getState().estimatedDurationMs;
-    setDurationMs(totalDuration);
-    syncEngineRef.current.loadScript(script, totalDuration);
-
-    const unsubscribe = syncEngineRef.current.subscribe((state) => {
-      setBoardElements(state.activeElements);
-      setTutorPointer(state.tutorPointer);
-      setActiveFocusArea(state.activeFocusArea);
-      setIsPlaying(state.isPlaying);
-      setCurrentTimeMs(state.currentTimeMs);
-      setDurationMs(state.durationMs);
-
-      // Trigger End-of-Topic Summary Modal at completion
-      if (state.currentTimeMs >= state.durationMs && state.durationMs > 0) {
-        setShowSummaryNotebookModal(true);
+      onError: (err) => {
+        addToast(err.message, 'error');
+      },
+      onConnect: () => {
+        addToast('Connected to AI Tutor!', 'success');
+        setIsPlaying(true);
+      },
+      onDisconnect: () => {
+        addToast('Tutor disconnected.', 'error');
+        setIsPlaying(false);
       }
     });
 
-    // Initialize Manual Voice Recognition Bridge
-    voiceBridgeRef.current = new LiveTutorVoiceBridge({
-      onRecordingStarted: () => {
-        setIsVoiceRecording(true);
-        syncEngineRef.current.pause();
-      },
-      onRecordingEnded: () => {
-        setIsVoiceRecording(false);
-      },
-      onSpeechTranscribed: (transcribedText) => {
-        handleStudentSpokenQuery(transcribedText);
-      },
+    realtimeTeacherRef.current = teacher;
+
+    // Subscribe to Board State Manager updates
+    const unsubscribe = boardStateManagerRef.current.subscribe((state) => {
+      // Map elements to array as expected by the canvas
+      setBoardElements(Array.from(state.elements.values()) as BoardElement[]);
+
+      if (state.focusedElementId) {
+        // Find focused element
+        const el = state.elements.get(state.focusedElementId);
+        if (el && el.metadata && el.metadata.x) {
+           setActiveFocusArea({ x: el.metadata.x, y: el.metadata.y, w: el.metadata.width || 100, h: el.metadata.height || 100, color: '#0066FF' });
+        }
+      } else {
+        setActiveFocusArea(null);
+      }
     });
+
+    // Attempt connection
+    teacher.connect();
 
     return () => {
       unsubscribe();
-      voiceBridgeRef.current?.stopManualRecording();
+      teacher.disconnect();
     };
-  }, [topicTitle, initialScript, topicComplexity, effectiveUserName]);
+  }, [topicTitle, effectiveUserName, addToast]);
 
   // Handle Manual Mic Click
   const handleMicToggle = () => {
     if (isVoiceRecording) {
-      voiceBridgeRef.current?.stopManualRecording();
+      realtimeTeacherRef.current?.setMuted(true);
       setIsVoiceRecording(false);
+      addToast('Microphone muted.', 'info');
     } else {
-      syncEngineRef.current.pause();
-      const started = voiceBridgeRef.current?.startManualRecording();
-      if (started) {
-        setIsVoiceRecording(true);
-        addToast('Listening to your question... Speak clearly.', 'info');
-      } else {
-        // Fallback for devices without speech recognition
-        const promptText = window.prompt('Type your question for the tutor:');
-        if (promptText && promptText.trim()) {
-          handleStudentSpokenQuery(promptText.trim());
-        }
-      }
+      realtimeTeacherRef.current?.setMuted(false);
+      setIsVoiceRecording(true);
+      addToast('Microphone live.', 'success');
     }
-  };
-
-  // Student Asks a Question -> AI redraws / highlights board & clarifies warmly
-  const handleStudentSpokenQuery = (query: string) => {
-    setInterruptionQuery(`"${query}"`);
-    syncEngineRef.current.pause();
-
-    // Friendly AI Clarification & Dynamic Board Redraw
-    setTutorClarificationText(`Great question, ${effectiveUserName}! Let's zoom into this exact mechanism on the board.`);
-    
-    // Dynamic Redraw: Highlight specific concept or draw rich illustration
-    setBoardElements((prev) => [
-      ...prev,
-      {
-        id: `clarification_${Date.now()}`,
-        type: 'takeaway',
-        x: 25,
-        y: 160,
-        width: 480,
-        title: `Clarification for ${effectiveUserName}`,
-        keywords: ['Key Clarification', 'Core Insight'],
-        summary: `Addressing: "${query}". Remember that baseline criteria always precede secondary exceptions.`,
-        color: '#0066FF',
-      },
-    ]);
-
-    setActiveFocusArea({ x: 20, y: 155, w: 490, h: 120, color: '#0066FF' });
-    addToast(`Tutor answered: "${query}"`, 'success');
   };
 
   const togglePlayback = () => {
     if (isPlaying) {
-      syncEngineRef.current.pause();
+      realtimeTeacherRef.current?.disconnect();
+      setIsPlaying(false);
     } else {
-      setInterruptionQuery(null);
-      setTutorClarificationText(null);
-      syncEngineRef.current.play();
+      realtimeTeacherRef.current?.connect();
     }
   };
 
   const handleStudentLassoSelect = (elementIds: string[]) => {
-    syncEngineRef.current.pause();
     const queryNotice = elementIds.length > 0
       ? `Circled: ${elementIds.join(', ')}. What would you like explained?`
       : 'Circled board area. What would you like explained?';
@@ -319,7 +216,7 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
           }}
           onContinue={() => {
             setShowDiagnosticModal(false);
-            syncEngineRef.current.play();
+            /* realtimeTeacherRef.current?.connect(); */
           }}
         />
       )}
@@ -340,7 +237,7 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
           }}
           onContinue={() => {
             setShowMidLessonCheck(false);
-            syncEngineRef.current.play();
+            /* realtimeTeacherRef.current?.connect(); */
           }}
         />
       )}
@@ -430,7 +327,7 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
                 onClick={() => {
                   setInterruptionQuery(null);
                   setTutorClarificationText(null);
-                  syncEngineRef.current.play();
+                  /* realtimeTeacherRef.current?.connect(); */
                 }}
                 className="underline font-bold hover:opacity-80 ml-3"
               >
