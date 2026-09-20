@@ -123,8 +123,10 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
 
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
+  const startedSessionRef = useRef(false);
 
   // ── Hide global header/nav while in live classroom ──────────────────────
   useEffect(() => {
@@ -186,17 +188,42 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   useEffect(() => {
-    startSession();
+    if (!startedSessionRef.current) {
+      startSession();
+      startedSessionRef.current = true;
+    }
     return () => {
-      serviceRef.current?.endSession();
-      serviceRef.current = null;
+      // Allow StrictMode teardown, but note this will close the session
+      if (serviceRef.current) {
+        serviceRef.current.endSession();
+        serviceRef.current = null;
+        startedSessionRef.current = false;
+        setHasStarted(false);
+      }
     };
   }, [startSession]);
 
   // Ensure AudioContext is unlocked on any user gesture in the classroom
   const ensureAudioUnlocked = useCallback(() => {
-    serviceRef.current?.resumeAudio().catch(() => {});
+    if (serviceRef.current && !serviceRef.current.isAudioUnlocked()) {
+      serviceRef.current.resumeAudio().catch(() => {});
+    }
   }, []);
+
+  const handleStartLesson = async () => {
+    if (!serviceRef.current) return;
+
+    // Unlock audio first
+    const unlocked = await serviceRef.current.resumeAudio();
+    if (unlocked) {
+      serviceRef.current.triggerInitialGreeting();
+      setHasStarted(true);
+    } else {
+      console.warn('[AvelutLiveClassroomView] Audio not unlocked, but marking as started anyway');
+      setHasStarted(true);
+      serviceRef.current.triggerInitialGreeting();
+    }
+  };
 
   // ── Handlers ────────────────────────────────────────────────────────────
   const handleToggleMute = () => {
@@ -264,6 +291,23 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           <TeacherStatePill state={teacherState} />
         </div>
       </header>
+
+      {/* ── TAP TO START OVERLAY ──────────────────────────────────────────── */}
+      {!hasStarted && teacherState === 'connected' && !errorMsg && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
+          <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in">
+            <button
+              onClick={handleStartLesson}
+              className="flex items-center gap-3 px-8 py-4 rounded-full bg-[#38BDF8] hover:bg-[#0284c7]
+                         active:scale-95 transition-all shadow-[0_0_40px_rgba(56,189,248,0.3)] text-black font-bold text-lg"
+            >
+              <Ear className="w-6 h-6" />
+              Tap to Start Lesson
+            </button>
+            <p className="text-sm font-medium text-white/60">Teacher is ready</p>
+          </div>
+        </div>
+      )}
 
       {/* ── ERROR OVERLAY ─────────────────────────────────────────────────── */}
       {errorMsg && (

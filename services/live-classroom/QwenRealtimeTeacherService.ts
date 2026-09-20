@@ -210,8 +210,13 @@ export class QwenRealtimeTeacherService {
     }
   }
 
+  /** Returns true if the output audio context is currently running */
+  public isAudioUnlocked(): boolean {
+    return this.outputAudioCtx?.state === 'running';
+  }
+
   /** Public method to ensure AudioContext is active on user gesture */
-  public async resumeAudio(): Promise<void> {
+  public async resumeAudio(): Promise<boolean> {
     try {
       if (this.inputAudioCtx && this.inputAudioCtx.state === 'suspended') {
         await this.inputAudioCtx.resume();
@@ -219,8 +224,18 @@ export class QwenRealtimeTeacherService {
       if (this.outputAudioCtx && this.outputAudioCtx.state === 'suspended') {
         await this.outputAudioCtx.resume();
       }
+      return this.isAudioUnlocked();
     } catch (e) {
       console.warn('[QwenRealtime] resumeAudio warning:', e);
+      return false;
+    }
+  }
+
+  /** Triggers the initial teacher greeting manually from the UI */
+  public triggerInitialGreeting(): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[QwenRealtime] Manually triggering initial greeting');
+      this.sendJson({ event_id: `greet_manual_${Date.now()}`, type: 'response.create' });
     }
   }
 
@@ -249,8 +264,12 @@ export class QwenRealtimeTeacherService {
     // Safeguard greeting trigger if session.updated is not received within 1500ms
     setTimeout(() => {
       if (this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
-        console.log('[QwenRealtime] Safeguard: triggering initial teacher greeting');
-        this.sendJson({ event_id: `greet_safeguard_${Date.now()}`, type: 'response.create' });
+        if (this.isAudioUnlocked()) {
+          console.log('[QwenRealtime] Safeguard: triggering initial teacher greeting');
+          this.sendJson({ event_id: `greet_safeguard_${Date.now()}`, type: 'response.create' });
+        } else {
+          console.log('[QwenRealtime] Safeguard: skipped greeting because audio is not unlocked yet');
+        }
       }
     }, 1500);
   }
@@ -361,19 +380,28 @@ export class QwenRealtimeTeacherService {
 
     switch (event.type) {
       case 'session.created':
-        console.log('[QwenRealtime] Session created on DashScope');
+        console.log('[QwenRealtime] session.created on DashScope');
         break;
 
       case 'session.updated':
-        console.log('[QwenRealtime] Session updated on DashScope — triggering initial greeting');
-        this.sendJson({
-          event_id: `greet_session_updated_${Date.now()}`,
-          type: 'response.create',
-        });
+        console.log('[QwenRealtime] session.updated on DashScope');
+        if (this.isAudioUnlocked()) {
+          console.log('[QwenRealtime] Triggering initial greeting after session.updated');
+          this.sendJson({
+            event_id: `greet_session_updated_${Date.now()}`,
+            type: 'response.create',
+          });
+        } else {
+          console.log('[QwenRealtime] Skipped initial greeting on session.updated because audio is not unlocked yet');
+        }
         break;
 
       case 'response.audio.delta':
-        if (event.delta) { this.setState('speaking'); this.playDelta(event.delta); }
+        if (event.delta) {
+          // console.log('[QwenRealtime] response.audio.delta length:', event.delta.length); // Optionally log length
+          this.setState('speaking');
+          this.playDelta(event.delta);
+        }
         break;
 
       case 'response.audio_transcript.delta':
@@ -574,12 +602,26 @@ export class QwenRealtimeTeacherService {
 
   // ── Audio output (WebSocket → speaker) ───────────────────────────────────
 
+  private async ensureOutputRunning(): Promise<void> {
+    if (this.outputAudioCtx && this.outputAudioCtx.state === 'suspended') {
+      try {
+        await this.outputAudioCtx.resume();
+      } catch (err) {
+        console.warn('[QwenRealtime] ensureOutputRunning failed to resume:', err);
+      }
+    }
+  }
+
   private playDelta(base64: string): void {
     if (!this.outputAudioCtx) return;
     try {
+      // Ensure audio context is running when we receive audio
+      void this.ensureOutputRunning();
+
       if (this.outputAudioCtx.state === 'suspended') {
-        void this.outputAudioCtx.resume().catch(() => {});
+        console.warn('[QwenRealtime] Audio context is suspended during playDelta! Audio may not be heard.');
       }
+
       const bin = atob(base64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
