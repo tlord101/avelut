@@ -132,8 +132,33 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     return () => { setCustomHeaderConfig?.(null); };
   }, [setCustomHeaderConfig]);
 
-  // ── Start realtime session ──────────────────────────────────────────────
+  // ── Store current parameters in refs to avoid re-triggering startSession on object mutations ──
+  const paramsRef = useRef({
+    topicTitle,
+    courseName,
+    syllabusContext,
+    studentName: userProfile?.display_name || undefined,
+    appSettings,
+  });
+
+  useEffect(() => {
+    paramsRef.current = {
+      topicTitle,
+      courseName,
+      syllabusContext,
+      studentName: userProfile?.display_name || undefined,
+      appSettings,
+    };
+  }, [topicTitle, courseName, syllabusContext, userProfile, appSettings]);
+
+  // ── Start realtime session once on mount ───────────────────────────────────
   const startSession = useCallback(() => {
+    // Teardown previous if existing
+    if (serviceRef.current) {
+      serviceRef.current.endSession();
+      serviceRef.current = null;
+    }
+
     const svc = new QwenRealtimeTeacherService();
     serviceRef.current = svc;
 
@@ -147,16 +172,18 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
     });
 
+    const { topicTitle: tTitle, courseName: cName, syllabusContext: sCtx, studentName: sName, appSettings: aSettings } = paramsRef.current;
+
     void svc.startSession(
       {
-        topicTitle,
-        courseName,
-        syllabusContext,
-        studentName: userProfile?.display_name || undefined,
+        topicTitle: tTitle,
+        courseName: cName,
+        syllabusContext: sCtx,
+        studentName: sName,
       },
-      appSettings,
+      aSettings,
     );
-  }, [topicTitle, courseName, syllabusContext, userProfile, appSettings]);
+  }, []);
 
   useEffect(() => {
     startSession();
@@ -165,6 +192,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       serviceRef.current = null;
     };
   }, [startSession]);
+
+  // Ensure AudioContext is unlocked on any user gesture in the classroom
+  const ensureAudioUnlocked = useCallback(() => {
+    serviceRef.current?.resumeAudio().catch(() => {});
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────
   const handleToggleMute = () => {
@@ -191,7 +223,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex flex-col w-full h-full bg-[#0A0A0A] text-[#FAFAFA] overflow-hidden select-none">
+    <div
+      onClick={ensureAudioUnlocked}
+      onTouchStart={ensureAudioUnlocked}
+      className="fixed inset-0 z-50 flex flex-col w-full h-full bg-[#0A0A0A] text-[#FAFAFA] overflow-hidden select-none"
+    >
 
       {/* ── TOP BAR ──────────────────────────────────────────────────────── */}
       <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 py-2.5

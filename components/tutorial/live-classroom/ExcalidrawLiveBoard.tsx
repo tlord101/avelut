@@ -6,8 +6,8 @@
  * the ExcalidrawImperativeAPI with AvelutBoardController on mount.
  */
 
-import React, { useEffect, useRef } from 'react';
-import { Excalidraw } from '@excalidraw/excalidraw';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
@@ -24,38 +24,45 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
   onBoardReady,
 }) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const didInitRef = useRef(false);
+
+  // Seed the initial elements with the lesson topic title
+  const initialElements = useMemo(() => {
+    avelutBoardController.initBoard(topicTitle);
+    try {
+      return convertToExcalidrawElements([
+        {
+          type: 'text',
+          x: 60,
+          y: 40,
+          text: `📚 ${topicTitle}`,
+          fontSize: 36,
+          fontFamily: 1,
+          textAlign: 'left',
+          verticalAlign: 'top',
+          strokeColor: '#38BDF8',
+        },
+      ]);
+    } catch {
+      return [];
+    }
+  }, [topicTitle]);
 
   const handleApiSet = (api: ExcalidrawImperativeAPI) => {
     apiRef.current = api;
     avelutBoardController.setApi(api);
     avelutBoardController.setLessonTitle(topicTitle);
-
-    // Write the topic title header on first mount only
-    if (!didInitRef.current) {
-      didInitRef.current = true;
-      avelutBoardController.writeText(`📚 ${topicTitle}`, {
-        fontSize: 'title',
-        color: '#38BDF8',
-        x: 60,
-        y: 40,
-      });
-    }
-
     onBoardReady?.(api);
   };
 
-  // Clean up board controller API ref on unmount
   useEffect(() => {
-    return () => {
-      avelutBoardController.setApi(null);
-    };
-  }, []);
+    if (apiRef.current) {
+      avelutBoardController.setApi(apiRef.current);
+    }
+  }, [topicTitle]);
 
   return (
     <div
       className={`relative w-full h-full overflow-hidden bg-[#0A0A0A] ${className}`}
-      // Prevent the Excalidraw canvas capturing back-gesture on mobile
       style={{ touchAction: 'none' }}
     >
       <Excalidraw
@@ -72,6 +79,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
           },
         }}
         initialData={{
+          elements: initialElements,
           appState: {
             viewBackgroundColor: '#0A0A0A',
             currentItemStrokeColor: '#38BDF8',

@@ -54,6 +54,17 @@
     integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
 
   <script>
+    // Map deprecated 'unload' event to 'pagehide' to prevent Chrome Permissions Policy violation
+    (function() {
+      const _origAEL = window.addEventListener;
+      window.addEventListener = function(type, listener, options) {
+        if (type === 'unload') {
+          return _origAEL.call(window, 'pagehide', listener, options);
+        }
+        return _origAEL.call(window, type, listener, options);
+      };
+    })();
+
     window.__firebase_config = {
       apiKey: "mock-key",
       authDomain: "mock.firebaseapp.com",

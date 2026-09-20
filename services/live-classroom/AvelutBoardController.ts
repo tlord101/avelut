@@ -47,14 +47,42 @@ export class AvelutBoardController {
   // ── API registration ──────────────────────────────────────────────────────
 
   public setApi(api: ExcalidrawImperativeAPI | null): void {
-    this.api = api;
-    if (api && this.elements.length > 0) {
-      this.syncScene(false);
+    if (api) {
+      this.api = api;
+      setTimeout(() => {
+        if (this.elements.length > 0) {
+          this.syncScene(true);
+        }
+      }, 60);
     }
   }
 
   public setLessonTitle(title: string): void {
     this.lessonTitle = title;
+  }
+
+  public initBoard(title: string): void {
+    this.lessonTitle = title;
+    this.cursorY = 120;
+    try {
+      const titleEls = convertToExcalidrawElements([{
+        type: 'text',
+        x: 60,
+        y: 40,
+        text: `📚 ${title}`,
+        fontSize: 36,
+        fontFamily: 1,
+        textAlign: 'left',
+        verticalAlign: 'top',
+        strokeColor: '#38BDF8',
+      }]);
+      this.elements = [...titleEls];
+      if (this.api) {
+        setTimeout(() => this.syncScene(true), 60);
+      }
+    } catch (e) {
+      console.warn('[BoardController] initBoard error:', e);
+    }
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────

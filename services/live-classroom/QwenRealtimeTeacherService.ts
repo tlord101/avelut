@@ -210,12 +210,27 @@ export class QwenRealtimeTeacherService {
     }
   }
 
+  /** Public method to ensure AudioContext is active on user gesture */
+  public async resumeAudio(): Promise<void> {
+    try {
+      if (this.inputAudioCtx && this.inputAudioCtx.state === 'suspended') {
+        await this.inputAudioCtx.resume();
+      }
+      if (this.outputAudioCtx && this.outputAudioCtx.state === 'suspended') {
+        await this.outputAudioCtx.resume();
+      }
+    } catch (e) {
+      console.warn('[QwenRealtime] resumeAudio warning:', e);
+    }
+  }
+
   // ── Session initialisation ────────────────────────────────────────────────
 
   private sendSessionInit(): void {
     if (!this.promptConfig) return;
 
     const instructions = buildTeacherSystemPrompt(this.promptConfig);
+    console.log('[QwenRealtime] Sending session.update...');
 
     this.sendJson({
       event_id: `session_init_${Date.now()}`,
@@ -231,10 +246,13 @@ export class QwenRealtimeTeacherService {
       },
     });
 
-    // Trigger the initial greeting immediately
+    // Safeguard greeting trigger if session.updated is not received within 1500ms
     setTimeout(() => {
-      this.sendJson({ event_id: `greet_${Date.now()}`, type: 'response.create' });
-    }, 200);
+      if (this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
+        console.log('[QwenRealtime] Safeguard: triggering initial teacher greeting');
+        this.sendJson({ event_id: `greet_safeguard_${Date.now()}`, type: 'response.create' });
+      }
+    }, 1500);
   }
 
   private buildToolDeclarations() {
@@ -342,6 +360,18 @@ export class QwenRealtimeTeacherService {
     try { event = JSON.parse(raw); } catch { return; }
 
     switch (event.type) {
+      case 'session.created':
+        console.log('[QwenRealtime] Session created on DashScope');
+        break;
+
+      case 'session.updated':
+        console.log('[QwenRealtime] Session updated on DashScope — triggering initial greeting');
+        this.sendJson({
+          event_id: `greet_session_updated_${Date.now()}`,
+          type: 'response.create',
+        });
+        break;
+
       case 'response.audio.delta':
         if (event.delta) { this.setState('speaking'); this.playDelta(event.delta); }
         break;
@@ -453,6 +483,12 @@ export class QwenRealtimeTeacherService {
           output: JSON.stringify({ success: true }),
         },
       });
+
+      // Instruct Qwen Realtime model to create response after tool output (drawings)
+      this.sendJson({
+        event_id: `resp_after_tool_${Date.now()}`,
+        type: 'response.create',
+      });
     }
   }
 
@@ -541,6 +577,9 @@ export class QwenRealtimeTeacherService {
   private playDelta(base64: string): void {
     if (!this.outputAudioCtx) return;
     try {
+      if (this.outputAudioCtx.state === 'suspended') {
+        void this.outputAudioCtx.resume().catch(() => {});
+      }
       const bin = atob(base64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
