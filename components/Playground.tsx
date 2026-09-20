@@ -113,6 +113,7 @@ export const Playground: React.FC<PlaygroundProps> = ({
       <FlashcardsNew
         userProfile={userProfile}
         appSettings={appSettings}
+        initialCourse={viewState.initialCourse}
         onDeckCreated={(deckId) => navigateToView({ type: 'flashcards_study', deckId })}
       />
     );
@@ -132,6 +133,7 @@ export const Playground: React.FC<PlaygroundProps> = ({
       <CBTNew
         userProfile={userProfile}
         appSettings={appSettings}
+        initialCourse={viewState.initialCourse}
         onExamCreated={(examId) => navigateToView({ type: 'cbt_exam', examId })}
       />
     );

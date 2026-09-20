@@ -18,7 +18,7 @@ export interface PlaygroundProps {
 export type ViewState =
   | { type: 'home' }
   | { type: 'past_viewer'; packId: string }
-  | { type: 'flashcards_new' }
+  | { type: 'flashcards_new'; initialCourse?: string }
   | { type: 'flashcards_study'; deckId: string }
-  | { type: 'cbt_new' }
+  | { type: 'cbt_new'; initialCourse?: string }
   | { type: 'cbt_exam'; examId: string };

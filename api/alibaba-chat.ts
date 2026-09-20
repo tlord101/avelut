@@ -57,18 +57,21 @@ export async function POST(req: Request) {
       Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
     );
 
-    let model = 'qwen3.7-flash';
+    let rawModel = (body.model ? String(body.model).trim() : 'qwen3.7-flash');
+    // Strip OpenRouter or provider prefixes like "qwen/"
+    rawModel = rawModel.replace(/^qwen\//i, '').replace(/^alibaba\//i, '');
+    if (!rawModel) rawModel = 'qwen3.7-flash';
+
+    let model = rawModel;
     if (hasImage) {
       model = 'qwen-vl-plus';
-    } else if (body.model) {
-      model = String(body.model).trim();
     }
 
     const payload: any = {
       model,
       messages,
-      temperature: body.temperature ?? 0.7,
-      max_tokens: body.max_tokens ?? 4096,
+      temperature: body.temperature ?? 0.35,
+      max_tokens: Math.min(body.max_tokens ?? 1024, 2048),
       include_reasoning: false,
     };
 
@@ -83,11 +86,21 @@ export async function POST(req: Request) {
       payload.response_format = body.response_format;
     }
 
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: requestHeaders,
-      body: JSON.stringify(payload),
-    });
+    // 12s timeout controller for proxy fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

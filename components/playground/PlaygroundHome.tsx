@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { UserProfile } from '../../types';
+import type { UserProfile, Course } from '../../types';
 import type { PastQuestionPack, FlashcardDeck, CBTExam } from '../../types/playground';
 import {
   getPastQuestionPacks,
   getSavedFlashcardDecks,
   getSavedCBTExams
 } from '../../services/playgroundStorageService';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { PlaygroundCardSkeleton } from '../Skeleton';
 
 export interface PlaygroundHomeProps {
@@ -15,6 +16,7 @@ export interface PlaygroundHomeProps {
 
 export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onNavigateView }) => {
   const [pastPacks, setPastPacks] = useState<PastQuestionPack[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeHomeTab, setActiveHomeTab] = useState<'past' | 'flashcards' | 'cbt'>('past');
   const [savedDecks, setSavedDecks] = useState<FlashcardDeck[]>([]);
@@ -25,14 +27,16 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const [packs, decks, exams] = await Promise.all([
+        const [packs, decks, exams, dbCourses] = await Promise.all([
           getPastQuestionPacks(),
           userProfile?.uid ? getSavedFlashcardDecks(userProfile.uid) : Promise.resolve([]),
-          userProfile?.uid ? getSavedCBTExams(userProfile.uid) : Promise.resolve([])
+          userProfile?.uid ? getSavedCBTExams(userProfile.uid) : Promise.resolve([]),
+          supabaseDataService.fetchCourses(userProfile?.department_id, userProfile?.level)
         ]);
         setPastPacks(packs);
         setSavedDecks(decks);
         setSavedExams(exams);
+        setCourses(dbCourses || []);
       } catch (err) {
         console.error('PlaygroundHome error fetching data:', err);
       } finally {
@@ -40,7 +44,7 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
       }
     };
     fetchAllData();
-  }, [userProfile?.uid]);
+  }, [userProfile?.uid, userProfile?.department_id, userProfile?.level]);
 
   const filteredPacks = useMemo(() => {
     if (!searchQuery.trim()) return pastPacks;
@@ -157,35 +161,97 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
           )}
         </div>
 
-        {/* TAB 1: PAST QUESTIONS LIST */}
+        {/* TAB 1: PAST QUESTIONS / DATABASE COURSES */}
         {activeHomeTab === 'past' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
             {isLoading ? (
-              Array.from({ length: 6 }).map((_, i) => <PlaygroundCardSkeleton key={i} />)
-            ) : filteredPacks.map(pack => (
-              <div
-                key={pack.id}
-                onClick={() => onNavigateView({ type: 'past_viewer', packId: pack.id })}
-                className="bg-[#141414] border border-[#2A2A2A] rounded-2xl p-5 hover:border-[#3A3A3A] transition cursor-pointer flex flex-col justify-between group shadow-sm"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#1C1C1C] border border-[#2A2A2A] text-blue-400">
-                      {pack.courseCode || 'PAST Q'}
-                    </span>
-                    <span className="text-xs text-[#A3A3A3] font-medium">Year {pack.year || '2023'}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => <PlaygroundCardSkeleton key={i} />)}
+              </div>
+            ) : filteredPacks.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredPacks.map(pack => (
+                  <div
+                    key={pack.id}
+                    onClick={() => onNavigateView({ type: 'past_viewer', packId: pack.id })}
+                    className="bg-[#141414] border border-[#2A2A2A] rounded-2xl p-5 hover:border-[#3A3A3A] transition cursor-pointer flex flex-col justify-between group shadow-sm active:scale-95"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#1C1C1C] border border-[#2A2A2A] text-blue-400">
+                          {pack.courseCode || 'PAST Q'}
+                        </span>
+                        <span className="text-xs text-[#A3A3A3] font-medium">Year {pack.year || '2023'}</span>
+                      </div>
+                      <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition leading-snug">
+                        {pack.title}
+                      </h3>
+                    </div>
+
+                    <div className="mt-5 pt-3 border-t border-[#1C1C1C] flex items-center justify-between text-xs text-[#A3A3A3]">
+                      <span className="capitalize">{pack.type} Format</span>
+                      <span className="font-semibold text-white">{pack.questionCount} Questions</span>
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition leading-snug">
-                    {pack.title}
-                  </h3>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-[#141414] border border-[#2A2A2A] rounded-3xl p-6 sm:p-8 text-center max-w-2xl mx-auto">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Academic Courses Catalog</h3>
+                  <p className="text-xs sm:text-sm text-[#A3A3A3] mb-4 leading-relaxed">
+                    Official faculty past exam papers will appear here once published. You can generate instant CBT Practice Tests or Flashcards directly from your registered courses below.
+                  </p>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-[#1C1C1C] flex items-center justify-between text-xs text-[#A3A3A3]">
-                  <span className="capitalize">{pack.type} Format</span>
-                  <span className="font-semibold text-white">{pack.questionCount} Questions</span>
-                </div>
+                {courses.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#A3A3A3] mb-3">
+                      Enrolled Department Courses ({courses.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {courses.map(c => (
+                        <div key={c.course_id} className="bg-[#141414] border border-[#2A2A2A] rounded-2xl p-5 hover:border-[#3A3A3A] transition flex flex-col justify-between group shadow-sm">
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#1C1C1C] border border-[#2A2A2A] text-blue-400">
+                                {c.course_code || 'COURSE'}
+                              </span>
+                              <span className="text-xs text-[#A3A3A3] font-medium">{c.level}</span>
+                            </div>
+                            <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition leading-snug">
+                              {c.course_name}
+                            </h3>
+                            <p className="text-xs text-[#A3A3A3] mt-2 line-clamp-2">
+                              {c.description || `${c.topics?.length || 0} syllabus topics`}
+                            </p>
+                          </div>
+                          <div className="mt-5 pt-3 border-t border-[#1C1C1C] flex items-center gap-2">
+                            <button
+                              onClick={() => onNavigateView({ type: 'cbt_new', initialCourse: c.course_name })}
+                              className="flex-1 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-600 active:scale-95 text-white text-xs font-bold transition text-center shadow"
+                            >
+                              Practice CBT
+                            </button>
+                            <button
+                              onClick={() => onNavigateView({ type: 'flashcards_new', initialCourse: c.course_name })}
+                              className="flex-1 py-2.5 rounded-xl bg-[#1C1C1C] hover:bg-[#252525] border border-[#2A2A2A] active:scale-95 text-white text-xs font-bold transition text-center"
+                            >
+                              Flashcards
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+            )}
           </div>
         )}
 

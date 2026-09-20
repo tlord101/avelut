@@ -11,22 +11,41 @@ import {
   getSavedFlashcardDecks
 } from '../../services/playgroundStorageService';
 
+import { supabaseDataService } from '../../services/supabaseDataService';
+import type { Course } from '../../types';
+
 export interface FlashcardsNewProps {
   userProfile?: UserProfile;
   appSettings?: AppSettings;
+  initialCourse?: string;
   onDeckCreated: (deckId: string) => void;
 }
 
 export const FlashcardsNew: React.FC<FlashcardsNewProps> = ({
   userProfile,
   appSettings,
+  initialCourse,
   onDeckCreated
 }) => {
   const { addToast } = useToast();
-  const [courseTopicInput, setCourseTopicInput] = useState('');
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [courseTopicInput, setCourseTopicInput] = useState(initialCourse || '');
   const [flashcardCount, setFlashcardCount] = useState(15);
   const [flashcardDifficulty, setFlashcardDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    supabaseDataService.fetchCourses(userProfile?.department_id, userProfile?.level).then(dbCourses => {
+      if (dbCourses) setCourses(dbCourses);
+    });
+  }, [userProfile?.department_id, userProfile?.level]);
+
+  useEffect(() => {
+    if (initialCourse) {
+      setCourseTopicInput(initialCourse);
+    }
+  }, [initialCourse]);
 
   const handleGenerate = async () => {
     if (!courseTopicInput.trim()) {
@@ -102,13 +121,40 @@ Return strictly valid JSON with no markdown block markers:
         </div>
 
         <div className="space-y-4">
+          {courses.length > 0 && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#A3A3A3] mb-2">
+                Select from Enrolled Courses
+              </label>
+              <select
+                value={selectedCourseId}
+                onChange={e => {
+                  const cId = e.target.value;
+                  setSelectedCourseId(cId);
+                  const selected = courses.find(c => c.course_id === cId);
+                  if (selected) {
+                    setCourseTopicInput(`${selected.course_code}: ${selected.course_name}`);
+                  }
+                }}
+                className="w-full px-4 py-3 rounded-xl bg-[#1C1C1C] border border-[#2A2A2A] text-white text-sm focus:outline-none focus:border-blue-500 mb-3"
+              >
+                <option value="">-- Choose an academic course --</option>
+                {courses.map(c => (
+                  <option key={c.course_id} value={c.course_id}>
+                    {c.course_code ? `${c.course_code} - ` : ''}{c.course_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#A3A3A3] mb-2">
-              Course / Topic Name
+              Topic or Subject
             </label>
             <input
               type="text"
-              placeholder="e.g. MTH 101 Calculus & Differentiation"
+              placeholder="e.g. Differentiation & Integration"
               value={courseTopicInput}
               onChange={e => setCourseTopicInput(e.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-[#1C1C1C] border border-[#2A2A2A] text-white placeholder-[#A3A3A3] text-sm focus:outline-none focus:border-blue-500"

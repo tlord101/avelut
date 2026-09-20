@@ -620,6 +620,11 @@ function resolveAlibabaEndpoints(
     ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
     : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
 
+  // For study guide chat, strictly call backend proxy endpoint directly as requested
+  if (options?.feature === 'study_guide_chat') {
+    return proxyEndpoints;
+  }
+
   const publicEndpoints = [
     'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
     'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -768,11 +773,20 @@ async function* callAlibabaQwenStream(
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-      });
+      const fetchController = new AbortController();
+      const timeoutId = setTimeout(() => fetchController.abort(), 6000);
+
+      let res: Response;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(bodyPayload),
+          signal: fetchController.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (res.ok && res.body) {
         response = res;

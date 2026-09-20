@@ -52,6 +52,12 @@ export default defineConfig(({ command, mode }) => {
             changeOrigin: true,
             rewrite: () => '/qwen-realtime',
           },
+          // Dev HTTP proxy: /api/alibaba-chat → backend API
+          '/api/alibaba-chat': {
+            target: 'https://www.avelut.xyz',
+            changeOrigin: true,
+            secure: true,
+          },
         },
       },
       plugins: [
