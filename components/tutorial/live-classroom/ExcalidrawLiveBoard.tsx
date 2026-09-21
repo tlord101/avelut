@@ -48,6 +48,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
   }, [topicTitle]);
 
   const handleApiSet = (api: ExcalidrawImperativeAPI) => {
+    console.log('[ExcalidrawLiveBoard] API ready');
     apiRef.current = api;
     avelutBoardController.setApi(api);
     avelutBoardController.setLessonTitle(topicTitle);

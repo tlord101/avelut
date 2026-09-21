@@ -88,7 +88,10 @@ export class AvelutBoardController {
   // ── Internal helpers ──────────────────────────────────────────────────────
 
   private syncScene(scrollToContent = true): void {
-    if (!this.api) return;
+    if (!this.api) {
+      console.warn('[BoardController] syncScene skipped — Excalidraw API not set yet. elements=', this.elements.length);
+      return;
+    }
     try {
       this.api.updateScene({ elements: this.elements, commitToHistory: false });
       if (scrollToContent && this.elements.length > 0) {
@@ -128,6 +131,7 @@ export class AvelutBoardController {
 
   /** Write text or a formula on the board */
   public writeText(text: string, args?: WriteTextArgs): void {
+    console.log('[BoardController] writeText', text?.slice(0, 80), args);
     if (!text?.trim()) return;
 
     const fontSize = this.fontSizeToNumber(args?.fontSize);
@@ -154,6 +158,7 @@ export class AvelutBoardController {
 
   /** Draw a geometric shape or arrow */
   public drawShape(args: DrawShapeArgs): void {
+    console.log('[BoardController] drawShape', args.type, args);
     const { type, x, y, width = 120, height = 70, label, color = '#38BDF8', backgroundColor = 'transparent', strokeStyle = 'solid' } = args;
 
     const el: any = {
