@@ -126,6 +126,17 @@ export async function POST(req: Request) {
                 'Access-Control-Allow-Origin': '*',
               },
             });
+          } else if (response.status === 429) {
+            return new Response(
+              JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
+              {
+                status: 429,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              }
+            );
           }
         } catch {
           // Continue to next endpoint or OpenRouter fallback
@@ -191,6 +202,19 @@ export async function POST(req: Request) {
 
         const orErrText = await orResponse.text().catch(() => '');
         console.warn('[Alibaba Chat Proxy] OpenRouter fallback failed:', orResponse.status, orErrText);
+
+        if (orResponse.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+            }
+          );
+        }
 
         return new Response(
           JSON.stringify({ error: `OpenRouter fallback failed: ${orResponse.status} ${orResponse.statusText}. ${orErrText}` }),
