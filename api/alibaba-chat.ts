@@ -32,6 +32,19 @@ export async function POST(req: Request) {
       req.headers.get('x-openrouter-key') ||
       '';
 
+    if (!alibabaApiKey && !openRouterApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required API keys (ALIBABA_API_KEY or OPENROUTER_API_KEY).' }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
     const workspaceId =
       req.headers.get('x-dashscope-workspace') ||
       process.env.ALIBABA_WORKSPACE_ID ||
@@ -117,56 +130,81 @@ export async function POST(req: Request) {
 
     // 2. Resilient Fallback to OpenRouter (guarantees fast 2-3s response with Qwen)
     if (openRouterApiKey) {
-      const openRouterPayload: any = {
-        model: openrouterModel,
-        messages,
-        temperature: body.temperature ?? 0.35,
-        max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
-        include_reasoning: false,
-      };
-      if (body.response_format) openRouterPayload.response_format = body.response_format;
-      if (body.stream) openRouterPayload.stream = true;
+      try {
+        const openRouterPayload: any = {
+          model: openrouterModel,
+          messages,
+          temperature: body.temperature ?? 0.35,
+          max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
+          include_reasoning: false,
+        };
+        if (body.response_format) openRouterPayload.response_format = body.response_format;
+        if (body.stream) openRouterPayload.stream = true;
 
-      const orController = new AbortController();
-      const orTimer = setTimeout(() => orController.abort(), 25000);
+        const orController = new AbortController();
+        const orTimer = setTimeout(() => orController.abort(), 25000);
 
-      const orResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://avelut.xyz',
-          'X-Title': 'Avelut AI',
-        },
-        body: JSON.stringify(openRouterPayload),
-        signal: orController.signal,
-      });
-      clearTimeout(orTimer);
+        const orResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openRouterApiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://avelut.xyz',
+            'X-Title': 'Avelut AI',
+          },
+          body: JSON.stringify(openRouterPayload),
+          signal: orController.signal,
+        });
+        clearTimeout(orTimer);
 
-      if (orResponse.ok) {
-        if (body.stream && orResponse.body) {
-          return new Response(orResponse.body, {
+        if (orResponse.ok) {
+          if (body.stream && orResponse.body) {
+            return new Response(orResponse.body, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*',
+              },
+            });
+          }
+          const orData = await orResponse.text();
+          return new Response(orData, {
             status: 200,
             headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive',
+              'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
             },
           });
         }
-        const orData = await orResponse.text();
-        return new Response(orData, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
 
-      const orErrText = await orResponse.text().catch(() => '');
-      console.warn('[Alibaba Chat Proxy] OpenRouter fallback failed:', orResponse.status, orErrText);
+        const orErrText = await orResponse.text().catch(() => '');
+        console.warn('[Alibaba Chat Proxy] OpenRouter fallback failed:', orResponse.status, orErrText);
+
+        return new Response(
+          JSON.stringify({ error: `OpenRouter fallback failed: ${orResponse.status} ${orResponse.statusText}. ${orErrText}` }),
+          {
+            status: orResponse.status >= 400 && orResponse.status < 600 ? orResponse.status : 500,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          }
+        );
+      } catch (fallbackError: any) {
+        console.warn('[Alibaba Chat Proxy] OpenRouter fallback fetch threw error:', fallbackError);
+        return new Response(
+          JSON.stringify({ error: `OpenRouter fallback threw error: ${fallbackError.message}` }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          }
+        );
+      }
     }
 
     return new Response(

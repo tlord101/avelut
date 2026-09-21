@@ -28,6 +28,19 @@ export async function POST(req: Request) {
       req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
       '';
 
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Missing OPENROUTER_API_KEY environment variable.' }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
     const baseUrl = 'https://openrouter.ai/api/v1';
 
     const requestHeaders: Record<string, string> = {
@@ -46,64 +59,77 @@ export async function POST(req: Request) {
     let lastErrorText = '';
 
     for (const model of candidateModels) {
-      const payload: any = {
-        model,
-        messages,
-        temperature: body.temperature ?? 0.7,
-        max_tokens: body.max_tokens ?? 4096,
-        include_reasoning: false,
-      };
+      try {
+        const payload: any = {
+          model,
+          messages,
+          temperature: body.temperature ?? 0.7,
+          max_tokens: body.max_tokens ?? 4096,
+          include_reasoning: false,
+        };
 
-      if (body.stream) {
-        payload.stream = true;
-        if (body.stream_options) {
-          payload.stream_options = body.stream_options;
+        if (body.stream) {
+          payload.stream = true;
+          if (body.stream_options) {
+            payload.stream_options = body.stream_options;
+          }
         }
-      }
 
-      if (body.response_format) {
-        payload.response_format = body.response_format;
-      }
+        if (body.response_format) {
+          payload.response_format = body.response_format;
+        }
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify(payload),
-      });
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: JSON.stringify(payload),
+        });
 
-      if (response.ok) {
-        if (body.stream && response.body) {
-          return new Response(response.body, {
+        if (response.ok) {
+          if (body.stream && response.body) {
+            return new Response(response.body, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*',
+              },
+            });
+          }
+
+          const data = await response.text();
+          return new Response(data, {
             status: 200,
             headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive',
+              'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
             },
           });
         }
 
-        const data = await response.text();
-        return new Response(data, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
+        lastErrorText = await response.text();
+        lastResponse = response;
 
-      lastErrorText = await response.text();
-      lastResponse = response;
-
-      // If 401 or auth issue without fallback key, retry won't fix it on this model, but try next model if 429 or 5xx
-      if (response.status !== 429 && response.status < 500) {
-        break;
+        // If 401 or auth issue without fallback key, retry won't fix it on this model, but try next model if 429 or 5xx
+        if (response.status !== 429 && response.status < 500) {
+          break;
+        }
+      } catch (err: any) {
+        lastErrorText = JSON.stringify({ error: `Fetch error for model ${model}: ${err.message}` });
+        // continue to next fallback model
       }
     }
 
-    return new Response(lastErrorText || JSON.stringify({ error: 'All OpenRouter models failed' }), {
+    // Ensure we return a properly formatted JSON error
+    let errorResponseStr = lastErrorText;
+    try {
+      JSON.parse(lastErrorText);
+    } catch {
+      errorResponseStr = JSON.stringify({ error: lastErrorText || 'All OpenRouter models failed' });
+    }
+
+    return new Response(errorResponseStr, {
       status: lastResponse?.status || 500,
       headers: {
         'Content-Type': 'application/json',
