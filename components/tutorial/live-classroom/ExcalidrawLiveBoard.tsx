@@ -28,23 +28,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
   // Seed the initial elements with the lesson topic title
   const initialElements = useMemo(() => {
     avelutBoardController.initBoard(topicTitle);
-    try {
-      return convertToExcalidrawElements([
-        {
-          type: 'text',
-          x: 60,
-          y: 40,
-          text: `📚 ${topicTitle}`,
-          fontSize: 36,
-          fontFamily: 1,
-          textAlign: 'left',
-          verticalAlign: 'top',
-          strokeColor: '#38BDF8',
-        },
-      ]);
-    } catch {
-      return [];
-    }
+    return avelutBoardController.getElements();
   }, [topicTitle]);
 
   const handleApiSet = (api: ExcalidrawImperativeAPI) => {
@@ -63,16 +47,13 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
 
   return (
     <div
-      className={`excalidraw-live-board relative w-full h-full overflow-hidden bg-[#0A0A0A] ${className}`}
-      style={{ touchAction: 'none' }}
+      className={`relative w-full h-full overflow-hidden bg-[#0A0A0A] select-none excalidraw-live-board ${className}`}
     >
+      {/* Aggressively suppress all Excalidraw UI bars, docks, tools, sidebars */}
       <style>{`
-        /* Strip all Excalidraw UI toolbars, menus, sidebars, zoom dock, and footer actions */
-        .excalidraw-live-board .excalidraw .App-toolbar,
-        .excalidraw-live-board .excalidraw .App-toolbar-content,
-        .excalidraw-live-board .excalidraw .App-menu,
-        .excalidraw-live-board .excalidraw .App-menu__left,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .dropdown-menu,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-toolbar,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-toolbar-content,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-menu,
         .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar-trigger,
         .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar,
         .excalidraw-live-board .excalidraw .layer-ui__wrapper .footer-center,
@@ -119,6 +100,9 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
             currentItemBackgroundColor: 'transparent',
             currentItemFontFamily: 1,
             gridSize: null,
+            zoom: { value: 1.0 },
+            scrollX: 0,
+            scrollY: 0,
           },
         }}
       />

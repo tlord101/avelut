@@ -173,118 +173,14 @@ export class AvelutBoardVisualizerService {
     throw lastError || new Error('Failed to reach AI visualizer model endpoints');
   }
 
-  // ── Kickoff Illustration ──────────────────────────────────────────────────
+  // ── Kickoff Management ────────────────────────────────────────────────────
 
   /**
-   * Generates a high-impact opening board layout immediately upon entering the classroom.
+   * Classroom entrance: The blackboard starts clean with only the topic title in the header.
+   * Visual diagrams and formulas are drawn dynamically as the lecturer speaks.
    */
   public async generateKickoffIllustration(): Promise<void> {
-    if (!this.config?.topicTitle) return;
-    if (this.hasGeneratedKickoff) return;
-
-    this.hasGeneratedKickoff = true;
-    this.setStatus('visualizing', `Designing opening board for ${this.config.topicTitle}…`);
-
-    const { topicTitle, courseName = 'Academic Course', syllabusContext, durationMinutes = 30, learningPath } = this.config;
-
-    const systemPrompt = `You are an elite academic visualizer for an interactive blackboard.
-Your job is to generate a clean, educational opening layout on the board for the lesson topic.
-Choose the MOST intuitive visual diagram format:
-- "concept_map": for conceptual topics with a central theme and 3-5 radiating branches (biology, medicine, social sciences, general science).
-- "cycle": for processes that repeat or loop (water cycle, cell cycle, feedback loops, economic circuits).
-- "flow": for sequential steps, reactions, derivations, or algorithms (step 1 -> step 2 -> step 3).
-- "comparison": for contrasting two opposing concepts or mechanisms (mitosis vs meiosis, AC vs DC, RAM vs ROM).
-- "coordinate_axes": for graphs, physics trajectories, or mathematical equations.
-- "free_body" or "collision": for physics force and momentum problems.
-
-Return ONLY a valid JSON object matching this schema:
-{
-  "boardTitle": "Title to display at top",
-  "diagram": {
-    "diagramType": "concept_map" | "cycle" | "flow" | "comparison" | "coordinate_axes" | "collision" | "free_body",
-    "data": {
-      // For concept_map: { "centralConcept": "...", "branches": [{ "label": "..." }, { "label": "..." }, { "label": "..." }] }
-      // For cycle: { "title": "...", "steps": ["Step 1", "Step 2", "Step 3", "Step 4"] }
-      // For flow: { "steps": ["Step 1", "Step 2", "Step 3"] }
-      // For comparison: { "leftTitle": "...", "rightTitle": "...", "leftPoints": ["point 1", "point 2"], "rightPoints": ["point 1", "point 2"] }
-      // For coordinate_axes: { "title": "...", "xAxisLabel": "...", "yAxisLabel": "..." }
-      // For collision: { "item1Mass": "m₁", "item1Velocity": "v₁", "item2Mass": "m₂", "item2Velocity": "v₂", "equation": "m₁v₁ + m₂v₂ = ..." }
-      // For free_body: { "objectLabel": "m", "forces": [{ "name": "F_N", "direction": "up" }, { "name": "F_g", "direction": "down" }] }
-    }
-  },
-  "formula": "Primary formula / law equation or null",
-  "keyTakeaways": ["Core insight 1", "Core insight 2"]
-}`;
-
-    const userPrompt = `Topic: "${topicTitle}"
-Course: "${courseName}"
-Syllabus / Context: "${syllabusContext || 'Standard curriculum'}"
-Roadmap: ${learningPath?.length ? JSON.stringify(learningPath) : 'Core principles, visual intuition, practical application'}
-Duration: ${durationMinutes} minutes
-
-Create the opening visual blackboard presentation now!`;
-
-    try {
-      const result = await this.callAlibabaTextModel(systemPrompt, userPrompt);
-      console.log('[BoardVisualizer] Kickoff layout generated:', result);
-
-      // Execute on board
-      if (result.boardTitle) {
-        avelutBoardController.writeText(result.boardTitle, {
-          fontSize: 'title',
-          color: '#38BDF8',
-          x: 60,
-          y: 40,
-        });
-      }
-
-      if (result.diagram?.diagramType && result.diagram?.data) {
-        avelutBoardController.drawDiagram(result.diagram.diagramType, result.diagram.data);
-      }
-
-      if (result.formula) {
-        avelutBoardController.writeText(result.formula, {
-          fontSize: 'large',
-          color: '#FDE047',
-          isFormula: true,
-        });
-      }
-
-      if (Array.isArray(result.keyTakeaways)) {
-        for (const point of result.keyTakeaways) {
-          avelutBoardController.writeText(`• ${point}`, {
-            fontSize: 'small',
-            color: '#E2E8F0',
-          });
-        }
-      }
-
-      this.setStatus('ready');
-      this.callbacks.onVisualDrawn?.(`Visualized ${result.diagram?.diagramType || 'topic'} on board`);
-    } catch (err: any) {
-      console.error('[BoardVisualizer] generateKickoffIllustration error:', err);
-      this.setStatus('error', err.message);
-
-      // Graceful fallback: render a clean concept map directly without waiting
-      this.renderFallbackKickoff(topicTitle);
-    }
-  }
-
-  private renderFallbackKickoff(topic: string): void {
-    avelutBoardController.writeText(`📚 ${topic}`, {
-      fontSize: 'title',
-      color: '#38BDF8',
-      x: 60,
-      y: 40,
-    });
-    avelutBoardController.drawDiagram('concept_map', {
-      centralConcept: topic,
-      branches: [
-        { label: 'Key Principles' },
-        { label: 'Mechanisms' },
-        { label: 'Applications' },
-      ],
-    });
+    // Intentionally keep board clean on entrance: the topic title is already rendered in the header zone.
     this.setStatus('ready');
   }
 
@@ -338,45 +234,36 @@ Create the opening visual blackboard presentation now!`;
     this.isProcessing = true;
     this.setStatus('visualizing', 'Updating board illustration…');
 
-    const systemPrompt = `You are an elite autonomous digital blackboard illustrator working alongside a live spoken lecture.
-The voice teacher just explained this in speech: "${recentChunk}"
+    const systemPrompt = `You are an elite autonomous digital blackboard illustrator for a live university lecture.
+The lecturer is actively explaining this in the current step: "${recentChunk}"
 Lesson Topic: "${this.config.topicTitle}"
 
-Decide how the blackboard should dynamically be updated, edited, illustrated, or cleared right now.
-Supported actions:
-- "draw_diagram": draw an intuitive visual diagram (concept_map, cycle, flow, comparison, coordinate_axes, collision, free_body)
-- "write_text": write an equation, formula, law, or definition (text, fontSize: "medium"|"large", isFormula: boolean, color: "#38BDF8"|"#FDE047")
-- "edit_text": modify an existing text or formula component on the board (target: "string to find", newText: "replacement text")
-- "write_keywords": render a row of highlighted keyword pills (keywords: ["term1", "term2", "term3"])
-- "highlight_concept": draw an attention highlight around an existing concept (targetTextOrLabel: "...", style: "box"|"circle"|"underline")
-- "clear_component": erase an obsolete section or diagram (target: "...")
-- "clear_board": clear the board keeping title (keepTitle: true) when moving to a brand-new subtopic milestone
+CRITICAL RULES:
+1. ONLY illustrate the concrete academic concept, diagram, law, mechanism, or equation actively being explained right now.
+2. NEVER output generic learning frameworks or system prompt roadmaps (e.g., do NOT output "Core Principles", "Visual Intuition", "Learning Framework", or generic motivational bullets).
+3. The blackboard uses an organized single-viewport layout:
+   - "draw_diagram": Replaces the main stage with a clear visual diagram (concept_map, cycle, flow, comparison, coordinate_axes, collision, free_body) tailored to this specific explanation.
+   - "set_formula": Sets the primary equation or law in the highlighted formula card below the stage (e.g., "v = u + at", "F = ma").
+   - "write_keywords": Displays 2-4 key technical terms introduced in this explanation.
+   - "edit_text": Updates an existing label or equation on the board.
+   - "clear_stage": Clears the main diagram stage when moving to a brand-new concept.
+   - "clear_component": Erases a specific obsolete element (target: "...").
+4. If the speech is conversational greeting, transitioning, or asking a question to the student without introducing a visual concept, return {"shouldDraw": false}. Do NOT draw anything!
 
 Return ONLY valid JSON matching:
 {
-  "shouldDraw": true,
+  "shouldDraw": true | false,
   "summary": "Brief 3-word summary of the visual action",
   "actions": [
     {
-      "action": "draw_diagram" | "write_text" | "edit_text" | "write_keywords" | "highlight_concept" | "clear_component" | "clear_board",
+      "action": "draw_diagram" | "write_text" | "set_formula" | "edit_text" | "write_keywords" | "highlight_concept" | "clear_component" | "clear_stage",
       "params": { ... }
     }
   ]
-}
-OR if a single action:
-{
-  "shouldDraw": true,
-  "summary": "...",
-  "action": "...",
-  "params": { ... }
-}
-OR if it was just conversational banter / no visual needed:
-{
-  "shouldDraw": false
 }`;
 
-    const userPrompt = `Topic: "${this.config.topicTitle}"
-Teacher Spoke: "${recentChunk}"
+    const userPrompt = `Current Topic: "${this.config.topicTitle}"
+Teacher Just Spoke: "${recentChunk}"
 
 Decide what visual updates to render on the blackboard right now.`;
 
@@ -562,6 +449,18 @@ Generate the visual board action.`;
             params.targetTextOrLabel || params.text || '',
             params.style || 'box',
           );
+          break;
+        }
+        case 'set_formula':
+        case 'formula': {
+          const formula = params.formula || params.text || params.content || '';
+          if (formula) {
+            avelutBoardController.setFormula(formula);
+          }
+          break;
+        }
+        case 'clear_stage': {
+          avelutBoardController.clearStage();
           break;
         }
         case 'clear_board': {

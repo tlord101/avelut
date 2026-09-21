@@ -277,17 +277,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     }
 
     serviceRef.current.triggerInitialGreeting();
-    // Launch kickoff board illustration immediately
-    void avelutBoardVisualizer.generateKickoffIllustration();
     setHasStarted(true);
   };
 
   const handleBoardReady = useCallback(() => {
     console.log('[AvelutLiveClassroomView] Excalidraw board ready');
-    // Pre-seed kickoff visual as soon as the canvas mounts
-    if (!avelutBoardController.hasElements()) {
-      void avelutBoardVisualizer.generateKickoffIllustration();
-    }
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────

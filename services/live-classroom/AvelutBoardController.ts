@@ -41,7 +41,7 @@ export interface DrawShapeArgs {
 export class AvelutBoardController {
   private api: ExcalidrawImperativeAPI | null = null;
   private elements: any[] = [];
-  private cursorY = 120;
+  private cursorY = 90;
   private lessonTitle = '';
 
   // ── API registration ──────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ export class AvelutBoardController {
       this.api = api;
       setTimeout(() => {
         if (this.elements.length > 0) {
-          this.syncScene(true);
+          this.syncScene();
         }
       }, 60);
     }
@@ -61,24 +61,35 @@ export class AvelutBoardController {
     this.lessonTitle = title;
   }
 
+  public getElements(): any[] {
+    return [...this.elements];
+  }
+
+  /**
+   * Initialize blackboard on entrance with single, clean header title.
+   * Viewport is locked to 1.0 zoom and (0,0) offset — no infinite canvas drift.
+   */
   public initBoard(title: string): void {
     this.lessonTitle = title;
-    this.cursorY = 120;
+    this.cursorY = 90;
     try {
-      const titleEls = convertToExcalidrawElements([{
-        type: 'text',
-        x: 60,
-        y: 40,
-        text: `📚 ${title}`,
-        fontSize: 36,
-        fontFamily: 1,
-        textAlign: 'left',
-        verticalAlign: 'top',
-        strokeColor: '#38BDF8',
-      }]);
+      const titleEls = convertToExcalidrawElements([
+        {
+          type: 'text',
+          x: 48,
+          y: 28,
+          text: `📚 ${title}`,
+          fontSize: 26,
+          fontFamily: 1,
+          textAlign: 'left',
+          verticalAlign: 'top',
+          strokeColor: '#38BDF8',
+          customData: { zone: 'header' },
+        },
+      ]);
       this.elements = [...titleEls];
       if (this.api) {
-        setTimeout(() => this.syncScene(true), 60);
+        this.syncScene();
       }
     } catch (e) {
       console.warn('[BoardController] initBoard error:', e);
@@ -87,36 +98,40 @@ export class AvelutBoardController {
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
-  private syncScene(scrollToContent = true): void {
+  /**
+   * Syncs elements to Excalidraw while locking zoom at 1.0 and scroll at (0, 0).
+   * Strictly prevents zooming in/out or camera panning across elements.
+   */
+  private syncScene(): void {
     if (!this.api) {
-      console.warn('[BoardController] syncScene skipped — Excalidraw API not set yet. elements=', this.elements.length);
       return;
     }
     try {
-      this.api.updateScene({ elements: [...this.elements] });
-      if (scrollToContent && this.elements.length > 0) {
-        setTimeout(() => {
-          try {
-            this.api?.scrollToContent(this.elements, {
-              fitToViewport: this.elements.length > 2,
-              viewportZoomFactor: 0.85,
-              maxZoom: 1.0,
-              minZoom: 0.35,
-              animate: true,
-            });
-          } catch (_) {}
-        }, 80);
-      }
+      this.api.updateScene({
+        elements: [...this.elements],
+        appState: {
+          zoom: { value: 1.0 },
+          scrollX: 0,
+          scrollY: 0,
+        },
+      });
     } catch (e) {
       console.warn('[BoardController] syncScene error:', e);
     }
   }
 
-  private appendElements(rawElements: any[], scroll = true): void {
+  /**
+   * Append elements with assigned zone tag and sync immediately without zooming.
+   */
+  private appendElements(rawElements: any[], zone: 'stage' | 'notes' | 'header' = 'stage'): void {
     try {
-      const converted = convertToExcalidrawElements(rawElements);
+      const tagged = rawElements.map(el => ({
+        ...el,
+        customData: { ...(el.customData || {}), zone },
+      }));
+      const converted = convertToExcalidrawElements(tagged);
       this.elements = [...this.elements, ...converted];
-      this.syncScene(scroll);
+      this.syncScene();
     } catch (err) {
       console.error('[BoardController] appendElements error:', err);
     }
@@ -133,25 +148,45 @@ export class AvelutBoardController {
   private fontSizeToNumber(size?: FontSize): number {
     if (typeof size === 'number') return size;
     switch (size) {
-      case 'small': return 16;
-      case 'medium': return 22;
-      case 'large': return 28;
-      case 'title': return 36;
-      default: return 22;
+      case 'small': return 14;
+      case 'medium': return 18;
+      case 'large': return 24;
+      case 'title': return 28;
+      default: return 18;
     }
+  }
+
+  // ── Zone Management (Guarantees No Overlap) ───────────────────────────────
+
+  /** Clears the main diagram stage so new diagrams replace old ones cleanly */
+  public clearStage(): void {
+    this.elements = this.elements.filter(el => el.customData?.zone !== 'stage');
+    this.cursorY = 90;
+    this.syncScene();
+  }
+
+  /** Clears formula or note cards */
+  public clearNotes(): void {
+    this.elements = this.elements.filter(el => el.customData?.zone !== 'notes');
+    this.syncScene();
   }
 
   // ── Public Board Actions ──────────────────────────────────────────────────
 
-  /** Write text or a formula on the board */
+  /** Write text or formula on the board in a designated safe area */
   public writeText(text: string, args?: WriteTextArgs): void {
-    console.log('[BoardController] writeText', text?.slice(0, 80), args);
     if (!text?.trim()) return;
 
+    if (args?.isFormula) {
+      this.setFormula(text.trim());
+      return;
+    }
+
     const fontSize = this.fontSizeToNumber(args?.fontSize);
-    const x = args?.x ?? 60;
-    const y = args?.y ?? this.cursorY;
-    const color = args?.color ?? (args?.isFormula ? '#38BDF8' : '#FAFAFA');
+    const x = args?.x ?? 50;
+    // Constrain Y to safe stage/notes area, never below y: 510
+    const y = Math.min(args?.y ?? this.cursorY, 480);
+    const color = args?.color ?? '#FAFAFA';
 
     this.appendElements([{
       type: 'text',
@@ -162,21 +197,49 @@ export class AvelutBoardController {
       textAlign: 'left',
       verticalAlign: 'top',
       strokeColor: color,
-    }]);
+    }], y >= 400 ? 'notes' : 'stage');
 
     if (args?.y === undefined) {
       const lines = text.split('\n').length;
-      this.cursorY += Math.max(44, lines * fontSize * 1.5 + 16);
+      this.cursorY = Math.min(y + Math.max(36, lines * fontSize * 1.4 + 12), 480);
     }
   }
 
-  /** Draw a geometric shape or arrow */
+  /** Display a highlighted law or equation in the formula card slot */
+  public setFormula(formulaText: string): void {
+    if (!formulaText?.trim()) return;
+    // Erase existing formula slot
+    this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
+
+    const els = convertToExcalidrawElements([{
+      type: 'rectangle',
+      x: 50,
+      y: 410,
+      width: Math.min(Math.max(formulaText.length * 14 + 40, 240), 550),
+      height: 48,
+      strokeColor: '#FDE047',
+      backgroundColor: '#1E1B4B',
+      fillStyle: 'solid',
+      roundness: { type: 3 },
+      label: { text: formulaText.trim(), fontSize: 18, strokeColor: '#FDE047' },
+      customData: { zone: 'notes', slot: 'formula' },
+    }]);
+
+    this.elements = [...this.elements, ...els];
+    this.syncScene();
+  }
+
+  /** Draw a geometric shape or arrow in the stage zone */
   public drawShape(args: DrawShapeArgs): void {
-    console.log('[BoardController] drawShape', args.type, args);
     const { type, x, y, width = 120, height = 70, label, color = '#38BDF8', backgroundColor = 'transparent', strokeStyle = 'solid' } = args;
+    const safeY = Math.min(y, 380);
 
     const el: any = {
-      type, x, y, width, height,
+      type,
+      x: Math.min(x, 650),
+      y: safeY,
+      width: Math.min(width, 600),
+      height: Math.min(height, 260),
       strokeColor: color,
       backgroundColor,
       fillStyle: backgroundColor !== 'transparent' ? 'solid' : 'hachure',
@@ -186,10 +249,9 @@ export class AvelutBoardController {
       roundness: { type: 3 },
     };
 
-    if (label) el.label = { text: label, fontSize: 18, strokeColor: '#FAFAFA' };
+    if (label) el.label = { text: label, fontSize: 16, strokeColor: '#FAFAFA' };
 
-    this.appendElements([el]);
-    if (y + height > this.cursorY) this.cursorY = y + height + 30;
+    this.appendElements([el], safeY >= 400 ? 'notes' : 'stage');
   }
 
   /** Highlight/circle an existing board element by label text */
@@ -200,9 +262,9 @@ export class AvelutBoardController {
     );
 
     const tx = target?.x ?? 60;
-    const ty = target?.y ?? (this.cursorY - 50);
-    const tw = Math.max(target?.width ?? 0, 150);
-    const th = Math.max(target?.height ?? 0, 40);
+    const ty = target?.y ?? (this.cursorY - 40);
+    const tw = Math.max(target?.width ?? 0, 140);
+    const th = Math.max(target?.height ?? 0, 36);
     const hlColor = '#FBBF24';
 
     if (style === 'underline') {
@@ -210,35 +272,35 @@ export class AvelutBoardController {
         type: 'line', x: tx - 4, y: ty + th + 4,
         width: tw + 8, height: 0,
         strokeColor: hlColor, strokeWidth: 3, roughness: 2,
-      }]);
+      }], 'stage');
     } else if (style === 'circle') {
       this.appendElements([{
-        type: 'ellipse', x: tx - 14, y: ty - 10,
-        width: tw + 28, height: th + 20,
+        type: 'ellipse', x: tx - 12, y: ty - 8,
+        width: tw + 24, height: th + 16,
         strokeColor: hlColor, strokeWidth: 2.5,
         backgroundColor: 'transparent', roughness: 2,
-      }]);
+      }], 'stage');
     } else {
       this.appendElements([{
         type: 'rectangle', x: tx - 8, y: ty - 6,
         width: tw + 16, height: th + 12,
         strokeColor: hlColor, strokeWidth: 2, strokeStyle: 'dashed',
         backgroundColor: 'transparent', roughness: 1.2,
-      }]);
+      }], 'stage');
     }
   }
 
   /** Clear the canvas (optionally keeping the lesson title) */
   public clearBoard(keepTitle = true): void {
     if (keepTitle && this.lessonTitle) {
-      const titleEl = this.elements.find(el => el.type === 'text' && el.y < 100);
+      const titleEl = this.elements.find(el => el.customData?.zone === 'header' || (el.type === 'text' && el.y < 60));
       this.elements = titleEl ? [titleEl] : [];
-      this.cursorY = 140;
+      this.cursorY = 90;
     } else {
       this.elements = [];
-      this.cursorY = 80;
+      this.cursorY = 90;
     }
-    this.syncScene(false);
+    this.syncScene();
   }
 
   /** Update or edit the text of an existing element on the board */
@@ -298,22 +360,23 @@ export class AvelutBoardController {
     return false;
   }
 
-  /** Write a row of highlighted keyword pills */
-  public writeKeywords(keywords: string[], startX = 60, startY?: number): void {
+  /** Write a row of highlighted keyword pills in the designated notes slot */
+  public writeKeywords(keywords: string[], startX = 50, startY = 475): void {
     if (!keywords || !keywords.length) return;
-    const y = startY ?? this.cursorY;
+    // Clear previous keywords to avoid overlap
+    this.elements = this.elements.filter(el => el.customData?.slot !== 'keywords');
     let cx = startX;
-    const els: any[] = [];
+    const rawEls: any[] = [];
 
-    keywords.forEach((kw) => {
+    keywords.slice(0, 4).forEach((kw) => {
       const kwLen = kw.length;
-      const w = Math.max(kwLen * 10 + 24, 75);
+      const w = Math.max(kwLen * 10 + 20, 75);
       const h = 32;
 
-      els.push({
+      rawEls.push({
         type: 'rectangle',
         x: cx,
-        y,
+        y: startY,
         width: w,
         height: h,
         strokeColor: '#38BDF8',
@@ -321,34 +384,39 @@ export class AvelutBoardController {
         fillStyle: 'solid',
         roundness: { type: 3 },
         label: { text: kw, fontSize: 13, strokeColor: '#38BDF8' },
+        customData: { zone: 'notes', slot: 'keywords' },
       });
 
       cx += w + 12;
-      if (cx > 700) {
+      if (cx > 650) {
         cx = startX;
       }
     });
 
-    this.appendElements(els);
-    this.cursorY = y + 48;
+    this.appendElements(rawEls, 'notes');
   }
 
-  /** Draw high-level intuitive diagrams */
+  /** Draw high-level intuitive diagrams (automatically clears previous stage visual) */
   public drawDiagram(diagramType: string, data: Record<string, any>): void {
-    const startY = this.cursorY;
+    // Automatically clear previous stage diagram so diagrams never overlap
+    this.clearStage();
+
+    const startX = 50;
+    const startY = 85;
+
     switch (diagramType) {
-      case 'collision': this.drawCollisionDiagram(60, startY, data); break;
-      case 'free_body': this.drawFreeBodyDiagram(60, startY, data); break;
+      case 'collision': this.drawCollisionDiagram(startX, startY, data); break;
+      case 'free_body': this.drawFreeBodyDiagram(startX, startY, data); break;
       case 'coordinate_axes':
-      case 'graph': this.drawCoordinateAxes(60, startY, data); break;
+      case 'graph': this.drawCoordinateAxes(startX, startY, data); break;
       case 'flow':
-      case 'steps': this.drawFlowDiagram(60, startY, data); break;
-      case 'cycle': this.drawCycleDiagram(60, startY, data); break;
-      case 'comparison': this.drawComparisonDiagram(60, startY, data); break;
+      case 'steps': this.drawFlowDiagram(startX, startY, data); break;
+      case 'cycle': this.drawCycleDiagram(startX, startY, data); break;
+      case 'comparison': this.drawComparisonDiagram(startX, startY, data); break;
       case 'concept_map':
-      case 'mindmap': this.drawConceptMapDiagram(60, startY, data); break;
+      case 'mindmap': this.drawConceptMapDiagram(startX, startY, data); break;
       default:
-        if (data?.title) this.writeText(data.title, { fontSize: 'medium' });
+        if (data?.title) this.writeText(data.title, { fontSize: 'medium', y: startY });
         break;
     }
   }
@@ -356,34 +424,34 @@ export class AvelutBoardController {
   // ── Diagram Generators ────────────────────────────────────────────────────
 
   private drawCollisionDiagram(sx: number, sy: number, data: any): void {
-    const r = 35;
-    const ball1X = sx + 30, ball2X = sx + 230;
-    const ballY = sy + 60;
+    const r = 30;
+    const ball1X = sx + 30, ball2X = sx + 220;
+    const ballY = sy + 50;
 
     this.appendElements([
       // Ball 1
       { type: 'ellipse', x: ball1X, y: ballY, width: r * 2, height: r * 2,
         strokeColor: '#38BDF8', backgroundColor: '#0284C7', fillStyle: 'solid',
-        label: { text: data.item1Mass || 'm₁', fontSize: 16, strokeColor: '#FAFAFA' } },
+        label: { text: data.item1Mass || 'm₁', fontSize: 15, strokeColor: '#FAFAFA' } },
       // Arrow 1 (velocity)
-      { type: 'arrow', x: ball1X + r * 2 + 8, y: ballY + r, width: 60, height: 0,
+      { type: 'arrow', x: ball1X + r * 2 + 8, y: ballY + r, width: 55, height: 0,
         strokeColor: '#38BDF8', strokeWidth: 2.5,
-        label: { text: data.item1Velocity || 'v₁ →', fontSize: 14, strokeColor: '#38BDF8' } },
+        label: { text: data.item1Velocity || 'v₁ →', fontSize: 13, strokeColor: '#38BDF8' } },
       // Ball 2
       { type: 'ellipse', x: ball2X, y: ballY, width: r * 2, height: r * 2,
         strokeColor: '#34D399', backgroundColor: '#059669', fillStyle: 'solid',
-        label: { text: data.item2Mass || 'm₂', fontSize: 16, strokeColor: '#FAFAFA' } },
+        label: { text: data.item2Mass || 'm₂', fontSize: 15, strokeColor: '#FAFAFA' } },
       // Arrow 2
-      { type: 'arrow', x: ball2X + r * 2 + 8, y: ballY + r, width: 50, height: 0,
+      { type: 'arrow', x: ball2X + r * 2 + 8, y: ballY + r, width: 45, height: 0,
         strokeColor: '#34D399', strokeWidth: 2,
-        label: { text: data.item2Velocity || 'v₂ = 0', fontSize: 14, strokeColor: '#34D399' } },
+        label: { text: data.item2Velocity || 'v₂ = 0', fontSize: 13, strokeColor: '#34D399' } },
       ...(data.equation ? [{
-        type: 'text', x: sx + 40, y: sy + 160,
-        text: data.equation, fontSize: 22, strokeColor: '#FDE047', fontFamily: 1,
+        type: 'text', x: sx + 30, y: sy + 130,
+        text: data.equation, fontSize: 18, strokeColor: '#FDE047', fontFamily: 1,
         textAlign: 'left', verticalAlign: 'top',
       }] : []),
-    ]);
-    this.cursorY = sy + (data.equation ? 215 : 165);
+    ], 'stage');
+    this.cursorY = sy + 180;
   }
 
   private drawFreeBodyDiagram(sx: number, sy: number, data: any): void {
