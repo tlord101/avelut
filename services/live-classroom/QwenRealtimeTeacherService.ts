@@ -193,7 +193,24 @@ export class QwenRealtimeTeacherService {
         resolve();
       };
 
-      ws.onmessage = (evt) => this.handleMessage(evt.data as string);
+      ws.onmessage = async (evt) => {
+        try {
+          let raw: string;
+          if (typeof evt.data === 'string') {
+            raw = evt.data;
+          } else if (evt.data instanceof Blob) {
+            raw = await evt.data.text();
+          } else if (evt.data instanceof ArrayBuffer) {
+            raw = new TextDecoder().decode(evt.data);
+          } else {
+            console.warn('[QwenRealtime] Unknown WS data type:', typeof evt.data, evt.data);
+            return;
+          }
+          this.handleMessage(raw);
+        } catch (err) {
+          console.warn('[QwenRealtime] Failed to process WS message:', err);
+        }
+      };
 
       ws.onerror = () => {
         this.setState('error');
@@ -240,10 +257,28 @@ export class QwenRealtimeTeacherService {
 
   /** Triggers the initial teacher greeting manually from the UI */
   public triggerInitialGreeting(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[QwenRealtime] Manually triggering initial greeting');
-      this.sendJson({ event_id: `greet_manual_${Date.now()}`, type: 'response.create' });
-    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    console.log('[QwenRealtime] Manually triggering initial greeting');
+
+    // Give the model something to reply to (important when tools are present)
+    this.sendJson({
+      event_id: `kickoff_${Date.now()}`,
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: 'Please greet me warmly and start the lesson now.',
+        }],
+      },
+    });
+
+    this.sendJson({
+      event_id: `greet_manual_${Date.now()}`,
+      type: 'response.create',
+    });
   }
 
   // ── Session initialisation ────────────────────────────────────────────────
@@ -258,7 +293,7 @@ export class QwenRealtimeTeacherService {
       event_id: `session_init_${Date.now()}`,
       type: 'session.update',
       session: {
-        modalities: ['audio', 'text'],
+        modalities: ['text', 'audio'],
         voice: 'Jennifer',
         instructions,
         input_audio_format: 'pcm',
@@ -277,7 +312,7 @@ export class QwenRealtimeTeacherService {
       if (this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
         if (this.isAudioUnlocked()) {
           console.log('[QwenRealtime] Safeguard: triggering initial teacher greeting');
-          this.sendJson({ event_id: `greet_safeguard_${Date.now()}`, type: 'response.create' });
+          this.triggerInitialGreeting();
         } else {
           console.log('[QwenRealtime] Safeguard: skipped greeting because audio is not unlocked yet');
         }
@@ -387,7 +422,18 @@ export class QwenRealtimeTeacherService {
 
   private handleMessage(raw: string): void {
     let event: any;
-    try { event = JSON.parse(raw); } catch { return; }
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      console.warn('[QwenRealtime] Non-JSON message (first 150 chars):', String(raw).slice(0, 150));
+      return;
+    }
+
+    if (!event?.type) {
+      console.warn('[QwenRealtime] Event missing type. Payload:', event);
+      console.warn('[QwenRealtime] Raw (first 200 chars):', String(raw).slice(0, 200));
+      return;
+    }
 
     // Log incoming event types clearly
     console.log(`[QwenRealtime] Event received: ${event.type}`);
@@ -401,10 +447,7 @@ export class QwenRealtimeTeacherService {
         console.log('[QwenRealtime] session.updated on DashScope');
         if (this.isAudioUnlocked()) {
           console.log('[QwenRealtime] Triggering initial greeting after session.updated');
-          this.sendJson({
-            event_id: `greet_session_updated_${Date.now()}`,
-            type: 'response.create',
-          });
+          this.triggerInitialGreeting();
         } else {
           console.log('[QwenRealtime] Skipped initial greeting on session.updated because audio is not unlocked yet');
         }
@@ -412,9 +455,9 @@ export class QwenRealtimeTeacherService {
 
       case 'response.audio.delta':
         if (event.delta) {
-          // console.log('[QwenRealtime] response.audio.delta length:', event.delta.length); // Optionally log length
+          console.log('[QwenRealtime] audio.delta length:', event.delta?.length ?? 0);
           this.setState('speaking');
-          this.playDelta(event.delta);
+          void this.playDelta(event.delta);
         }
         break;
 
@@ -474,6 +517,7 @@ export class QwenRealtimeTeacherService {
       switch (name) {
         case 'write_text':
           avelutBoardController.writeText(args.text, {
+            text: args.text,
             fontSize: args.fontSize,
             color: args.color,
             x: args.x,
@@ -617,7 +661,8 @@ export class QwenRealtimeTeacherService {
   // ── Audio output (WebSocket → speaker) ───────────────────────────────────
 
   private async ensureOutputRunning(): Promise<void> {
-    if (this.outputAudioCtx && this.outputAudioCtx.state === 'suspended') {
+    if (!this.outputAudioCtx) return;
+    if (this.outputAudioCtx.state === 'suspended') {
       try {
         await this.outputAudioCtx.resume();
       } catch (err) {
@@ -626,30 +671,45 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  private playDelta(base64: string): void {
-    if (!this.outputAudioCtx) return;
+  private async playDelta(base64: string): Promise<void> {
+    if (!this.outputAudioCtx || !base64) return;
     try {
       // Ensure audio context is running when we receive audio
-      void this.ensureOutputRunning();
+      await this.ensureOutputRunning();
 
       if (this.outputAudioCtx.state === 'suspended') {
-        console.warn('[QwenRealtime] Audio context is suspended during playDelta! Audio may not be heard.');
+        console.warn('[QwenRealtime] AudioContext still suspended — cannot play');
+        return;
       }
 
-      const bin = atob(base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
 
-      const int16 = new Int16Array(bytes.buffer);
-      const float32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+      const sampleCount = Math.floor(bytes.byteLength / 2);
+      if (sampleCount <= 0) {
+        console.warn('[QwenRealtime] playDelta empty samples');
+        return;
+      }
 
-      const buf = this.outputAudioCtx.createBuffer(1, float32.length, 24000);
-      buf.getChannelData(0).set(float32);
+      const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
+      const float32 = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      const buf = this.outputAudioCtx.createBuffer(1, sampleCount, 24000);
+      buf.copyToChannel(float32, 0);
 
       const src = this.outputAudioCtx.createBufferSource();
       src.buffer = buf;
-      src.connect(this.outputAudioCtx.destination);
+
+      const gain = this.outputAudioCtx.createGain();
+      gain.gain.value = 1.0;
+      src.connect(gain);
+      gain.connect(this.outputAudioCtx.destination);
 
       const now = this.outputAudioCtx.currentTime;
       if (this.nextPlayTime < now) this.nextPlayTime = now;
@@ -661,6 +721,12 @@ export class QwenRealtimeTeacherService {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
       };
+
+      console.log('[QwenRealtime] playDelta OK', {
+        samples: sampleCount,
+        duration: buf.duration.toFixed(3),
+        ctx: this.outputAudioCtx.state,
+      });
     } catch (err) {
       console.warn('[QwenRealtime] playDelta error:', err);
     }

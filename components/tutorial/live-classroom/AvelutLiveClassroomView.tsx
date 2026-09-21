@@ -213,16 +213,16 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const handleStartLesson = async () => {
     if (!serviceRef.current) return;
 
-    // Unlock audio first
     const unlocked = await serviceRef.current.resumeAudio();
-    if (unlocked) {
-      serviceRef.current.triggerInitialGreeting();
-      setHasStarted(true);
-    } else {
-      console.warn('[AvelutLiveClassroomView] Audio not unlocked, but marking as started anyway');
-      setHasStarted(true);
-      serviceRef.current.triggerInitialGreeting();
+    // Small delay helps Capacitor / some WebViews finish resume
+    await new Promise((r) => setTimeout(r, 80));
+
+    if (!unlocked) {
+      console.warn('[AvelutLiveClassroomView] Audio still not unlocked after resume');
     }
+
+    serviceRef.current.triggerInitialGreeting();
+    setHasStarted(true);
   };
 
   // ── Handlers ────────────────────────────────────────────────────────────
