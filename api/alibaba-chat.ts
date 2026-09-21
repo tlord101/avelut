@@ -82,8 +82,12 @@ export async function POST(req: Request) {
             temperature: body.temperature ?? 0.35,
             max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
           };
-          if (body.response_format) payload.response_format = body.response_format;
-          if (body.stream) payload.stream = true;
+          if (body.response_format && body.response_format.type === 'json_object') {
+            payload.response_format = { type: 'json_object' };
+            payload.stream = false; // Strictly enforce non-streaming for JSON mode
+          } else if (body.stream) {
+            payload.stream = true;
+          }
 
           const requestHeaders: Record<string, string> = {
             'Authorization': `Bearer ${alibabaApiKey}`,
@@ -102,7 +106,7 @@ export async function POST(req: Request) {
           clearTimeout(timer);
 
           if (response.ok) {
-            if (body.stream && response.body) {
+            if (payload.stream && response.body) {
               return new Response(response.body, {
                 status: 200,
                 headers: {
@@ -113,11 +117,12 @@ export async function POST(req: Request) {
                 },
               });
             }
-            const data = await response.text();
-            return new Response(data, {
+            const data = await response.json();
+            const extractedText = data?.choices?.[0]?.message?.content || '';
+            return new Response(extractedText, {
               status: 200,
               headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain',
                 'Access-Control-Allow-Origin': '*',
               },
             });
@@ -138,8 +143,12 @@ export async function POST(req: Request) {
           max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
           include_reasoning: false,
         };
-        if (body.response_format) openRouterPayload.response_format = body.response_format;
-        if (body.stream) openRouterPayload.stream = true;
+        if (body.response_format && body.response_format.type === 'json_object') {
+          openRouterPayload.response_format = { type: 'json_object' };
+          openRouterPayload.stream = false; // Strictly enforce non-streaming for JSON mode
+        } else if (body.stream) {
+          openRouterPayload.stream = true;
+        }
 
         const orController = new AbortController();
         const orTimer = setTimeout(() => orController.abort(), 25000);
@@ -158,7 +167,7 @@ export async function POST(req: Request) {
         clearTimeout(orTimer);
 
         if (orResponse.ok) {
-          if (body.stream && orResponse.body) {
+          if (openRouterPayload.stream && orResponse.body) {
             return new Response(orResponse.body, {
               status: 200,
               headers: {
@@ -169,11 +178,12 @@ export async function POST(req: Request) {
               },
             });
           }
-          const orData = await orResponse.text();
-          return new Response(orData, {
+          const orData = await orResponse.json();
+          const extractedText = orData?.choices?.[0]?.message?.content || '';
+          return new Response(extractedText, {
             status: 200,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'text/plain',
               'Access-Control-Allow-Origin': '*',
             },
           });

@@ -162,17 +162,19 @@ export class AvelutBoardVisualizerService {
           continue; // Try the next fallback endpoint
         }
 
-        const data = await res.json();
-        const contentStr = data?.choices?.[0]?.message?.content;
+        const contentStr = await res.text();
         if (!contentStr) {
-          lastError = new Error(`Empty response from AI visualizer model at ${ep}. Response data: ${JSON.stringify(data).slice(0, 100)}`);
+          lastError = new Error(`Empty response from AI visualizer model at ${ep}.`);
+          console.warn(`[BoardVisualizer] ${lastError.message}`);
           continue; // Try the next fallback endpoint
         }
 
         try {
-          return JSON.parse(contentStr);
+          // Sanitize potential markdown blocks
+          const sanitizedStr = contentStr.replace(/^```json/i, '').replace(/```$/i, '').trim();
+          return JSON.parse(sanitizedStr);
         } catch {
-          // Extract JSON block inside markdown fences or text
+          // Fallback: Extract JSON block inside markdown fences or text
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             return JSON.parse(jsonMatch[0]);
@@ -181,10 +183,11 @@ export class AvelutBoardVisualizerService {
         }
       } catch (err: any) {
         lastError = err;
-        console.warn(`[BoardVisualizer] Error connecting to ${ep}:`, err.message);
+        console.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
       }
     }
 
+    console.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
     throw lastError || new Error('Failed to reach AI visualizer model endpoints');
   }
 
