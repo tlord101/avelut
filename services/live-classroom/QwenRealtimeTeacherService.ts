@@ -491,11 +491,12 @@ export class QwenRealtimeTeacherService {
 
       case 'response.audio_transcript.done':
         this.callbacks.onTranscript?.(this.fullTranscript, true);
-        this.fullTranscript = '';
         break;
 
       // ── Semantic barge-in ───────────────────────────────────────────────
       case 'input_audio_buffer.speech_started':
+        this.fullTranscript = '';
+        this.lastTranscriptSlice = '';
         if (performance.now() < this.teacherSpeakingUntil) {
           console.log('[QwenRealtime] Ignoring barge-in during teacher speech');
           return;
@@ -591,6 +592,7 @@ export class QwenRealtimeTeacherService {
 
         // Reset turn state
         this.hasCalledToolInTurn = false;
+        this.fullTranscript = '';
         this.lastTranscriptSlice = '';
         break;
       }
