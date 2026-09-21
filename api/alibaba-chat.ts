@@ -80,7 +80,7 @@ export async function POST(req: Request) {
             model: dashscopeModel,
             messages,
             temperature: body.temperature ?? 0.35,
-            max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
+            max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
           };
           if (body.response_format && body.response_format.type === 'json_object') {
             payload.response_format = { type: 'json_object' };
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
           model: openrouterModel,
           messages,
           temperature: body.temperature ?? 0.35,
-          max_tokens: Math.min(body.max_tokens ?? 1200, 2048),
+          max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
           include_reasoning: false,
         };
         if (body.response_format && body.response_format.type === 'json_object') {

@@ -91,7 +91,7 @@ export class AvelutBoardVisualizerService {
         try {
           return JSON.parse(jsonMatch[0]);
         } catch (e) {
-          console.warn('[BoardVisualizer] Failed to parse matched JSON:', jsonMatch[0]);
+          console.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text);
           return null;
         }
       }
@@ -139,7 +139,7 @@ export class AvelutBoardVisualizerService {
       ],
       temperature: 0.25,
       response_format: { type: 'json_object' },
-      max_tokens: 1200,
+      max_tokens: 2500,
     };
 
     let lastError: any = null;
