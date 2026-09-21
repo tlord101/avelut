@@ -38,7 +38,39 @@ export interface DrawShapeArgs {
 
 // ─── Board Controller Class ──────────────────────────────────────────────────
 
+class BoardActionQueue {
+  private queue: Array<() => Promise<void>> = [];
+  private isProcessing = false;
+
+  public push(action: () => Promise<void> | void) {
+    this.queue.push(async () => {
+      await action();
+    });
+    this.processNext();
+  }
+
+  private async processNext() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const action = this.queue.shift();
+      if (action) {
+        try {
+          await action();
+        } catch (e) {
+          console.error('[BoardActionQueue] Error executing action', e);
+        }
+      }
+    }
+
+    this.isProcessing = false;
+  }
+}
+
 export class AvelutBoardController {
+  private actionQueue = new BoardActionQueue();
+
   private api: ExcalidrawImperativeAPI | null = null;
   private elements: any[] = [];
   private cursorY = 90;
@@ -161,6 +193,9 @@ export class AvelutBoardController {
 
   /** Clears the main diagram stage so new diagrams replace old ones cleanly */
   public clearStage(): void {
+    this.actionQueue.push(() => { this._clearStage(); });
+  }
+  private _clearStage(): void {
     this.elements = this.elements.filter(el => el.customData?.zone !== 'stage');
     this.cursorY = 90;
     this.syncScene();
@@ -168,6 +203,9 @@ export class AvelutBoardController {
 
   /** Clears formula or note cards */
   public clearNotes(): void {
+    this.actionQueue.push(() => { this._clearNotes(); });
+  }
+  private _clearNotes(): void {
     this.elements = this.elements.filter(el => el.customData?.zone !== 'notes');
     this.syncScene();
   }
@@ -176,12 +214,15 @@ export class AvelutBoardController {
 
   /** Write text or formula on the board in a designated safe area */
   public writeText(text: string, args?: WriteTextArgs): void {
+    this.actionQueue.push(() => { this._writeText(text, args); });
+  }
+  private _writeText(text: string, args?: WriteTextArgs): void {
     if (!text?.trim()) return;
 
     console.log('[BoardController] writeText called:', text, args);
 
     if (args?.isFormula) {
-      this.setFormula(text.trim());
+      this._setFormula(text.trim());
       return;
     }
 
@@ -210,6 +251,9 @@ export class AvelutBoardController {
 
   /** Display a highlighted law or equation in the formula card slot */
   public setFormula(formulaText: string): void {
+    this.actionQueue.push(() => { this._setFormula(formulaText); });
+  }
+  private _setFormula(formulaText: string): void {
     if (!formulaText?.trim()) return;
     // Erase existing formula slot
     this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
@@ -234,6 +278,9 @@ export class AvelutBoardController {
 
   /** Draw a geometric shape or arrow in the stage zone */
   public drawShape(args: DrawShapeArgs): void {
+    this.actionQueue.push(() => { this._drawShape(args); });
+  }
+  private _drawShape(args: DrawShapeArgs): void {
     const { type, x, y, width = 120, height = 70, label, color = '#38BDF8', backgroundColor = 'transparent', strokeStyle = 'solid' } = args;
     const safeY = Math.min(y, 380);
 
@@ -259,6 +306,9 @@ export class AvelutBoardController {
 
   /** Highlight/circle an existing board element by label text */
   public highlightConcept(targetText: string, style: 'circle' | 'box' | 'underline' = 'box'): void {
+    this.actionQueue.push(() => { this._highlightConcept(targetText, style); });
+  }
+  private _highlightConcept(targetText: string, style: 'circle' | 'box' | 'underline' = 'box'): void {
     const target = this.elements.find(el =>
       (el.type === 'text' && el.text?.toLowerCase().includes(targetText.toLowerCase())) ||
       el.label?.text?.toLowerCase().includes(targetText.toLowerCase())
@@ -295,6 +345,9 @@ export class AvelutBoardController {
 
   /** Clear the canvas (optionally keeping the lesson title) */
   public clearBoard(keepTitle = true): void {
+    this.actionQueue.push(() => { this._clearBoard(keepTitle); });
+  }
+  private _clearBoard(keepTitle = true): void {
     if (keepTitle && this.lessonTitle) {
       const titleEl = this.elements.find(el => el.customData?.zone === 'header' || (el.type === 'text' && el.y < 60));
       this.elements = titleEl ? [titleEl] : [];
@@ -308,6 +361,10 @@ export class AvelutBoardController {
 
   /** Update or edit the text of an existing element on the board */
   public updateText(targetTextOrLabel: string, newText: string): boolean {
+    this.actionQueue.push(() => { this._updateText(targetTextOrLabel, newText); });
+    return true;
+  }
+  private _updateText(targetTextOrLabel: string, newText: string): boolean {
     if (!targetTextOrLabel || !newText) return false;
     let found = false;
     const lower = targetTextOrLabel.toLowerCase();
@@ -344,6 +401,10 @@ export class AvelutBoardController {
 
   /** Remove a component or text matching targetTextOrLabel from the board */
   public removeComponent(targetTextOrLabel: string): boolean {
+    this.actionQueue.push(() => { this._removeComponent(targetTextOrLabel); });
+    return true;
+  }
+  private _removeComponent(targetTextOrLabel: string): boolean {
     if (!targetTextOrLabel) return false;
     const initialLen = this.elements.length;
     const lower = targetTextOrLabel.toLowerCase();
@@ -365,6 +426,9 @@ export class AvelutBoardController {
 
   /** Write a row of highlighted keyword pills in the designated notes slot */
   public writeKeywords(keywords: string[], startX = 50, startY = 475): void {
+    this.actionQueue.push(() => { this._writeKeywords(keywords, startX, startY); });
+  }
+  private _writeKeywords(keywords: string[], startX = 50, startY = 475): void {
     if (!keywords || !keywords.length) return;
     // Clear previous keywords to avoid overlap
     this.elements = this.elements.filter(el => el.customData?.slot !== 'keywords');
@@ -401,9 +465,12 @@ export class AvelutBoardController {
 
   /** Draw high-level intuitive diagrams (automatically clears previous stage visual) */
   public drawDiagram(diagramType: string, data: Record<string, any>): void {
+    this.actionQueue.push(() => { this._drawDiagram(diagramType, data); });
+  }
+  private _drawDiagram(diagramType: string, data: Record<string, any>): void {
     console.log('[BoardController] drawDiagram called:', diagramType, data);
     // Automatically clear previous stage diagram so diagrams never overlap
-    this.clearStage();
+    this._clearStage();
 
     const startX = 50;
     const startY = 85;
@@ -420,7 +487,7 @@ export class AvelutBoardController {
       case 'concept_map':
       case 'mindmap': this.drawConceptMapDiagram(startX, startY, data); break;
       default:
-        if (data?.title) this.writeText(data.title, { fontSize: 'medium', y: startY });
+        if (data?.title) this._writeText(data.title, { fontSize: 'medium', y: startY });
         break;
     }
   }

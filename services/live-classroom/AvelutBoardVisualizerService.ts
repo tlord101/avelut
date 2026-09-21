@@ -260,26 +260,10 @@ Return ONLY valid JSON:
    */
   public processSpeechTranscript(transcript: string, isTurnFinal = false): void {
     if (!transcript) return;
-
-    // Always set or append if service sends deltas only
     this.speechBuffer = transcript;
 
-    if (isTurnFinal) {
-      if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
-      this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals(true);
-      }, 600);
-      return;
-    }
-
-    // Debounce stream: evaluate if enough novel text accumulated
-    const novelChars = transcript.length - this.lastEvaluatedSpeech.length;
-    if (novelChars >= this.minCharsForEval && !this.isProcessing) {
-      if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
-      this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals(false);
-      }, this.evalDebounceMs);
-    }
+    // Autonomous evaluation has been explicitly disabled to prevent dual-writer chaos.
+    // The Qwen realtime model now handles all direct tool calls.
   }
 
   /**

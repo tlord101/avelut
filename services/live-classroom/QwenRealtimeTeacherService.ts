@@ -358,8 +358,121 @@ export class QwenRealtimeTeacherService {
       },
       {
         type: 'function',
+        name: 'set_formula',
+        description: 'Display a highlighted law or equation in the formula card slot.',
+        parameters: {
+          type: 'object',
+          properties: {
+            formula: { type: 'string', description: 'The formula to display (e.g. F = ma)' }
+          },
+          required: ['formula'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'write_keywords',
+        description: 'Write a row of highlighted keyword pills.',
+        parameters: {
+          type: 'object',
+          properties: {
+            keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' }
+          },
+          required: ['keywords'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'draw_diagram',
+        description: 'Draw a high-level intuitive diagram on the stage.',
+        parameters: {
+          type: 'object',
+          properties: {
+            diagramType: { type: 'string', enum: ['concept_map', 'cycle', 'flow', 'comparison', 'coordinate_axes', 'free_body', 'collision'] },
+            data: { type: 'object', description: 'Structured data for the diagram. Varies by type.' }
+          },
+          required: ['diagramType', 'data'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'draw_shape',
+        description: 'Draw a geometric shape or arrow.',
+        parameters: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['rectangle', 'ellipse', 'arrow', 'line'] },
+            x: { type: 'number' },
+            y: { type: 'number' },
+            width: { type: 'number' },
+            height: { type: 'number' },
+            label: { type: 'string' },
+            color: { type: 'string' },
+            backgroundColor: { type: 'string' },
+            strokeStyle: { type: 'string', enum: ['solid', 'dashed', 'dotted'] }
+          },
+          required: ['type', 'x', 'y'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'highlight_concept',
+        description: 'Highlight or circle an existing board element by label text.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetText: { type: 'string' },
+            style: { type: 'string', enum: ['circle', 'box', 'underline'] }
+          },
+          required: ['targetText'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'clear_stage',
+        description: 'Clears the main diagram stage so new diagrams replace old ones cleanly.',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        type: 'function',
+        name: 'clear_board',
+        description: 'Clear the entire canvas (keeps lesson title).',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        type: 'function',
+        name: 'update_text',
+        description: 'Update or edit the text of an existing element.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetText: { type: 'string' },
+            newText: { type: 'string' }
+          },
+          required: ['targetText', 'newText'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'remove_component',
+        description: 'Remove a component or text matching target text from the board.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetText: { type: 'string' }
+          },
+          required: ['targetText'],
+        },
+      },
+      {
+        type: 'function',
         name: 'request_diagram',
-        description: 'Request a complex illustration or diagram from the board visualizer.',
+        description: 'Request a complex illustration or diagram from the board visualizer. Use this ONLY for complex drawings you cannot do directly.',
         parameters: {
           type: 'object',
           properties: {
@@ -507,13 +620,12 @@ export class QwenRealtimeTeacherService {
         }
 
         // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
-        // The board is purely for illustrations, formulas, and diagrams.
-        // Fallback: If the model spoke substantively but didn't explicitly call a tool,
-        // we ask the Visualizer Co-Pilot to draw an appropriate diagram or write keywords.
+        // We demote the phrase-trigger backup so it only triggers as a last resort, avoiding dual-writer chaos.
+        // Also removed autonomous visualizer processing.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
           const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
           if (triggered) {
-            console.log('[QwenRealtime] Phrase trigger backup fired for slice:', this.lastTranscriptSlice);
+            console.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
             import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
               avelutBoardVisualizer.illustrateFromBoardWrite({
                 boardText: 'Fallback Diagram Request',
@@ -522,10 +634,7 @@ export class QwenRealtimeTeacherService {
               });
             });
           } else {
-            console.log('[QwenRealtime] No tool called this turn, falling back to Visualizer for slice:', this.lastTranscriptSlice);
-            import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
-              avelutBoardVisualizer.processSpeechTranscript(this.lastTranscriptSlice, true);
-            });
+            console.log('[QwenRealtime] No tool called this turn, but no drawing phrase detected. Doing nothing.');
           }
         }
 
@@ -569,11 +678,47 @@ export class QwenRealtimeTeacherService {
         case 'write_text':
           avelutBoardController.writeText(args.text ?? args.content ?? '');
           break;
-
+        case 'set_formula':
+          avelutBoardController.setFormula(args.formula ?? args.text ?? args.content ?? '');
+          break;
+        case 'write_keywords':
+          avelutBoardController.writeKeywords(args.keywords ?? []);
+          break;
+        case 'draw_diagram':
+          avelutBoardController.drawDiagram(args.diagramType ?? '', args.data ?? {});
+          break;
+        case 'draw_shape':
+          avelutBoardController.drawShape({
+            type: args.type,
+            x: args.x,
+            y: args.y,
+            width: args.width,
+            height: args.height,
+            label: args.label,
+            color: args.color,
+            backgroundColor: args.backgroundColor,
+            strokeStyle: args.strokeStyle,
+          });
+          break;
+        case 'highlight_concept':
+          avelutBoardController.highlightConcept(args.targetText ?? '', args.style);
+          break;
+        case 'clear_stage':
+          avelutBoardController.clearStage();
+          break;
+        case 'clear_board':
+          avelutBoardController.clearBoard();
+          break;
+        case 'update_text':
+          avelutBoardController.updateText(args.targetText ?? '', args.newText ?? '');
+          break;
+        case 'remove_component':
+          avelutBoardController.removeComponent(args.targetText ?? '');
+          break;
         case 'request_diagram':
           import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
             avelutBoardVisualizer.illustrateFromBoardWrite({
-              boardText: args.topic,
+              boardText: args.topic ?? '',
               recentSpeech: this.lastTranscriptSlice.slice(-250),
               forceDiagram: true,
             });
