@@ -241,6 +241,98 @@ export class AvelutBoardController {
     this.syncScene(false);
   }
 
+  /** Update or edit the text of an existing element on the board */
+  public updateText(targetTextOrLabel: string, newText: string): boolean {
+    if (!targetTextOrLabel || !newText) return false;
+    let found = false;
+    const lower = targetTextOrLabel.toLowerCase();
+
+    this.elements = this.elements.map(el => {
+      if (el.type === 'text' && el.text?.toLowerCase().includes(lower)) {
+        found = true;
+        return {
+          ...el,
+          text: newText,
+          originalText: newText,
+          version: (el.version || 1) + 1,
+          versionNonce: Math.floor(Math.random() * 1000000),
+        };
+      }
+      if (el.label?.text?.toLowerCase().includes(lower)) {
+        found = true;
+        return {
+          ...el,
+          label: { ...el.label, text: newText },
+          version: (el.version || 1) + 1,
+          versionNonce: Math.floor(Math.random() * 1000000),
+        };
+      }
+      return el;
+    });
+
+    if (found) {
+      this.syncScene(false);
+      console.log(`[BoardController] Updated text matching "${targetTextOrLabel}" -> "${newText}"`);
+    }
+    return found;
+  }
+
+  /** Remove a component or text matching targetTextOrLabel from the board */
+  public removeComponent(targetTextOrLabel: string): boolean {
+    if (!targetTextOrLabel) return false;
+    const initialLen = this.elements.length;
+    const lower = targetTextOrLabel.toLowerCase();
+
+    this.elements = this.elements.filter(el => {
+      const match =
+        (el.type === 'text' && el.text?.toLowerCase().includes(lower)) ||
+        (el.label?.text?.toLowerCase().includes(lower));
+      return !match;
+    });
+
+    if (this.elements.length !== initialLen) {
+      this.syncScene(false);
+      console.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
+      return true;
+    }
+    return false;
+  }
+
+  /** Write a row of highlighted keyword pills */
+  public writeKeywords(keywords: string[], startX = 60, startY?: number): void {
+    if (!keywords || !keywords.length) return;
+    const y = startY ?? this.cursorY;
+    let cx = startX;
+    const els: any[] = [];
+
+    keywords.forEach((kw) => {
+      const kwLen = kw.length;
+      const w = Math.max(kwLen * 10 + 24, 75);
+      const h = 32;
+
+      els.push({
+        type: 'rectangle',
+        x: cx,
+        y,
+        width: w,
+        height: h,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0F172A',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: kw, fontSize: 13, strokeColor: '#38BDF8' },
+      });
+
+      cx += w + 12;
+      if (cx > 700) {
+        cx = startX;
+      }
+    });
+
+    this.appendElements(els);
+    this.cursorY = y + 48;
+  }
+
   /** Draw high-level intuitive diagrams */
   public drawDiagram(diagramType: string, data: Record<string, any>): void {
     const startY = this.cursorY;

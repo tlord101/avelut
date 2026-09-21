@@ -136,7 +136,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   // Visualizer co-pilot state
   const [visualizerStatus, setVisualizerStatus] = useState<VisualizerStatus>('idle');
   const [visualizerMessage, setVisualizerMessage] = useState<string>('');
-  const [showDiagramMenu, setShowDiagramMenu] = useState(false);
 
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
@@ -481,51 +480,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           >
             <MessageSquare className="w-5 h-5" />
           </button>
-
-          {/* Visual Illustrator toggle */}
-          <div className="relative">
-            <button
-              onClick={() => setShowDiagramMenu(v => !v)}
-              className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
-                showDiagramMenu || visualizerStatus === 'visualizing'
-                  ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(251,191,36,0.5)]'
-                  : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
-              }`}
-              aria-label="Illustrate Concept"
-              title="Illustrate Concept on Board"
-            >
-              <Sparkles className={`w-5 h-5 ${visualizerStatus === 'visualizing' ? 'animate-spin' : ''}`} />
-            </button>
-
-            {/* Diagram Preset Popover Menu */}
-            {showDiagramMenu && (
-              <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-52 p-2 rounded-2xl bg-[#1C1917]/95 border border-white/15 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 z-40 flex flex-col gap-1">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                  ✨ Visual Illustrations
-                </div>
-                {[
-                  { label: 'Auto-Illustrate', type: undefined, icon: '✨' },
-                  { label: 'Concept Map', type: 'concept_map', icon: '🗺️' },
-                  { label: 'Cycle / Process', type: 'cycle', icon: '🔄' },
-                  { label: 'Comparison', type: 'comparison', icon: '⚖️' },
-                  { label: 'Step-by-Step Flow', type: 'flow', icon: '📊' },
-                  { label: 'Coordinate Graph', type: 'coordinate_axes', icon: '📈' },
-                ].map((item) => (
-                  <button
-                    key={item.label}
-                    onClick={() => {
-                      void avelutBoardVisualizer.illustrateOnDemand(item.type);
-                      setShowDiagramMenu(false);
-                    }}
-                    className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:bg-white/20 text-left text-xs font-medium text-white/90 transition-all"
-                  >
-                    <span>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Mic button with audio level pulse ring */}
           <div className="relative flex items-center justify-center">

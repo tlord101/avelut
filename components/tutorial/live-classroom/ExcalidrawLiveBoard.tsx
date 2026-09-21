@@ -63,12 +63,42 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden bg-[#0A0A0A] ${className}`}
+      className={`excalidraw-live-board relative w-full h-full overflow-hidden bg-[#0A0A0A] ${className}`}
       style={{ touchAction: 'none' }}
     >
+      <style>{`
+        /* Strip all Excalidraw UI toolbars, menus, sidebars, zoom dock, and footer actions */
+        .excalidraw-live-board .excalidraw .App-toolbar,
+        .excalidraw-live-board .excalidraw .App-toolbar-content,
+        .excalidraw-live-board .excalidraw .App-menu,
+        .excalidraw-live-board .excalidraw .App-menu__left,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .dropdown-menu,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar-trigger,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .footer-center,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .zoom-actions,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .undo-redo-buttons,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .hint,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .help-icon,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .buttonList,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .UserList,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .dropdown-menu-container,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .encrypted-icon-tooltip,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .shapes-section,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .stack,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper .Island {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+      `}</style>
       <Excalidraw
         excalidrawAPI={handleApiSet}
         theme="dark"
+        viewModeEnabled={true}
+        zenModeEnabled={true}
+        gridModeEnabled={false}
+        renderTopRightUI={() => null}
         UIOptions={{
           canvasActions: {
             changeViewBackgroundColor: false,
@@ -83,6 +113,8 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
           elements: initialElements,
           appState: {
             viewBackgroundColor: '#0A0A0A',
+            viewModeEnabled: true,
+            zenModeEnabled: true,
             currentItemStrokeColor: '#38BDF8',
             currentItemBackgroundColor: 'transparent',
             currentItemFontFamily: 1,

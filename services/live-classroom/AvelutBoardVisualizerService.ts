@@ -296,11 +296,11 @@ Create the opening visual blackboard presentation now!`;
 
     // Debounce stream: evaluate if enough novel text accumulated
     const novelChars = transcript.length - this.lastEvaluatedSpeech.length;
-    if (novelChars > 160 && !this.isProcessing) {
+    if (novelChars > 70 && !this.isProcessing) {
       if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
       this.speechDebounceTimer = setTimeout(() => {
         void this.evaluateSpeechForVisuals();
-      }, 3500);
+      }, 2000);
     }
   }
 
@@ -312,56 +312,77 @@ Create the opening visual blackboard presentation now!`;
     if (this.isProcessing || !this.config?.topicTitle) return;
 
     const currentSpeech = this.speechBuffer.trim();
-    if (currentSpeech.length < 40 || currentSpeech === this.lastEvaluatedSpeech) return;
+    if (currentSpeech.length < 30 || currentSpeech === this.lastEvaluatedSpeech) return;
 
     // Isolate what was recently said since last evaluation
     const recentChunk = currentSpeech.slice(this.lastEvaluatedSpeech.length).trim() || currentSpeech.slice(-250);
     this.lastEvaluatedSpeech = currentSpeech;
 
     // Skip short conversational greetings / checks
-    if (recentChunk.length < 35 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentChunk)) {
+    if (recentChunk.length < 25 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentChunk)) {
       return;
     }
 
     this.isProcessing = true;
-    this.setStatus('visualizing', 'Illustrating teacher explanation on board…');
+    this.setStatus('visualizing', 'Updating board illustration…');
 
-    const systemPrompt = `You are a real-time blackboard illustrator working alongside a spoken lecture.
-The voice teacher just explained a concept to the student.
-Determine if what was just explained warrants drawing a diagram, writing a formula, adding a shape, or highlighting an existing concept on the Excalidraw board.
+    const systemPrompt = `You are an elite autonomous digital blackboard illustrator working alongside a live spoken lecture.
+The voice teacher just explained this in speech: "${recentChunk}"
+Lesson Topic: "${this.config.topicTitle}"
 
-If the speech explains a specific concept, process, formula, or comparison:
-Return ONLY a JSON object:
+Decide how the blackboard should dynamically be updated, edited, illustrated, or cleared right now.
+Supported actions:
+- "draw_diagram": draw an intuitive visual diagram (concept_map, cycle, flow, comparison, coordinate_axes, collision, free_body)
+- "write_text": write an equation, formula, law, or definition (text, fontSize: "medium"|"large", isFormula: boolean, color: "#38BDF8"|"#FDE047")
+- "edit_text": modify an existing text or formula component on the board (target: "string to find", newText: "replacement text")
+- "write_keywords": render a row of highlighted keyword pills (keywords: ["term1", "term2", "term3"])
+- "highlight_concept": draw an attention highlight around an existing concept (targetTextOrLabel: "...", style: "box"|"circle"|"underline")
+- "clear_component": erase an obsolete section or diagram (target: "...")
+- "clear_board": clear the board keeping title (keepTitle: true) when moving to a brand-new subtopic milestone
+
+Return ONLY valid JSON matching:
 {
   "shouldDraw": true,
-  "summary": "Brief 3-word description of what is drawn",
-  "action": "draw_diagram" | "write_text" | "draw_shape" | "highlight_concept",
-  "params": {
-    // For draw_diagram: { "diagramType": "cycle"|"flow"|"comparison"|"concept_map"|"coordinate_axes"|"collision"|"free_body", "data": { ... } }
-    // For write_text: { "text": "...", "fontSize": "medium"|"large", "isFormula": boolean, "color": "#38BDF8" }
-    // For draw_shape: { "type": "rectangle"|"ellipse"|"arrow", "label": "...", "color": "#34D399" }
-    // For highlight_concept: { "targetTextOrLabel": "...", "style": "circle"|"box"|"underline" }
-  }
+  "summary": "Brief 3-word summary of the visual action",
+  "actions": [
+    {
+      "action": "draw_diagram" | "write_text" | "edit_text" | "write_keywords" | "highlight_concept" | "clear_component" | "clear_board",
+      "params": { ... }
+    }
+  ]
 }
-
-If the speech is purely general commentary, student checking, or chit-chat that doesn't need a visual:
-Return:
+OR if a single action:
+{
+  "shouldDraw": true,
+  "summary": "...",
+  "action": "...",
+  "params": { ... }
+}
+OR if it was just conversational banter / no visual needed:
 {
   "shouldDraw": false
 }`;
 
-    const userPrompt = `Lesson Topic: "${this.config.topicTitle}"
+    const userPrompt = `Topic: "${this.config.topicTitle}"
 Teacher Spoke: "${recentChunk}"
 
-Decide what to illustrate on the board right now.`;
+Decide what visual updates to render on the blackboard right now.`;
 
     try {
       const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt);
       console.log('[BoardVisualizer] Speech evaluation decision:', decision);
 
-      if (decision.shouldDraw && decision.action && decision.params) {
-        this.executeVisualAction(decision.action, decision.params);
-        this.callbacks.onVisualDrawn?.(decision.summary || 'Illustrated concept on board');
+      if (decision.shouldDraw) {
+        if (Array.isArray(decision.actions)) {
+          for (const item of decision.actions) {
+            if (item.action && item.params) {
+              this.executeVisualAction(item.action, item.params);
+            }
+          }
+        } else if (decision.action && decision.params) {
+          this.executeVisualAction(decision.action, decision.params);
+        }
+        this.callbacks.onVisualDrawn?.(decision.summary || 'Updated blackboard');
       }
     } catch (err) {
       console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
@@ -483,6 +504,26 @@ Generate the visual board action.`;
             y: params.y,
             isFormula: params.isFormula,
           });
+          break;
+        }
+        case 'edit_text': {
+          const target = params.target || params.targetTextOrLabel || '';
+          const newText = params.newText || params.text || '';
+          if (target && newText) {
+            avelutBoardController.updateText(target, newText);
+          }
+          break;
+        }
+        case 'write_keywords': {
+          const keywords = params.keywords || (Array.isArray(params.data) ? params.data : []);
+          avelutBoardController.writeKeywords(keywords, params.x, params.y);
+          break;
+        }
+        case 'clear_component': {
+          const target = params.target || params.targetTextOrLabel || '';
+          if (target) {
+            avelutBoardController.removeComponent(target);
+          }
           break;
         }
         case 'draw_shape': {
