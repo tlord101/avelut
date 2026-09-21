@@ -79,6 +79,27 @@ export class AvelutBoardVisualizerService {
     this.drawnTopics.clear();
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private safeJsonParse(text: string): any {
+    try {
+      const sanitizedStr = text.replace(/^```json/i, '').replace(/```$/i, '').trim();
+      return JSON.parse(sanitizedStr);
+    } catch {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          console.warn('[BoardVisualizer] Failed to parse matched JSON:', jsonMatch[0]);
+          return null;
+        }
+      }
+      console.warn('[BoardVisualizer] Failed to parse JSON from response:', text);
+      return null;
+    }
+  }
+
   // ── Network Fetch to Alibaba Text Models ───────────────────────────────────
 
   private async callAlibabaTextModel(systemPrompt: string, userPrompt: string): Promise<any> {
@@ -151,6 +172,11 @@ export class AvelutBoardVisualizerService {
           const errBody = await res.text().catch(() => '');
           console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status} ${res.statusText}:`, errBody);
 
+          if (res.status === 429) {
+            console.warn('[BoardVisualizer] Rate limited by upstream. Gracefully failing this turn.');
+            throw new Error('RATE_LIMIT');
+          }
+
           let parsedError;
           try {
             parsedError = JSON.parse(errBody).error;
@@ -169,19 +195,16 @@ export class AvelutBoardVisualizerService {
           continue; // Try the next fallback endpoint
         }
 
-        try {
-          // Sanitize potential markdown blocks
-          const sanitizedStr = contentStr.replace(/^```json/i, '').replace(/```$/i, '').trim();
-          return JSON.parse(sanitizedStr);
-        } catch {
-          // Fallback: Extract JSON block inside markdown fences or text
-          const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
-          }
+        const parsedJson = this.safeJsonParse(contentStr);
+        if (parsedJson) {
+          return parsedJson;
+        } else {
           throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 100));
         }
       } catch (err: any) {
+        if (err.message === 'RATE_LIMIT') {
+          throw err; // bubble up without fallback if it's a hard rate limit
+        }
         lastError = err;
         console.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
       }

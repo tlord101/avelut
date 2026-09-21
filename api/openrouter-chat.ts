@@ -121,6 +121,19 @@ export async function POST(req: Request) {
       }
     }
 
+    if (lastResponse?.status === 429) {
+      return new Response(
+        JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
     // Ensure we return a properly formatted JSON error
     let errorResponseStr = lastErrorText;
     try {
