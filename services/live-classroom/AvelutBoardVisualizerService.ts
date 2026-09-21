@@ -92,12 +92,20 @@ export class AvelutBoardVisualizerService {
         window.location.protocol === 'capacitor:' ||
         window.location.protocol === 'ionic:');
 
-    const proxyEndpoints = isNative
-      ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-      : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
-
-    const directEndpoint = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions`;
-    const endpoints = [...proxyEndpoints, directEndpoint];
+    // Prioritize backend proxy endpoints (CORS-safe and authenticated server-side)
+    const endpoints = isNative
+      ? [
+          'https://www.avelut.xyz/api/alibaba-chat',
+          'https://www.avelut.xyz/api/openrouter-chat',
+          '/api/alibaba-chat',
+          '/api/openrouter-chat',
+        ]
+      : [
+          '/api/alibaba-chat',
+          '/api/openrouter-chat',
+          'https://www.avelut.xyz/api/alibaba-chat',
+          'https://www.avelut.xyz/api/openrouter-chat',
+        ];
 
     const payload = {
       model: 'qwen3.7-flash',
@@ -116,6 +124,7 @@ export class AvelutBoardVisualizerService {
       try {
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
+          'X-Title': 'Avelut AI Classroom',
         };
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
@@ -125,7 +134,7 @@ export class AvelutBoardVisualizerService {
         }
 
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 14000);
+        const timer = setTimeout(() => controller.abort(), 22000);
 
         const res = await fetch(ep, {
           method: 'POST',
@@ -143,14 +152,17 @@ export class AvelutBoardVisualizerService {
 
         const data = await res.json();
         const contentStr = data?.choices?.[0]?.message?.content;
-        if (!contentStr) throw new Error('Empty response from Alibaba model');
+        if (!contentStr) throw new Error('Empty response from AI visualizer model');
 
         try {
           return JSON.parse(contentStr);
         } catch {
-          // Handle potential markdown code fencing in JSON output
-          const cleaned = contentStr.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-          return JSON.parse(cleaned);
+          // Extract JSON block inside markdown fences or text
+          const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+          }
+          throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 100));
         }
       } catch (err: any) {
         lastError = err;
@@ -158,7 +170,7 @@ export class AvelutBoardVisualizerService {
       }
     }
 
-    throw lastError || new Error('Failed to reach Alibaba text model endpoints');
+    throw lastError || new Error('Failed to reach AI visualizer model endpoints');
   }
 
   // ── Kickoff Illustration ──────────────────────────────────────────────────
@@ -375,12 +387,16 @@ Decide what visual updates to render on the blackboard right now.`;
       if (decision.shouldDraw) {
         if (Array.isArray(decision.actions)) {
           for (const item of decision.actions) {
-            if (item.action && item.params) {
-              this.executeVisualAction(item.action, item.params);
+            const act = item.action || item.type;
+            const params = item.params || item;
+            if (act) {
+              this.executeVisualAction(act, params);
             }
           }
-        } else if (decision.action && decision.params) {
-          this.executeVisualAction(decision.action, decision.params);
+        } else if (decision.action || decision.type) {
+          const act = decision.action || decision.type;
+          const params = decision.params || decision;
+          this.executeVisualAction(act, params);
         }
         this.callbacks.onVisualDrawn?.(decision.summary || 'Updated blackboard');
       }
@@ -496,7 +512,8 @@ Generate the visual board action.`;
           avelutBoardController.drawDiagram(type, data);
           break;
         }
-        case 'write_text': {
+        case 'write_text':
+        case 'text': {
           avelutBoardController.writeText(params.text || params.content || '', {
             fontSize: params.fontSize,
             color: params.color,
@@ -526,11 +543,12 @@ Generate the visual board action.`;
           }
           break;
         }
-        case 'draw_shape': {
+        case 'draw_shape':
+        case 'draw': {
           avelutBoardController.drawShape({
-            type: params.type || 'rectangle',
-            x: Number(params.x) || 60,
-            y: Number(params.y) || 120,
+            type: params.shape || params.type || 'rectangle',
+            x: Number(params.x ?? params.position?.x) || 60,
+            y: Number(params.y ?? params.position?.y) || 120,
             width: params.width,
             height: params.height,
             label: params.label,
