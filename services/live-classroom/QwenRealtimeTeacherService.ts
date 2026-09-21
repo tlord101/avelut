@@ -65,6 +65,8 @@ export class QwenRealtimeTeacherService {
   private hasGreeted = false;
   private isStarting = false;
 
+  private teacherSpeakingUntil = 0;
+
   // ── State helpers ─────────────────────────────────────────────────────────
 
   public setCallbacks(cb: QwenTeacherCallbacks): void { this.callbacks = cb; }
@@ -365,31 +367,7 @@ export class QwenRealtimeTeacherService {
           },
           required: ['text'],
         },
-        function: {
-          name: 'write_text',
-          description:
-            'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
-          parameters: {
-            type: 'object',
-            properties: {
-              text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
-              fontSize: {
-                type: 'string',
-                enum: ['small', 'medium', 'large', 'title'],
-                description: 'Text size',
-              },
-              color: {
-                type: 'string',
-                description:
-                  'Hex color, e.g. "#38BDF8" for accent/formula, "#FAFAFA" for standard, "#FBBF24" for highlight',
-              },
-              x: { type: 'number', description: 'Optional X canvas position (0–800)' },
-              y: { type: 'number', description: 'Optional Y canvas position (0–600)' },
-              isFormula: { type: 'boolean', description: 'True if this is a mathematical or scientific equation' },
-            },
-            required: ['text'],
-          },
-        },
+
       },
       {
         type: 'function',
@@ -409,24 +387,7 @@ export class QwenRealtimeTeacherService {
           },
           required: ['type', 'x', 'y'],
         },
-        function: {
-          name: 'draw_shape',
-          description: 'Draw a rectangle, ellipse, arrow, or line on the board.',
-          parameters: {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['rectangle', 'ellipse', 'arrow', 'line'] },
-              x: { type: 'number' },
-              y: { type: 'number' },
-              width: { type: 'number' },
-              height: { type: 'number' },
-              label: { type: 'string' },
-              color: { type: 'string' },
-              backgroundColor: { type: 'string' },
-            },
-            required: ['type', 'x', 'y'],
-          },
-        },
+
       },
       {
         type: 'function',
@@ -447,25 +408,7 @@ export class QwenRealtimeTeacherService {
           },
           required: ['diagramType', 'data'],
         },
-        function: {
-          name: 'draw_diagram',
-          description:
-            'Draw an intuitive diagram: collision (objects colliding), free_body (forces on an object), coordinate_axes (graphs), flow (step sequences), cycle (circular loops), comparison (contrasting columns), or concept_map (mind map).',
-          parameters: {
-            type: 'object',
-            properties: {
-              diagramType: {
-                type: 'string',
-                enum: ['collision', 'free_body', 'coordinate_axes', 'flow', 'cycle', 'comparison', 'concept_map'],
-              },
-              data: {
-                type: 'object',
-                description: 'Diagram-specific properties (labels, masses, forces, steps, leftTitle, rightTitle, centralConcept, etc.)',
-              },
-            },
-            required: ['diagramType', 'data'],
-          },
-        },
+
       },
       {
         type: 'function',
@@ -483,22 +426,7 @@ export class QwenRealtimeTeacherService {
           },
           required: ['targetTextOrLabel'],
         },
-        function: {
-          name: 'highlight_concept',
-          description:
-            'Draw a circle, dashed box, or underline around an existing concept on the board to direct student attention.',
-          parameters: {
-            type: 'object',
-            properties: {
-              targetTextOrLabel: {
-                type: 'string',
-                description: 'Text of the element to highlight',
-              },
-              style: { type: 'string', enum: ['circle', 'box', 'underline'] },
-            },
-            required: ['targetTextOrLabel'],
-          },
-        },
+
       },
       {
         type: 'function',
@@ -511,17 +439,7 @@ export class QwenRealtimeTeacherService {
             keepTitle: { type: 'boolean' },
           },
         },
-        function: {
-          name: 'clear_board',
-          description:
-            'Clear the teaching board to start fresh. Set keepTitle=true to preserve the lesson heading.',
-          parameters: {
-            type: 'object',
-            properties: {
-              keepTitle: { type: 'boolean' },
-            },
-          },
-        },
+
       },
     ];
   }
@@ -557,7 +475,7 @@ export class QwenRealtimeTeacherService {
 
       case 'response.audio.delta':
         if (event.delta) {
-          console.log('[QwenRealtime] audio.delta length:', event.delta?.length ?? 0);
+          this.teacherSpeakingUntil = performance.now() + 400;
           this.setState('speaking');
           void this.playDelta(event.delta);
         }
@@ -578,6 +496,10 @@ export class QwenRealtimeTeacherService {
 
       // ── Semantic barge-in ───────────────────────────────────────────────
       case 'input_audio_buffer.speech_started':
+        if (performance.now() < this.teacherSpeakingUntil) {
+          console.log('[QwenRealtime] Ignoring barge-in during teacher speech');
+          return;
+        }
         this.stopPlayback();
         this.setState('listening');
         break;
@@ -658,18 +580,13 @@ export class QwenRealtimeTeacherService {
 
         // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
         // The board is purely for illustrations, formulas, and diagrams.
-        // As a subtle helper, ONLY if an explicit mathematical equation is detected in speech
-        // and no tool was called, write just that concise equation.
+        // Fallback: If the model spoke substantively but didn't explicitly call a tool,
+        // we ask the Visualizer Co-Pilot to draw an appropriate diagram or write keywords.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
-          const formulaMatch = this.lastTranscriptSlice.match(/\b([A-Za-z_Δ][A-Za-z0-9_]*\s*=\s*[^.,;!?\n]+)/);
-          if (formulaMatch && formulaMatch[1] && formulaMatch[1].length < 40 && !formulaMatch[1].toLowerCase().includes('hello')) {
-            console.log('[QwenRealtime] Extracted formula from speech:', formulaMatch[1]);
-            avelutBoardController.writeText(formulaMatch[1].trim(), {
-              fontSize: 'medium',
-              color: '#38BDF8',
-              isFormula: true,
-            });
-          }
+          console.log('[QwenRealtime] No tool called this turn, falling back to Visualizer for slice:', this.lastTranscriptSlice);
+          import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
+            avelutBoardVisualizer.processSpeechTranscript(this.lastTranscriptSlice, true);
+          });
         }
 
         // Reset turn state
@@ -784,6 +701,7 @@ export class QwenRealtimeTeacherService {
 
     const handleAudioData = (data: Float32Array) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
+      if (this.state === 'speaking' || performance.now() < this.teacherSpeakingUntil) return;
 
       // Compute RMS for UI visualisation
       let sum = 0;
@@ -909,7 +827,11 @@ export class QwenRealtimeTeacherService {
       gain.connect(this.outputAudioCtx.destination);
 
       const now = this.outputAudioCtx.currentTime;
-      if (this.nextPlayTime < now) this.nextPlayTime = now;
+      if (this.activeAudioSources.length === 0) {
+        this.nextPlayTime = now + 0.08;
+      } else if (this.nextPlayTime < now - 0.25) {
+        this.nextPlayTime = now;
+      }
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
 
@@ -918,12 +840,6 @@ export class QwenRealtimeTeacherService {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
       };
-
-      console.log('[QwenRealtime] playDelta OK', {
-        samples: sampleCount,
-        duration: buf.duration.toFixed(3),
-        ctx: this.outputAudioCtx.state,
-      });
     } catch (err) {
       console.warn('[QwenRealtime] playDelta error:', err);
     }

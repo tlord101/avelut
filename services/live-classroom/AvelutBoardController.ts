@@ -104,6 +104,7 @@ export class AvelutBoardController {
    */
   private syncScene(_unused?: boolean): void {
     if (!this.api) {
+      console.warn('[BoardController] syncScene skipped — API null, elements=', this.elements.length);
       return;
     }
     try {
@@ -176,6 +177,8 @@ export class AvelutBoardController {
   /** Write text or formula on the board in a designated safe area */
   public writeText(text: string, args?: WriteTextArgs): void {
     if (!text?.trim()) return;
+
+    console.log('[BoardController] writeText called:', text, args);
 
     if (args?.isFormula) {
       this.setFormula(text.trim());
@@ -398,6 +401,7 @@ export class AvelutBoardController {
 
   /** Draw high-level intuitive diagrams (automatically clears previous stage visual) */
   public drawDiagram(diagramType: string, data: Record<string, any>): void {
+    console.log('[BoardController] drawDiagram called:', diagramType, data);
     // Automatically clear previous stage diagram so diagrams never overlap
     this.clearStage();
 
