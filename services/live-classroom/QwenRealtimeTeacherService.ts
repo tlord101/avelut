@@ -14,6 +14,11 @@
  *  Realtime model must always call text tools (write_text / set_formula / write_keywords).
  *  Complex illustration is optional and handled by AvelutBoardVisualizerService
  *  via phrase detection on the transcript. No draw_* tools are exposed to the model.
+ *
+ * CRITICAL: Qwen Omni Realtime requires the NESTED tool schema:
+ *   { type: "function", function: { name, description, parameters } }
+ * Flat OpenAI-style schemas are ignored and the model speaks the tool name as text.
+ * Also: tool_choice and parallel_tool_calls are NOT supported on Omni-Realtime.
  */
 
 import { avelutBoardController } from './AvelutBoardController';
@@ -304,7 +309,8 @@ export class QwenRealtimeTeacherService {
     const duration = this.promptConfig?.durationMinutes || 30;
     console.log('[QwenRealtime] Manually triggering initial greeting for', topic, `(${duration} min)`);
 
-    // Only ask for text tools — illustration is handled by the visualizer
+    // Do NOT mention tool names in the user message — that causes the model to speak them.
+    // The system prompt already requires writing on the board via tools.
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -313,7 +319,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me, announce that today we are mastering ${topic}, and immediately call write_text (or write_keywords) to put the topic title or a short real-world hook on the board. Do not ask me what topic we are going to discuss.`,
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me warmly, announce the topic, put the key title on the board, and start with a real-world intuition. Do not ask me what topic we are going to discuss.`,
         }],
       },
     });
@@ -331,11 +337,13 @@ export class QwenRealtimeTeacherService {
 
     const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
     const instructions = buildTeacherSystemPrompt(this.promptConfig, stageInstruction);
-    console.log('[QwenRealtime] Sending session.update with text-only tools schema...');
+    console.log('[QwenRealtime] Sending session.update with nested text-only tools schema...');
 
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
 
+    // NOTE: Qwen Omni Realtime does NOT support tool_choice or parallel_tool_calls.
+    // Do not send them — they are ignored or can break tool calling.
     this.sendJson({
       event_id: `session_init_${Date.now()}`,
       type: 'session.update',
@@ -351,109 +359,127 @@ export class QwenRealtimeTeacherService {
           silence_duration_ms: 800,
         },
         tools: this.buildToolDeclarations(),
-        tool_choice: 'auto',
-        parallel_tool_calls: true,
       },
     });
   }
 
   /**
-   * TEXT TOOLS ONLY.
-   * Complex illustration (diagrams, flowcharts) is handled by AvelutBoardVisualizerService
-   * when it detects drawing-related phrases in the transcript.
+   * TEXT TOOLS ONLY — nested format required by Qwen Omni Realtime.
+   * Official schema: { type: "function", function: { name, description, parameters } }
+   * Flat schemas cause the model to speak the tool name as text instead of calling it.
    */
   private buildToolDeclarations() {
     return [
       {
         type: 'function',
-        name: 'write_text',
-        description: 'Write a key title, definition, core principle, or short label on the teaching board. Never write speech transcripts. Max ~12 words.',
-        parameters: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', description: 'Short text or label to display' }
+        function: {
+          name: 'write_text',
+          description: 'Write a key title, definition, core principle, or short label on the teaching board. Never write speech transcripts. Max ~12 words.',
+          parameters: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Short text or label to display' }
+            },
+            required: ['text'],
           },
-          required: ['text'],
         },
       },
       {
         type: 'function',
-        name: 'set_formula',
-        description: 'Display a highlighted law or equation in the formula card slot (e.g. F = ma).',
-        parameters: {
-          type: 'object',
-          properties: {
-            formula: { type: 'string', description: 'The formula to display' }
+        function: {
+          name: 'set_formula',
+          description: 'Display a highlighted law or equation in the formula card slot (e.g. F = ma).',
+          parameters: {
+            type: 'object',
+            properties: {
+              formula: { type: 'string', description: 'The formula to display' }
+            },
+            required: ['formula'],
           },
-          required: ['formula'],
         },
       },
       {
         type: 'function',
-        name: 'write_keywords',
-        description: 'Write a row of highlighted keyword pills (2–4 technical terms).',
-        parameters: {
-          type: 'object',
-          properties: {
-            keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' }
+        function: {
+          name: 'write_keywords',
+          description: 'Write a row of highlighted keyword pills (2–4 technical terms).',
+          parameters: {
+            type: 'object',
+            properties: {
+              keywords: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Array of 2-4 technical terms'
+              }
+            },
+            required: ['keywords'],
           },
-          required: ['keywords'],
         },
       },
       {
         type: 'function',
-        name: 'highlight_concept',
-        description: 'Highlight or circle an existing board element by label text.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' },
-            style: { type: 'string', enum: ['circle', 'box', 'underline'] }
+        function: {
+          name: 'highlight_concept',
+          description: 'Highlight or circle an existing board element by label text.',
+          parameters: {
+            type: 'object',
+            properties: {
+              targetText: { type: 'string' },
+              style: { type: 'string', enum: ['circle', 'box', 'underline'] }
+            },
+            required: ['targetText'],
           },
-          required: ['targetText'],
         },
       },
       {
         type: 'function',
-        name: 'clear_stage',
-        description: 'Clears the main diagram/stage area so new content can replace old ones cleanly.',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        type: 'function',
-        name: 'clear_board',
-        description: 'Clear the entire canvas (keeps lesson title).',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        type: 'function',
-        name: 'update_text',
-        description: 'Update or edit the text of an existing element on the board.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' },
-            newText: { type: 'string' }
+        function: {
+          name: 'clear_stage',
+          description: 'Clears the main diagram/stage area so new content can replace old ones cleanly.',
+          parameters: {
+            type: 'object',
+            properties: {},
           },
-          required: ['targetText', 'newText'],
         },
       },
       {
         type: 'function',
-        name: 'remove_component',
-        description: 'Remove a component or text matching target text from the board.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' }
+        function: {
+          name: 'clear_board',
+          description: 'Clear the entire canvas (keeps lesson title).',
+          parameters: {
+            type: 'object',
+            properties: {},
           },
-          required: ['targetText'],
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'update_text',
+          description: 'Update or edit the text of an existing element on the board.',
+          parameters: {
+            type: 'object',
+            properties: {
+              targetText: { type: 'string' },
+              newText: { type: 'string' }
+            },
+            required: ['targetText', 'newText'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'remove_component',
+          description: 'Remove a component or text matching target text from the board.',
+          parameters: {
+            type: 'object',
+            properties: {
+              targetText: { type: 'string' }
+            },
+            required: ['targetText'],
+          },
         },
       },
     ];
@@ -593,9 +619,6 @@ export class QwenRealtimeTeacherService {
           setTimeout(() => { if (this.state !== 'listening') this.setState('listening'); }, 400);
         }
 
-        // Illustration is optional and handled by the visualizer co-pilot
-        // when it detects drawing-related phrases in the transcript.
-        // We only log if the model failed to call any text tool this turn.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
           console.log('[QwenRealtime] No text tool called this turn. Visualizer may still trigger on phrase detection.');
         }
@@ -670,7 +693,6 @@ export class QwenRealtimeTeacherService {
           avelutBoardController.removeComponent(args.targetText ?? '');
           break;
         default:
-          // Silently ignore any legacy complex tools the model might still try to call
           console.warn('[QwenRealtime] Ignoring unknown/removed tool:', name, args);
           break;
       }
