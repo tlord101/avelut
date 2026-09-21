@@ -345,102 +345,27 @@ export class QwenRealtimeTeacherService {
       {
         type: 'function',
         name: 'write_text',
-        description:
-          'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
+        description: 'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
         parameters: {
           type: 'object',
           properties: {
-            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
-            fontSize: {
-              type: 'string',
-              enum: ['small', 'medium', 'large', 'title'],
-              description: 'Text size',
-            },
-            color: {
-              type: 'string',
-              description:
-                'Hex color, e.g. "#38BDF8" for accent/formula, "#FAFAFA" for standard, "#FBBF24" for highlight',
-            },
-            x: { type: 'number', description: 'Optional X canvas position (0–800)' },
-            y: { type: 'number', description: 'Optional Y canvas position (0–600)' },
-            isFormula: { type: 'boolean', description: 'True if this is a mathematical or scientific equation' },
+            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' }
           },
           required: ['text'],
         },
-
       },
       {
         type: 'function',
-        name: 'draw_shape',
-        description: 'Draw a rectangle, ellipse, arrow, or line on the board.',
+        name: 'request_diagram',
+        description: 'Request a complex illustration or diagram from the board visualizer.',
         parameters: {
           type: 'object',
           properties: {
-            type: { type: 'string', enum: ['rectangle', 'ellipse', 'arrow', 'line'] },
-            x: { type: 'number' },
-            y: { type: 'number' },
-            width: { type: 'number' },
-            height: { type: 'number' },
-            label: { type: 'string' },
-            color: { type: 'string' },
-            backgroundColor: { type: 'string' },
+            topic: { type: 'string', description: 'The concept name or topic to draw (e.g., "free body diagram of a box")' }
           },
-          required: ['type', 'x', 'y'],
+          required: ['topic'],
         },
-
-      },
-      {
-        type: 'function',
-        name: 'draw_diagram',
-        description:
-          'Draw an intuitive diagram: collision (objects colliding), free_body (forces on an object), coordinate_axes (graphs), flow (step sequences), cycle (circular loops), comparison (contrasting columns), or concept_map (mind map).',
-        parameters: {
-          type: 'object',
-          properties: {
-            diagramType: {
-              type: 'string',
-              enum: ['collision', 'free_body', 'coordinate_axes', 'flow', 'cycle', 'comparison', 'concept_map'],
-            },
-            data: {
-              type: 'object',
-              description: 'Diagram-specific properties (labels, masses, forces, steps, leftTitle, rightTitle, centralConcept, etc.)',
-            },
-          },
-          required: ['diagramType', 'data'],
-        },
-
-      },
-      {
-        type: 'function',
-        name: 'highlight_concept',
-        description:
-          'Draw a circle, dashed box, or underline around an existing concept on the board to direct student attention.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetTextOrLabel: {
-              type: 'string',
-              description: 'Text of the element to highlight',
-            },
-            style: { type: 'string', enum: ['circle', 'box', 'underline'] },
-          },
-          required: ['targetTextOrLabel'],
-        },
-
-      },
-      {
-        type: 'function',
-        name: 'clear_board',
-        description:
-          'Clear the teaching board to start fresh. Set keepTitle=true to preserve the lesson heading.',
-        parameters: {
-          type: 'object',
-          properties: {
-            keepTitle: { type: 'boolean' },
-          },
-        },
-
-      },
+      }
     ];
   }
 
@@ -584,10 +509,22 @@ export class QwenRealtimeTeacherService {
         // Fallback: If the model spoke substantively but didn't explicitly call a tool,
         // we ask the Visualizer Co-Pilot to draw an appropriate diagram or write keywords.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
-          console.log('[QwenRealtime] No tool called this turn, falling back to Visualizer for slice:', this.lastTranscriptSlice);
-          import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
-            avelutBoardVisualizer.processSpeechTranscript(this.lastTranscriptSlice, true);
-          });
+          const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
+          if (triggered) {
+            console.log('[QwenRealtime] Phrase trigger backup fired for slice:', this.lastTranscriptSlice);
+            import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
+              avelutBoardVisualizer.illustrateFromBoardWrite({
+                boardText: 'Fallback Diagram Request',
+                recentSpeech: this.lastTranscriptSlice.slice(-250),
+                forceDiagram: true,
+              });
+            });
+          } else {
+            console.log('[QwenRealtime] No tool called this turn, falling back to Visualizer for slice:', this.lastTranscriptSlice);
+            import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
+              avelutBoardVisualizer.processSpeechTranscript(this.lastTranscriptSlice, true);
+            });
+          }
         }
 
         // Reset turn state
@@ -628,44 +565,17 @@ export class QwenRealtimeTeacherService {
     try {
       switch (name) {
         case 'write_text':
-          avelutBoardController.writeText(args.text ?? args.content ?? '', {
-            fontSize: args.fontSize,
-            color: args.color,
-            x: args.x,
-            y: args.y,
-            isFormula: args.isFormula,
+          avelutBoardController.writeText(args.text ?? args.content ?? '');
+          break;
+
+        case 'request_diagram':
+          import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
+            avelutBoardVisualizer.illustrateFromBoardWrite({
+              boardText: args.topic,
+              recentSpeech: this.lastTranscriptSlice.slice(-250),
+              forceDiagram: true,
+            });
           });
-          break;
-
-        case 'draw_shape':
-          avelutBoardController.drawShape({
-            type: args.type,
-            x: Number(args.x) || 60,
-            y: Number(args.y) || 120,
-            width: args.width,
-            height: args.height,
-            label: args.label,
-            color: args.color,
-            backgroundColor: args.backgroundColor,
-          });
-          break;
-
-        case 'draw_diagram':
-          avelutBoardController.drawDiagram(
-            args.diagramType ?? args.type,
-            args.data ?? args,
-          );
-          break;
-
-        case 'highlight_concept':
-          avelutBoardController.highlightConcept(
-            args.targetTextOrLabel ?? args.text ?? '',
-            args.style ?? 'box',
-          );
-          break;
-
-        case 'clear_board':
-          avelutBoardController.clearBoard(args.keepTitle ?? true);
           break;
 
         default:
