@@ -51,6 +51,7 @@ export class AvelutBoardVisualizerService {
   private isProcessing = false;
   private hasGeneratedKickoff = false;
   private drawnTopics = new Set<string>();
+  private pendingRequests = new Map<string, AbortController>();
 
   constructor(callbacks?: VisualizerCallbacks) {
     if (callbacks) this.callbacks = callbacks;
@@ -102,7 +103,7 @@ export class AvelutBoardVisualizerService {
 
   // ── Network Fetch to Alibaba Text Models ───────────────────────────────────
 
-  private async callAlibabaTextModel(systemPrompt: string, userPrompt: string): Promise<any> {
+  private async callAlibabaTextModel(systemPrompt: string, userPrompt: string, requestId: string, isComplex = false): Promise<any> {
     const apiKey = getAlibabaApiKey(this.appSettings);
     const workspaceId =
       (this.appSettings as any)?.alibaba_workspace_id ||
@@ -116,20 +117,15 @@ export class AvelutBoardVisualizerService {
         window.location.protocol === 'capacitor:' ||
         window.location.protocol === 'ionic:');
 
-    // Prioritize backend proxy endpoints (CORS-safe and authenticated server-side)
-    const endpoints = isNative
-      ? [
-          'https://www.avelut.xyz/api/alibaba-chat',
-          'https://www.avelut.xyz/api/openrouter-chat',
-          '/api/alibaba-chat',
-          '/api/openrouter-chat',
-        ]
-      : [
-          '/api/alibaba-chat',
-          '/api/openrouter-chat',
-          'https://www.avelut.xyz/api/alibaba-chat',
-          'https://www.avelut.xyz/api/openrouter-chat',
-        ];
+    // Prefer a single reliable proxy first. Native apps must use absolute URLs.
+    const primaryEndpoint = isNative
+      ? 'https://www.avelut.xyz/api/alibaba-chat'
+      : '/api/alibaba-chat';
+
+    const endpoints = [
+      primaryEndpoint,
+      isNative ? 'https://www.avelut.xyz/api/openrouter-chat' : '/api/openrouter-chat'
+    ];
 
     const payload = {
       model: 'qwen3.7-flash',
@@ -144,29 +140,39 @@ export class AvelutBoardVisualizerService {
 
     let lastError: any = null;
 
-    for (const ep of endpoints) {
-      try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Title': 'Avelut AI Classroom',
-        };
-        if (apiKey) {
-          headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-        if (workspaceId) {
-          headers['X-DashScope-WorkSpace'] = workspaceId;
+    // Create and track abort controller for this specific request
+    const controller = new AbortController();
+    this.pendingRequests.set(requestId, controller);
+
+    try {
+      for (const ep of endpoints) {
+        if (controller.signal.aborted) {
+          throw new DOMException('The user aborted a request.', 'AbortError');
         }
 
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 22000);
+        try {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'X-Title': 'Avelut AI Classroom',
+          };
+          if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+          }
+          if (workspaceId) {
+            headers['X-DashScope-WorkSpace'] = workspaceId;
+          }
 
-        const res = await fetch(ep, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
+          // Timeout: complex generation gets 30s, simple ones get 15s.
+          const timeoutMs = isComplex ? 30000 : 15000;
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+          const res = await fetch(ep, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
 
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
@@ -185,7 +191,12 @@ export class AvelutBoardVisualizerService {
           }
 
           lastError = new Error(`Endpoint ${ep} returned ${res.status} ${res.statusText}: ${parsedError || 'Unknown error'}`);
-          continue; // Try the next fallback endpoint
+          // Continue to fallback only on real network/5xx errors
+          if (res.status >= 500) {
+            continue;
+          } else {
+             throw lastError;
+          }
         }
 
         const contentStr = await res.text();
@@ -202,6 +213,9 @@ export class AvelutBoardVisualizerService {
           throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 100));
         }
       } catch (err: any) {
+        if (err.name === 'AbortError') {
+          throw err; // Do not fallback on abort
+        }
         if (err.message === 'RATE_LIMIT') {
           throw err; // bubble up without fallback if it's a hard rate limit
         }
@@ -212,6 +226,17 @@ export class AvelutBoardVisualizerService {
 
     console.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
     throw lastError || new Error('Failed to reach AI visualizer model endpoints');
+    } finally {
+      this.pendingRequests.delete(requestId);
+    }
+  }
+
+
+  public cancelPendingRequests(): void {
+    for (const [id, controller] of this.pendingRequests.entries()) {
+      controller.abort();
+    }
+    this.pendingRequests.clear();
   }
 
   // ── Kickoff Management ────────────────────────────────────────────────────
@@ -238,7 +263,9 @@ Return ONLY valid JSON:
     const userPrompt = `Topic: "${topicTitle}"\nCourse: "${courseName}"\nContext: "${syllabusContext || ''}"\nGenerate the best kickoff diagram to introduce this topic.`;
 
     try {
-      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      this.cancelPendingRequests();
+      const requestId = `kickoff_${Date.now()}`;
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.title) {
         avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
       }
@@ -249,7 +276,7 @@ Return ONLY valid JSON:
       this.hasGeneratedKickoff = true;
     } catch (err: any) {
       console.error('[BoardVisualizer] kickoff error:', err);
-      this.setStatus('error', err.message);
+      if (err.name !== 'AbortError') this.setStatus('error', err.message);
     }
   }
 
@@ -260,26 +287,10 @@ Return ONLY valid JSON:
    */
   public processSpeechTranscript(transcript: string, isTurnFinal = false): void {
     if (!transcript) return;
-
-    // Always set or append if service sends deltas only
     this.speechBuffer = transcript;
 
-    if (isTurnFinal) {
-      if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
-      this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals(true);
-      }, 600);
-      return;
-    }
-
-    // Debounce stream: evaluate if enough novel text accumulated
-    const novelChars = transcript.length - this.lastEvaluatedSpeech.length;
-    if (novelChars >= this.minCharsForEval && !this.isProcessing) {
-      if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
-      this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals(false);
-      }, this.evalDebounceMs);
-    }
+    // Autonomous evaluation has been explicitly disabled to prevent dual-writer chaos.
+    // The Qwen realtime model now handles all direct tool calls.
   }
 
   /**
@@ -342,7 +353,9 @@ Recent Focus: "${recentFocus}"
 Instruction: Illustrate what is being taught now with a diagram and/or formula and short labels.`;
 
     try {
-      const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      this.cancelPendingRequests();
+      const requestId = `speech_${Date.now()}`;
+      const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, false);
       console.log('[BoardVisualizer] Speech evaluation decision:', decision);
 
       if (decision.shouldDraw) {
@@ -370,7 +383,7 @@ Instruction: Illustrate what is being taught now with a diagram and/or formula a
         this.lastEvaluatedSpeech = currentSpeech; // Update if model decided not to draw
       }
     } catch (err) {
-      console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
+      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
       // Don't update lastEvaluatedSpeech on error so we can retry with more context
     } finally {
       this.isProcessing = false;
@@ -402,13 +415,15 @@ Force Diagram: ${params.forceDiagram ? 'true' : 'false'}
 Generate the visual board action.`;
 
     try {
-      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      this.cancelPendingRequests();
+      const requestId = `board_${Date.now()}`;
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.action && res.params) {
         this.executeVisualAction(res.action, res.params);
         this.callbacks.onVisualDrawn?.(`Illustrated: ${params.boardText}`);
       }
     } catch (err) {
-      console.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err);
+      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err);
     } finally {
       this.setStatus('ready');
     }
@@ -442,7 +457,9 @@ Requested Diagram Type: ${requestedDiagramType || 'best visual for this concept'
 Generate the diagram data now.`;
 
     try {
-      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      this.cancelPendingRequests();
+      const requestId = `demand_${Date.now()}`;
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.title) {
         avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
       }
@@ -493,13 +510,15 @@ Student Query: "${query}"
 Generate the visual board action.`;
 
     try {
-      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      this.cancelPendingRequests();
+      const requestId = `query_${Date.now()}`;
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.action && res.params) {
         this.executeVisualAction(res.action, res.params);
         this.callbacks.onVisualDrawn?.(`Illustrated answer for student`);
       }
     } catch (err) {
-      console.warn('[BoardVisualizer] handleStudentQuery error:', err);
+      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] handleStudentQuery error:', err);
     } finally {
       this.setStatus('ready');
     }
@@ -596,6 +615,7 @@ Generate the visual board action.`;
 
   /** Clean up timers and reset */
   public endSession(): void {
+    this.cancelPendingRequests();
     if (this.speechDebounceTimer) {
       clearTimeout(this.speechDebounceTimer);
       this.speechDebounceTimer = null;
