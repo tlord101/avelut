@@ -62,6 +62,8 @@ export class QwenRealtimeTeacherService {
   private hasCalledToolInTurn = false;
   private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
   private executedCallIds = new Set<string>();
+  private hasGreeted = false;
+  private isStarting = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -83,9 +85,14 @@ export class QwenRealtimeTeacherService {
     appSettings?: AppSettings | null,
   ): Promise<void> {
     // Guard against double start
-    if (this.ws || this.state !== 'closed' && this.state !== 'connecting' && this.state !== 'error') {
-      this.endSession();
+    if (this.isStarting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
+      console.log('[QwenRealtime] startSession: already connected or starting, returning early');
+      return;
     }
+
+    this.endSession();
+    this.hasGreeted = false;
+    this.isStarting = true;
 
     this.promptConfig = config;
     if (appSettings) this.appSettings = appSettings;
@@ -109,7 +116,9 @@ export class QwenRealtimeTeacherService {
 
       await this.connectWebSocket();
       await this.startMicRecording();
+      this.isStarting = false;
     } catch (err: any) {
+      this.isStarting = false;
       console.error('[QwenRealtime] startSession failed:', err);
       this.setState('error');
       this.callbacks.onError?.(
@@ -155,11 +164,13 @@ export class QwenRealtimeTeacherService {
     void this.outputAudioCtx?.close();
     this.outputAudioCtx = null;
 
-    this.ws?.close();
+    if (this.ws) { this.ws.close(); }
     this.ws = null;
 
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
+    this.hasGreeted = false;
+    this.isStarting = false;
 
     this.setState('closed');
   }
@@ -265,6 +276,11 @@ export class QwenRealtimeTeacherService {
   /** Triggers the initial teacher greeting manually from the UI */
   public triggerInitialGreeting(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (this.hasGreeted) {
+      console.log('[QwenRealtime] Greeting already sent — skip');
+      return;
+    }
+    this.hasGreeted = true;
 
     const topic = this.promptConfig?.topicTitle ? `"${this.promptConfig.topicTitle}"` : 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
@@ -319,17 +335,7 @@ export class QwenRealtimeTeacherService {
       },
     });
 
-    // Safeguard greeting trigger if session.updated is not received within 1500ms
-    setTimeout(() => {
-      if (this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
-        if (this.isAudioUnlocked()) {
-          console.log('[QwenRealtime] Safeguard: triggering initial teacher greeting');
-          this.triggerInitialGreeting();
-        } else {
-          console.log('[QwenRealtime] Safeguard: skipped greeting because audio is not unlocked yet');
-        }
-      }
-    }, 1500);
+
   }
 
   private buildToolDeclarations() {
@@ -547,12 +553,6 @@ export class QwenRealtimeTeacherService {
 
       case 'session.updated':
         console.log('[QwenRealtime] session.updated on DashScope');
-        if (this.isAudioUnlocked()) {
-          console.log('[QwenRealtime] Triggering initial greeting after session.updated');
-          this.triggerInitialGreeting();
-        } else {
-          console.log('[QwenRealtime] Skipped initial greeting on session.updated because audio is not unlocked yet');
-        }
         break;
 
       case 'response.audio.delta':
