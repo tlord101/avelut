@@ -44,9 +44,7 @@ export class PedagogicalStateMachine {
     }
   }
 
-  public recordStudentAnswer(answer: string, isCorrect: boolean): void {
-    // For now, simple heuristics can be tracked here, or just progress the state.
-    // In a full implementation, we'd branch based on isCorrect.
+  public recordStudentAnswer(_answer: string, _isCorrect: boolean): void {
     this.advance();
   }
 
@@ -56,7 +54,6 @@ export class PedagogicalStateMachine {
 
     let changed = false;
 
-    // Force progression if running out of time
     if (timeRatio > 0.85 && this.currentState !== 'SUMMARY' && this.currentState !== 'COMPLETE') {
       if (this.currentState !== 'MASTERY_CHECK') {
         this.forceAdvance('MASTERY_CHECK');
@@ -77,7 +74,6 @@ export class PedagogicalStateMachine {
     const prevState = this.currentState;
     this.turnCountInStage++;
 
-    // Normal progression rules
     switch (this.currentState) {
       case 'GREETING':
         this.currentState = 'STAGE_1_INTUITION';
@@ -109,7 +105,7 @@ export class PedagogicalStateMachine {
 
     if (this.currentState !== prevState) {
       this.turnCountInStage = 0;
-      return true; // state changed
+      return true;
     }
     return false;
   }
@@ -118,35 +114,35 @@ export class PedagogicalStateMachine {
     switch (this.currentState) {
       case 'GREETING':
         return `[CURRENT STAGE: GREETING]
-You are starting the lesson. Greet the student warmly, announce the topic "${this.config.topicTitle}", and IMMEDATELY call a board tool (like draw_diagram or write_text) to illustrate an initial real-world hook. Do NOT ask what topic to teach.`;
+Greet the student warmly, announce the topic "${this.config.topicTitle}", and IMMEDIATELY call write_text (or write_keywords) to put the topic title or a short real-world hook on the board. Do NOT ask what topic to teach.`;
 
       case 'STAGE_1_INTUITION':
         return `[CURRENT STAGE: STAGE 1 - REAL-WORLD INTUITION]
-Start with a vivid, relatable, everyday situation. Make the student feel the concept before they name it. Do NOT use formulas yet.`;
+Start with a vivid, relatable, everyday situation. Make the student feel the concept before they name it. Call write_text with a short label for the intuition (e.g. "Pushing a heavy box"). Do NOT use formulas yet.`;
 
       case 'STAGE_2_VISUAL':
-        return `[CURRENT STAGE: STAGE 2 - VISUAL DEMONSTRATION]
-You MUST call your board tools (write_text, request_diagram, or draw_diagram) in this turn to sketch what you just described. The student must SEE it on the board as you speak. ALWAYS call a tool before speaking.`;
+        return `[CURRENT STAGE: STAGE 2 - KEY POINTS ON BOARD]
+Write the core idea on the board using write_text or write_keywords. Keep it short. Then explain it in 1–2 sentences. Illustration will appear automatically if needed — you do not draw.`;
 
       case 'STAGE_3_EXPLANATION':
         return `[CURRENT STAGE: STAGE 3 - CORE EXPLANATION]
-Explain the physical or conceptual mechanism behind what they just saw. Use short, punchy sentences. No long lectures.`;
+Explain the mechanism behind the idea. Use short, punchy sentences. Call write_text with the key definition or principle. No long lectures.`;
 
       case 'STAGE_4_FORMULA':
         return `[CURRENT STAGE: STAGE 4 - MATHEMATICS & FORMULAS]
-Introduce the formula (if applicable). Show it as a shorthand for the intuition they already have. You MUST write it on the board using the set_formula or write_text tool in this turn!`;
+Introduce the formula (if applicable). You MUST call set_formula or write_text to put it on the board in this turn. Show it as shorthand for the intuition they already have.`;
 
       case 'STAGE_5_SOCRATIC':
         return `[CURRENT STAGE: STAGE 5 - SOCRATIC PARTICIPATION]
-Ask the student ONE short verbal intuition-check question. STOP TALKING. Wait for their response. When they answer, evaluate it verbally.`;
+Ask the student ONE short verbal intuition-check question. STOP TALKING and wait. When they answer, evaluate it verbally.`;
 
       case 'MASTERY_CHECK':
         return `[CURRENT STAGE: MASTERY CHECK]
-You are nearing the end of the lesson. Say: "Let's do a quick mastery check!" Ask a conceptual or formula-application question. Wait for the answer. Evaluate it.`;
+Say: "Let's do a quick mastery check!" Ask a conceptual or formula-application question. Wait for the answer. Evaluate it.`;
 
       case 'SUMMARY':
         return `[CURRENT STAGE: SUMMARY]
-The lesson is wrapping up. Give a brief diagnostic summary of what they understood well and what to review. Keep it encouraging and short.`;
+Give a brief diagnostic summary of what they understood well and what to review. Keep it encouraging and short.`;
 
       case 'COMPLETE':
         return `[CURRENT STAGE: COMPLETE]

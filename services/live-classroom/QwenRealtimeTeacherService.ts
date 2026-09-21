@@ -8,7 +8,12 @@
  *  - 16kHz PCM16 mic input streaming
  *  - 24kHz PCM16 gapless Web Audio playback
  *  - Semantic barge-in / interruption (input_audio_buffer.speech_started)
- *  - Native function / tool calling → dispatches to AvelutBoardController
+ *  - Native function / tool calling → dispatches ONLY text tools to AvelutBoardController
+ *
+ * Design rule (2026-09):
+ *  Realtime model must always call text tools (write_text / set_formula / write_keywords).
+ *  Complex illustration is optional and handled by AvelutBoardVisualizerService
+ *  via phrase detection on the transcript. No draw_* tools are exposed to the model.
  */
 
 import { avelutBoardController } from './AvelutBoardController';
@@ -297,9 +302,9 @@ export class QwenRealtimeTeacherService {
 
     const topic = this.promptConfig?.topicTitle ? `"${this.promptConfig.topicTitle}"` : 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
-    console.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
+    console.log('[QwenRealtime] Manually triggering initial greeting for', topic, `(${duration} min)`);
 
-    // Give the model a direct instruction to greet warmly AND immediately draw on the board
+    // Only ask for text tools — illustration is handled by the visualizer
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -308,7 +313,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me, announce that today we are mastering ${topic}, and immediately call your board tools (draw_diagram, draw_shape, or write_text) to illustrate the introductory visual concept on the board as you speak! Do not ask me what topic we are going to discuss.`,
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me, announce that today we are mastering ${topic}, and immediately call write_text (or write_keywords) to put the topic title or a short real-world hook on the board. Do not ask me what topic we are going to discuss.`,
         }],
       },
     });
@@ -326,7 +331,7 @@ export class QwenRealtimeTeacherService {
 
     const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
     const instructions = buildTeacherSystemPrompt(this.promptConfig, stageInstruction);
-    console.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
+    console.log('[QwenRealtime] Sending session.update with text-only tools schema...');
 
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
@@ -350,20 +355,23 @@ export class QwenRealtimeTeacherService {
         parallel_tool_calls: true,
       },
     });
-
-
   }
 
+  /**
+   * TEXT TOOLS ONLY.
+   * Complex illustration (diagrams, flowcharts) is handled by AvelutBoardVisualizerService
+   * when it detects drawing-related phrases in the transcript.
+   */
   private buildToolDeclarations() {
     return [
       {
         type: 'function',
         name: 'write_text',
-        description: 'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
+        description: 'Write a key title, definition, core principle, or short label on the teaching board. Never write speech transcripts. Max ~12 words.',
         parameters: {
           type: 'object',
           properties: {
-            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' }
+            text: { type: 'string', description: 'Short text or label to display' }
           },
           required: ['text'],
         },
@@ -371,11 +379,11 @@ export class QwenRealtimeTeacherService {
       {
         type: 'function',
         name: 'set_formula',
-        description: 'Display a highlighted law or equation in the formula card slot.',
+        description: 'Display a highlighted law or equation in the formula card slot (e.g. F = ma).',
         parameters: {
           type: 'object',
           properties: {
-            formula: { type: 'string', description: 'The formula to display (e.g. F = ma)' }
+            formula: { type: 'string', description: 'The formula to display' }
           },
           required: ['formula'],
         },
@@ -383,46 +391,13 @@ export class QwenRealtimeTeacherService {
       {
         type: 'function',
         name: 'write_keywords',
-        description: 'Write a row of highlighted keyword pills.',
+        description: 'Write a row of highlighted keyword pills (2–4 technical terms).',
         parameters: {
           type: 'object',
           properties: {
             keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' }
           },
           required: ['keywords'],
-        },
-      },
-      {
-        type: 'function',
-        name: 'draw_diagram',
-        description: 'Draw a high-level intuitive diagram on the stage.',
-        parameters: {
-          type: 'object',
-          properties: {
-            diagramType: { type: 'string', enum: ['concept_map', 'cycle', 'flow', 'comparison', 'coordinate_axes', 'free_body', 'collision'] },
-            data: { type: 'object', description: 'Structured data for the diagram. Varies by type.' }
-          },
-          required: ['diagramType', 'data'],
-        },
-      },
-      {
-        type: 'function',
-        name: 'draw_shape',
-        description: 'Draw a geometric shape or arrow.',
-        parameters: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['rectangle', 'ellipse', 'arrow', 'line'] },
-            x: { type: 'number' },
-            y: { type: 'number' },
-            width: { type: 'number' },
-            height: { type: 'number' },
-            label: { type: 'string' },
-            color: { type: 'string' },
-            backgroundColor: { type: 'string' },
-            strokeStyle: { type: 'string', enum: ['solid', 'dashed', 'dotted'] }
-          },
-          required: ['type', 'x', 'y'],
         },
       },
       {
@@ -441,7 +416,7 @@ export class QwenRealtimeTeacherService {
       {
         type: 'function',
         name: 'clear_stage',
-        description: 'Clears the main diagram stage so new diagrams replace old ones cleanly.',
+        description: 'Clears the main diagram/stage area so new content can replace old ones cleanly.',
         parameters: {
           type: 'object',
           properties: {},
@@ -459,7 +434,7 @@ export class QwenRealtimeTeacherService {
       {
         type: 'function',
         name: 'update_text',
-        description: 'Update or edit the text of an existing element.',
+        description: 'Update or edit the text of an existing element on the board.',
         parameters: {
           type: 'object',
           properties: {
@@ -481,18 +456,6 @@ export class QwenRealtimeTeacherService {
           required: ['targetText'],
         },
       },
-      {
-        type: 'function',
-        name: 'request_diagram',
-        description: 'Request a complex illustration or diagram from the board visualizer. Use this ONLY for complex drawings you cannot do directly.',
-        parameters: {
-          type: 'object',
-          properties: {
-            topic: { type: 'string', description: 'The concept name or topic to draw (e.g., "free body diagram of a box")' }
-          },
-          required: ['topic'],
-        },
-      }
     ];
   }
 
@@ -513,7 +476,6 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
-    // Log incoming event types clearly
     console.log(`[QwenRealtime] Event received: ${event.type}`);
 
     switch (event.type) {
@@ -631,23 +593,11 @@ export class QwenRealtimeTeacherService {
           setTimeout(() => { if (this.state !== 'listening') this.setState('listening'); }, 400);
         }
 
-        // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
-        // We demote the phrase-trigger backup so it only triggers as a last resort, avoiding dual-writer chaos.
-        // Also removed autonomous visualizer processing.
+        // Illustration is optional and handled by the visualizer co-pilot
+        // when it detects drawing-related phrases in the transcript.
+        // We only log if the model failed to call any text tool this turn.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
-          const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
-          if (triggered) {
-            console.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
-            import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
-              avelutBoardVisualizer.illustrateFromBoardWrite({
-                boardText: 'Fallback Diagram Request',
-                recentSpeech: this.lastTranscriptSlice.slice(-250),
-                forceDiagram: true,
-              });
-            });
-          } else {
-            console.log('[QwenRealtime] No tool called this turn, but no drawing phrase detected. Doing nothing.');
-          }
+          console.log('[QwenRealtime] No text tool called this turn. Visualizer may still trigger on phrase detection.');
         }
 
         // Reset turn state
@@ -659,7 +609,7 @@ export class QwenRealtimeTeacherService {
            const timeChanged = this.stateMachine.evaluateState();
            const turnChanged = this.stateMachine.advance();
            if (timeChanged || turnChanged) {
-             this.sendSessionInit(); // Send session update to update prompt with new state
+             this.sendSessionInit(); // Update prompt with new stage instruction
            }
         }
         break;
@@ -674,7 +624,7 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  // ── Tool execution → AvelutBoardController ────────────────────────────────
+  // ── Tool execution → AvelutBoardController (text tools only) ─────────────
 
   private executeToolCall(callId: string, name: string, argsRaw: any): void {
     if (this.executedCallIds.has(callId)) return;
@@ -704,22 +654,6 @@ export class QwenRealtimeTeacherService {
         case 'write_keywords':
           avelutBoardController.writeKeywords(args.keywords ?? []);
           break;
-        case 'draw_diagram':
-          avelutBoardController.drawDiagram(args.diagramType ?? '', args.data ?? {});
-          break;
-        case 'draw_shape':
-          avelutBoardController.drawShape({
-            type: args.type,
-            x: args.x,
-            y: args.y,
-            width: args.width,
-            height: args.height,
-            label: args.label,
-            color: args.color,
-            backgroundColor: args.backgroundColor,
-            strokeStyle: args.strokeStyle,
-          });
-          break;
         case 'highlight_concept':
           avelutBoardController.highlightConcept(args.targetText ?? '', args.style);
           break;
@@ -735,18 +669,9 @@ export class QwenRealtimeTeacherService {
         case 'remove_component':
           avelutBoardController.removeComponent(args.targetText ?? '');
           break;
-        case 'request_diagram':
-          import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
-            avelutBoardVisualizer.illustrateFromBoardWrite({
-              boardText: args.topic ?? '',
-              recentSpeech: this.lastTranscriptSlice.slice(-250),
-              forceDiagram: true,
-            });
-          });
-          break;
-
         default:
-          console.warn('[QwenRealtime] Unknown tool:', name, args);
+          // Silently ignore any legacy complex tools the model might still try to call
+          console.warn('[QwenRealtime] Ignoring unknown/removed tool:', name, args);
           break;
       }
     } catch (toolErr) {
@@ -778,81 +703,49 @@ export class QwenRealtimeTeacherService {
 
     const source = this.inputAudioCtx.createMediaStreamSource(this.micStream);
 
-    const handleAudioData = (data: Float32Array) => {
+    // ScriptProcessor is deprecated but still the most reliable cross-browser path
+    // for realtime PCM streaming without AudioWorklet complexity.
+    const bufferSize = 4096;
+    const processor = this.inputAudioCtx.createScriptProcessor(bufferSize, 1, 1);
+    this.processorNode = processor;
+
+    processor.onaudioprocess = (e) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
-      if (this.state === 'speaking' || performance.now() < this.teacherSpeakingUntil) return;
 
-      // Compute RMS for UI visualisation
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-      this.callbacks.onAudioLevel?.(Math.min(1, Math.sqrt(sum / data.length) * 4));
+      const input = e.inputBuffer.getChannelData(0);
+      // Convert Float32 → Int16 PCM
+      const pcm = new Int16Array(input.length);
+      for (let i = 0; i < input.length; i++) {
+        const s = Math.max(-1, Math.min(1, input[i]));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
 
-      // Float32 → Int16 → Base64
-      const pcm16 = new Int16Array(data.length);
-      for (let i = 0; i < data.length; i++) {
-        const s = Math.max(-1, Math.min(1, data[i]));
-        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      // Base64 encode and send
+      const bytes = new Uint8Array(pcm.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
       }
-      const bytes = new Uint8Array(pcm16.buffer);
-      let bin = '';
-      for (let i = 0; i < bytes.length; i++) {
-        bin += String.fromCharCode(bytes[i]);
-      }
+      const base64 = btoa(binary);
 
       this.sendJson({
-        event_id: `aud_in_${Date.now()}`,
+        event_id: `audio_${Date.now()}`,
         type: 'input_audio_buffer.append',
-        audio: btoa(bin),
+        audio: base64,
       });
+
+      // Simple RMS for UI level meter
+      let sum = 0;
+      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+      const rms = Math.sqrt(sum / input.length);
+      this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
     };
 
-    // 1. Try modern AudioWorkletNode first (prevents ScriptProcessorNode deprecation warning)
-    if (this.inputAudioCtx.audioWorklet) {
-      try {
-        const workletCode = `
-          class PCM16RecorderProcessor extends AudioWorkletProcessor {
-            process(inputs) {
-              const input = inputs[0];
-              if (input && input[0]) {
-                this.port.postMessage(input[0]);
-              }
-              return true;
-            }
-          }
-          registerProcessor('pcm16-recorder-processor', PCM16RecorderProcessor);
-        `;
-        const blob = new Blob([workletCode], { type: 'application/javascript' });
-        const workletUrl = URL.createObjectURL(blob);
-        await this.inputAudioCtx.audioWorklet.addModule(workletUrl);
-        URL.revokeObjectURL(workletUrl);
-
-        const workletNode = new AudioWorkletNode(this.inputAudioCtx, 'pcm16-recorder-processor');
-        workletNode.port.onmessage = (e) => {
-          if (e.data && e.data instanceof Float32Array) {
-            handleAudioData(e.data);
-          }
-        };
-
-        source.connect(workletNode);
-        workletNode.connect(this.inputAudioCtx.destination);
-        this.processorNode = workletNode;
-        return;
-      } catch (workletErr) {
-        console.warn('[QwenRealtime] AudioWorklet init failed, falling back to ScriptProcessor:', workletErr);
-      }
-    }
-
-    // 2. Fallback: ScriptProcessorNode for legacy browser/webview compatibility
-    const scriptProcessor = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
-    scriptProcessor.onaudioprocess = (e) => {
-      handleAudioData(e.inputBuffer.getChannelData(0));
-    };
-    source.connect(scriptProcessor);
-    scriptProcessor.connect(this.inputAudioCtx.destination);
-    this.processorNode = scriptProcessor;
+    source.connect(processor);
+    processor.connect(this.inputAudioCtx.destination);
   }
 
-  // ── Audio output (WebSocket → speaker) ───────────────────────────────────
+  // ── Audio output (WS → speaker) ───────────────────────────────────────────
 
   private async ensureOutputRunning(): Promise<void> {
     if (!this.outputAudioCtx) return;
@@ -868,7 +761,6 @@ export class QwenRealtimeTeacherService {
   private async playDelta(base64: string): Promise<void> {
     if (!this.outputAudioCtx || !base64) return;
     try {
-      // Ensure audio context is running when we receive audio
       await this.ensureOutputRunning();
 
       if (this.outputAudioCtx.state === 'suspended') {
@@ -931,4 +823,3 @@ export class QwenRealtimeTeacherService {
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
   }
 }
-
