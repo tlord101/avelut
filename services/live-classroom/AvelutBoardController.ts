@@ -102,7 +102,7 @@ export class AvelutBoardController {
    * Syncs elements to Excalidraw while locking zoom at 1.0 and scroll at (0, 0).
    * Strictly prevents zooming in/out or camera panning across elements.
    */
-  private syncScene(): void {
+  private syncScene(_unused?: boolean): void {
     if (!this.api) {
       return;
     }
@@ -110,7 +110,7 @@ export class AvelutBoardController {
       this.api.updateScene({
         elements: [...this.elements],
         appState: {
-          zoom: { value: 1.0 },
+          zoom: { value: 1.0 as any },
           scrollX: 0,
           scrollY: 0,
         },
@@ -333,7 +333,7 @@ export class AvelutBoardController {
     });
 
     if (found) {
-      this.syncScene(false);
+      this.syncScene();
       console.log(`[BoardController] Updated text matching "${targetTextOrLabel}" -> "${newText}"`);
     }
     return found;
@@ -353,7 +353,7 @@ export class AvelutBoardController {
     });
 
     if (this.elements.length !== initialLen) {
-      this.syncScene(false);
+      this.syncScene();
       console.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
       return true;
     }
