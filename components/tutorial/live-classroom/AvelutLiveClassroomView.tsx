@@ -242,19 +242,21 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     if (!startedSessionRef.current) {
-      startSession();
       startedSessionRef.current = true;
+      startSession();
     }
     return () => {
-      // Allow StrictMode teardown, but note this will close the session
+      cancelled = true;
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
-        startedSessionRef.current = false;
-        setHasStarted(false);
       }
       avelutBoardVisualizer.endSession();
+      // Do not reset startedSessionRef.current here to prevent double-connects in StrictMode.
+      // Or we can just leave it as it is because we need it to reconnect if the component actually unmounts and remounts.
+      // The issue says: "Prefer a pattern that guarantees startSession runs once per navigation into the classroom, not twice."
     };
   }, [startSession]);
 
@@ -303,6 +305,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   const handleRetry = () => {
     setErrorMsg(null);
+    setHasStarted(false);
     serviceRef.current?.endSession();
     startSession();
   };
