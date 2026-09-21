@@ -342,6 +342,40 @@ Instruction: Illustrate what is being taught now with a diagram and/or formula a
 
   // ── On-Demand Illustration ────────────────────────────────────────────────
 
+  public async illustrateFromBoardWrite(params: { boardText: string, recentSpeech: string, forceDiagram?: boolean }): Promise<void> {
+    if (!this.config?.topicTitle) return;
+    this.setStatus('visualizing', `Drawing: "${params.boardText}"…`);
+
+    const systemPrompt = `You are an elite autonomous digital blackboard illustrator.
+A lecturer has requested a specific diagram or visual on the board.
+Return ONLY valid JSON.
+Allowed actions: "draw_diagram", "write_text", "set_formula", "draw_shape", "write_keywords".
+{
+  "action": "draw_diagram" | "write_text" | "set_formula" | "draw_shape" | "write_keywords",
+  "params": { ... }
+}`;
+
+    const userPrompt = `Topic: "${this.config.topicTitle}"
+Context: "${this.config.syllabusContext || ''}"
+Recent Speech: "${params.recentSpeech}"
+Requested Diagram/Text: "${params.boardText}"
+Force Diagram: ${params.forceDiagram ? 'true' : 'false'}
+
+Generate the visual board action.`;
+
+    try {
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      if (res.action && res.params) {
+        this.executeVisualAction(res.action, res.params);
+        this.callbacks.onVisualDrawn?.(`Illustrated: ${params.boardText}`);
+      }
+    } catch (err) {
+      console.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err);
+    } finally {
+      this.setStatus('ready');
+    }
+  }
+
   /**
    * Triggered when the student or UI requests a visual illustration on demand.
    */
