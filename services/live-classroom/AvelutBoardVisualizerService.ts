@@ -3,17 +3,12 @@
  *
  * Co-Pilot AI Board Illustrator that runs alongside the Realtime Voice Teacher.
  *
- * Capabilities:
- *  1. Immediate Kickoff Illustration: As soon as the lesson begins, requests
- *     Alibaba Cloud text models (qwen3.7-flash / qwen-plus) to generate a rich,
- *     intuitive opening diagram (concept map, cycle, flow, comparison, or formula)
- *     and draws it onto the Excalidraw board immediately.
- *  2. Real-Time Speech Visual Streaming: Monitors speech transcripts from the voice
- *     teacher in real time. When new concepts, processes, or equations are explained,
- *     autonomously creates and streams matching visual diagrams, shapes, and highlights
- *     onto the board.
- *  3. On-Demand Visual Illustration: Allows the student to tap "✨ Illustrate" or
- *     request specific diagrams (concept_map, cycle, comparison, flow) on demand.
+ * Design:
+ *  - Realtime model only writes TEXT (write_text / set_formula / write_keywords).
+ *  - This service generates DIAGRAMS when the teacher speech contains illustration phrases
+ *    ("imagine", "let me draw", "on the board", "picture this", etc.).
+ *  - Kickoff illustration runs once at lesson start with a COMPACT JSON schema
+ *    so responses are not truncated by max_tokens.
  */
 
 import { avelutBoardController } from './AvelutBoardController';
@@ -36,6 +31,10 @@ export interface VisualizerCallbacks {
   onVisualDrawn?: (summary: string) => void;
 }
 
+/** Phrases that trigger the text-model illustrator from teacher speech */
+const ILLUSTRATION_PHRASE_RE =
+  /\b(let me draw|i(?:'| a)?m going to draw|on the board|let me show you|show you on the board|picture this|imagine|visuali[sz]e|let me sketch|sketch this|draw a|draw the|diagram|flowchart|flow chart|concept map|mind map|let me map|illustrate|let me illustrate|here(?:'| i)s a diagram|look at this diagram)\b/i;
+
 export class AvelutBoardVisualizerService {
   private config: VisualizerConfig | null = null;
   private appSettings: AppSettings | null = null;
@@ -44,9 +43,8 @@ export class AvelutBoardVisualizerService {
 
   private speechBuffer = '';
   private lastEvaluatedSpeech = '';
-  private minCharsForEval = 180;
-  private maxContextChars = 900;
-  private evalDebounceMs = 2500;
+  private lastPhraseTriggerAt = 0;
+  private phraseCooldownounceMs = 8000; // do not fire more than once every 8s
   private speechDebounceTimer: any = null;
   private isProcessing = false;
   private hasGeneratedKickoff = false;
@@ -76,6 +74,7 @@ export class AvelutBoardVisualizerService {
     if (appSettings) this.appSettings = appSettings;
     this.speechBuffer = '';
     this.lastEvaluatedSpeech = '';
+    this.lastPhraseTriggerAt = 0;
     this.hasGeneratedKickoff = false;
     this.drawnTopics.clear();
   }
@@ -84,26 +83,47 @@ export class AvelutBoardVisualizerService {
 
   private safeJsonParse(text: string): any {
     try {
-      const sanitizedStr = text.replace(/^```json/i, '').replace(/```$/i, '').trim();
-      return JSON.parse(sanitizedStr);
+      let s = text.trim();
+      // Strip markdown fences if present
+      s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      return JSON.parse(s);
     } catch {
+      // Try to extract the largest {...} block
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[0]);
-        } catch (e) {
-          console.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text);
-          return null;
+        } catch {
+          // Truncated JSON — try to close open braces/brackets roughly
+          let partial = jsonMatch[0];
+          // Remove trailing incomplete string
+          partial = partial.replace(/,\s*"[^"]*$/, '');
+          partial = partial.replace(/,\s*$/, '');
+          // Balance braces
+          const opens = (partial.match(/\{/g) || []).length;
+          const closes = (partial.match(/\}/g) || []).length;
+          for (let i = 0; i < opens - closes; i++) partial += '}';
+          try {
+            return JSON.parse(partial);
+          } catch (e2) {
+            console.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text.slice(0, 400));
+            return null;
+          }
         }
       }
-      console.warn('[BoardVisualizer] Failed to parse JSON from response:', text);
+      console.warn('[BoardVisualizer] Failed to parse JSON from response:', text.slice(0, 200));
       return null;
     }
   }
 
   // ── Network Fetch to Alibaba Text Models ───────────────────────────────────
 
-  private async callAlibabaTextModel(systemPrompt: string, userPrompt: string, requestId: string, isComplex = false): Promise<any> {
+  private async callAlibabaTextModel(
+    systemPrompt: string,
+    userPrompt: string,
+    requestId: string,
+    isComplex = false,
+  ): Promise<any> {
     const apiKey = getAlibabaApiKey(this.appSettings);
     const workspaceId =
       (this.appSettings as any)?.alibaba_workspace_id ||
@@ -117,30 +137,29 @@ export class AvelutBoardVisualizerService {
         window.location.protocol === 'capacitor:' ||
         window.location.protocol === 'ionic:');
 
-    // Prefer a single reliable proxy first. Native apps must use absolute URLs.
     const primaryEndpoint = isNative
       ? 'https://www.avelut.xyz/api/alibaba-chat'
       : '/api/alibaba-chat';
 
     const endpoints = [
       primaryEndpoint,
-      isNative ? 'https://www.avelut.xyz/api/openrouter-chat' : '/api/openrouter-chat'
+      isNative ? 'https://www.avelut.xyz/api/openrouter-chat' : '/api/openrouter-chat',
     ];
 
+    // Compact responses for diagrams — higher max_tokens only when needed
     const payload = {
       model: 'qwen3.7-flash',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.25,
+      temperature: 0.2,
       response_format: { type: 'json_object' },
-      max_tokens: 2500,
+      max_tokens: isComplex ? 1800 : 900,
     };
 
     let lastError: any = null;
 
-    // Create and track abort controller for this specific request
     const controller = new AbortController();
     this.pendingRequests.set(requestId, controller);
 
@@ -155,15 +174,10 @@ export class AvelutBoardVisualizerService {
             'Content-Type': 'application/json',
             'X-Title': 'Avelut AI Classroom',
           };
-          if (apiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-          }
-          if (workspaceId) {
-            headers['X-DashScope-WorkSpace'] = workspaceId;
-          }
+          if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+          if (workspaceId) headers['X-DashScope-WorkSpace'] = workspaceId;
 
-          // Timeout: complex generation gets 30s, simple ones get 15s.
-          const timeoutMs = isComplex ? 30000 : 15000;
+          const timeoutMs = isComplex ? 28000 : 14000;
           const timer = setTimeout(() => controller.abort(), timeoutMs);
 
           const res = await fetch(ep, {
@@ -174,66 +188,60 @@ export class AvelutBoardVisualizerService {
           });
           clearTimeout(timer);
 
-        if (!res.ok) {
-          const errBody = await res.text().catch(() => '');
-          console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status} ${res.statusText}:`, errBody);
+          if (!res.ok) {
+            const errBody = await res.text().catch(() => '');
+            console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status}:`, errBody.slice(0, 200));
 
-          if (res.status === 429) {
-            console.warn('[BoardVisualizer] Rate limited by upstream. Gracefully failing this turn.');
-            throw new Error('RATE_LIMIT');
+            if (res.status === 429) throw new Error('RATE_LIMIT');
+
+            lastError = new Error(`Endpoint ${ep} returned ${res.status}`);
+            if (res.status >= 500) continue;
+            throw lastError;
           }
 
-          let parsedError;
-          try {
-            parsedError = JSON.parse(errBody).error;
-          } catch {
-            parsedError = errBody;
-          }
-
-          lastError = new Error(`Endpoint ${ep} returned ${res.status} ${res.statusText}: ${parsedError || 'Unknown error'}`);
-          // Continue to fallback only on real network/5xx errors
-          if (res.status >= 500) {
+          const contentStr = await res.text();
+          if (!contentStr) {
+            lastError = new Error(`Empty response from ${ep}`);
             continue;
-          } else {
-             throw lastError;
           }
-        }
 
-        const contentStr = await res.text();
-        if (!contentStr) {
-          lastError = new Error(`Empty response from AI visualizer model at ${ep}.`);
-          console.warn(`[BoardVisualizer] ${lastError.message}`);
-          continue; // Try the next fallback endpoint
-        }
+          // Some proxies wrap the model output in { choices: [{ message: { content } }] }
+          let rawForParse = contentStr;
+          try {
+            const outer = JSON.parse(contentStr);
+            if (outer?.choices?.[0]?.message?.content) {
+              rawForParse = outer.choices[0].message.content;
+            } else if (typeof outer?.content === 'string') {
+              rawForParse = outer.content;
+            } else if (outer?.title || outer?.diagramType || outer?.action || outer?.shouldDraw) {
+              // Already the diagram/action JSON
+              return outer;
+            }
+          } catch {
+            // contentStr is already the model JSON string
+          }
 
-        const parsedJson = this.safeJsonParse(contentStr);
-        if (parsedJson) {
-          return parsedJson;
-        } else {
-          throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 100));
+          const parsedJson = this.safeJsonParse(rawForParse);
+          if (parsedJson) return parsedJson;
+
+          throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 120));
+        } catch (err: any) {
+          if (err.name === 'AbortError') throw err;
+          if (err.message === 'RATE_LIMIT') throw err;
+          lastError = err;
+          console.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-          throw err; // Do not fallback on abort
-        }
-        if (err.message === 'RATE_LIMIT') {
-          throw err; // bubble up without fallback if it's a hard rate limit
-        }
-        lastError = err;
-        console.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
       }
-    }
 
-    console.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
-    throw lastError || new Error('Failed to reach AI visualizer model endpoints');
+      console.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
+      throw lastError || new Error('Failed to reach AI visualizer model endpoints');
     } finally {
       this.pendingRequests.delete(requestId);
     }
   }
 
-
   public cancelPendingRequests(): void {
-    for (const [id, controller] of this.pendingRequests.entries()) {
+    for (const [, controller] of this.pendingRequests.entries()) {
       controller.abort();
     }
     this.pendingRequests.clear();
@@ -242,149 +250,126 @@ export class AvelutBoardVisualizerService {
   // ── Kickoff Management ────────────────────────────────────────────────────
 
   /**
-   * Classroom entrance: The blackboard starts clean with only the topic title in the header.
-   * Visual diagrams and formulas are drawn dynamically as the lecturer speaks.
+   * Compact kickoff diagram — short labels only so JSON never truncates.
    */
   public async generateKickoffIllustration(): Promise<void> {
     if (!this.config?.topicTitle) return;
+    if (this.hasGeneratedKickoff) return;
 
     this.setStatus('visualizing', 'Generating topic kickoff diagram…');
     const { topicTitle, courseName = 'Academic Course', syllabusContext } = this.config;
 
-    const systemPrompt = `You are a live blackboard illustrator setting up the opening visualization for a new lesson.
-Generate a structured topic overview diagram for the student in JSON.
-Valid diagram types: "concept_map", "cycle", "flow", "comparison".
-Return ONLY valid JSON:
+    const systemPrompt = `You are a live blackboard illustrator.
+Return ONLY compact valid JSON for a simple opening diagram.
+Rules:
+- Use diagramType: "concept_map" | "flow" | "cycle" | "comparison"
+- Labels max 4 words each. NO long descriptions.
+- Max 5 nodes for concept_map. Max 4 steps for flow/cycle.
+Schema:
 {
-  "title": "Diagram Title",
-  "diagramType": "concept_map" | "cycle" | "flow" | "comparison",
-  "data": { ... }
+  "title": "Short Title",
+  "diagramType": "concept_map",
+  "data": {
+    "nodes": [{"id": "a", "label": "Label"}],
+    "connections": [{"from": "a", "to": "b"}],
+    "steps": ["Step 1", "Step 2"]
+  }
 }`;
-    const userPrompt = `Topic: "${topicTitle}"\nCourse: "${courseName}"\nContext: "${syllabusContext || ''}"\nGenerate the best kickoff diagram to introduce this topic.`;
+
+    const userPrompt = `Topic: "${topicTitle}"
+Course: "${courseName}"
+Context: "${(syllabusContext || '').slice(0, 200)}"
+Generate a compact kickoff diagram. Short labels only.`;
 
     try {
-      this.cancelPendingRequests();
+      // Do NOT cancel other requests aggressively on kickoff — only cancel older kickoffs
       const requestId = `kickoff_${Date.now()}`;
       const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
+
       if (res.title) {
         avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
       }
       if (res.diagramType && res.data) {
         avelutBoardController.drawDiagram(res.diagramType, res.data);
+      } else if (res.action && res.params) {
+        this.executeVisualAction(res.action, res.params);
       }
       this.setStatus('ready');
       this.hasGeneratedKickoff = true;
+      this.callbacks.onVisualDrawn?.(res.title || 'Kickoff diagram');
     } catch (err: any) {
       console.error('[BoardVisualizer] kickoff error:', err);
       if (err.name !== 'AbortError') this.setStatus('error', err.message);
     }
   }
 
-  // ── Speech Transcript Monitoring (Autonomous Co-Pilot) ────────────────────
+  // ── Speech Transcript Monitoring (phrase-triggered illustration) ─────────
 
   /**
    * Called as speech transcripts arrive from QwenRealtimeTeacherService.
+   * When illustration phrases are detected (imagine, draw, on the board, …),
+   * triggers the text model to generate a diagram.
    */
   public processSpeechTranscript(transcript: string, isTurnFinal = false): void {
     if (!transcript) return;
     this.speechBuffer = transcript;
 
-    // Autonomous evaluation has been explicitly disabled to prevent dual-writer chaos.
-    // The Qwen realtime model now handles all direct tool calls.
+    const slice = transcript.slice(-400);
+    if (!ILLUSTRATION_PHRASE_RE.test(slice)) return;
+
+    const now = Date.now();
+    if (now - this.lastPhraseTriggerAt < this.phraseDebounceMs) return;
+    if (this.isProcessing) return;
+
+    // Debounce slightly so we get a fuller sentence after the trigger phrase
+    if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
+    this.speechDebounceTimer = setTimeout(() => {
+      this.lastPhraseTriggerAt = Date.now();
+      void this.triggerIllustrationFromSpeech(slice);
+    }, isTurnFinal ? 400 : 900);
   }
 
-  /**
-   * Sends the recent speech explanation to the Alibaba text model to determine
-   * if a specific formula, shape, highlight, or diagram should appear on the board.
-   */
-  private async evaluateSpeechForVisuals(isTurnFinal = false): Promise<void> {
-    if (this.isProcessing || !this.config?.topicTitle) return;
-
-    const currentSpeech = this.speechBuffer.trim();
-    if (currentSpeech.length < 30 || currentSpeech === this.lastEvaluatedSpeech) return;
-
-    const full = currentSpeech;
-    const novel = full.slice(this.lastEvaluatedSpeech.length).trim();
-
-    // Prefer a wide window of recent context
-    const contextWindow = full.slice(-this.maxContextChars);
-    const recentFocus = novel.length >= 80 ? novel.slice(-this.maxContextChars) : contextWindow;
-
-    // Skip short conversational greetings / checks
-    if (recentFocus.length < 25 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentFocus)) {
-      return;
-    }
+  private async triggerIllustrationFromSpeech(recentSpeech: string): Promise<void> {
+    if (!this.config?.topicTitle || this.isProcessing) return;
 
     this.isProcessing = true;
-    this.setStatus('visualizing', 'Updating board illustration…');
+    this.setStatus('visualizing', 'Illustrating from speech…');
 
-    const systemPrompt = `You are an elite autonomous digital blackboard illustrator for a live university lecture.
-The lecturer is teaching and explaining concepts. You must decide what visual updates to render on the blackboard right now.
-
-CRITICAL RULES:
-1. Prefer shouldDraw true when the teacher explains a concept, law, process, comparison, or equation.
-2. Allowed actions (can return MULTIPLE in one response):
-   - "write_text": short title or 1-line definition (max ~12 words). Never paste full spoken paragraphs!
-   - "set_formula": equations like F = ma, v = u + at
-   - "draw_diagram": concept_map | flow | cycle | comparison | coordinate_axes | free_body | collision
-   - "draw_shape": supporting arrows/boxes
-   - "write_keywords": 2–4 technical terms
-   - "highlight_concept" / "clear_stage" when switching topics
-3. Always include at least one visual action when shouldDraw is true (diagram OR formula OR keywords + text).
-4. If the speech is purely conversational greeting, transitioning, or asking a question to the student without introducing a visual concept, return {"shouldDraw": false}. Do NOT draw anything!
-
-Return strict JSON only matching:
+    const systemPrompt = `You are a live blackboard illustrator.
+The teacher just used a phrase that suggests a visual (draw / imagine / on the board / picture / diagram).
+Return ONLY compact valid JSON.
+Prefer:
 {
-  "shouldDraw": true | false,
-  "summary": "Brief 3-word summary of the visual action",
-  "actions": [
-    {
-      "action": "draw_diagram" | "write_text" | "set_formula" | "draw_shape" | "write_keywords" | "highlight_concept" | "clear_stage",
-      "params": { ... }
-    }
-  ]
-}`;
+  "action": "draw_diagram",
+  "params": {
+    "diagramType": "concept_map" | "flow" | "cycle" | "comparison" | "free_body" | "coordinate_axes",
+    "data": { "nodes": [{"id":"a","label":"Short"}], "connections": [], "steps": [] }
+  }
+}
+Or for a formula: { "action": "set_formula", "params": { "formula": "V = IR" } }
+Or keywords: { "action": "write_keywords", "params": { "keywords": ["term1", "term2"] } }
+Labels max 4 words. No long descriptions.`;
 
     const userPrompt = `Topic: "${this.config.topicTitle}"
-Course / Syllabus Context: "${this.config.syllabusContext || ''}"
-Teacher Speech Context Window: "${contextWindow}"
-Recent Focus: "${recentFocus}"
-
-Instruction: Illustrate what is being taught now with a diagram and/or formula and short labels.`;
+Recent teacher speech: "${recentSpeech.slice(-350)}"
+Generate one compact visual for what they are explaining.`;
 
     try {
-      this.cancelPendingRequests();
-      const requestId = `speech_${Date.now()}`;
-      const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, false);
-      console.log('[BoardVisualizer] Speech evaluation decision:', decision);
+      const requestId = `phrase_${Date.now()}`;
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
 
-      if (decision.shouldDraw) {
-        if (Array.isArray(decision.actions)) {
-          for (const item of decision.actions) {
-            const act = item.action || item.type;
-            const params = item.params || item;
-            if (act) {
-              this.executeVisualAction(act, params);
-            }
-          }
-        } else if (decision.action || decision.type) {
-          const act = decision.action || decision.type;
-          const params = decision.params || decision;
-          this.executeVisualAction(act, params);
-        }
-        this.callbacks.onVisualDrawn?.(decision.summary || 'Updated blackboard');
-        this.lastEvaluatedSpeech = currentSpeech; // Only update on successful draw
-
-        // Anti-spam: wait a bit before evaluating again unless it's the end of a turn
-        if (!isTurnFinal) {
-           await new Promise((r) => setTimeout(r, 4000));
-        }
-      } else {
-        this.lastEvaluatedSpeech = currentSpeech; // Update if model decided not to draw
+      if (res.action && res.params) {
+        this.executeVisualAction(res.action, res.params);
+        this.callbacks.onVisualDrawn?.(res.summary || 'Illustrated from speech');
+      } else if (res.diagramType && res.data) {
+        avelutBoardController.drawDiagram(res.diagramType, res.data);
+        if (res.title) avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
+        this.callbacks.onVisualDrawn?.(res.title || 'Diagram');
       }
-    } catch (err) {
-      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
-      // Don't update lastEvaluatedSpeech on error so we can retry with more context
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.warn('[BoardVisualizer] phrase illustration error:', err);
+      }
     } finally {
       this.isProcessing = false;
       this.setStatus('ready');
@@ -393,45 +378,43 @@ Instruction: Illustrate what is being taught now with a diagram and/or formula a
 
   // ── On-Demand Illustration ────────────────────────────────────────────────
 
-  public async illustrateFromBoardWrite(params: { boardText: string, recentSpeech: string, forceDiagram?: boolean }): Promise<void> {
+  public async illustrateFromBoardWrite(params: {
+    boardText: string;
+    recentSpeech: string;
+    forceDiagram?: boolean;
+  }): Promise<void> {
     if (!this.config?.topicTitle) return;
     this.setStatus('visualizing', `Drawing: "${params.boardText}"…`);
 
-    const systemPrompt = `You are an elite autonomous digital blackboard illustrator.
-A lecturer has requested a specific diagram or visual on the board.
-Return ONLY valid JSON.
-Allowed actions: "draw_diagram", "write_text", "set_formula", "draw_shape", "write_keywords".
+    const systemPrompt = `You are a live blackboard illustrator.
+Return ONLY compact JSON.
 {
-  "action": "draw_diagram" | "write_text" | "set_formula" | "draw_shape" | "write_keywords",
+  "action": "draw_diagram" | "write_text" | "set_formula" | "write_keywords",
   "params": { ... }
-}`;
+}
+For draw_diagram use short labels only (max 4 words per node).`;
 
     const userPrompt = `Topic: "${this.config.topicTitle}"
-Context: "${this.config.syllabusContext || ''}"
-Recent Speech: "${params.recentSpeech}"
-Requested Diagram/Text: "${params.boardText}"
-Force Diagram: ${params.forceDiagram ? 'true' : 'false'}
-
-Generate the visual board action.`;
+Recent Speech: "${params.recentSpeech.slice(-250)}"
+Requested: "${params.boardText}"
+Force Diagram: ${params.forceDiagram ? 'true' : 'false'}`;
 
     try {
-      this.cancelPendingRequests();
       const requestId = `board_${Date.now()}`;
       const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.action && res.params) {
         this.executeVisualAction(res.action, res.params);
         this.callbacks.onVisualDrawn?.(`Illustrated: ${params.boardText}`);
+      } else if (res.diagramType && res.data) {
+        avelutBoardController.drawDiagram(res.diagramType, res.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err.name !== 'AbortError') console.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err);
     } finally {
       this.setStatus('ready');
     }
   }
 
-  /**
-   * Triggered when the student or UI requests a visual illustration on demand.
-   */
   public async illustrateOnDemand(requestedDiagramType?: string): Promise<void> {
     if (!this.config?.topicTitle) return;
 
@@ -440,24 +423,20 @@ Generate the visual board action.`;
     const { topicTitle, courseName = 'Academic Course', syllabusContext } = this.config;
 
     const systemPrompt = `You are a live blackboard illustrator.
-Generate a structured diagram for the student in JSON.
-Valid diagram types: "concept_map", "cycle", "flow", "comparison", "coordinate_axes", "free_body", "collision".
-Return ONLY valid JSON:
+Return ONLY compact valid JSON:
 {
-  "title": "Diagram Title",
+  "title": "Short Title",
   "diagramType": "concept_map" | "cycle" | "flow" | "comparison" | "coordinate_axes" | "free_body" | "collision",
-  "data": { ... }
-}`;
+  "data": { "nodes": [{"id":"a","label":"L"}], "connections": [], "steps": [] }
+}
+Labels max 4 words. Max 5 nodes.`;
 
     const userPrompt = `Topic: "${topicTitle}"
 Course: "${courseName}"
-Context: "${syllabusContext || ''}"
-Requested Diagram Type: ${requestedDiagramType || 'best visual for this concept'}
-
-Generate the diagram data now.`;
+Context: "${(syllabusContext || '').slice(0, 150)}"
+Requested: ${requestedDiagramType || 'best visual'}`;
 
     try {
-      this.cancelPendingRequests();
       const requestId = `demand_${Date.now()}`;
       const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.title) {
@@ -467,16 +446,13 @@ Generate the diagram data now.`;
         avelutBoardController.drawDiagram(res.diagramType, res.data);
       }
       this.setStatus('ready');
-      this.callbacks.onVisualDrawn?.(`Drawn ${res.diagramType} on board`);
+      this.callbacks.onVisualDrawn?.(`Drawn ${res.diagramType || 'diagram'} on board`);
     } catch (err: any) {
       console.error('[BoardVisualizer] illustrateOnDemand error:', err);
-      this.setStatus('error', err.message);
+      if (err.name !== 'AbortError') this.setStatus('error', err.message);
     }
   }
 
-  /**
-   * Handle text question from student that may ask for a visual aid.
-   */
   public async handleStudentQuery(query: string): Promise<void> {
     if (!query.trim() || !this.config?.topicTitle) return;
 
@@ -489,6 +465,9 @@ Generate the diagram data now.`;
       lower.includes('formula') ||
       lower.includes('map') ||
       lower.includes('graph') ||
+      lower.includes('imagine') ||
+      lower.includes('picture') ||
+      lower.includes('visualize') ||
       lower.includes('compare');
 
     if (!isVisualRequest) return;
@@ -496,28 +475,27 @@ Generate the diagram data now.`;
     this.setStatus('visualizing', `Illustrating: "${query}"…`);
 
     const systemPrompt = `You are a live blackboard visual assistant.
-A student typed a question during a live lesson.
-Generate a direct visual response (diagram, formula, or flow) on the blackboard.
-Return ONLY valid JSON:
+Return ONLY compact JSON:
 {
-  "action": "draw_diagram" | "write_text" | "draw_shape",
+  "action": "draw_diagram" | "write_text" | "set_formula" | "write_keywords",
   "params": { ... }
-}`;
+}
+Short labels only.`;
 
     const userPrompt = `Topic: "${this.config.topicTitle}"
 Student Query: "${query}"
-
-Generate the visual board action.`;
+Generate the visual.`;
 
     try {
-      this.cancelPendingRequests();
       const requestId = `query_${Date.now()}`;
       const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
       if (res.action && res.params) {
         this.executeVisualAction(res.action, res.params);
-        this.callbacks.onVisualDrawn?.(`Illustrated answer for student`);
+        this.callbacks.onVisualDrawn?.('Illustrated answer for student');
+      } else if (res.diagramType && res.data) {
+        avelutBoardController.drawDiagram(res.diagramType, res.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err.name !== 'AbortError') console.warn('[BoardVisualizer] handleStudentQuery error:', err);
     } finally {
       this.setStatus('ready');
@@ -550,9 +528,7 @@ Generate the visual board action.`;
         case 'edit_text': {
           const target = params.target || params.targetTextOrLabel || '';
           const newText = params.newText || params.text || '';
-          if (target && newText) {
-            avelutBoardController.updateText(target, newText);
-          }
+          if (target && newText) avelutBoardController.updateText(target, newText);
           break;
         }
         case 'write_keywords': {
@@ -562,9 +538,7 @@ Generate the visual board action.`;
         }
         case 'clear_component': {
           const target = params.target || params.targetTextOrLabel || '';
-          if (target) {
-            avelutBoardController.removeComponent(target);
-          }
+          if (target) avelutBoardController.removeComponent(target);
           break;
         }
         case 'draw_shape':
@@ -583,7 +557,7 @@ Generate the visual board action.`;
         }
         case 'highlight_concept': {
           avelutBoardController.highlightConcept(
-            params.targetTextOrLabel || params.text || '',
+            params.targetTextOrLabel || params.text || params.targetText || '',
             params.style || 'box',
           );
           break;
@@ -591,9 +565,7 @@ Generate the visual board action.`;
         case 'set_formula':
         case 'formula': {
           const formula = params.formula || params.text || params.content || '';
-          if (formula) {
-            avelutBoardController.setFormula(formula);
-          }
+          if (formula) avelutBoardController.setFormula(formula);
           break;
         }
         case 'clear_stage': {
@@ -622,6 +594,7 @@ Generate the visual board action.`;
     }
     this.speechBuffer = '';
     this.lastEvaluatedSpeech = '';
+    this.lastPhraseTriggerAt = 0;
     this.isProcessing = false;
     this.hasGeneratedKickoff = false;
     this.setStatus('idle');
