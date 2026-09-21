@@ -93,11 +93,17 @@ export class AvelutBoardController {
       return;
     }
     try {
-      this.api.updateScene({ elements: this.elements });
+      this.api.updateScene({ elements: [...this.elements] });
       if (scrollToContent && this.elements.length > 0) {
         setTimeout(() => {
           try {
-            this.api?.scrollToContent(this.elements, { fitToViewport: true, animate: true });
+            this.api?.scrollToContent(this.elements, {
+              fitToViewport: this.elements.length > 2,
+              viewportZoomFactor: 0.85,
+              maxZoom: 1.0,
+              minZoom: 0.35,
+              animate: true,
+            });
           } catch (_) {}
         }, 80);
       }
@@ -114,6 +120,14 @@ export class AvelutBoardController {
     } catch (err) {
       console.error('[BoardController] appendElements error:', err);
     }
+  }
+
+  public hasElements(): boolean {
+    return this.elements.length > 1; // More than just title
+  }
+
+  public getElementCount(): number {
+    return this.elements.length;
   }
 
   private fontSizeToNumber(size?: FontSize): number {

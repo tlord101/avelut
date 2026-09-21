@@ -35,6 +35,10 @@ import {
   type TeacherState,
 } from '../../../services/live-classroom/QwenRealtimeTeacherService';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
+import {
+  avelutBoardVisualizer,
+  type VisualizerStatus,
+} from '../../../services/live-classroom/AvelutBoardVisualizerService';
 import type { UserProfile } from '../../../types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -129,6 +133,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
 
+  // Visualizer co-pilot state
+  const [visualizerStatus, setVisualizerStatus] = useState<VisualizerStatus>('idle');
+  const [visualizerMessage, setVisualizerMessage] = useState<string>('');
+  const [showDiagramMenu, setShowDiagramMenu] = useState(false);
+
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
 
@@ -172,16 +181,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     const svc = new QwenRealtimeTeacherService();
     serviceRef.current = svc;
 
-    svc.setCallbacks({
-      onStateChange: (s) => {
-        setTeacherState(s);
-        if (s === 'connected') setErrorMsg(null);
-      },
-      onTranscript: (text) => setTranscript(text),
-      onAudioLevel: (level) => setAudioLevel(level),
-      onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
-    });
-
     const {
       topicTitle: tTitle,
       courseName: cName,
@@ -191,6 +190,44 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       learningPath: lPath,
       appSettings: aSettings,
     } = paramsRef.current;
+
+    // Initialize the AI Visualizer Co-Pilot with topic & settings
+    avelutBoardVisualizer.initialize(
+      {
+        topicTitle: tTitle,
+        courseName: cName,
+        syllabusContext: sCtx,
+        studentName: sName,
+        durationMinutes: dMinutes,
+        learningPath: lPath,
+      },
+      aSettings,
+    );
+
+    avelutBoardVisualizer.setCallbacks({
+      onStatusChange: (s, msg) => {
+        setVisualizerStatus(s);
+        if (msg) setVisualizerMessage(msg);
+      },
+      onVisualDrawn: (summary) => {
+        setVisualizerMessage(summary);
+        setTimeout(() => setVisualizerMessage(''), 4000);
+      },
+    });
+
+    svc.setCallbacks({
+      onStateChange: (s) => {
+        setTeacherState(s);
+        if (s === 'connected') setErrorMsg(null);
+      },
+      onTranscript: (text, isFinal) => {
+        setTranscript(text);
+        // Forward speech to visualizer co-pilot for real-time board illustrations
+        avelutBoardVisualizer.processSpeechTranscript(text, isFinal);
+      },
+      onAudioLevel: (level) => setAudioLevel(level),
+      onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
+    });
 
     void svc.startSession(
       {
@@ -218,6 +255,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         startedSessionRef.current = false;
         setHasStarted(false);
       }
+      avelutBoardVisualizer.endSession();
     };
   }, [startSession]);
 
@@ -240,8 +278,18 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     }
 
     serviceRef.current.triggerInitialGreeting();
+    // Launch kickoff board illustration immediately
+    void avelutBoardVisualizer.generateKickoffIllustration();
     setHasStarted(true);
   };
+
+  const handleBoardReady = useCallback(() => {
+    console.log('[AvelutLiveClassroomView] Excalidraw board ready');
+    // Pre-seed kickoff visual as soon as the canvas mounts
+    if (!avelutBoardController.hasElements()) {
+      void avelutBoardVisualizer.generateKickoffIllustration();
+    }
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────
   const handleToggleMute = () => {
@@ -253,7 +301,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const handleSendText = (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim() || !serviceRef.current) return;
-    serviceRef.current.sendTextMessage(textInput.trim());
+    const q = textInput.trim();
+    serviceRef.current.sendTextMessage(q);
+    void avelutBoardVisualizer.handleStudentQuery(q);
     setTextInput('');
     setShowTextInput(false);
   };
@@ -304,8 +354,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           </div>
         </div>
 
-        {/* Right: teacher state pill */}
-        <div className="pointer-events-auto">
+        {/* Right: visualizer status pill + teacher state pill */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {visualizerStatus === 'visualizing' && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-medium backdrop-blur-md animate-pulse">
+              <Sparkles className="w-3.5 h-3.5 animate-spin" />
+              <span className="hidden xs:inline">Illustrating…</span>
+            </div>
+          )}
+          {visualizerMessage && visualizerStatus !== 'visualizing' && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-medium backdrop-blur-md">
+              <span>{visualizerMessage}</span>
+            </div>
+          )}
           <TeacherStatePill state={teacherState} />
         </div>
       </header>
@@ -359,7 +420,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
       {/* ── EXCALIDRAW BOARD (full-screen) ────────────────────────────────── */}
       <main className="absolute inset-0 w-full h-full">
-        <ExcalidrawLiveBoard topicTitle={topicTitle} className="w-full h-full" />
+        <ExcalidrawLiveBoard topicTitle={topicTitle} onBoardReady={handleBoardReady} className="w-full h-full" />
       </main>
 
       {/* ── SUBTITLE PILL ─────────────────────────────────────────────────── */}
@@ -420,6 +481,51 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           >
             <MessageSquare className="w-5 h-5" />
           </button>
+
+          {/* Visual Illustrator toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDiagramMenu(v => !v)}
+              className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
+                showDiagramMenu || visualizerStatus === 'visualizing'
+                  ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(251,191,36,0.5)]'
+                  : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+              }`}
+              aria-label="Illustrate Concept"
+              title="Illustrate Concept on Board"
+            >
+              <Sparkles className={`w-5 h-5 ${visualizerStatus === 'visualizing' ? 'animate-spin' : ''}`} />
+            </button>
+
+            {/* Diagram Preset Popover Menu */}
+            {showDiagramMenu && (
+              <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-52 p-2 rounded-2xl bg-[#1C1917]/95 border border-white/15 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 z-40 flex flex-col gap-1">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                  ✨ Visual Illustrations
+                </div>
+                {[
+                  { label: 'Auto-Illustrate', type: undefined, icon: '✨' },
+                  { label: 'Concept Map', type: 'concept_map', icon: '🗺️' },
+                  { label: 'Cycle / Process', type: 'cycle', icon: '🔄' },
+                  { label: 'Comparison', type: 'comparison', icon: '⚖️' },
+                  { label: 'Step-by-Step Flow', type: 'flow', icon: '📊' },
+                  { label: 'Coordinate Graph', type: 'coordinate_axes', icon: '📈' },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      void avelutBoardVisualizer.illustrateOnDemand(item.type);
+                      setShowDiagramMenu(false);
+                    }}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:bg-white/20 text-left text-xs font-medium text-white/90 transition-all"
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Mic button with audio level pulse ring */}
           <div className="relative flex items-center justify-center">
