@@ -78,6 +78,11 @@ export class QwenRealtimeTeacherService {
     config: TeacherPromptConfig,
     appSettings?: AppSettings | null,
   ): Promise<void> {
+    // Guard against double start
+    if (this.ws || this.state !== 'closed' && this.state !== 'connecting' && this.state !== 'error') {
+      this.endSession();
+    }
+
     this.promptConfig = config;
     if (appSettings) this.appSettings = appSettings;
     this.setState('connecting');
@@ -218,12 +223,14 @@ export class QwenRealtimeTeacherService {
   /** Public method to ensure AudioContext is active on user gesture */
   public async resumeAudio(): Promise<boolean> {
     try {
+      const promises = [];
       if (this.inputAudioCtx && this.inputAudioCtx.state === 'suspended') {
-        await this.inputAudioCtx.resume();
+        promises.push(this.inputAudioCtx.resume());
       }
       if (this.outputAudioCtx && this.outputAudioCtx.state === 'suspended') {
-        await this.outputAudioCtx.resume();
+        promises.push(this.outputAudioCtx.resume());
       }
+      await Promise.all(promises);
       return this.isAudioUnlocked();
     } catch (e) {
       console.warn('[QwenRealtime] resumeAudio warning:', e);
@@ -254,9 +261,13 @@ export class QwenRealtimeTeacherService {
         modalities: ['audio', 'text'],
         voice: 'Jennifer',
         instructions,
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        turn_detection: { type: 'server_vad', semantic_vad: true },
+        input_audio_format: 'pcm',
+        output_audio_format: 'pcm',
+        turn_detection: {
+          type: 'semantic_vad',
+          threshold: 0.5,
+          silence_duration_ms: 800,
+        },
         tools: this.buildToolDeclarations(),
       },
     });
@@ -377,6 +388,9 @@ export class QwenRealtimeTeacherService {
   private handleMessage(raw: string): void {
     let event: any;
     try { event = JSON.parse(raw); } catch { return; }
+
+    // Log incoming event types clearly
+    console.log(`[QwenRealtime] Event received: ${event.type}`);
 
     switch (event.type) {
       case 'session.created':
