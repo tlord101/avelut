@@ -9,7 +9,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
 
 export interface ExcalidrawLiveBoardProps {
@@ -76,7 +76,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
             export: false,
             loadScene: false,
             saveAsImage: false,
-            theme: false,
+            toggleTheme: false,
           },
         }}
         initialData={{

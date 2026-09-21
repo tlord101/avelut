@@ -1,6 +1,6 @@
 import { FirebaseUser } from '@/lib/backend';
 import React, { Suspense, lazy } from 'react';
-import { writeCachedJson } from './utils/cache';
+import { readCachedJson, writeCachedJson } from './utils/cache';
 import type { UserProfile, UserProgress, DashboardData, AppSettings, ChatConversation } from './types';
 import {
     DashboardSkeleton,
@@ -152,8 +152,18 @@ export const MainContent: React.FC<MainContentProps> = ({
                                 setCustomHeaderConfig={setCustomHeaderConfig}
                             />
                         );
-                    case 'voice_tutorial':
-                        return <VoiceTutorialPage userProfile={userProfile} appSettings={appSettings} onNavigate={onNavigate} setCustomHeaderConfig={setCustomHeaderConfig} />;
+                    case 'voice_tutorial': {
+                        const activeTutorialSession = readCachedJson<any>('avelut_active_voice_tutorial', null);
+                        return (
+                            <VoiceTutorialPage
+                                userProfile={userProfile}
+                                appSettings={appSettings}
+                                initialSessionData={activeTutorialSession}
+                                onNavigate={onNavigate}
+                                setCustomHeaderConfig={setCustomHeaderConfig}
+                            />
+                        );
+                    }
                     case 'leaderboard':
                         return <Leaderboard userProfile={userProfile} />;
                     case 'visual_solver':

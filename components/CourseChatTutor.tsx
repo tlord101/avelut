@@ -117,8 +117,19 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       setShowLimitModal(true);
       return;
     }
+
+    const syllabusRoadmap = topicStructure?.steps && topicStructure.steps.length > 0
+      ? topicStructure.steps.map((s, idx) => `Step ${idx + 1}: ${s.title} (${s.objective})`).join('\n')
+      : (topic.topic_context || `Course: ${course.course_name}`);
+
+    writeCachedJson('avelut_active_voice_tutorial', {
+      course,
+      topic,
+      syllabusContext: syllabusRoadmap,
+    });
+
     onOpenVoiceTutorial();
-  }, [liveAccess.allowed, onOpenVoiceTutorial]);
+  }, [liveAccess.allowed, onOpenVoiceTutorial, course, topic, topicStructure]);
 
   // Load or generate topic structure JSON stored on the user's device
   useEffect(() => {

@@ -43,6 +43,8 @@ export interface AvelutLiveClassroomViewProps {
   topicTitle: string;
   courseName?: string;
   syllabusContext?: string;
+  durationMinutes?: number;
+  learningPath?: string[];
   userProfile?: UserProfile | null;
   appSettings?: any;
   onClose?: () => void;
@@ -111,6 +113,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   topicTitle,
   courseName = 'Academic Course',
   syllabusContext,
+  durationMinutes = 30,
+  learningPath,
   userProfile,
   appSettings,
   onClose,
@@ -139,6 +143,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     topicTitle,
     courseName,
     syllabusContext,
+    durationMinutes,
+    learningPath,
     studentName: userProfile?.display_name || undefined,
     appSettings,
   });
@@ -148,10 +154,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       topicTitle,
       courseName,
       syllabusContext,
+      durationMinutes,
+      learningPath,
       studentName: userProfile?.display_name || undefined,
       appSettings,
     };
-  }, [topicTitle, courseName, syllabusContext, userProfile, appSettings]);
+  }, [topicTitle, courseName, syllabusContext, durationMinutes, learningPath, userProfile, appSettings]);
 
   // ── Start realtime session once on mount ───────────────────────────────────
   const startSession = useCallback(() => {
@@ -174,7 +182,15 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
     });
 
-    const { topicTitle: tTitle, courseName: cName, syllabusContext: sCtx, studentName: sName, appSettings: aSettings } = paramsRef.current;
+    const {
+      topicTitle: tTitle,
+      courseName: cName,
+      syllabusContext: sCtx,
+      studentName: sName,
+      durationMinutes: dMinutes,
+      learningPath: lPath,
+      appSettings: aSettings,
+    } = paramsRef.current;
 
     void svc.startSession(
       {
@@ -182,6 +198,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         courseName: cName,
         syllabusContext: sCtx,
         studentName: sName,
+        durationMinutes: dMinutes,
+        learningPath: lPath,
       },
       aSettings,
     );
@@ -276,8 +294,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
               <span className="text-[10px] font-bold tracking-widest uppercase text-red-400">LIVE</span>
-              <span className="text-[10px] text-white/40 truncate max-w-[120px] sm:max-w-[220px]">
-                • {courseName}
+              <span className="text-[10px] text-white/40 truncate max-w-[140px] sm:max-w-[240px]">
+                • {courseName} • {durationMinutes}m
               </span>
             </div>
             <h1 className="text-sm font-bold tracking-tight text-white truncate max-w-[180px] sm:max-w-sm leading-tight">

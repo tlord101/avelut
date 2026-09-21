@@ -262,7 +262,12 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         setTopicToOpen(topic);
         setTopicPickerCourse(null);
 
-        // Topic selected for StudyGuide view
+        // Cache active session for live voice tutorial
+        writeCachedJson('avelut_active_voice_tutorial', {
+            course,
+            topic,
+            syllabusContext: topic.topic_context || `Course: ${course.course_name}`,
+        });
     }, [topicVisits, userProfile, appSettings]);
 
     const touchStartX = useRef<number | null>(null);
@@ -763,16 +768,17 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const memoizedVoiceSessionData = useMemo<VoiceTutorialSessionData | null>(() => {
         if (activeExternalSession) return activeExternalSession;
         if (!isVoiceTutorialActive || !selectedCourse) return null;
+        const targetTopic = topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0
+            ? selectedCourse.topics[0]
+            : {
+                topic_id: 'core_principles',
+                topic_name: 'Core Principles & Overview',
+                topic_context: `Overview and principles of ${selectedCourse.course_name || 'Course'}`,
+            });
         return {
             course: selectedCourse,
-            topic: topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0
-                ? selectedCourse.topics[0]
-                : {
-                    topic_id: 'core_principles',
-                    topic_name: 'Core Principles & Overview',
-                    topic_context: `Overview and principles of ${selectedCourse.course_name || 'Course'}`,
-                }),
-            syllabusContext: '',
+            topic: targetTopic,
+            syllabusContext: targetTopic.topic_context || `Course: ${selectedCourse.course_name}`,
         };
     }, [activeExternalSession, isVoiceTutorialActive, selectedCourse, topicToOpen]);
 

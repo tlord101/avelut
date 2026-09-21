@@ -60,6 +60,8 @@ export class QwenRealtimeTeacherService {
   private fullTranscript = '';
   private lastTranscriptSlice = '';
   private hasCalledToolInTurn = false;
+  private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
+  private executedCallIds = new Set<string>();
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -155,6 +157,9 @@ export class QwenRealtimeTeacherService {
 
     this.ws?.close();
     this.ws = null;
+
+    this.pendingToolCalls.clear();
+    this.executedCallIds.clear();
 
     this.setState('closed');
   }
@@ -261,9 +266,11 @@ export class QwenRealtimeTeacherService {
   public triggerInitialGreeting(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    console.log('[QwenRealtime] Manually triggering initial greeting');
+    const topic = this.promptConfig?.topicTitle ? `"${this.promptConfig.topicTitle}"` : 'the topic';
+    const duration = this.promptConfig?.durationMinutes || 30;
+    console.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
-    // Give the model something to reply to (important when tools are present)
+    // Give the model a direct instruction to greet warmly AND immediately draw on the board
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -272,7 +279,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: 'Please greet me warmly and start the lesson now.',
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me, announce that today we are mastering ${topic}, and immediately call your board tools (draw_diagram, draw_shape, or write_text) to illustrate the introductory visual concept on the board as you speak! Do not ask me what topic we are going to discuss.`,
         }],
       },
     });
@@ -289,7 +296,10 @@ export class QwenRealtimeTeacherService {
     if (!this.promptConfig) return;
 
     const instructions = buildTeacherSystemPrompt(this.promptConfig);
-    console.log('[QwenRealtime] Sending session.update...');
+    console.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
+
+    this.pendingToolCalls.clear();
+    this.executedCallIds.clear();
 
     this.sendJson({
       event_id: `session_init_${Date.now()}`,
@@ -328,11 +338,11 @@ export class QwenRealtimeTeacherService {
         type: 'function',
         name: 'write_text',
         description:
-          'Write a title, definition, explanation sentence, or formula on the Excalidraw teaching board.',
+          'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
         parameters: {
           type: 'object',
           properties: {
-            text: { type: 'string', description: 'Text or formula to display' },
+            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
             fontSize: {
               type: 'string',
               enum: ['small', 'medium', 'large', 'title'],
@@ -345,8 +355,34 @@ export class QwenRealtimeTeacherService {
             },
             x: { type: 'number', description: 'Optional X canvas position (0–800)' },
             y: { type: 'number', description: 'Optional Y canvas position (0–600)' },
+            isFormula: { type: 'boolean', description: 'True if this is a mathematical or scientific equation' },
           },
           required: ['text'],
+        },
+        function: {
+          name: 'write_text',
+          description:
+            'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
+          parameters: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
+              fontSize: {
+                type: 'string',
+                enum: ['small', 'medium', 'large', 'title'],
+                description: 'Text size',
+              },
+              color: {
+                type: 'string',
+                description:
+                  'Hex color, e.g. "#38BDF8" for accent/formula, "#FAFAFA" for standard, "#FBBF24" for highlight',
+              },
+              x: { type: 'number', description: 'Optional X canvas position (0–800)' },
+              y: { type: 'number', description: 'Optional Y canvas position (0–600)' },
+              isFormula: { type: 'boolean', description: 'True if this is a mathematical or scientific equation' },
+            },
+            required: ['text'],
+          },
         },
       },
       {
@@ -367,25 +403,62 @@ export class QwenRealtimeTeacherService {
           },
           required: ['type', 'x', 'y'],
         },
+        function: {
+          name: 'draw_shape',
+          description: 'Draw a rectangle, ellipse, arrow, or line on the board.',
+          parameters: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['rectangle', 'ellipse', 'arrow', 'line'] },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              width: { type: 'number' },
+              height: { type: 'number' },
+              label: { type: 'string' },
+              color: { type: 'string' },
+              backgroundColor: { type: 'string' },
+            },
+            required: ['type', 'x', 'y'],
+          },
+        },
       },
       {
         type: 'function',
         name: 'draw_diagram',
         description:
-          'Draw an intuitive physical or conceptual diagram: collision (two objects colliding with velocity arrows), free_body (central mass with directional force arrows), coordinate_axes (x/y graph), flow (sequential step boxes).',
+          'Draw an intuitive diagram: collision (objects colliding), free_body (forces on an object), coordinate_axes (graphs), flow (step sequences), cycle (circular loops), comparison (contrasting columns), or concept_map (mind map).',
         parameters: {
           type: 'object',
           properties: {
             diagramType: {
               type: 'string',
-              enum: ['collision', 'free_body', 'coordinate_axes', 'flow'],
+              enum: ['collision', 'free_body', 'coordinate_axes', 'flow', 'cycle', 'comparison', 'concept_map'],
             },
             data: {
               type: 'object',
-              description: 'Diagram-specific properties (labels, masses, forces, steps, etc.)',
+              description: 'Diagram-specific properties (labels, masses, forces, steps, leftTitle, rightTitle, centralConcept, etc.)',
             },
           },
           required: ['diagramType', 'data'],
+        },
+        function: {
+          name: 'draw_diagram',
+          description:
+            'Draw an intuitive diagram: collision (objects colliding), free_body (forces on an object), coordinate_axes (graphs), flow (step sequences), cycle (circular loops), comparison (contrasting columns), or concept_map (mind map).',
+          parameters: {
+            type: 'object',
+            properties: {
+              diagramType: {
+                type: 'string',
+                enum: ['collision', 'free_body', 'coordinate_axes', 'flow', 'cycle', 'comparison', 'concept_map'],
+              },
+              data: {
+                type: 'object',
+                description: 'Diagram-specific properties (labels, masses, forces, steps, leftTitle, rightTitle, centralConcept, etc.)',
+              },
+            },
+            required: ['diagramType', 'data'],
+          },
         },
       },
       {
@@ -404,6 +477,22 @@ export class QwenRealtimeTeacherService {
           },
           required: ['targetTextOrLabel'],
         },
+        function: {
+          name: 'highlight_concept',
+          description:
+            'Draw a circle, dashed box, or underline around an existing concept on the board to direct student attention.',
+          parameters: {
+            type: 'object',
+            properties: {
+              targetTextOrLabel: {
+                type: 'string',
+                description: 'Text of the element to highlight',
+              },
+              style: { type: 'string', enum: ['circle', 'box', 'underline'] },
+            },
+            required: ['targetTextOrLabel'],
+          },
+        },
       },
       {
         type: 'function',
@@ -414,6 +503,17 @@ export class QwenRealtimeTeacherService {
           type: 'object',
           properties: {
             keepTitle: { type: 'boolean' },
+          },
+        },
+        function: {
+          name: 'clear_board',
+          description:
+            'Clear the teaching board to start fresh. Set keepTitle=true to preserve the lesson heading.',
+          parameters: {
+            type: 'object',
+            properties: {
+              keepTitle: { type: 'boolean' },
+            },
           },
         },
       },
@@ -491,39 +591,92 @@ export class QwenRealtimeTeacherService {
         console.log('[QwenRealtime] conversation.item.created', event.item?.id);
         break;
 
-      case 'response.output_item.added':
-      case 'response.output_item.done':
-        console.log(`[QwenRealtime] ${event.type}`);
+      case 'response.output_item.added': {
+        console.log(`[QwenRealtime] response.output_item.added:`, event.item?.type);
+        if (event.item?.type === 'function_call') {
+          const item = event.item;
+          const key = item.call_id || item.id;
+          if (key) {
+            const entry = {
+              name: item.name,
+              call_id: item.call_id || item.id,
+              arguments: item.arguments || '',
+            };
+            this.pendingToolCalls.set(key, entry);
+            if (item.id) this.pendingToolCalls.set(item.id, entry);
+          }
+        }
         break;
+      }
 
-      case 'response.function_call_arguments.delta':
-        break; // Ignore delta for now
+      case 'response.function_call_arguments.delta': {
+        const key = event.call_id || event.item_id;
+        if (key && this.pendingToolCalls.has(key)) {
+          const pending = this.pendingToolCalls.get(key)!;
+          pending.arguments += (event.delta || '');
+        }
+        break;
+      }
 
-      case 'response.function_call_arguments.done':
-        console.log('[QwenRealtime] TOOL CALL', {
-          name: event.name,
-          call_id: event.call_id,
-          arguments: event.arguments,
+      case 'response.function_call_arguments.done': {
+        const key = event.call_id || event.item_id;
+        const pending = key ? this.pendingToolCalls.get(key) : null;
+        const toolName = event.name || pending?.name;
+        const callId = event.call_id || pending?.call_id || key;
+        const argsStr = event.arguments || pending?.arguments || '{}';
+
+        console.log('[QwenRealtime] TOOL CALL arguments.done:', {
+          name: toolName,
+          call_id: callId,
+          arguments: argsStr,
         });
-        this.hasCalledToolInTurn = true;
-        this.executeTool(event);
-        break;
 
-      case 'response.done':
+        if (toolName && callId) {
+          this.executeToolCall(callId, toolName, argsStr);
+        }
+        break;
+      }
+
+      case 'response.output_item.done': {
+        console.log(`[QwenRealtime] response.output_item.done:`, event.item?.type);
+        if (event.item?.type === 'function_call') {
+          const item = event.item;
+          const callId = item.call_id || item.id;
+          const toolName = item.name;
+          const argsStr = item.arguments || '{}';
+          if (toolName && callId) {
+            this.executeToolCall(callId, toolName, argsStr);
+          }
+        }
+        break;
+      }
+
+      case 'response.done': {
         if (this.state === 'speaking' || this.state === 'drawing') {
           setTimeout(() => { if (this.state !== 'listening') this.setState('listening'); }, 400);
         }
 
-        // Fallback: If after response.done there was speech but zero tool calls in that turn
+        // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
+        // The board is purely for illustrations, formulas, and diagrams.
+        // As a subtle helper, ONLY if an explicit mathematical equation is detected in speech
+        // and no tool was called, write just that concise equation.
         if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
-          console.log('[QwenRealtime] Fallback board update: No tool called during turn, writing transcript slice.');
-          avelutBoardController.writeText(this.lastTranscriptSlice, { fontSize: 'medium', color: '#FAFAFA' });
+          const formulaMatch = this.lastTranscriptSlice.match(/\b([A-Za-z_Δ][A-Za-z0-9_]*\s*=\s*[^.,;!?\n]+)/);
+          if (formulaMatch && formulaMatch[1] && formulaMatch[1].length < 40 && !formulaMatch[1].toLowerCase().includes('hello')) {
+            console.log('[QwenRealtime] Extracted formula from speech:', formulaMatch[1]);
+            avelutBoardController.writeText(formulaMatch[1].trim(), {
+              fontSize: 'medium',
+              color: '#38BDF8',
+              isFormula: true,
+            });
+          }
         }
 
         // Reset turn state
         this.hasCalledToolInTurn = false;
         this.lastTranscriptSlice = '';
         break;
+      }
 
       case 'error':
         console.error('[QwenRealtime] Server error:', event.error);
@@ -536,20 +689,22 @@ export class QwenRealtimeTeacherService {
 
   // ── Tool execution → AvelutBoardController ────────────────────────────────
 
-  private executeTool(event: any): void {
-    const name = event.name;
-    const call_id = event.call_id;
+  private executeToolCall(callId: string, name: string, argsRaw: any): void {
+    if (this.executedCallIds.has(callId)) return;
+    this.executedCallIds.add(callId);
+    this.hasCalledToolInTurn = true;
+    this.setState('drawing');
+
     let args: any = {};
     try {
-      args = typeof event.arguments === 'string'
-        ? JSON.parse(event.arguments)
-        : (event.arguments ?? {});
+      args = typeof argsRaw === 'string'
+        ? JSON.parse(argsRaw)
+        : (argsRaw ?? {});
     } catch (e) {
-      console.warn('[QwenRealtime] Bad tool args:', event.arguments);
+      console.warn('[QwenRealtime] Bad tool args:', argsRaw);
     }
 
-    console.log('[QwenRealtime] executeTool', name, args);
-    this.setState('drawing');
+    console.log('[QwenRealtime] Executing board tool:', name, args);
 
     try {
       switch (name) {
@@ -603,13 +758,13 @@ export class QwenRealtimeTeacherService {
     }
 
     // Always return tool output so model can continue speaking
-    if (call_id) {
+    if (callId) {
       this.sendJson({
         event_id: `tool_out_${Date.now()}`,
         type: 'conversation.item.create',
         item: {
           type: 'function_call_output',
-          call_id,
+          call_id: callId,
           output: JSON.stringify({ success: true, tool: name }),
         },
       });

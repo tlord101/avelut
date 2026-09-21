@@ -28,6 +28,8 @@ import {
   formatResumeLabel,
   type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
+import { readCachedJson, writeCachedJson } from '../utils/cache';
+import { getOrGenerateTopicStructure } from '../services/topicStructureService';
 
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
@@ -62,13 +64,56 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   const { settings: hookAppSettings } = useAppSettings();
   const resolvedAppSettings = propAppSettings || hookAppSettings;
 
-  // ── Derived topic / course info ──────────────────────────────────────────
+  // ── Derived topic / course info with cached session & recent topic fallback ──
+  const effectiveSessionData = useMemo<VoiceTutorialSessionData | null>(() => {
+    if (initialSessionData && (initialSessionData.topic?.topic_name || initialSessionData.customPrompt)) {
+      return initialSessionData;
+    }
+    const cached = readCachedJson<VoiceTutorialSessionData | null>('avelut_active_voice_tutorial', null);
+    if (cached && (cached.topic?.topic_name || cached.customPrompt)) {
+      return cached;
+    }
+    // Fallback: see if user has a recent course / topic in local courses
+    const uid = userProfile?.uid || 'anon';
+    const courses = readCachedJson<Course[]>(`avelut_courses_${uid}`, []);
+    if (courses.length > 0) {
+      const topicVisits = readCachedJson<Record<string, number>>(`avelut_topic_visits_${uid}`, {});
+      let bestCourse = courses[0];
+      let bestTopic = courses[0].topics?.[0];
+      let bestTime = 0;
+
+      for (const c of courses) {
+        if (Array.isArray(c.topics)) {
+          for (const t of c.topics) {
+            const time = topicVisits[`${c.course_id}::${t.topic_id}`] || topicVisits[t.topic_id] || 0;
+            if (time > bestTime) {
+              bestTime = time;
+              bestCourse = c;
+              bestTopic = t;
+            }
+          }
+        }
+      }
+
+      if (bestTopic) {
+        return {
+          course: bestCourse,
+          topic: bestTopic,
+          syllabusContext: bestTopic.topic_context || `Course: ${bestCourse.course_name}`,
+        };
+      }
+    }
+    return initialSessionData || null;
+  }, [initialSessionData, userProfile?.uid]);
+
   const topicTitle =
-    initialSessionData?.topic?.topic_name ||
-    initialSessionData?.customPrompt ||
+    effectiveSessionData?.topic?.topic_name ||
+    effectiveSessionData?.customPrompt ||
     'Live Tutorial';
-  const courseName = initialSessionData?.course?.course_name || 'Academic Topic';
-  const syllabusContext = initialSessionData?.syllabusContext;
+  const courseName = effectiveSessionData?.course?.course_name || 'Academic Topic';
+  const syllabusContext =
+    effectiveSessionData?.syllabusContext ||
+    effectiveSessionData?.topic?.topic_context;
 
   // ── UI State ─────────────────────────────────────────────────────────────
   const [selectedDuration, setSelectedDuration] = useState<LessonDurationMode | null>(null);
@@ -77,15 +122,39 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditCheckData, setCreditCheckData] = useState<any>(null);
   const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
+  const [learningPath, setLearningPath] = useState<string[]>([]);
+
+  // ── Load or generate topic learning path structure ───────────────────────
+  useEffect(() => {
+    const topicKey = effectiveSessionData?.topic?.topic_id || effectiveSessionData?.topic?.topic_name;
+    if (!topicKey || !effectiveSessionData?.topic?.topic_name) return;
+
+    let isCancelled = false;
+    getOrGenerateTopicStructure({
+      topicKey,
+      topicTitle,
+      courseTitle: courseName,
+      context: syllabusContext || effectiveSessionData?.topic?.topic_context,
+      userProfile: userProfile || ({} as any),
+      appSettings: resolvedAppSettings,
+    }).then((struct) => {
+      if (!isCancelled && struct?.steps && struct.steps.length > 0) {
+        const formatted = struct.steps.map((s, idx) => `Step ${idx + 1}: ${s.title} — ${s.objective}`);
+        setLearningPath(formatted);
+      }
+    }).catch(() => {});
+
+    return () => { isCancelled = true; };
+  }, [effectiveSessionData, topicTitle, courseName, syllabusContext, userProfile, resolvedAppSettings]);
 
   // ── Stable session identity: reset when topic changes ───────────────────
   const sessionId = useMemo(() => {
-    const topicId = initialSessionData?.topic?.topic_id || '';
-    const courseId = initialSessionData?.course?.course_id || '';
+    const topicId = effectiveSessionData?.topic?.topic_id || '';
+    const courseId = effectiveSessionData?.course?.course_id || '';
     return `${courseId}::${topicId}::${topicTitle}::${courseName}`;
   }, [
-    initialSessionData?.topic?.topic_id,
-    initialSessionData?.course?.course_id,
+    effectiveSessionData?.topic?.topic_id,
+    effectiveSessionData?.course?.course_id,
     topicTitle,
     courseName,
   ]);
@@ -205,6 +274,8 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
           topicTitle={topicTitle}
           courseName={courseName}
           syllabusContext={syllabusContext}
+          durationMinutes={selectedDuration || 30}
+          learningPath={learningPath}
           userProfile={userProfile}
           appSettings={resolvedAppSettings}
           onClose={onBack}

@@ -9,14 +9,14 @@
  */
 
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
 export type FontSize = 'small' | 'medium' | 'large' | 'title' | number;
 
 export interface WriteTextArgs {
-  text: string;
+  text?: string;
   fontSize?: FontSize;
   color?: string;
   x?: number;
@@ -93,7 +93,7 @@ export class AvelutBoardController {
       return;
     }
     try {
-      this.api.updateScene({ elements: this.elements, commitToHistory: false });
+      this.api.updateScene({ elements: this.elements });
       if (scrollToContent && this.elements.length > 0) {
         setTimeout(() => {
           try {
@@ -237,6 +237,10 @@ export class AvelutBoardController {
       case 'graph': this.drawCoordinateAxes(60, startY, data); break;
       case 'flow':
       case 'steps': this.drawFlowDiagram(60, startY, data); break;
+      case 'cycle': this.drawCycleDiagram(60, startY, data); break;
+      case 'comparison': this.drawComparisonDiagram(60, startY, data); break;
+      case 'concept_map':
+      case 'mindmap': this.drawConceptMapDiagram(60, startY, data); break;
       default:
         if (data?.title) this.writeText(data.title, { fontSize: 'medium' });
         break;
@@ -357,6 +361,211 @@ export class AvelutBoardController {
 
     this.appendElements(els);
     this.cursorY = sy + 90;
+  }
+
+  private drawCycleDiagram(sx: number, sy: number, data: any): void {
+    const steps: string[] = data.steps || ['Stage 1', 'Stage 2', 'Stage 3', 'Stage 4'];
+    const n = steps.length;
+    const cx = sx + 160, cy = sy + 130;
+    const rx = 120, ry = 80;
+    const els: any[] = [];
+
+    const positions = steps.map((_, i) => {
+      const angle = (i * 2 * Math.PI) / n - Math.PI / 2;
+      return {
+        x: cx + rx * Math.cos(angle) - 45,
+        y: cy + ry * Math.sin(angle) - 20,
+      };
+    });
+
+    steps.forEach((step, i) => {
+      const pos = positions[i];
+      els.push({
+        type: 'rectangle',
+        x: pos.x,
+        y: pos.y,
+        width: 90,
+        height: 40,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0F172A',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: step, fontSize: 13, strokeColor: '#FAFAFA' },
+      });
+
+      const nextPos = positions[(i + 1) % n];
+      const startAx = pos.x + 45;
+      const startAy = pos.y + 20;
+      const endAx = nextPos.x + 45;
+      const endAy = nextPos.y + 20;
+      els.push({
+        type: 'arrow',
+        x: startAx,
+        y: startAy,
+        width: (endAx - startAx) * 0.7,
+        height: (endAy - startAy) * 0.7,
+        strokeColor: '#F59E0B',
+        strokeWidth: 2,
+      });
+    });
+
+    if (data.title) {
+      els.push({
+        type: 'text',
+        x: sx + 20,
+        y: sy,
+        text: `🔄 ${data.title}`,
+        fontSize: 18,
+        strokeColor: '#FAFAFA',
+        fontFamily: 1,
+        textAlign: 'left',
+        verticalAlign: 'top',
+      });
+    }
+
+    this.appendElements(els);
+    this.cursorY = sy + 250;
+  }
+
+  private drawComparisonDiagram(sx: number, sy: number, data: any): void {
+    const leftTitle = data.leftTitle || 'Concept A';
+    const rightTitle = data.rightTitle || 'Concept B';
+    const leftPoints: string[] = data.leftPoints || [];
+    const rightPoints: string[] = data.rightPoints || [];
+
+    const colW = 160;
+    const els: any[] = [
+      // Left header
+      {
+        type: 'rectangle',
+        x: sx,
+        y: sy,
+        width: colW,
+        height: 38,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0369A1',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: leftTitle, fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+      // VS badge
+      {
+        type: 'ellipse',
+        x: sx + colW + 10,
+        y: sy + 4,
+        width: 32,
+        height: 32,
+        strokeColor: '#F59E0B',
+        backgroundColor: '#78350F',
+        fillStyle: 'solid',
+        label: { text: 'VS', fontSize: 11, strokeColor: '#FDE047' },
+      },
+      // Right header
+      {
+        type: 'rectangle',
+        x: sx + colW + 52,
+        y: sy,
+        width: colW,
+        height: 38,
+        strokeColor: '#34D399',
+        backgroundColor: '#065F46',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: rightTitle, fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+    ];
+
+    let rowY = sy + 48;
+    const maxPoints = Math.max(leftPoints.length, rightPoints.length, 1);
+    for (let i = 0; i < maxPoints; i++) {
+      if (leftPoints[i]) {
+        els.push({
+          type: 'text',
+          x: sx + 6,
+          y: rowY,
+          text: `• ${leftPoints[i]}`,
+          fontSize: 14,
+          strokeColor: '#E2E8F0',
+          fontFamily: 1,
+        });
+      }
+      if (rightPoints[i]) {
+        els.push({
+          type: 'text',
+          x: sx + colW + 58,
+          y: rowY,
+          text: `• ${rightPoints[i]}`,
+          fontSize: 14,
+          strokeColor: '#E2E8F0',
+          fontFamily: 1,
+        });
+      }
+      rowY += 26;
+    }
+
+    this.appendElements(els);
+    this.cursorY = rowY + 30;
+  }
+
+  private drawConceptMapDiagram(sx: number, sy: number, data: any): void {
+    const central = data.centralConcept || data.title || 'Core Idea';
+    const branches: Array<{ label: string; details?: string }> = data.branches || [
+      { label: 'Aspect 1' },
+      { label: 'Aspect 2' },
+      { label: 'Aspect 3' },
+    ];
+
+    const cx = sx + 160, cy = sy + 90;
+    const els: any[] = [
+      // Central Node
+      {
+        type: 'ellipse',
+        x: cx - 60,
+        y: cy - 25,
+        width: 120,
+        height: 50,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0C4A6E',
+        fillStyle: 'solid',
+        label: { text: central, fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+    ];
+
+    const branchDist = 130;
+    const n = branches.length;
+    branches.forEach((b, i) => {
+      const angle = (i * 2 * Math.PI) / n;
+      const bx = cx + branchDist * Math.cos(angle) - 45;
+      const by = cy + (branchDist * 0.7) * Math.sin(angle) - 18;
+
+      // Connecting arrow
+      els.push({
+        type: 'arrow',
+        x: cx,
+        y: cy,
+        width: (bx + 45 - cx) * 0.8,
+        height: (by + 18 - cy) * 0.8,
+        strokeColor: '#94A3B8',
+        strokeWidth: 1.8,
+      });
+
+      // Branch node
+      els.push({
+        type: 'rectangle',
+        x: bx,
+        y: by,
+        width: 90,
+        height: 36,
+        strokeColor: '#A78BFA',
+        backgroundColor: '#1E1B4B',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: b.label, fontSize: 12, strokeColor: '#FAFAFA' },
+      });
+    });
+
+    this.appendElements(els);
+    this.cursorY = sy + 210;
   }
 }
 
