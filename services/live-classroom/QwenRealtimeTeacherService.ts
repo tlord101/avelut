@@ -58,6 +58,8 @@ export class QwenRealtimeTeacherService {
   private promptConfig: TeacherPromptConfig | null = null;
   private appSettings: AppSettings | null = null;
   private fullTranscript = '';
+  private lastTranscriptSlice = '';
+  private hasCalledToolInTurn = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -464,6 +466,7 @@ export class QwenRealtimeTeacherService {
       case 'response.audio_transcript.delta':
         if (event.delta) {
           this.fullTranscript += event.delta;
+          this.lastTranscriptSlice += event.delta;
           this.callbacks.onTranscript?.(this.fullTranscript, false);
         }
         break;
@@ -484,7 +487,25 @@ export class QwenRealtimeTeacherService {
         break;
 
       // ── Tool / function call ────────────────────────────────────────────
+      case 'conversation.item.created':
+        console.log('[QwenRealtime] conversation.item.created', event.item?.id);
+        break;
+
+      case 'response.output_item.added':
+      case 'response.output_item.done':
+        console.log(`[QwenRealtime] ${event.type}`);
+        break;
+
+      case 'response.function_call_arguments.delta':
+        break; // Ignore delta for now
+
       case 'response.function_call_arguments.done':
+        console.log('[QwenRealtime] TOOL CALL', {
+          name: event.name,
+          call_id: event.call_id,
+          arguments: event.arguments,
+        });
+        this.hasCalledToolInTurn = true;
         this.executeTool(event);
         break;
 
@@ -492,6 +513,16 @@ export class QwenRealtimeTeacherService {
         if (this.state === 'speaking' || this.state === 'drawing') {
           setTimeout(() => { if (this.state !== 'listening') this.setState('listening'); }, 400);
         }
+
+        // Fallback: If after response.done there was speech but zero tool calls in that turn
+        if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
+          console.log('[QwenRealtime] Fallback board update: No tool called during turn, writing transcript slice.');
+          avelutBoardController.writeText(this.lastTranscriptSlice, { fontSize: 'medium', color: '#FAFAFA' });
+        }
+
+        // Reset turn state
+        this.hasCalledToolInTurn = false;
+        this.lastTranscriptSlice = '';
         break;
 
       case 'error':
@@ -506,30 +537,37 @@ export class QwenRealtimeTeacherService {
   // ── Tool execution → AvelutBoardController ────────────────────────────────
 
   private executeTool(event: any): void {
-    const { name, call_id } = event;
+    const name = event.name;
+    const call_id = event.call_id;
     let args: any = {};
-    try { args = typeof event.arguments === 'string' ? JSON.parse(event.arguments) : event.arguments ?? {}; }
-    catch (e) { console.warn('[QwenRealtime] Bad tool args:', event.arguments); }
+    try {
+      args = typeof event.arguments === 'string'
+        ? JSON.parse(event.arguments)
+        : (event.arguments ?? {});
+    } catch (e) {
+      console.warn('[QwenRealtime] Bad tool args:', event.arguments);
+    }
 
+    console.log('[QwenRealtime] executeTool', name, args);
     this.setState('drawing');
 
     try {
       switch (name) {
         case 'write_text':
-          avelutBoardController.writeText(args.text, {
-            text: args.text,
+          avelutBoardController.writeText(args.text ?? args.content ?? '', {
             fontSize: args.fontSize,
             color: args.color,
             x: args.x,
             y: args.y,
+            isFormula: args.isFormula,
           });
           break;
 
         case 'draw_shape':
           avelutBoardController.drawShape({
             type: args.type,
-            x: args.x,
-            y: args.y,
+            x: Number(args.x) || 60,
+            y: Number(args.y) || 120,
             width: args.width,
             height: args.height,
             label: args.label,
@@ -539,11 +577,17 @@ export class QwenRealtimeTeacherService {
           break;
 
         case 'draw_diagram':
-          avelutBoardController.drawDiagram(args.diagramType, args.data ?? {});
+          avelutBoardController.drawDiagram(
+            args.diagramType ?? args.type,
+            args.data ?? args,
+          );
           break;
 
         case 'highlight_concept':
-          avelutBoardController.highlightConcept(args.targetTextOrLabel, args.style);
+          avelutBoardController.highlightConcept(
+            args.targetTextOrLabel ?? args.text ?? '',
+            args.style ?? 'box',
+          );
           break;
 
         case 'clear_board':
@@ -551,14 +595,14 @@ export class QwenRealtimeTeacherService {
           break;
 
         default:
-          console.warn('[QwenRealtime] Unknown tool:', name);
+          console.warn('[QwenRealtime] Unknown tool:', name, args);
           break;
       }
     } catch (toolErr) {
       console.error('[QwenRealtime] Tool execution error:', toolErr);
     }
 
-    // Return function call output so the model can continue its turn
+    // Always return tool output so model can continue speaking
     if (call_id) {
       this.sendJson({
         event_id: `tool_out_${Date.now()}`,
@@ -566,11 +610,9 @@ export class QwenRealtimeTeacherService {
         item: {
           type: 'function_call_output',
           call_id,
-          output: JSON.stringify({ success: true }),
+          output: JSON.stringify({ success: true, tool: name }),
         },
       });
-
-      // Instruct Qwen Realtime model to create response after tool output (drawings)
       this.sendJson({
         event_id: `resp_after_tool_${Date.now()}`,
         type: 'response.create',
