@@ -406,8 +406,7 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
           throw new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
         }
 
-        const data = await response.json();
-        const rawText = data?.choices?.[0]?.message?.content || '';
+        const rawText = await response.text();
 
         return {
           text: () => rawText,
@@ -696,8 +695,7 @@ async function callAlibabaQwen(
           throw new Error(`Alibaba Qwen Direct HTTP ${response.status}: ${errorText}`);
         }
 
-        const data = await response.json();
-        const rawText = data?.choices?.[0]?.message?.content || '';
+        const rawText = await response.text();
 
         return {
           text: () => rawText,

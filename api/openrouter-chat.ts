@@ -68,15 +68,14 @@ export async function POST(req: Request) {
           include_reasoning: false,
         };
 
-        if (body.stream) {
+        if (body.response_format && body.response_format.type === 'json_object') {
+          payload.response_format = { type: 'json_object' };
+          payload.stream = false; // Strictly enforce non-streaming for JSON mode
+        } else if (body.stream) {
           payload.stream = true;
           if (body.stream_options) {
             payload.stream_options = body.stream_options;
           }
-        }
-
-        if (body.response_format) {
-          payload.response_format = body.response_format;
         }
 
         const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -86,7 +85,7 @@ export async function POST(req: Request) {
         });
 
         if (response.ok) {
-          if (body.stream && response.body) {
+          if (payload.stream && response.body) {
             return new Response(response.body, {
               status: 200,
               headers: {
@@ -98,11 +97,12 @@ export async function POST(req: Request) {
             });
           }
 
-          const data = await response.text();
-          return new Response(data, {
+          const data = await response.json();
+          const extractedText = data?.choices?.[0]?.message?.content || '';
+          return new Response(extractedText, {
             status: 200,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'text/plain',
               'Access-Control-Allow-Origin': '*',
             },
           });

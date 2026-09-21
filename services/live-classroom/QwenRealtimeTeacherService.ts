@@ -334,6 +334,8 @@ export class QwenRealtimeTeacherService {
           silence_duration_ms: 800,
         },
         tools: this.buildToolDeclarations(),
+        tool_choice: 'auto',
+        parallel_tool_calls: true,
       },
     });
 
