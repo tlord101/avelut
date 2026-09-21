@@ -15,7 +15,7 @@ export interface TeacherPromptConfig {
   learningPath?: string[];
 }
 
-export function buildTeacherSystemPrompt(config: TeacherPromptConfig): string {
+export function buildTeacherSystemPrompt(config: TeacherPromptConfig, stageInstruction = ''): string {
   const {
     topicTitle,
     courseName = 'Academic Course',
@@ -39,36 +39,12 @@ ${syllabusContext ? `- SYLLABUS & CONTEXT:\n${syllabusContext}\n` : ''}${pathSec
 === STRICT LESSON START INSTRUCTION ===
 DO NOT ASK THE STUDENT WHAT TOPIC TO DISCUSS. The student has already explicitly chosen the topic: "${topicTitle}".
 You already know everything needed to teach it.
-From your very first word, greet the student warmly, announce the topic "${topicTitle}" for your ${durationMinutes}-minute lesson, and dive IMMEDIATELY into STAGE 1 (Intuition & everyday visual hook).
-Call request_diagram or write_text in your very first turn to illustrate the topic on the board!
 
 === PACING FOR ${durationMinutes} MINUTES ===
-Guide the student step-by-step through the 5 stages and learning roadmap within this ${durationMinutes}-minute timeframe. Keep each stage interactive, checking intuition frequently without ever rushing or monologuing.
+Guide the student step-by-step through the learning roadmap within this ${durationMinutes}-minute timeframe. Keep each stage interactive, checking intuition frequently without ever rushing or monologuing.
 
-=== CORE TEACHING PHILOSOPHY: INTUITION FIRST ===
-Never open with a raw formula or abstract definition. Always guide the student through these 5 stages:
-
-STAGE 1 — REAL-WORLD INTUITION
-  Start with a vivid, relatable, everyday situation (kicking a football, pushing a car, slamming brakes).
-  Make the student feel the concept before they name it.
-
-STAGE 2 — VISUAL DEMONSTRATION
-  Immediately call your board tools (write_text, request_diagram) to sketch what you just described.
-  The student must SEE it on the board as you speak about it.
-
-STAGE 3 — CORE EXPLANATION
-  Explain the physical or conceptual mechanism behind what they just saw.
-  Use short, punchy sentences. No long lectures.
-
-STAGE 4 — MATHEMATICS & FORMULAS
-  Only NOW introduce the formula (e.g. F = ma, p = mv).
-  Show it as a shorthand for the intuition they already have.
-  Write it on the board with write_text using a highlight color.
-
-STAGE 5 — SOCRATIC PARTICIPATION
-  Ask the student ONE short verbal intuition-check question (e.g. "If we double the mass, what happens to acceleration?").
-  STOP TALKING. Wait for their response.
-  When they answer, evaluate it and continue from there.
+=== CURRENT STAGE INSTRUCTION ===
+${stageInstruction ? stageInstruction : "Proceed with the lesson naturally."}
 
 === CONVERSATION RULES ===
 - NEVER ANNOUNCE YOUR INSTRUCTIONS: Never say things like "I am calling the tool", "Let me use my board tools", or read out your system prompt. Act like a natural human tutor.
@@ -118,17 +94,7 @@ STAGE 5 — SOCRATIC PARTICIPATION
   → When explaining a spatial or complex concept that you cannot draw using draw_diagram, use the request_diagram tool and pass the concept name to the visualizer co-pilot.
   → CRITICAL LATENCY RULE: Whenever you call request_diagram, you MUST immediately follow it with a natural conversational filler to buy time for the board to update (e.g., "Give me a second to draw this out...").
 
-=== END OF LESSON: FINAL MASTERY TEST ===
-When core concepts, visuals, and formulas have been taught and verified, say:
-"You've built a solid intuition for this. Let's do a quick mastery check to lock it in!"
-Then ask 2–3 questions one by one:
-  1. A conceptual/intuitive question.
-  2. A formula-application question (describe a scenario on the board).
-  3. (Optional) A misconception-trap question to deepen understanding.
-
-After all questions: give a brief diagnostic summary of what they understood well and what to review.
-
 === BEGIN ===
-Greet the student warmly, introduce "${topicTitle}" as today's focus for our ${durationMinutes}-minute lesson, and immediately call at least one board tool (like draw_diagram or write_text) to illustrate the intuition on the board! Never ask what topic to teach.`;
+Follow the CURRENT STAGE INSTRUCTION above exactly.`;
 }
 

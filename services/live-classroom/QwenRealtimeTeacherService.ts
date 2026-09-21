@@ -13,6 +13,7 @@
 
 import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
+import { PedagogicalStateMachine } from './PedagogicalStateMachine';
 import type { AppSettings } from '../../types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ export class QwenRealtimeTeacherService {
   private executedCallIds = new Set<string>();
   private hasGreeted = false;
   private isStarting = false;
+  private stateMachine: PedagogicalStateMachine | null = null;
 
   private teacherSpeakingUntil = 0;
 
@@ -97,6 +99,13 @@ export class QwenRealtimeTeacherService {
     this.isStarting = true;
 
     this.promptConfig = config;
+
+    this.stateMachine = new PedagogicalStateMachine({
+      topicTitle: config.topicTitle,
+      durationMinutes: config.durationMinutes || 30,
+      learningPath: config.learningPath,
+      syllabusContext: config.syllabusContext
+    });
     if (appSettings) this.appSettings = appSettings;
     this.setState('connecting');
 
@@ -173,6 +182,13 @@ export class QwenRealtimeTeacherService {
     this.executedCallIds.clear();
     this.hasGreeted = false;
     this.isStarting = false;
+
+    this.stateMachine = new PedagogicalStateMachine({
+      topicTitle: config.topicTitle,
+      durationMinutes: config.durationMinutes || 30,
+      learningPath: config.learningPath,
+      syllabusContext: config.syllabusContext
+    });
 
     this.setState('closed');
   }
@@ -313,7 +329,8 @@ export class QwenRealtimeTeacherService {
   private sendSessionInit(): void {
     if (!this.promptConfig) return;
 
-    const instructions = buildTeacherSystemPrompt(this.promptConfig);
+    const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
+    const instructions = buildTeacherSystemPrompt(this.promptConfig, stageInstruction);
     console.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
 
     this.pendingToolCalls.clear();
@@ -642,6 +659,14 @@ export class QwenRealtimeTeacherService {
         this.hasCalledToolInTurn = false;
         this.fullTranscript = '';
         this.lastTranscriptSlice = '';
+
+        if (this.stateMachine) {
+           const timeChanged = this.stateMachine.evaluateState();
+           const turnChanged = this.stateMachine.advance();
+           if (timeChanged || turnChanged) {
+             this.sendSessionInit(); // Send session update to update prompt with new state
+           }
+        }
         break;
       }
 
