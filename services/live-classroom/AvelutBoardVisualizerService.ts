@@ -149,13 +149,25 @@ export class AvelutBoardVisualizerService {
 
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
-          console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status}:`, errBody);
-          continue;
+          console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status} ${res.statusText}:`, errBody);
+
+          let parsedError;
+          try {
+            parsedError = JSON.parse(errBody).error;
+          } catch {
+            parsedError = errBody;
+          }
+
+          lastError = new Error(`Endpoint ${ep} returned ${res.status} ${res.statusText}: ${parsedError || 'Unknown error'}`);
+          continue; // Try the next fallback endpoint
         }
 
         const data = await res.json();
         const contentStr = data?.choices?.[0]?.message?.content;
-        if (!contentStr) throw new Error('Empty response from AI visualizer model');
+        if (!contentStr) {
+          lastError = new Error(`Empty response from AI visualizer model at ${ep}. Response data: ${JSON.stringify(data).slice(0, 100)}`);
+          continue; // Try the next fallback endpoint
+        }
 
         try {
           return JSON.parse(contentStr);
