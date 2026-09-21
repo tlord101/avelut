@@ -280,6 +280,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
     serviceRef.current.triggerInitialGreeting();
     setHasStarted(true);
+
+    // Request a kickoff diagram for the topic once lesson starts
+    void avelutBoardVisualizer.generateKickoffIllustration();
   };
 
   const handleBoardReady = useCallback(() => {

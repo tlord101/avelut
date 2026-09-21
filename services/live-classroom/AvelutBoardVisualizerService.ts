@@ -44,6 +44,9 @@ export class AvelutBoardVisualizerService {
 
   private speechBuffer = '';
   private lastEvaluatedSpeech = '';
+  private minCharsForEval = 180;
+  private maxContextChars = 900;
+  private evalDebounceMs = 2500;
   private speechDebounceTimer: any = null;
   private isProcessing = false;
   private hasGeneratedKickoff = false;
@@ -180,8 +183,36 @@ export class AvelutBoardVisualizerService {
    * Visual diagrams and formulas are drawn dynamically as the lecturer speaks.
    */
   public async generateKickoffIllustration(): Promise<void> {
-    // Intentionally keep board clean on entrance: the topic title is already rendered in the header zone.
-    this.setStatus('ready');
+    if (!this.config?.topicTitle) return;
+
+    this.setStatus('visualizing', 'Generating topic kickoff diagram…');
+    const { topicTitle, courseName = 'Academic Course', syllabusContext } = this.config;
+
+    const systemPrompt = `You are a live blackboard illustrator setting up the opening visualization for a new lesson.
+Generate a structured topic overview diagram for the student in JSON.
+Valid diagram types: "concept_map", "cycle", "flow", "comparison".
+Return ONLY valid JSON:
+{
+  "title": "Diagram Title",
+  "diagramType": "concept_map" | "cycle" | "flow" | "comparison",
+  "data": { ... }
+}`;
+    const userPrompt = `Topic: "${topicTitle}"\nCourse: "${courseName}"\nContext: "${syllabusContext || ''}"\nGenerate the best kickoff diagram to introduce this topic.`;
+
+    try {
+      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt);
+      if (res.title) {
+        avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
+      }
+      if (res.diagramType && res.data) {
+        avelutBoardController.drawDiagram(res.diagramType, res.data);
+      }
+      this.setStatus('ready');
+      this.hasGeneratedKickoff = true;
+    } catch (err: any) {
+      console.error('[BoardVisualizer] kickoff error:', err);
+      this.setStatus('error', err.message);
+    }
   }
 
   // ── Speech Transcript Monitoring (Autonomous Co-Pilot) ────────────────────
@@ -192,23 +223,24 @@ export class AvelutBoardVisualizerService {
   public processSpeechTranscript(transcript: string, isTurnFinal = false): void {
     if (!transcript) return;
 
+    // Always set or append if service sends deltas only
     this.speechBuffer = transcript;
 
     if (isTurnFinal) {
       if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
       this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals();
-      }, 400);
+        void this.evaluateSpeechForVisuals(true);
+      }, 600);
       return;
     }
 
     // Debounce stream: evaluate if enough novel text accumulated
     const novelChars = transcript.length - this.lastEvaluatedSpeech.length;
-    if (novelChars > 70 && !this.isProcessing) {
+    if (novelChars >= this.minCharsForEval && !this.isProcessing) {
       if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
       this.speechDebounceTimer = setTimeout(() => {
-        void this.evaluateSpeechForVisuals();
-      }, 2000);
+        void this.evaluateSpeechForVisuals(false);
+      }, this.evalDebounceMs);
     }
   }
 
@@ -216,18 +248,21 @@ export class AvelutBoardVisualizerService {
    * Sends the recent speech explanation to the Alibaba text model to determine
    * if a specific formula, shape, highlight, or diagram should appear on the board.
    */
-  private async evaluateSpeechForVisuals(): Promise<void> {
+  private async evaluateSpeechForVisuals(isTurnFinal = false): Promise<void> {
     if (this.isProcessing || !this.config?.topicTitle) return;
 
     const currentSpeech = this.speechBuffer.trim();
     if (currentSpeech.length < 30 || currentSpeech === this.lastEvaluatedSpeech) return;
 
-    // Isolate what was recently said since last evaluation
-    const recentChunk = currentSpeech.slice(this.lastEvaluatedSpeech.length).trim() || currentSpeech.slice(-250);
-    this.lastEvaluatedSpeech = currentSpeech;
+    const full = currentSpeech;
+    const novel = full.slice(this.lastEvaluatedSpeech.length).trim();
+
+    // Prefer a wide window of recent context
+    const contextWindow = full.slice(-this.maxContextChars);
+    const recentFocus = novel.length >= 80 ? novel.slice(-this.maxContextChars) : contextWindow;
 
     // Skip short conversational greetings / checks
-    if (recentChunk.length < 25 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentChunk)) {
+    if (recentFocus.length < 25 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentFocus)) {
       return;
     }
 
@@ -235,37 +270,38 @@ export class AvelutBoardVisualizerService {
     this.setStatus('visualizing', 'Updating board illustration…');
 
     const systemPrompt = `You are an elite autonomous digital blackboard illustrator for a live university lecture.
-The lecturer is actively explaining this in the current step: "${recentChunk}"
-Lesson Topic: "${this.config.topicTitle}"
+The lecturer is teaching and explaining concepts. You must decide what visual updates to render on the blackboard right now.
 
 CRITICAL RULES:
-1. ONLY illustrate the concrete academic concept, diagram, law, mechanism, or equation actively being explained right now.
-2. NEVER output generic learning frameworks or system prompt roadmaps (e.g., do NOT output "Core Principles", "Visual Intuition", "Learning Framework", or generic motivational bullets).
-3. The blackboard uses an organized single-viewport layout:
-   - "draw_diagram": Replaces the main stage with a clear visual diagram (concept_map, cycle, flow, comparison, coordinate_axes, collision, free_body) tailored to this specific explanation.
-   - "set_formula": Sets the primary equation or law in the highlighted formula card below the stage (e.g., "v = u + at", "F = ma").
-   - "write_keywords": Displays 2-4 key technical terms introduced in this explanation.
-   - "edit_text": Updates an existing label or equation on the board.
-   - "clear_stage": Clears the main diagram stage when moving to a brand-new concept.
-   - "clear_component": Erases a specific obsolete element (target: "...").
-4. If the speech is conversational greeting, transitioning, or asking a question to the student without introducing a visual concept, return {"shouldDraw": false}. Do NOT draw anything!
+1. Prefer shouldDraw true when the teacher explains a concept, law, process, comparison, or equation.
+2. Allowed actions (can return MULTIPLE in one response):
+   - "write_text": short title or 1-line definition (max ~12 words). Never paste full spoken paragraphs!
+   - "set_formula": equations like F = ma, v = u + at
+   - "draw_diagram": concept_map | flow | cycle | comparison | coordinate_axes | free_body | collision
+   - "draw_shape": supporting arrows/boxes
+   - "write_keywords": 2–4 technical terms
+   - "highlight_concept" / "clear_stage" when switching topics
+3. Always include at least one visual action when shouldDraw is true (diagram OR formula OR keywords + text).
+4. If the speech is purely conversational greeting, transitioning, or asking a question to the student without introducing a visual concept, return {"shouldDraw": false}. Do NOT draw anything!
 
-Return ONLY valid JSON matching:
+Return strict JSON only matching:
 {
   "shouldDraw": true | false,
   "summary": "Brief 3-word summary of the visual action",
   "actions": [
     {
-      "action": "draw_diagram" | "write_text" | "set_formula" | "edit_text" | "write_keywords" | "highlight_concept" | "clear_component" | "clear_stage",
+      "action": "draw_diagram" | "write_text" | "set_formula" | "draw_shape" | "write_keywords" | "highlight_concept" | "clear_stage",
       "params": { ... }
     }
   ]
 }`;
 
-    const userPrompt = `Current Topic: "${this.config.topicTitle}"
-Teacher Just Spoke: "${recentChunk}"
+    const userPrompt = `Topic: "${this.config.topicTitle}"
+Course / Syllabus Context: "${this.config.syllabusContext || ''}"
+Teacher Speech Context Window: "${contextWindow}"
+Recent Focus: "${recentFocus}"
 
-Decide what visual updates to render on the blackboard right now.`;
+Instruction: Illustrate what is being taught now with a diagram and/or formula and short labels.`;
 
     try {
       const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt);
@@ -286,9 +322,18 @@ Decide what visual updates to render on the blackboard right now.`;
           this.executeVisualAction(act, params);
         }
         this.callbacks.onVisualDrawn?.(decision.summary || 'Updated blackboard');
+        this.lastEvaluatedSpeech = currentSpeech; // Only update on successful draw
+
+        // Anti-spam: wait a bit before evaluating again unless it's the end of a turn
+        if (!isTurnFinal) {
+           await new Promise((r) => setTimeout(r, 4000));
+        }
+      } else {
+        this.lastEvaluatedSpeech = currentSpeech; // Update if model decided not to draw
       }
     } catch (err) {
       console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
+      // Don't update lastEvaluatedSpeech on error so we can retry with more context
     } finally {
       this.isProcessing = false;
       this.setStatus('ready');
@@ -391,6 +436,7 @@ Generate the visual board action.`;
   // ── Action Dispatcher ─────────────────────────────────────────────────────
 
   private executeVisualAction(action: string, params: Record<string, any>): void {
+    console.log('[BoardVisualizer] execute', action, params);
     try {
       switch (action) {
         case 'draw_diagram': {
