@@ -1,3 +1,4 @@
+import { liveLogger } from "./logger";
 /**
  * AvelutBoardVisualizerService.ts
  *
@@ -92,11 +93,11 @@ export class AvelutBoardVisualizerService {
         try {
           return JSON.parse(jsonMatch[0]);
         } catch (e) {
-          console.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text);
+          liveLogger.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text);
           return null;
         }
       }
-      console.warn('[BoardVisualizer] Failed to parse JSON from response:', text);
+      liveLogger.warn('[BoardVisualizer] Failed to parse JSON from response:', text);
       return null;
     }
   }
@@ -176,10 +177,10 @@ export class AvelutBoardVisualizerService {
 
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
-          console.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status} ${res.statusText}:`, errBody);
+          liveLogger.warn(`[BoardVisualizer] Endpoint ${ep} returned ${res.status} ${res.statusText}:`, errBody);
 
           if (res.status === 429) {
-            console.warn('[BoardVisualizer] Rate limited by upstream. Gracefully failing this turn.');
+            liveLogger.warn('[BoardVisualizer] Rate limited by upstream. Gracefully failing this turn.');
             throw new Error('RATE_LIMIT');
           }
 
@@ -202,7 +203,7 @@ export class AvelutBoardVisualizerService {
         const contentStr = await res.text();
         if (!contentStr) {
           lastError = new Error(`Empty response from AI visualizer model at ${ep}.`);
-          console.warn(`[BoardVisualizer] ${lastError.message}`);
+          liveLogger.warn(`[BoardVisualizer] ${lastError.message}`);
           continue; // Try the next fallback endpoint
         }
 
@@ -220,11 +221,11 @@ export class AvelutBoardVisualizerService {
           throw err; // bubble up without fallback if it's a hard rate limit
         }
         lastError = err;
-        console.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
+        liveLogger.warn(`[BoardVisualizer] Fetch failed for endpoint ${ep}:`, err);
       }
     }
 
-    console.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
+    liveLogger.warn('[BoardVisualizer] All endpoints failed. Last error:', lastError);
     throw lastError || new Error('Failed to reach AI visualizer model endpoints');
     } finally {
       this.pendingRequests.delete(requestId);
@@ -275,7 +276,7 @@ Return ONLY valid JSON:
       this.setStatus('ready');
       this.hasGeneratedKickoff = true;
     } catch (err: any) {
-      console.error('[BoardVisualizer] kickoff error:', err);
+      liveLogger.error('[BoardVisualizer] kickoff error:', err);
       if (err.name !== 'AbortError') this.setStatus('error', err.message);
     }
   }
@@ -311,7 +312,7 @@ Return ONLY valid JSON:
     const recentFocus = novel.length >= 80 ? novel.slice(-this.maxContextChars) : contextWindow;
 
     // Skip short conversational greetings / checks
-    if (recentFocus.length < 25 || /^(hello|hi|welcome|can you hear|let's begin|are you ready)/i.test(recentFocus)) {
+    if (recentFocus.length < 30 || /^(hello|hi|welcome|can you hear|let's begin|are you ready|yes|no|exactly|that's right|great|good job|let me draw|on the board|let me show you)/i.test(recentFocus)) {
       return;
     }
 
@@ -356,7 +357,7 @@ Instruction: Illustrate what is being taught now with a diagram and/or formula a
       this.cancelPendingRequests();
       const requestId = `speech_${Date.now()}`;
       const decision = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, false);
-      console.log('[BoardVisualizer] Speech evaluation decision:', decision);
+      liveLogger.log('[BoardVisualizer] Speech evaluation decision:', decision);
 
       if (decision.shouldDraw) {
         if (Array.isArray(decision.actions)) {
@@ -383,7 +384,7 @@ Instruction: Illustrate what is being taught now with a diagram and/or formula a
         this.lastEvaluatedSpeech = currentSpeech; // Update if model decided not to draw
       }
     } catch (err) {
-      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err);
+      if (err.name !== 'AbortError') { liveLogger.warn('[BoardVisualizer] evaluateSpeechForVisuals error:', err); this.setStatus('error', err.message); }
       // Don't update lastEvaluatedSpeech on error so we can retry with more context
     } finally {
       this.isProcessing = false;
@@ -423,7 +424,7 @@ Generate the visual board action.`;
         this.callbacks.onVisualDrawn?.(`Illustrated: ${params.boardText}`);
       }
     } catch (err) {
-      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err);
+      if (err.name !== 'AbortError') { liveLogger.warn('[BoardVisualizer] illustrateFromBoardWrite error:', err); this.setStatus('error', err.message); }
     } finally {
       this.setStatus('ready');
     }
@@ -469,7 +470,7 @@ Generate the diagram data now.`;
       this.setStatus('ready');
       this.callbacks.onVisualDrawn?.(`Drawn ${res.diagramType} on board`);
     } catch (err: any) {
-      console.error('[BoardVisualizer] illustrateOnDemand error:', err);
+      liveLogger.error('[BoardVisualizer] illustrateOnDemand error:', err);
       this.setStatus('error', err.message);
     }
   }
@@ -518,7 +519,7 @@ Generate the visual board action.`;
         this.callbacks.onVisualDrawn?.(`Illustrated answer for student`);
       }
     } catch (err) {
-      if (err.name !== 'AbortError') console.warn('[BoardVisualizer] handleStudentQuery error:', err);
+      if (err.name !== 'AbortError') { liveLogger.warn('[BoardVisualizer] handleStudentQuery error:', err); this.setStatus('error', err.message); }
     } finally {
       this.setStatus('ready');
     }
@@ -527,7 +528,7 @@ Generate the visual board action.`;
   // ── Action Dispatcher ─────────────────────────────────────────────────────
 
   private executeVisualAction(action: string, params: Record<string, any>): void {
-    console.log('[BoardVisualizer] execute', action, params);
+    liveLogger.log('[BoardVisualizer] execute', action, params);
     try {
       switch (action) {
         case 'draw_diagram': {
@@ -605,11 +606,11 @@ Generate the visual board action.`;
           break;
         }
         default:
-          console.warn('[BoardVisualizer] Unknown visual action:', action);
+          liveLogger.warn('[BoardVisualizer] Unknown visual action:', action);
           break;
       }
     } catch (err) {
-      console.error('[BoardVisualizer] executeVisualAction failed:', err);
+      liveLogger.error('[BoardVisualizer] executeVisualAction failed:', err);
     }
   }
 

@@ -39,7 +39,8 @@ import {
   avelutBoardVisualizer,
   type VisualizerStatus,
 } from '../../../services/live-classroom/AvelutBoardVisualizerService';
-import type { UserProfile } from '../../../types';
+import type { UserProfile } from './../../../types';
+import { liveLogger } from './../../../services/live-classroom/logger';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   // ── Start realtime session once on mount ───────────────────────────────────
   const startSession = useCallback(() => {
+    const newSessionId = Math.random().toString(36).slice(2, 9);
+    liveLogger.setSessionId(newSessionId);
+    liveLogger.log('Starting classroom session');
     // Teardown previous if existing
     if (serviceRef.current) {
       serviceRef.current.endSession();
@@ -254,9 +258,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         serviceRef.current = null;
       }
       avelutBoardVisualizer.endSession();
-      // Do not reset startedSessionRef.current here to prevent double-connects in StrictMode.
-      // Or we can just leave it as it is because we need it to reconnect if the component actually unmounts and remounts.
-      // The issue says: "Prefer a pattern that guarantees startSession runs once per navigation into the classroom, not twice."
+      startedSessionRef.current = false;
     };
   }, [startSession]);
 
@@ -310,6 +312,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     setErrorMsg(null);
     setHasStarted(false);
     serviceRef.current?.endSession();
+    serviceRef.current = null;
+    avelutBoardVisualizer.endSession();
+    startedSessionRef.current = false;
+    avelutBoardController.clearBoard(true);
+
     startSession();
   };
 

@@ -1,3 +1,4 @@
+import { liveLogger } from "./logger";
 /**
  * QwenRealtimeTeacherService.ts
  *
@@ -90,7 +91,7 @@ export class QwenRealtimeTeacherService {
   ): Promise<void> {
     // Guard against double start
     if (this.isStarting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
-      console.log('[QwenRealtime] startSession: already connected or starting, returning early');
+      liveLogger.log('[QwenRealtime] startSession: already connected or starting, returning early');
       return;
     }
 
@@ -130,7 +131,7 @@ export class QwenRealtimeTeacherService {
       this.isStarting = false;
     } catch (err: any) {
       this.isStarting = false;
-      console.error('[QwenRealtime] startSession failed:', err);
+      liveLogger.error('[QwenRealtime] startSession failed:', err);
       this.setState('error');
       this.callbacks.onError?.(
         err instanceof Error ? err : new Error(String(err))
@@ -216,14 +217,14 @@ export class QwenRealtimeTeacherService {
       }
     }
 
-    console.log('[QwenRealtime] Connecting via proxy:', wsUrl);
+    liveLogger.log('[QwenRealtime] Connecting via proxy:', wsUrl);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
       this.ws = ws;
 
       ws.onopen = () => {
-        console.log('[QwenRealtime] Proxy connected ✅');
+        liveLogger.log('[QwenRealtime] Proxy connected ✅');
         this.setState('connected');
         this.sendSessionInit();
         resolve();
@@ -239,12 +240,12 @@ export class QwenRealtimeTeacherService {
           } else if (evt.data instanceof ArrayBuffer) {
             raw = new TextDecoder().decode(evt.data);
           } else {
-            console.warn('[QwenRealtime] Unknown WS data type:', typeof evt.data, evt.data);
+            liveLogger.warn('[QwenRealtime] Unknown WS data type:', typeof evt.data, evt.data);
             return;
           }
           this.handleMessage(raw);
         } catch (err) {
-          console.warn('[QwenRealtime] Failed to process WS message:', err);
+          liveLogger.warn('[QwenRealtime] Failed to process WS message:', err);
         }
       };
 
@@ -286,7 +287,7 @@ export class QwenRealtimeTeacherService {
       await Promise.all(promises);
       return this.isAudioUnlocked();
     } catch (e) {
-      console.warn('[QwenRealtime] resumeAudio warning:', e);
+      liveLogger.warn('[QwenRealtime] resumeAudio warning:', e);
       return false;
     }
   }
@@ -295,14 +296,14 @@ export class QwenRealtimeTeacherService {
   public triggerInitialGreeting(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     if (this.hasGreeted) {
-      console.log('[QwenRealtime] Greeting already sent — skip');
+      liveLogger.log('[QwenRealtime] Greeting already sent — skip');
       return;
     }
     this.hasGreeted = true;
 
     const topic = this.promptConfig?.topicTitle ? `"${this.promptConfig.topicTitle}"` : 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
-    console.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
+    liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
     // Give the model a direct instruction to greet warmly AND immediately draw on the board
     this.sendJson({
@@ -331,7 +332,7 @@ export class QwenRealtimeTeacherService {
 
     const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
     const instructions = buildTeacherSystemPrompt(this.promptConfig, stageInstruction);
-    console.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
+    liveLogger.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
 
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
@@ -508,26 +509,26 @@ export class QwenRealtimeTeacherService {
     try {
       event = JSON.parse(raw);
     } catch {
-      console.warn('[QwenRealtime] Non-JSON message (first 150 chars):', String(raw).slice(0, 150));
+      liveLogger.warn('[QwenRealtime] Non-JSON message (first 150 chars):', String(raw).slice(0, 150));
       return;
     }
 
     if (!event?.type) {
-      console.warn('[QwenRealtime] Event missing type. Payload:', event);
-      console.warn('[QwenRealtime] Raw (first 200 chars):', String(raw).slice(0, 200));
+      liveLogger.warn('[QwenRealtime] Event missing type. Payload:', event);
+      liveLogger.warn('[QwenRealtime] Raw (first 200 chars):', String(raw).slice(0, 200));
       return;
     }
 
     // Log incoming event types clearly
-    console.log(`[QwenRealtime] Event received: ${event.type}`);
+    liveLogger.log(`[QwenRealtime] Event received: ${event.type}`);
 
     switch (event.type) {
       case 'session.created':
-        console.log('[QwenRealtime] session.created on DashScope');
+        liveLogger.log('[QwenRealtime] session.created on DashScope');
         break;
 
       case 'session.updated':
-        console.log('[QwenRealtime] session.updated on DashScope');
+        liveLogger.log('[QwenRealtime] session.updated on DashScope');
         break;
 
       case 'response.audio.delta':
@@ -555,7 +556,7 @@ export class QwenRealtimeTeacherService {
         this.fullTranscript = '';
         this.lastTranscriptSlice = '';
         if (performance.now() < this.teacherSpeakingUntil) {
-          console.log('[QwenRealtime] Ignoring barge-in during teacher speech');
+          liveLogger.log('[QwenRealtime] Ignoring barge-in during teacher speech');
           return;
         }
         this.stopPlayback();
@@ -568,11 +569,11 @@ export class QwenRealtimeTeacherService {
 
       // ── Tool / function call ────────────────────────────────────────────
       case 'conversation.item.created':
-        console.log('[QwenRealtime] conversation.item.created', event.item?.id);
+        liveLogger.log('[QwenRealtime] conversation.item.created', event.item?.id);
         break;
 
       case 'response.output_item.added': {
-        console.log(`[QwenRealtime] response.output_item.added:`, event.item?.type);
+        liveLogger.log(`[QwenRealtime] response.output_item.added:`, event.item?.type);
         if (event.item?.type === 'function_call') {
           const item = event.item;
           const key = item.call_id || item.id;
@@ -605,7 +606,7 @@ export class QwenRealtimeTeacherService {
         const callId = event.call_id || pending?.call_id || key;
         const argsStr = event.arguments || pending?.arguments || '{}';
 
-        console.log('[QwenRealtime] TOOL CALL arguments.done:', {
+        liveLogger.log('[QwenRealtime] TOOL CALL arguments.done:', {
           name: toolName,
           call_id: callId,
           arguments: argsStr,
@@ -618,7 +619,7 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'response.output_item.done': {
-        console.log(`[QwenRealtime] response.output_item.done:`, event.item?.type);
+        liveLogger.log(`[QwenRealtime] response.output_item.done:`, event.item?.type);
         if (event.item?.type === 'function_call') {
           const item = event.item;
           const callId = item.call_id || item.id;
@@ -639,10 +640,10 @@ export class QwenRealtimeTeacherService {
         // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
         // We demote the phrase-trigger backup so it only triggers as a last resort, avoiding dual-writer chaos.
         // Also removed autonomous visualizer processing.
-        if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length > 0) {
+        if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length >= 25) {
           const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
           if (triggered) {
-            console.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
+            liveLogger.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
             import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
               avelutBoardVisualizer.illustrateFromBoardWrite({
                 boardText: 'Fallback Diagram Request',
@@ -651,7 +652,7 @@ export class QwenRealtimeTeacherService {
               });
             });
           } else {
-            console.log('[QwenRealtime] No tool called this turn, but no drawing phrase detected. Doing nothing.');
+            liveLogger.log('[QwenRealtime] No tool called this turn, but no drawing phrase detected. Doing nothing.');
           }
         }
 
@@ -662,6 +663,7 @@ export class QwenRealtimeTeacherService {
 
         if (this.stateMachine) {
            const timeChanged = this.stateMachine.evaluateState();
+           liveLogger.setStage(this.stateMachine.getCurrentStage());
            const turnChanged = this.stateMachine.advance();
            if (timeChanged || turnChanged) {
              this.sendSessionInit(); // Send session update to update prompt with new state
@@ -671,7 +673,7 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'error':
-        console.error('[QwenRealtime] Server error:', event.error);
+        liveLogger.error('[QwenRealtime] Server error:', event.error);
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
         break;
 
@@ -693,10 +695,10 @@ export class QwenRealtimeTeacherService {
         ? JSON.parse(argsRaw)
         : (argsRaw ?? {});
     } catch (e) {
-      console.warn('[QwenRealtime] Bad tool args:', argsRaw);
+      liveLogger.warn('[QwenRealtime] Bad tool args:', argsRaw);
     }
 
-    console.log('[QwenRealtime] Executing board tool:', name, args);
+    liveLogger.log('[QwenRealtime] Executing board tool:', name, args);
 
     try {
       switch (name) {
@@ -751,11 +753,11 @@ export class QwenRealtimeTeacherService {
           break;
 
         default:
-          console.warn('[QwenRealtime] Unknown tool:', name, args);
+          liveLogger.warn('[QwenRealtime] Unknown tool:', name, args);
           break;
       }
     } catch (toolErr) {
-      console.error('[QwenRealtime] Tool execution error:', toolErr);
+      liveLogger.error('[QwenRealtime] Tool execution error:', toolErr);
     }
 
     // Always return tool output so model can continue speaking
@@ -843,7 +845,7 @@ export class QwenRealtimeTeacherService {
         this.processorNode = workletNode;
         return;
       } catch (workletErr) {
-        console.warn('[QwenRealtime] AudioWorklet init failed, falling back to ScriptProcessor:', workletErr);
+        liveLogger.warn('[QwenRealtime] AudioWorklet init failed, falling back to ScriptProcessor:', workletErr);
       }
     }
 
@@ -865,7 +867,7 @@ export class QwenRealtimeTeacherService {
       try {
         await this.outputAudioCtx.resume();
       } catch (err) {
-        console.warn('[QwenRealtime] ensureOutputRunning failed to resume:', err);
+        liveLogger.warn('[QwenRealtime] ensureOutputRunning failed to resume:', err);
       }
     }
   }
@@ -877,7 +879,7 @@ export class QwenRealtimeTeacherService {
       await this.ensureOutputRunning();
 
       if (this.outputAudioCtx.state === 'suspended') {
-        console.warn('[QwenRealtime] AudioContext still suspended — cannot play');
+        liveLogger.warn('[QwenRealtime] AudioContext still suspended — cannot play');
         return;
       }
 
@@ -889,7 +891,7 @@ export class QwenRealtimeTeacherService {
 
       const sampleCount = Math.floor(bytes.byteLength / 2);
       if (sampleCount <= 0) {
-        console.warn('[QwenRealtime] playDelta empty samples');
+        liveLogger.warn('[QwenRealtime] playDelta empty samples');
         return;
       }
 
@@ -925,7 +927,7 @@ export class QwenRealtimeTeacherService {
         if (i !== -1) this.activeAudioSources.splice(i, 1);
       };
     } catch (err) {
-      console.warn('[QwenRealtime] playDelta error:', err);
+      liveLogger.warn('[QwenRealtime] playDelta error:', err);
     }
   }
 

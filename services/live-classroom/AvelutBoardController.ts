@@ -1,3 +1,4 @@
+import { liveLogger } from "./logger";
 /**
  * AvelutBoardController.ts
  *
@@ -59,7 +60,7 @@ class BoardActionQueue {
         try {
           await action();
         } catch (e) {
-          console.error('[BoardActionQueue] Error executing action', e);
+          liveLogger.error('[BoardActionQueue] Error executing action', e);
         }
       }
     }
@@ -124,7 +125,7 @@ export class AvelutBoardController {
         this.syncScene();
       }
     } catch (e) {
-      console.warn('[BoardController] initBoard error:', e);
+      liveLogger.warn('[BoardController] initBoard error:', e);
     }
   }
 
@@ -136,7 +137,7 @@ export class AvelutBoardController {
    */
   private syncScene(_unused?: boolean): void {
     if (!this.api) {
-      console.warn('[BoardController] syncScene skipped — API null, elements=', this.elements.length);
+      liveLogger.warn('[BoardController] syncScene skipped — API null, elements=', this.elements.length);
       return;
     }
     try {
@@ -149,7 +150,7 @@ export class AvelutBoardController {
         },
       });
     } catch (e) {
-      console.warn('[BoardController] syncScene error:', e);
+      liveLogger.warn('[BoardController] syncScene error:', e);
     }
   }
 
@@ -166,7 +167,7 @@ export class AvelutBoardController {
       this.elements = [...this.elements, ...converted];
       this.syncScene();
     } catch (err) {
-      console.error('[BoardController] appendElements error:', err);
+      liveLogger.error('[BoardController] appendElements error:', err);
     }
   }
 
@@ -219,7 +220,7 @@ export class AvelutBoardController {
   private _writeText(text: string, args?: WriteTextArgs): void {
     if (!text?.trim()) return;
 
-    console.log('[BoardController] writeText called:', text, args);
+    liveLogger.log('[BoardController] writeText called:', text, args);
 
     if (args?.isFormula) {
       this._setFormula(text.trim());
@@ -227,6 +228,7 @@ export class AvelutBoardController {
     }
 
     const fontSize = this.fontSizeToNumber(args?.fontSize);
+    if (text === this.lessonTitle || text === `📚 ${this.lessonTitle}`) return;
     const x = args?.x ?? 50;
     // Constrain Y to safe stage/notes area, never below y: 510
     const y = Math.min(args?.y ?? this.cursorY, 480);
@@ -366,6 +368,7 @@ export class AvelutBoardController {
   }
   private _updateText(targetTextOrLabel: string, newText: string): boolean {
     if (!targetTextOrLabel || !newText) return false;
+    if (targetTextOrLabel === this.lessonTitle || targetTextOrLabel === `📚 ${this.lessonTitle}`) return false;
     let found = false;
     const lower = targetTextOrLabel.toLowerCase();
 
@@ -394,7 +397,7 @@ export class AvelutBoardController {
 
     if (found) {
       this.syncScene();
-      console.log(`[BoardController] Updated text matching "${targetTextOrLabel}" -> "${newText}"`);
+      liveLogger.log(`[BoardController] Updated text matching "${targetTextOrLabel}" -> "${newText}"`);
     }
     return found;
   }
@@ -406,6 +409,7 @@ export class AvelutBoardController {
   }
   private _removeComponent(targetTextOrLabel: string): boolean {
     if (!targetTextOrLabel) return false;
+    if (targetTextOrLabel === this.lessonTitle || targetTextOrLabel === `📚 ${this.lessonTitle}`) return false;
     const initialLen = this.elements.length;
     const lower = targetTextOrLabel.toLowerCase();
 
@@ -418,7 +422,7 @@ export class AvelutBoardController {
 
     if (this.elements.length !== initialLen) {
       this.syncScene();
-      console.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
+      liveLogger.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
       return true;
     }
     return false;
@@ -468,7 +472,7 @@ export class AvelutBoardController {
     this.actionQueue.push(() => { this._drawDiagram(diagramType, data); });
   }
   private _drawDiagram(diagramType: string, data: Record<string, any>): void {
-    console.log('[BoardController] drawDiagram called:', diagramType, data);
+    liveLogger.log('[BoardController] drawDiagram called:', diagramType, data);
     // Automatically clear previous stage diagram so diagrams never overlap
     this._clearStage();
 
