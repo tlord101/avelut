@@ -68,6 +68,8 @@ export class QwenRealtimeTeacherService {
   private retriedWithDefaultVoice = false;
   private currentModel = QWEN_REALTIME_MODEL;
   private boardController = avelutBoardController;
+  private hasReceivedAudioInCurrentResponse = false;
+  private isAwaitingContinuation = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -472,6 +474,11 @@ export class QwenRealtimeTeacherService {
 
       case 'response.audio.delta':
         if (event.delta) {
+          if (!this.hasReceivedAudioInCurrentResponse) {
+            this.hasReceivedAudioInCurrentResponse = true;
+            this.isAwaitingContinuation = false;
+            liveLogger.log('[QwenRealtime] Audio response receiving / playing');
+          }
           this.setState('speaking');
           void this.playDelta(event.delta);
         }
@@ -491,6 +498,8 @@ export class QwenRealtimeTeacherService {
       case 'response.created':
         // New response turn — reset transcript accumulator
         this.fullTranscript = '';
+        this.hasReceivedAudioInCurrentResponse = false;
+        liveLogger.log('[QwenRealtime] response.created');
         break;
 
       // ── Student interruption ────────────────────────────────────────────
@@ -542,7 +551,12 @@ export class QwenRealtimeTeacherService {
         const callId = event.call_id || pending?.call_id || key;
         const argsStr = event.arguments || event.function?.arguments || pending?.arguments || '{}';
 
-        liveLogger.log('[QwenRealtime] function_call_arguments.done:', { name: toolName, call_id: callId });
+        liveLogger.log(
+          `[QwenRealtime] TOOL CALL RECEIVED\n` +
+          `name: ${toolName}\n` +
+          `call_id: ${callId}\n` +
+          `arguments: ${argsStr}`
+        );
 
         if (toolName && callId) {
           void this.executeToolCall(callId, toolName, argsStr);
@@ -557,7 +571,13 @@ export class QwenRealtimeTeacherService {
           const callId = item.call_id || item.id;
           const toolName = item.name || item.function?.name;
           const argsStr = item.arguments || item.function?.arguments || '{}';
-          if (toolName && callId) {
+          if (toolName && callId && !this.executedCallIds.has(callId)) {
+            liveLogger.log(
+              `[QwenRealtime] TOOL CALL RECEIVED\n` +
+              `name: ${toolName}\n` +
+              `call_id: ${callId}\n` +
+              `arguments: ${argsStr}`
+            );
             void this.executeToolCall(callId, toolName, argsStr);
           }
         }
@@ -565,7 +585,13 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'response.done': {
-        if (this.state === 'speaking' || this.state === 'drawing') {
+        liveLogger.log('[QwenRealtime] response.done');
+        // If we are currently awaiting tool continuation, do NOT reset to listening
+        if (this.isAwaitingContinuation) {
+          liveLogger.log('[QwenRealtime] Tool response done — awaiting continuation audio');
+          break;
+        }
+        if (this.state === 'speaking') {
           // Audio may still be playing — playback completion sets state to listening
           // If no audio was playing, transition now
           if (this.activeAudioSources.length === 0) {
@@ -623,6 +649,7 @@ export class QwenRealtimeTeacherService {
     this.executedCallIds.add(callId);
 
     this.setState('drawing');
+    this.isAwaitingContinuation = true;
 
     let args: any = {};
     try {
@@ -633,8 +660,6 @@ export class QwenRealtimeTeacherService {
       liveLogger.warn('[QwenRealtime] Bad tool args:', argsRaw);
     }
 
-    liveLogger.log('[QwenRealtime] Executing board_action:', name, args);
-
     let toolResult: any;
 
     if (name === 'board_action') {
@@ -644,6 +669,9 @@ export class QwenRealtimeTeacherService {
       toolResult = { status: 'error', message: `Unknown tool: ${name}` };
     }
 
+    liveLogger.log('[QwenRealtime] TOOL EXECUTED');
+
+    liveLogger.log('[QwenRealtime] SENDING TOOL RESULT');
     // Return function result to close the tool call
     this.sendJson({
       event_id: `tool_out_${Date.now()}`,
@@ -655,6 +683,7 @@ export class QwenRealtimeTeacherService {
       },
     });
 
+    liveLogger.log('[QwenRealtime] REQUESTING TEACHER CONTINUATION');
     // Ask the model to continue teaching
     this.sendJson({
       event_id: `resp_after_tool_${Date.now()}`,
@@ -663,6 +692,15 @@ export class QwenRealtimeTeacherService {
         modalities: ['text', 'audio'],
       },
     });
+
+    // Safety timeout: if continuation audio does not arrive within 10s, revert state to listening
+    setTimeout(() => {
+      if (this.isAwaitingContinuation && this.state === 'drawing') {
+        liveLogger.warn('[QwenRealtime] Continuation timeout — reverting to listening');
+        this.isAwaitingContinuation = false;
+        this.setState('listening');
+      }
+    }, 10000);
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
