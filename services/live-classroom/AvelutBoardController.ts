@@ -87,6 +87,35 @@ export class AvelutBoardController {
   private cursorY = 90;
   private lessonTitle = '';
 
+  private pendingSkeletons: any[] = [];
+  private flushScheduled = false;
+
+  addSkeletonElement(skeleton: any): void {
+    this.pendingSkeletons.push(skeleton);
+    if (!this.flushScheduled) {
+      this.flushScheduled = true;
+      // Batch within 50ms to allow multiple draw calls in one turn
+      setTimeout(() => {
+        const skeletons = [...this.pendingSkeletons];
+        this.pendingSkeletons = [];
+        this.flushScheduled = false;
+
+        if (!this.api) {
+            console.warn('[BoardController] Cannot add skeletons — Excalidraw API not bound.');
+            return;
+        }
+
+        const elements = convertToExcalidrawElements(skeletons, { regenerateIds: false });
+        this.api.updateScene({
+          elements: [...this.api.getSceneElements(), ...elements],
+        });
+
+        // Also add to elements array to persist state
+        this.elements = [...this.elements, ...elements];
+      }, 50);
+    }
+  }
+
   private readonly STAGE_FULL_Y = 420;
   private readonly VIEWPORT_HEIGHT = 520;
 
