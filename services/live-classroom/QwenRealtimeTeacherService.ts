@@ -68,6 +68,7 @@ export class QwenRealtimeTeacherService {
   private executedCallIds = new Set<string>();
   private hasGreeted = false;
   private isStarting = false;
+  private isSessionUpdated = false;
   private stateMachine: PedagogicalStateMachine | null = null;
 
   private teacherSpeakingUntil = 0;
@@ -187,6 +188,7 @@ export class QwenRealtimeTeacherService {
     this.executedCallIds.clear();
     this.hasGreeted = false;
     this.isStarting = false;
+    this.isSessionUpdated = false;
 
     this.stateMachine = null;
 
@@ -300,7 +302,8 @@ export class QwenRealtimeTeacherService {
     }
     this.hasGreeted = true;
 
-    const topic = this.promptConfig?.topicTitle ? `"${this.promptConfig.topicTitle}"` : 'the topic';
+    const topicStr = this.promptConfig?.topicTitle || 'the topic';
+    const topic = `"${topicStr}"`;
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
@@ -313,7 +316,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me, announce that today we are mastering ${topic}, and immediately call your board tools (draw_diagram, draw_shape, or write_text) to illustrate the introductory visual concept on the board as you speak! Do not ask me what topic we are going to discuss.`,
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and immediately call your board tool illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" }) or annotate({ text: ${JSON.stringify(topicStr)} }) to place the introductory visual anchor on the board as you speak! Do not ask me what topic we are going to discuss.`,
         }],
       },
     });
@@ -336,12 +339,15 @@ export class QwenRealtimeTeacherService {
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
 
+    const selectedVoice = this.appSettings?.alibaba_voice_name || 'Cherry';
+    liveLogger.log('[QwenRealtime] Configuring session with voice:', selectedVoice);
+
     this.sendJson({
       event_id: `session_init_${Date.now()}`,
       type: 'session.update',
       session: {
         modalities: ['text', 'audio'],
-        voice: 'Jennifer',
+        voice: selectedVoice,
         instructions,
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
@@ -530,10 +536,15 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
     switch (event.type) {
       case 'session.created':
         liveLogger.log('[QwenRealtime] session.created on DashScope');
+        if (!this.isSessionUpdated) {
+          liveLogger.log('[QwenRealtime] Ensuring session.update is delivered after session.created');
+          this.sendSessionInit();
+        }
         break;
 
       case 'session.updated':
-        liveLogger.log('[QwenRealtime] session.updated on DashScope');
+        this.isSessionUpdated = true;
+        liveLogger.log('[QwenRealtime] session.updated on DashScope ✅');
         break;
 
       case 'response.audio.delta':
@@ -760,6 +771,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             break;
           }
           this.hasDrawnDiagramInTurn = true;
+          this.boardVisualizerService.hasGeneratedKickoff = true;
 
           const boardSummary = this.avelutBoardController.getCompactSummary();
           const reserve = this.avelutBoardController.reserveVerticalSpace(600);

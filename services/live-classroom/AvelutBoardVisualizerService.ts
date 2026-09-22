@@ -63,7 +63,7 @@ export class AvelutBoardVisualizerService {
   private phraseDebounceMs = 8000; // do not fire more than once every 8s
   private speechDebounceTimer: any = null;
   private isProcessing = false;
-  private hasGeneratedKickoff = false;
+  public hasGeneratedKickoff = false;
   private drawnTopics = new Set<string>();
   private pendingRequests = new Map<string, AbortController>();
 
@@ -359,50 +359,36 @@ Return ONLY the JSON object described in the system prompt.`;
     this.setStatus('visualizing', 'Generating topic kickoff diagram…');
     const { topicTitle, courseName = 'Academic Course', syllabusContext } = this.config;
 
-    const systemPrompt = `You are a live blackboard illustrator.
-Return ONLY compact valid JSON for a simple opening diagram.
-Rules:
-- Use diagramType: "concept_map" | "flow" | "cycle" | "comparison"
-- Labels max 4 words each. NO long descriptions.
-- Max 5 nodes for concept_map. Max 4 steps for flow/cycle.
-Schema:
-{
-  "title": "Short Title",
-  "diagramType": "concept_map",
-  "data": {
-    "nodes": [{"id": "a", "label": "Real Term"}],
-    "connections": [{"from": "a", "to": "b"}],
-    "steps": ["Topic-Specific Step", "Next Step"]
-  }
-}
-CRITICAL: Every label MUST be a real topic word from the lesson (e.g. Resistor, Ohm's Law, Color Code, Current).
-NEVER use Concept A, Concept B, Aspect 1, Aspect 2, Core Idea, Stage 1, Node 1, Label, or any placeholder.
-If you cannot name real concepts, return {"action":"write_text","params":{"text":"<topic word>"}} instead of a diagram.`;
-
-    const userPrompt = `Topic: "${topicTitle}"
-Course: "${courseName}"
-Context: "${(syllabusContext || '').slice(0, 200)}"
-Generate a compact kickoff diagram. Short labels only.`;
-
     try {
-      // Do NOT cancel other requests aggressively on kickoff — only cancel older kickoffs
-      const requestId = `kickoff_${Date.now()}`;
-      const res = await this.callAlibabaTextModel(systemPrompt, userPrompt, requestId, true);
+      const reserve = avelutBoardController.reserveVerticalSpace(380);
+      const res = await this.generateStructuredDiagram({
+        topic: `${topicTitle} - key concept, visual components, circuit/structure, and formula`,
+        template: 'concept_map',
+        context: syllabusContext || courseName,
+        constraints: { max_nodes: 6, color_palette: 'default' },
+        canvas: { width: 1600, height: 900, reservedTop: 80 },
+        yOffset: reserve.y,
+        existingBoardSummary: avelutBoardController.getCompactSummary(),
+      });
 
-      if (res.title) {
-        avelutBoardController.writeText(res.title, { fontSize: 'medium', color: '#38BDF8' });
+      if (res && Array.isArray(res.elements) && res.elements.length > 0) {
+        const ordered = [
+          ...res.elements.filter((e: any) => ['rectangle', 'ellipse', 'diamond'].includes(e.type)),
+          ...res.elements.filter((e: any) => ['arrow', 'line'].includes(e.type)),
+          ...res.elements.filter((e: any) => e.type === 'text'),
+        ];
+        avelutBoardController.drawStructured(ordered);
+        this.hasGeneratedKickoff = true;
+        this.setStatus('ready');
+        this.callbacks.onVisualDrawn?.(res.meta?.title || 'Kickoff diagram');
+      } else {
+        this.setStatus('ready');
       }
-      if (res.diagramType && res.data) {
-        avelutBoardController.drawDiagram(res.diagramType, res.data);
-      } else if (res.action && res.params) {
-        this.executeVisualAction(res.action, res.params);
-      }
-      this.setStatus('ready');
-      this.hasGeneratedKickoff = true;
-      this.callbacks.onVisualDrawn?.(res.title || 'Kickoff diagram');
     } catch (err: any) {
-      console.error('[BoardVisualizer] kickoff error:', err);
-      if (err.name !== 'AbortError') this.setStatus('error', err.message);
+      if (err?.name !== 'AbortError') {
+        console.error('[BoardVisualizer] kickoff error:', err);
+        this.setStatus('error', err.message);
+      }
     }
   }
 
@@ -554,8 +540,10 @@ Requested: ${requestedDiagramType || 'best visual'}`;
       this.setStatus('ready');
       this.callbacks.onVisualDrawn?.(`Drawn ${res.diagramType || 'diagram'} on board`);
     } catch (err: any) {
-      console.error('[BoardVisualizer] illustrateOnDemand error:', err);
-      if (err.name !== 'AbortError') this.setStatus('error', err.message);
+      if (err?.name !== 'AbortError') {
+        console.error('[BoardVisualizer] illustrateOnDemand error:', err);
+        this.setStatus('error', err.message);
+      }
     }
   }
 

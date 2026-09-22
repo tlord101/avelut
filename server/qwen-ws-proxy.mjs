@@ -65,10 +65,17 @@ wss.on('connection', (clientSocket, req) => {
 
   let clientClosed = false;
   let upstreamClosed = false;
+  const clientQueue = [];
 
   // ── Upstream → Client pipe ──────────────────────────────────────────────
   upstreamSocket.on('open', () => {
     console.log('[qwen-ws-proxy] ✅ Upstream DashScope connected');
+    while (clientQueue.length > 0) {
+      const item = clientQueue.shift();
+      if (item && upstreamSocket.readyState === WebSocket.OPEN) {
+        upstreamSocket.send(item.data, { binary: item.isBinary });
+      }
+    }
   });
 
   upstreamSocket.on('message', (data, isBinary) => {
@@ -96,6 +103,8 @@ wss.on('connection', (clientSocket, req) => {
   clientSocket.on('message', (data, isBinary) => {
     if (upstreamSocket.readyState === WebSocket.OPEN) {
       upstreamSocket.send(data, { binary: isBinary });
+    } else if (upstreamSocket.readyState === WebSocket.CONNECTING) {
+      clientQueue.push({ data, isBinary });
     }
   });
 

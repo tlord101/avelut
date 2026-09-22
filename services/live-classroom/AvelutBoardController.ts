@@ -203,27 +203,9 @@ export class AvelutBoardController {
     this.cursorY = 90;
     this.nextFreeY = 100;
     this.lastAnnotationY = 100;
-    try {
-      const titleEls = convertToExcalidrawElements([
-        {
-          type: 'text',
-          x: 48,
-          y: 28,
-          text: `📚 ${title}`,
-          fontSize: 26,
-          fontFamily: 1,
-          textAlign: 'left',
-          verticalAlign: 'top',
-          strokeColor: '#38BDF8',
-          customData: { zone: 'header' },
-        },
-      ]);
-      this.elements = [...titleEls];
-      if (this.api) {
-        this.syncScene();
-      }
-    } catch (e) {
-      console.warn('[BoardController] initBoard error:', e);
+    this.elements = [];
+    if (this.api) {
+      this.syncScene();
     }
   }
 
@@ -266,7 +248,7 @@ export class AvelutBoardController {
   }
 
   public hasElements(): boolean {
-    return this.elements.length > 1;
+    return this.elements.length > 0;
   }
 
   public getElementCount(): number {

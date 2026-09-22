@@ -84,8 +84,18 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     let clientDone = false;
     let upstreamDone = false;
+    const clientQueue: Array<{ data: any; isBinary: boolean }> = [];
 
     // ── Upstream → Client ──────────────────────────────────────────────────
+    upstream.on('open', () => {
+      while (clientQueue.length > 0) {
+        const item = clientQueue.shift();
+        if (item && upstream.readyState === WebSocket.OPEN) {
+          upstream.send(item.data, { binary: item.isBinary });
+        }
+      }
+    });
+
     upstream.on('message', (data, isBinary) => {
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.send(data, { binary: isBinary });
@@ -110,6 +120,8 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
     clientWs.on('message', (data, isBinary) => {
       if (upstream.readyState === WebSocket.OPEN) {
         upstream.send(data, { binary: isBinary });
+      } else if (upstream.readyState === WebSocket.CONNECTING) {
+        clientQueue.push({ data, isBinary });
       }
     });
 

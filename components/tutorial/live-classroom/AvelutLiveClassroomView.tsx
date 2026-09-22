@@ -281,8 +281,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     serviceRef.current.triggerInitialGreeting();
     setHasStarted(true);
 
-    // Request a kickoff diagram for the topic once lesson starts
-    void avelutBoardVisualizer.generateKickoffIllustration();
+    // If the teacher model doesn't trigger illustrate within 2.5s, run kickoff as a fallback
+    setTimeout(() => {
+      if (!avelutBoardVisualizer.hasGeneratedKickoff) {
+        void avelutBoardVisualizer.generateKickoffIllustration();
+      }
+    }, 2500);
   };
 
   const handleBoardReady = useCallback(() => {

@@ -125,7 +125,7 @@ class AlibabaVoiceEngine {
     }
 
     const model = options.model || options.appSettings?.alibaba_voice_model || 'qwen3-tts-flash';
-    const voice = options.voice || options.appSettings?.alibaba_voice_name || 'Jennifer';
+    const voice = options.voice || options.appSettings?.alibaba_voice_name || 'Cherry';
 
     let lastErr: Error | null = null;
 

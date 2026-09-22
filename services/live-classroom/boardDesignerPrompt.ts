@@ -104,7 +104,16 @@ beat. Do not exceed 8 nodes per response.
   pointing to annotated callouts around it.
 - custom: choose the best layout for the description. Keep <= 6 shapes.
 
-## EXAMPLE — heat engine flowchart
+## TECHNICAL COMPONENTS & PHYSICAL OBJECTS
+
+When the topic is about a physical, electrical, mechanical, or biological component/system (e.g. "Resistor", "Capacitor", "Circuit", "Cell", "Pipe", "Piston"):
+- Do NOT draw generic abstract comparison bubbles with "vs".
+- DRAW THE COMPONENT/SYSTEM ITSELF using clean geometry:
+  * For electrical components (e.g. Resistor): Draw the component body (rectangle or series of connected segments) labeled with its role and value (e.g. "Resistor (R)\\n[ Limits Current ]"), lead lines connecting from power source ("DC Source\\n[ + 9V - ]") through the resistor to ground, current flow arrow ("I (Current) →"), and the governing formula as standalone text (e.g. "V = I · R").
+  * For fluid/physical analogies (e.g. "Narrow Pipe"): Draw a container/pipe box with input flow arrow and restricted output flow arrow showing the constriction.
+  * Always include key governing equations (fontSize 28+) alongside the component.
+
+## EXAMPLE 1 — heat engine flowchart
 
 Input: topic "heat engine energy flow with efficiency equation", template "flowchart"
 
@@ -118,4 +127,19 @@ Output:
   {"type":"arrow","id":"arr_w","x":780,"y":430,"width":160,"height":0,"points":[[0,0],[1,0]],"endArrowhead":"arrow","start":{"id":"engine"},"label":{"text":"W (work)","fontSize":14}},
   {"type":"text","id":"eq","x":980,"y":400,"text":"η = 1 − T_C / T_H","fontSize":32}
 ],"meta":{"title":"Heat Engine","beat":"energy_flow","continuation":false}}
+
+## EXAMPLE 2 — electrical component & circuit schematic
+
+Input: topic "resistor in DC circuit with Ohm's Law", template "concept_map"
+
+Output:
+{"elements":[
+  {"type":"rectangle","id":"src","x":260,"y":240,"width":160,"height":90,"roundness":{"type":3},"backgroundColor":"#ffec99","label":{"text":"DC Source\n[ 9V Battery ]","fontSize":16}},
+  {"type":"rectangle","id":"res","x":600,"y":240,"width":200,"height":90,"roundness":{"type":3},"backgroundColor":"#a5d8ff","label":{"text":"Resistor (R)\n[ 100 Ω ]","fontSize":16}},
+  {"type":"ellipse","id":"gnd","x":980,"y":255,"width":120,"height":60,"roundness":{"type":3},"backgroundColor":"#d3f9d8","label":{"text":"Ground (0V)","fontSize":16}},
+  {"type":"arrow","id":"wire1","x":420,"y":285,"width":180,"height":0,"points":[[0,0],[1,0]],"endArrowhead":"arrow","start":{"id":"src"},"end":{"id":"res"},"label":{"text":"I (Current) →","fontSize":14}},
+  {"type":"arrow","id":"wire2","x":800,"y":285,"width":180,"height":0,"points":[[0,0],[1,0]],"endArrowhead":"arrow","start":{"id":"res"},"end":{"id":"gnd"},"label":{"text":"Return wire","fontSize":14}},
+  {"type":"text","id":"eq","x":560,"y":380,"text":"V = I · R  (Ohm's Law)","fontSize":32},
+  {"type":"text","id":"role","x":530,"y":440,"text":"Limits current flow & dissipates heat: P = I²R","fontSize":18}
+],"meta":{"title":"Resistor Circuit","beat":"circuit_schematic","continuation":false}}
 `;

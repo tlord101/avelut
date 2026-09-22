@@ -59,7 +59,7 @@ export class UnifiedVoiceRouter {
     const provider = this.resolveProvider(options);
 
     if (provider === 'alibaba') {
-      const voice = options.voice || options.appSettings?.alibaba_voice_name || 'Jennifer';
+      const voice = options.voice || options.appSettings?.alibaba_voice_name || 'Cherry';
       return alibabaVoiceEngine.playSpeech(text, {
         appSettings: options.appSettings,
         voice,
