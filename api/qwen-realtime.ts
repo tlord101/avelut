@@ -3,6 +3,9 @@
  *
  * Vercel Node.js Serverless Function — WebSocket Proxy for DashScope Realtime.
  *
+ * Model: qwen-omni-turbo-realtime (Alibaba Cloud Model Studio)
+ * To update the model, change QWEN_REALTIME_MODEL here and in server/qwen-ws-proxy.mjs.
+ *
  * WHY:
  *   The browser WebSocket API cannot send custom HTTP headers.
  *   DashScope requires "Authorization: Bearer <key>" on the WS handshake.
@@ -31,11 +34,13 @@ export const config = {
 export const maxDuration = 300;
 
 // ── DashScope upstream ────────────────────────────────────────────────────────
+// Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts
+const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
 const WORKSPACE_ID =
   process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
 const DASHSCOPE_URL =
   `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
-  `/api-ws/v1/realtime?model=qwen3.5-omni-flash-realtime`;
+  `/api-ws/v1/realtime?model=${QWEN_REALTIME_MODEL}`;
 
 // ── Singleton WSS (reused across warm invocations) ────────────────────────────
 const wss = new WebSocketServer({ noServer: true });

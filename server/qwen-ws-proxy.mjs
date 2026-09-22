@@ -2,7 +2,9 @@
 /**
  * server/qwen-ws-proxy.mjs
  *
- * WebSocket proxy for Alibaba Cloud DashScope qwen3.5-omni-flash-realtime.
+ * WebSocket proxy for Alibaba Cloud DashScope Qwen Omni Realtime.
+ * Model: qwen-omni-turbo-realtime
+ * To update the model, change QWEN_REALTIME_MODEL here and in api/qwen-realtime.ts.
  *
  * WHY THIS EXISTS:
  *   The browser WebSocket API cannot send custom HTTP headers.
@@ -27,9 +29,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 const PORT = parseInt(process.env.PORT_WS || '3001', 10);
 const API_KEY = process.env.ALIBABA_API_KEY || process.env.VITE_ALIBABA_API_KEY || '';
 const WORKSPACE_ID = process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
+// Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts and api/qwen-realtime.ts
+const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
 const DASHSCOPE_WS_URL =
   `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
-  `/api-ws/v1/realtime?model=qwen3.5-omni-flash-realtime`;
+  `/api-ws/v1/realtime?model=${QWEN_REALTIME_MODEL}`;
 
 if (!API_KEY) {
   console.error('[qwen-ws-proxy] ❌  ALIBABA_API_KEY is not set. Export it before starting.');

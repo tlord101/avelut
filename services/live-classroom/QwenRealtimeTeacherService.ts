@@ -1,22 +1,22 @@
-import { liveLogger } from "./logger";
 /**
  * QwenRealtimeTeacherService.ts
  *
- * Full-duplex WebSocket client for Alibaba Cloud Model Studio:
- * Model: qwen3.5-omni-flash-realtime  (Singapore / ap-southeast-1)
+ * Full-duplex WebSocket client for Alibaba Cloud Model Studio.
  *
- * Capabilities:
- *  - 16kHz PCM16 mic input streaming
- *  - 24kHz PCM16 gapless Web Audio playback
- *  - Semantic barge-in / interruption (input_audio_buffer.speech_started)
- *  - Native function / tool calling → dispatches to AvelutBoardController
+ * Architecture:
+ *   Student mic → Qwen Omni Realtime → audio + board_action → AvelutBoardController → Excalidraw
+ *
+ * One model. One board tool. No secondary AI. No state machine.
  */
 
+import { liveLogger } from './logger';
 import { avelutBoardController } from './AvelutBoardController';
-import { avelutBoardVisualizer } from './AvelutBoardVisualizerService';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
-import { PedagogicalStateMachine } from './PedagogicalStateMachine';
 import type { AppSettings } from '../../types';
+
+// ─── Centralized model identifier ────────────────────────────────────────────
+// Update this single constant when Alibaba releases a newer realtime model.
+export const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,35 +61,20 @@ export class QwenRealtimeTeacherService {
   private promptConfig: TeacherPromptConfig | null = null;
   private appSettings: AppSettings | null = null;
   private fullTranscript = '';
-  private lastTranscriptSlice = '';
-  private hasCalledToolInTurn = false;
-  private hasDrawnDiagramInTurn = false;
   private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
   private executedCallIds = new Set<string>();
   private hasGreeted = false;
   private isStarting = false;
   private isSessionUpdated = false;
   private retriedWithDefaultVoice = false;
-  private stateMachine: PedagogicalStateMachine | null = null;
-  private proactiveTimer: any = null;
 
-  private teacherSpeakingUntil = 0;
-  private avelutBoardController = avelutBoardController;
-  private boardVisualizerService = avelutBoardVisualizer;
+  private boardController = avelutBoardController;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
   public setCallbacks(cb: QwenTeacherCallbacks): void { this.callbacks = cb; }
   public getState(): TeacherState { return this.state; }
   public getIsMuted(): boolean { return this.isMuted; }
-
-  /** Returns true if teacher audio is physically playing or in room acoustic decay margin */
-  public isTeacherSpeaking(): boolean {
-    if (this.activeAudioSources.length > 0) return true;
-    if (this.outputAudioCtx && this.outputAudioCtx.currentTime < this.nextPlayTime) return true;
-    if (performance.now() < this.teacherSpeakingUntil) return true;
-    return false;
-  }
 
   private setState(s: TeacherState): void {
     if (this.state === s) return;
@@ -104,7 +89,6 @@ export class QwenRealtimeTeacherService {
     config: TeacherPromptConfig,
     appSettings?: AppSettings | null,
   ): Promise<void> {
-    // Guard against double start
     if (this.isStarting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
       liveLogger.log('[QwenRealtime] startSession: already connected or starting, returning early');
       return;
@@ -115,13 +99,6 @@ export class QwenRealtimeTeacherService {
     this.isStarting = true;
 
     this.promptConfig = config;
-
-    this.stateMachine = new PedagogicalStateMachine({
-      topicTitle: config.topicTitle,
-      durationMinutes: config.durationMinutes || 30,
-      learningPath: config.learningPath,
-      syllabusContext: config.syllabusContext
-    });
     if (appSettings) this.appSettings = appSettings;
     this.setState('connecting');
 
@@ -163,16 +140,6 @@ export class QwenRealtimeTeacherService {
   /** Send a typed message into the realtime conversation */
   public sendTextMessage(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !text.trim()) return;
-    this.clearProactiveTimer();
-    // Student engaged — allow soft stage progression
-    if (this.stateMachine) {
-      const prev = this.stateMachine.getCurrentStage();
-      this.stateMachine.recordStudentAnswer(text.trim(), true);
-      if (this.stateMachine.getCurrentStage() !== prev) {
-        liveLogger.log('[QwenRealtime] Stage advanced after student message:', prev, '→', this.stateMachine.getCurrentStage());
-        this.sendSessionInit();
-      }
-    }
     this.sendJson({
       event_id: `user_txt_${Date.now()}`,
       type: 'conversation.item.create',
@@ -182,12 +149,15 @@ export class QwenRealtimeTeacherService {
         content: [{ type: 'input_text', text: text.trim() }],
       },
     });
-    this.sendJson({ event_id: `resp_${Date.now()}`, type: 'response.create' });
+    this.sendJson({
+      event_id: `resp_${Date.now()}`,
+      type: 'response.create',
+      response: { modalities: ['text', 'audio'] },
+    });
   }
 
   /** Stop all audio and close the WebSocket cleanly */
   public endSession(): void {
-    this.clearProactiveTimer();
     this.stopPlayback();
 
     this.processorNode?.disconnect();
@@ -211,8 +181,6 @@ export class QwenRealtimeTeacherService {
     this.isStarting = false;
     this.isSessionUpdated = false;
     this.retriedWithDefaultVoice = false;
-
-    this.stateMachine = null;
 
     this.setState('closed');
   }
@@ -315,8 +283,11 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  /** Triggers the initial teacher greeting manually from the UI */
-  public async triggerInitialGreeting(): Promise<void> {
+  /**
+   * Triggers the initial teacher greeting.
+   * The session is already configured — just ask the model to begin.
+   */
+  public triggerInitialGreeting(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     if (this.hasGreeted) {
       liveLogger.log('[QwenRealtime] Greeting already sent — skip');
@@ -324,19 +295,11 @@ export class QwenRealtimeTeacherService {
     }
     this.hasGreeted = true;
 
-    liveLogger.setStage('GREETING');
-
-    const topicStr = this.promptConfig?.topicTitle || 'the topic';
-    const topic = `"${topicStr}"`;
+    const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
-    liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
+    liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min)`);
 
-    // 1. Immediately render the introductory illustration onto the whiteboard so the board is NEVER empty!
-    await this.boardVisualizerService.generateKickoffIllustration();
-    const boardSummary = this.avelutBoardController.getCompactSummary();
-    liveLogger.log('[QwenRealtime] Initial board illustrated successfully:', boardSummary);
-
-    // 2. Instruct model with the visual context so its speech directly references what is on the board
+    // Give the model its starting instruction as a user message
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -345,19 +308,16 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. The whiteboard is already illustrated with: ${boardSummary}. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and point directly to what is on the board!`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Begin naturally.`,
         }],
       },
     });
 
     this.sendJson({
-      event_id: `greet_manual_${Date.now()}`,
+      event_id: `greet_${Date.now()}`,
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        instructions: `The whiteboard has been illustrated with: "${boardSummary}". Greet the student warmly in 1-2 short sentences, point directly to what is on the board, and introduce the concept!`,
-        tools: this.buildToolDeclarations(),
-        tool_choice: 'auto',
       },
     });
   }
@@ -367,20 +327,15 @@ export class QwenRealtimeTeacherService {
   private sendSessionInit(overrideVoice?: string): void {
     if (!this.promptConfig) return;
 
-    const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
-    const instructions = buildTeacherSystemPrompt(this.promptConfig, stageInstruction);
-    liveLogger.log('[QwenRealtime] Sending session.update with DashScope tools schema...');
+    const instructions = buildTeacherSystemPrompt(this.promptConfig);
+    liveLogger.log('[QwenRealtime] Sending session.update...');
 
-    this.pendingToolCalls.clear();
-    this.executedCallIds.clear();
-
-    // DashScope Realtime (qwen3.5-omni-flash-realtime) supports 'Tina' as the primary English female voice.
-    // 'Cherry' is a TTS-only voice and is rejected by the Realtime WebSocket endpoint with a 400 error.
+    // Voice selection — Tina is the primary supported English voice
     let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'Tina';
     if (selectedVoice === 'Cherry' || selectedVoice === 'Catherine' || !selectedVoice) {
       selectedVoice = 'Tina';
     }
-    liveLogger.log('[QwenRealtime] Configuring session with voice:', selectedVoice);
+    liveLogger.log('[QwenRealtime] Session voice:', selectedVoice);
 
     this.sendJson({
       event_id: `session_init_${Date.now()}`,
@@ -392,268 +347,57 @@ export class QwenRealtimeTeacherService {
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
         turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          silence_duration_ms: 600,
-          prefix_padding_ms: 300,
+          type: 'semantic_vad',
         },
-        tools: this.buildToolDeclarations(),
+        tools: [this.buildBoardActionTool()],
         tool_choice: 'auto',
       },
     });
-
-
   }
 
-  private buildToolDeclarations() {
-    const rawTools = [
-      {
-        name: 'draw_shape',
-        description: 'Draw an Excalidraw shape (rectangle, ellipse, diamond) with text label on the board. Use this to construct diagrams, cards, or state boxes step-by-step.',
-        parameters: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['rectangle', 'ellipse', 'diamond'],
-              description: 'Shape geometric type. Default rectangle.',
-            },
-            id: {
-              type: 'string',
-              description: 'Unique element ID (e.g. "box1", "source", "stepA"). Used to connect arrows.',
-            },
-            label: {
-              type: 'string',
-              description: 'Text displayed inside the shape (e.g. "Step 1: Input" or "Battery 9V").',
-            },
-            backgroundColor: {
-              type: 'string',
-              description: 'Color: #e0f2fe (sky blue), #fef3c7 (amber), #dcfce7 (mint green), #fee2e2 (rose), #f3e8ff (purple), #ffffff (white).',
-            },
-            strokeColor: {
-              type: 'string',
-              description: 'Border outline color (e.g. #0284c7, #b45309, #16a34a, #dc2626, #1e1e1e).',
-            },
-            x: { type: 'number', description: 'Canvas X position (40 to 1200).' },
-            y: { type: 'number', description: 'Canvas Y position (90 to 380).' },
-            width: { type: 'number', description: 'Shape width (default 200).' },
-            height: { type: 'number', description: 'Shape height (default 90).' },
-          },
-          required: ['label'],
-        },
-      },
-      {
-        name: 'draw_arrow',
-        description: 'Draw a directional arrow between two shapes or points on the board. Can bind to shapes by ID with fromId and toId.',
-        parameters: {
-          type: 'object',
-          properties: {
-            fromId: {
-              type: 'string',
-              description: 'ID of source shape (e.g. "box1"). Binds arrow start.',
-            },
-            toId: {
-              type: 'string',
-              description: 'ID of destination shape (e.g. "box2"). Binds arrow end.',
-            },
-            label: {
-              type: 'string',
-              description: 'Label along arrow shaft (e.g. "current I", "flow Qh", "causes").',
-            },
-            color: {
-              type: 'string',
-              description: 'Arrow stroke color (e.g. #1e1e1e, #0284c7, #dc2626).',
-            },
-            strokeStyle: {
-              type: 'string',
-              enum: ['solid', 'dashed', 'dotted'],
-              description: 'Style of the arrow shaft. Default solid.',
-            },
-          },
-        },
-      },
-      {
-        name: 'draw_sticky_note',
-        description: 'Place a colorful Excalidraw sticky note on the board for key insights, definitions, formulas, or student reminders.',
-        parameters: {
-          type: 'object',
-          properties: {
-            text: {
-              type: 'string',
-              description: 'Note text content (e.g. "Key takeaway: V is directly proportional to I!").',
-            },
-            backgroundColor: {
-              type: 'string',
-              description: 'Color: #fef08a (yellow), #bae6fd (blue), #bbf7d0 (green), #fbcfe8 (pink), #fed7aa (orange).',
-            },
-            x: { type: 'number', description: 'Canvas X position (40 to 1200).' },
-            y: { type: 'number', description: 'Canvas Y position (90 to 380).' },
-          },
-          required: ['text'],
-        },
-      },
-      {
-        name: 'draw_component',
-        description: 'Render a pre-made, authentic engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate", "diode". Always call this immediately whenever discussing these physical components or introducing the lesson topic!',
-        parameters: {
-          type: 'object',
-          properties: {
-            component: {
-              type: 'string',
-              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate', 'diode'],
-              description: 'The pre-made component to render',
-            },
-            label: { type: 'string', description: 'Component label or value (e.g. "100 Ω", "9V", "AND Gate")' },
-            caption: { type: 'string', description: 'Governing equation or short note (e.g. "V = I · R")' },
-          },
-          required: ['component'],
-        },
-      },
-      {
-        name: 'annotate',
-        description: 'Write a short phrase directly on the board at a specific position. Use for quick callouts while talking: formulas you\'re deriving, step labels, terminology, quick definitions. This is FAST (no design step). Use it liberally between illustrate calls.',
-        parameters: {
-          type: 'object',
-          properties: {
-            text: { type: 'string' },
-            x: { type: 'number', description: '40-1200. Default 300.' },
-            y: { type: 'number', description: '90-380. Default auto-place below last annotation.' },
-            fontSize: { type: 'number', description: 'Default 24. Use 48+ for headings.' },
-            color: { type: 'string', description: 'Hex. Default #1e1e1e.' },
-          },
-          required: ['text'],
-        },
-      },
-      {
-        name: 'illustrate',
-        description: `Request a detailed diagram from the board designer. Use this for ANY diagram with more than 3 shapes, concept maps, flowcharts, energy-flow diagrams, cycles, or equation setups.
-
-CRITICAL BEHAVIORAL RULE: Before calling this tool, you MUST verbally announce it AND continue speaking for at least 5 seconds. Then call the tool while still narrating. After it returns, keep teaching by referring to what was drawn.
-
-Examples of the required preamble:
-- "So let me show you an example on the board. One minute please..."
-- "Let me sketch this out for you so it's clearer..."
-- "Watch the board — I'm putting this together now..."
-
-You must NEVER call this tool silently. Never go silent while it runs.`,
-        parameters: {
-          type: 'object',
-          properties: {
-            topic: { type: 'string', description: 'What the diagram should teach, e.g. "heat engine energy flow with efficiency equation"' },
-            template: {
-              type: 'string',
-              enum: ['flowchart', 'concept_map', 'comparison', 'cycle', 'equation_setup', 'custom'],
-              description: 'Layout template. Prefer a named template.',
-            },
-            context: { type: 'string', description: 'Teaching context to inform tone and complexity' },
-            constraints: {
-              type: 'object',
-              properties: {
-                max_nodes: { type: 'number' },
-                orientation: { type: 'string', enum: ['horizontal', 'vertical'] },
-                color_palette: { type: 'string', enum: ['default', 'thermal', 'cool', 'warn'] },
-              },
-            },
-          },
-          required: ['topic', 'template'],
-        },
-      },
-      {
-        name: 'write_text',
-        description: 'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
-        parameters: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
-          },
-          required: ['text'],
-        },
-      },
-      {
-        name: 'set_formula',
-        description: 'Display a highlighted law or equation in the formula card slot.',
-        parameters: {
-          type: 'object',
-          properties: {
-            formula: { type: 'string', description: 'The formula to display (e.g. F = ma)' },
-          },
-          required: ['formula'],
-        },
-      },
-      {
-        name: 'write_keywords',
-        description: 'Write a row of highlighted keyword pills.',
-        parameters: {
-          type: 'object',
-          properties: {
-            keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' },
-          },
-          required: ['keywords'],
-        },
-      },
-      {
-        name: 'highlight_concept',
-        description: 'Highlight or circle an existing board element by label text.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' },
-            style: { type: 'string', enum: ['circle', 'box', 'underline'] },
-          },
-          required: ['targetText'],
-        },
-      },
-      {
-        name: 'clear_stage',
-        description: 'Clears the main diagram stage so new diagrams replace old ones cleanly.',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'clear_board',
-        description: 'Clear the entire canvas (keeps lesson title).',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'update_text',
-        description: 'Update or edit the text of an existing element.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' },
-            newText: { type: 'string' },
-          },
-          required: ['targetText', 'newText'],
-        },
-      },
-      {
-        name: 'remove_component',
-        description: 'Remove a component or text matching target text from the board.',
-        parameters: {
-          type: 'object',
-          properties: {
-            targetText: { type: 'string' },
-          },
-          required: ['targetText'],
-        },
-      },
-    ];
-
-    // Conforms strictly to Alibaba DashScope Realtime tools schema:
-    // array of { type: 'function', function: { name, description, parameters } }
-    return rawTools.map((t) => ({
+  /**
+   * The single board tool exposed to the model.
+   * Uses Alibaba's documented function calling schema.
+   */
+  private buildBoardActionTool() {
+    return {
       type: 'function',
       function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
+        name: 'board_action',
+        description:
+          'Control the educational whiteboard while teaching. Use this whenever a visual, ' +
+          'keyword, equation, diagram, relationship, or written concept will improve understanding. ' +
+          'Call it naturally as part of teaching — do not narrate that you are calling it.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['draw', 'write', 'clear', 'highlight', 'erase'],
+              description:
+                'draw=create shapes/diagrams, write=add text/formula, ' +
+                'clear=clear current area, highlight=emphasize existing concept, erase=remove element',
+            },
+            elements: {
+              type: 'array',
+              description:
+                'Elements for "draw" action. Each element: ' +
+                '{kind:"box"|"circle"|"diamond"|"arrow"|"text", id?, text?, x?, y?, from?, to?, label?}',
+              items: { type: 'object' },
+            },
+            text: {
+              type: 'string',
+              description: 'Text or formula to write on the board (for "write" action)',
+            },
+            target: {
+              type: 'string',
+              description: 'Target element label or ID (for "highlight" or "erase" actions)',
+            },
+          },
+          required: ['action'],
+        },
       },
-    }));
+    };
   }
 
   // ── Message handler ───────────────────────────────────────────────────────
@@ -669,30 +413,26 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
     if (!event?.type) {
       liveLogger.warn('[QwenRealtime] Event missing type. Payload:', event);
-      liveLogger.warn('[QwenRealtime] Raw (first 200 chars):', String(raw).slice(0, 200));
       return;
     }
 
-    // Log incoming event types clearly
-    liveLogger.log(`[QwenRealtime] Event received: ${event.type}`);
+    liveLogger.log(`[QwenRealtime] ← ${event.type}`);
 
     switch (event.type) {
       case 'session.created':
-        liveLogger.log('[QwenRealtime] session.created on DashScope');
+        liveLogger.log('[QwenRealtime] session.created');
         if (!this.isSessionUpdated) {
-          liveLogger.log('[QwenRealtime] Ensuring session.update is delivered after session.created');
           this.sendSessionInit();
         }
         break;
 
       case 'session.updated':
         this.isSessionUpdated = true;
-        liveLogger.log('[QwenRealtime] session.updated on DashScope ✅');
+        liveLogger.log('[QwenRealtime] session.updated ✅');
         break;
 
       case 'response.audio.delta':
         if (event.delta) {
-          this.teacherSpeakingUntil = Math.max(this.teacherSpeakingUntil, performance.now() + 1000);
           this.setState('speaking');
           void this.playDelta(event.delta);
         }
@@ -701,7 +441,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       case 'response.audio_transcript.delta':
         if (event.delta) {
           this.fullTranscript += event.delta;
-          this.lastTranscriptSlice += event.delta;
           this.callbacks.onTranscript?.(this.fullTranscript, false);
         }
         break;
@@ -709,44 +448,29 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       case 'response.audio_transcript.done':
         this.callbacks.onTranscript?.(this.fullTranscript, true);
         break;
+
       case 'response.created':
-        this.clearProactiveTimer();
-        this.hasCalledToolInTurn = false;
-        this.hasDrawnDiagramInTurn = false;
+        // New response turn — reset transcript accumulator
+        this.fullTranscript = '';
         break;
 
-
-      // ── Semantic barge-in ───────────────────────────────────────────────
+      // ── Student interruption ────────────────────────────────────────────
       case 'input_audio_buffer.speech_started':
-        this.clearProactiveTimer();
-        this.fullTranscript = '';
-        this.lastTranscriptSlice = '';
-        if (this.isTeacherSpeaking()) {
-          liveLogger.log('[QwenRealtime] Ignoring barge-in/speech_started while teacher is speaking or in echo margin');
-          return;
-        }
+        // Qwen's VAD says the student is speaking — stop teacher audio cleanly.
+        liveLogger.log('[QwenRealtime] Student speech started — stopping teacher audio');
         this.stopPlayback();
         this.setState('listening');
         break;
 
       case 'input_audio_buffer.speech_stopped':
-        if (!this.isTeacherSpeaking()) {
-          this.setState('listening');
+        if (this.state === 'listening') {
+          // Will transition to speaking when response audio arrives
         }
         break;
 
       // ── Tool / function call ────────────────────────────────────────────
-      case 'conversation.item.created':
-        liveLogger.log('[QwenRealtime] conversation.item.created', event.item?.id, event.item?.role);
-        if (event.item?.role === 'user') {
-          this.clearProactiveTimer();
-          // Student spoke verbally — record in state machine
-          this.stateMachine?.recordStudentAnswer('spoken_answer', true);
-        }
-        break;
-
       case 'response.output_item.added': {
-        liveLogger.log(`[QwenRealtime] response.output_item.added:`, event.item?.type);
+        liveLogger.log(`[QwenRealtime] output_item.added:`, event.item?.type);
         if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
           const key = item.call_id || item.id;
@@ -779,77 +503,35 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         const callId = event.call_id || pending?.call_id || key;
         const argsStr = event.arguments || event.function?.arguments || pending?.arguments || '{}';
 
-        liveLogger.log('[QwenRealtime] TOOL CALL arguments.done:', {
-          name: toolName,
-          call_id: callId,
-          arguments: argsStr,
-        });
+        liveLogger.log('[QwenRealtime] function_call_arguments.done:', { name: toolName, call_id: callId });
 
         if (toolName && callId) {
-          this.executeToolCall(callId, toolName, argsStr);
+          void this.executeToolCall(callId, toolName, argsStr);
         }
         break;
       }
 
       case 'response.output_item.done': {
-        liveLogger.log(`[QwenRealtime] response.output_item.done:`, event.item?.type);
+        liveLogger.log(`[QwenRealtime] output_item.done:`, event.item?.type);
         if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
           const callId = item.call_id || item.id;
           const toolName = item.name || item.function?.name;
           const argsStr = item.arguments || item.function?.arguments || '{}';
           if (toolName && callId) {
-            this.executeToolCall(callId, toolName, argsStr);
+            void this.executeToolCall(callId, toolName, argsStr);
           }
         }
         break;
       }
 
       case 'response.done': {
-        if (!this.isTeacherSpeaking() && (this.state === 'speaking' || this.state === 'drawing')) {
-          this.setState('listening');
-        }
-
-        // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
-        // We demote the phrase-trigger backup so it only triggers as a last resort, avoiding dual-writer chaos.
-        // Also removed autonomous visualizer processing.
-        const stage = this.stateMachine?.getCurrentStage?.() ?? 'GREETING';
-        const ILLUSTRATABLE_STAGES = new Set(['EXPLANATION', 'DEMONSTRATION', 'EXAMPLE']);
-
-        if (!this.hasCalledToolInTurn && ILLUSTRATABLE_STAGES.has(stage) && this.lastTranscriptSlice.trim().length >= 25) {
-          const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
-          if (triggered) {
-            liveLogger.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
-            import('./AvelutBoardVisualizerService').then(({ avelutBoardVisualizer }) => {
-              avelutBoardVisualizer.illustrateFromBoardWrite({
-                boardText: 'Fallback Diagram Request',
-                recentSpeech: this.lastTranscriptSlice.slice(-250),
-                forceDiagram: true,
-              });
-            });
-          } else {
-            liveLogger.log('[QwenRealtime] No tool called this turn, but no drawing phrase detected. Doing nothing.');
+        if (this.state === 'speaking' || this.state === 'drawing') {
+          // Audio may still be playing — playback completion sets state to listening
+          // If no audio was playing, transition now
+          if (this.activeAudioSources.length === 0) {
+            this.setState('listening');
           }
-        }
-
-        // Reset turn state
-        this.hasCalledToolInTurn = false;
-        this.fullTranscript = '';
-        this.lastTranscriptSlice = '';
-
-        if (this.stateMachine) {
-           const prevStage = this.stateMachine.getCurrentStage();
-           const timeChanged = this.stateMachine.evaluateState();
-           liveLogger.setStage(this.stateMachine.getCurrentStage());
-
-           if (prevStage === 'GREETING') {
-             this.advanceFromGreetingToStage1();
-           } else {
-             if (timeChanged && this.stateMachine.getCurrentStage() !== prevStage) {
-               this.sendSessionInit(); // Update prompt for wrap-up stages
-             }
-             this.scheduleProactiveContinuation();
-           }
         }
         break;
       }
@@ -858,11 +540,15 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         liveLogger.error('[QwenRealtime] Server error:', event.error);
         if (event.error?.message?.includes('Voice') && !this.retriedWithDefaultVoice) {
           this.retriedWithDefaultVoice = true;
-          liveLogger.warn('[QwenRealtime] Voice error encountered. Auto-recovering session with voice "Tina"...');
+          liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "Tina"');
           this.sendSessionInit('Tina');
           return;
         }
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
+        break;
+
+      case 'conversation.item.created':
+        liveLogger.log('[QwenRealtime] conversation.item.created', event.item?.id, event.item?.role);
         break;
 
       default: break;
@@ -872,18 +558,10 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
   // ── Tool execution → AvelutBoardController ────────────────────────────────
 
   private async executeToolCall(callId: string, name: string, argsRaw: any): Promise<void> {
+    // Idempotency — execute each call_id exactly once
     if (this.executedCallIds.has(callId)) return;
     this.executedCallIds.add(callId);
 
-    // Prevent double-draw of diagram
-    if (name === 'illustrate' || name === 'draw_diagram') {
-      if (this.hasDrawnDiagramInTurn) {
-        liveLogger.warn('[QwenRealtime] Skipping duplicate illustrate/diagram in same turn:', argsRaw);
-        return;
-      }
-    }
-
-    this.hasCalledToolInTurn = true;
     this.setState('drawing');
 
     let args: any = {};
@@ -895,315 +573,36 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       liveLogger.warn('[QwenRealtime] Bad tool args:', argsRaw);
     }
 
-    liveLogger.log('[QwenRealtime] Executing board tool:', name, args);
+    liveLogger.log('[QwenRealtime] Executing board_action:', name, args);
 
-    let toolResult: any = { success: true, tool: name };
+    let toolResult: any;
 
-    try {
-      switch (name) {
-        case 'annotate': {
-          this.hasCalledToolInTurn = true;
-          const x = args.x ?? 300;
-          const y = args.y ?? this.avelutBoardController.nextAnnotationY();
-          const fontSize = args.fontSize ?? 24;
-          const color = args.color ?? '#1e1e1e';
-          this.avelutBoardController.addSkeletonElement({
-            type: 'text',
-            id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            x,
-            y,
-            text: args.text,
-            fontSize,
-            strokeColor: color,
-          });
-          toolResult = { status: 'ok' };
-          break;
-        }
-
-        case 'illustrate': {
-          this.hasCalledToolInTurn = true;
-
-          // Deduplicate: refuse a second illustrate in the same turn
-          if (this.hasDrawnDiagramInTurn) {
-            liveLogger.warn('[QwenRealtime] illustrate called twice in one turn — ignoring second');
-            toolResult = { status: 'skipped', reason: 'already_drew_this_turn' };
-            break;
-          }
-          this.hasDrawnDiagramInTurn = true;
-          this.boardVisualizerService.hasGeneratedKickoff = true;
-
-          const boardSummary = this.avelutBoardController.getCompactSummary();
-          const reserve = this.avelutBoardController.reserveVerticalSpace(600);
-
-          try {
-            const result = await this.boardVisualizerService.generateStructuredDiagram({
-              topic: args.topic,
-              template: args.template,
-              context: args.context || '',
-              constraints: args.constraints || {},
-              canvas: { width: 1600, height: 900, reservedTop: 80 },
-              yOffset: reserve.y,
-              existingBoardSummary: boardSummary,
-            });
-
-            if (!result || !Array.isArray(result.elements) || result.elements.length === 0) {
-              liveLogger.error('[QwenRealtime] illustrate returned empty result');
-              toolResult = { status: 'failed', reason: 'designer_empty' };
-              break;
-            }
-
-            // Enforce skeleton ordering: shapes → arrows → text
-            const ordered = [
-              ...result.elements.filter((e: any) => ['rectangle', 'ellipse', 'diamond'].includes(e.type)),
-              ...result.elements.filter((e: any) => ['arrow', 'line'].includes(e.type)),
-              ...result.elements.filter((e: any) => e.type === 'text'),
-            ];
-
-            this.avelutBoardController.drawStructured(ordered);
-
-            const newSummary = this.avelutBoardController.getCompactSummary();
-
-            toolResult = {
-              status: 'rendered',
-              title: result.meta?.title,
-              board_summary: newSummary,
-            };
-          } catch (err) {
-            liveLogger.error('[QwenRealtime] illustrate failed:', err);
-            toolResult = { status: 'failed', reason: String(err) };
-          }
-          break;
-        }
-
-        case 'draw_shape': {
-          this.hasCalledToolInTurn = true;
-          this.avelutBoardController.drawShape({
-            type: args.type || 'rectangle',
-            id: args.id,
-            label: args.label,
-            backgroundColor: args.backgroundColor,
-            strokeColor: args.strokeColor,
-            x: args.x,
-            y: args.y,
-            width: args.width,
-            height: args.height,
-            fillStyle: args.fillStyle,
-          });
-          const summary = this.avelutBoardController.getCompactSummary();
-          toolResult = { status: 'rendered', id: args.id, board_summary: summary };
-          break;
-        }
-
-        case 'draw_arrow': {
-          this.hasCalledToolInTurn = true;
-          this.avelutBoardController.drawArrow({
-            fromId: args.fromId,
-            toId: args.toId,
-            label: args.label,
-            color: args.color,
-            strokeWidth: args.strokeWidth,
-            strokeStyle: args.strokeStyle,
-          });
-          const summary = this.avelutBoardController.getCompactSummary();
-          toolResult = { status: 'rendered', fromId: args.fromId, toId: args.toId, board_summary: summary };
-          break;
-        }
-
-        case 'draw_sticky_note': {
-          this.hasCalledToolInTurn = true;
-          this.avelutBoardController.drawStickyNote({
-            text: args.text,
-            backgroundColor: args.backgroundColor,
-            x: args.x,
-            y: args.y,
-            width: args.width,
-            height: args.height,
-          });
-          const summary = this.avelutBoardController.getCompactSummary();
-          toolResult = { status: 'rendered', board_summary: summary };
-          break;
-        }
-
-        case 'draw_component': {
-          this.hasCalledToolInTurn = true;
-          this.boardVisualizerService.hasGeneratedKickoff = true;
-          this.avelutBoardController.drawComponent({
-            component: args.component,
-            label: args.label,
-            caption: args.caption,
-            x: args.x,
-            y: args.y,
-          });
-          const summary = this.avelutBoardController.getCompactSummary();
-          toolResult = {
-            status: 'rendered',
-            component: args.component,
-            board_summary: summary,
-          };
-          break;
-        }
-
-        case 'write_text':
-          this.avelutBoardController.writeText(args.text ?? args.content ?? '');
-          break;
-        case 'set_formula':
-          this.avelutBoardController.setFormula(args.formula ?? args.text ?? args.content ?? '');
-          break;
-        case 'write_keywords':
-          this.avelutBoardController.writeKeywords(args.keywords ?? []);
-          break;
-        case 'highlight_concept':
-          this.avelutBoardController.highlightConcept(args.targetText ?? '', args.style);
-          break;
-        case 'clear_stage':
-          this.avelutBoardController.clearStage();
-          break;
-        case 'clear_board':
-          this.avelutBoardController.clearBoard();
-          break;
-        case 'update_text':
-          this.avelutBoardController.updateText(args.targetText ?? '', args.newText ?? '');
-          break;
-        case 'remove_component':
-          this.avelutBoardController.removeComponent(args.targetText ?? '');
-          break;
-
-        default:
-          liveLogger.warn('[QwenRealtime] Unknown tool:', name, args);
-          break;
-      }
-    } catch (toolErr) {
-      liveLogger.error('[QwenRealtime] Tool execution error:', toolErr);
+    if (name === 'board_action') {
+      toolResult = this.boardController.executeBoardAction(args);
+    } else {
+      liveLogger.warn('[QwenRealtime] Unknown tool:', name);
+      toolResult = { status: 'error', message: `Unknown tool: ${name}` };
     }
 
-    // Always return tool output so DashScope tool call item is closed cleanly
-    if (callId) {
-      this.sendJson({
-        event_id: `tool_out_${Date.now()}`,
-        type: 'conversation.item.create',
-        item: {
-          type: 'function_call_output',
-          call_id: callId,
-          output: JSON.stringify(toolResult),
-        },
-      });
-
-      // Immediate feedback: notify model that the tool succeeded so speech continues smoothly
-      const toolLabel = name === 'draw_component' ? `the ${args.component || 'component'}` : name;
-      this.sendJson({
-        event_id: `resp_after_tool_${Date.now()}`,
-        type: 'response.create',
-        response: {
-          modalities: ['text', 'audio'],
-          instructions: `The board drawing for "${toolLabel}" has been placed on the whiteboard for the student. Now continue speaking to the student: refer directly to what you just drew on the board, explain the concept, and teach!`,
-          tools: this.buildToolDeclarations(),
-          tool_choice: 'auto',
-        },
-      });
-    }
-  }
-
-  private injectBoardStateMessage(summary: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    liveLogger.log('[QwenRealtime] injected board state summary:', summary);
-    this.ws.send(JSON.stringify({
-      type: "conversation.item.create",
+    // Return function result to close the tool call
+    this.sendJson({
+      event_id: `tool_out_${Date.now()}`,
+      type: 'conversation.item.create',
       item: {
-        type: "message",
-        role: "system",
-        content: [{ type: "input_text", text: `[BOARD STATE] ${summary}` }]
-      }
-    }));
-  }
+        type: 'function_call_output',
+        call_id: callId,
+        output: JSON.stringify(toolResult),
+      },
+    });
 
-  private advanceFromGreetingToStage1(): void {
-    if (!this.stateMachine || this.stateMachine.getCurrentStage() !== 'GREETING') return;
-
-    const tryAdvance = () => {
-      // If teacher is still speaking the greeting audio, wait and check again
-      if (this.isTeacherSpeaking()) {
-        setTimeout(tryAdvance, 500);
-        return;
-      }
-
-      if (!this.stateMachine || this.stateMachine.getCurrentStage() !== 'GREETING') return;
-
-      this.stateMachine.forceAdvance('STAGE_1_INTUITION');
-      const nextStage = this.stateMachine.getCurrentStage();
-      liveLogger.setStage(nextStage);
-      liveLogger.log(`[QwenRealtime] Greeting speech finished. Automatically starting ${nextStage}...`);
-      this.sendSessionInit();
-
-      const topic = this.promptConfig?.topicTitle || 'the topic';
-      setTimeout(() => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.isTeacherSpeaking()) {
-          const stageInst = this.stateMachine?.getNextInstruction() || '';
-          this.sendJson({
-            event_id: `teach_step_${Date.now()}`,
-            type: 'response.create',
-            response: {
-              modalities: ['text', 'audio'],
-              instructions: `${stageInst}\nBegin Stage 1 (Intuition) for ${topic}. Use an everyday real-world analogy. Call draw_sticky_note or annotate to place the intuition card on the board as you speak!`,
-              tools: this.buildToolDeclarations(),
-              tool_choice: 'auto',
-            },
-          });
-        }
-      }, 500);
-    };
-
-    setTimeout(tryAdvance, 800);
-  }
-
-  private scheduleProactiveContinuation(): void {
-    this.clearProactiveTimer();
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    this.proactiveTimer = setTimeout(() => {
-      // Must be idle: listening, not mid-speech, and past teacherSpeakingUntil
-      if (
-        this.state !== 'listening' ||
-        !this.ws ||
-        this.ws.readyState !== WebSocket.OPEN ||
-        this.isTeacherSpeaking()
-      ) {
-        // Still speaking or busy — try again later
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.scheduleProactiveContinuation();
-        }
-        return;
-      }
-      liveLogger.log('[QwenRealtime] Student quiet for 5s — continuing lesson proactively...');
-
-      if (this.stateMachine) {
-        const advanced = this.stateMachine.advance();
-        if (advanced) {
-          liveLogger.log('[QwenRealtime] Advanced stage to:', this.stateMachine.getCurrentStage());
-          this.sendSessionInit();
-        }
-      }
-
-      const topic = this.promptConfig?.topicTitle || 'the topic';
-      const stageInst = this.stateMachine?.getNextInstruction() || '';
-
-      this.sendJson({
-        event_id: `proactive_nudge_${Date.now()}`,
-        type: 'response.create',
-        response: {
-          modalities: ['text', 'audio'],
-          instructions: `${stageInst}\nThe student is listening. Proactively continue teaching ${topic}: explain the next key relationship, build on the intuition, or illustrate on the board. Call your board tools (draw_shape, draw_arrow, annotate, set_formula, or draw_sticky_note) as you speak!`,
-          tools: this.buildToolDeclarations(),
-          tool_choice: 'auto',
-        },
-      });
-    }, 5000);
-  }
-
-  private clearProactiveTimer(): void {
-    if (this.proactiveTimer) {
-      clearTimeout(this.proactiveTimer);
-      this.proactiveTimer = null;
-    }
+    // Ask the model to continue teaching
+    this.sendJson({
+      event_id: `resp_after_tool_${Date.now()}`,
+      type: 'response.create',
+      response: {
+        modalities: ['text', 'audio'],
+      },
+    });
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
@@ -1215,8 +614,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
     const handleAudioData = (data: Float32Array) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
-      // Absolute hardware silence gate while teacher is speaking or during room acoustic decay
-      if (this.isTeacherSpeaking()) return;
 
       // Compute RMS for UI visualisation
       let sum = 0;
@@ -1242,7 +639,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       });
     };
 
-    // 1. Try modern AudioWorkletNode first (prevents ScriptProcessorNode deprecation warning)
+    // 1. Try AudioWorkletNode first (avoids ScriptProcessorNode deprecation warning)
     if (this.inputAudioCtx.audioWorklet) {
       try {
         const workletCode = `
@@ -1269,8 +666,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           }
         };
 
-        // Connect through a zero-gain mute node to destination so worklet stays active
-        // without routing microphone audio back out of the user's speakers
         const muteNode = this.inputAudioCtx.createGain();
         muteNode.gain.value = 0;
         source.connect(workletNode);
@@ -1312,7 +707,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
   private async playDelta(base64: string): Promise<void> {
     if (!this.outputAudioCtx || !base64) return;
     try {
-      // Ensure audio context is running when we receive audio
       await this.ensureOutputRunning();
 
       if (this.outputAudioCtx.state === 'suspended') {
@@ -1327,10 +721,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       }
 
       const sampleCount = Math.floor(bytes.byteLength / 2);
-      if (sampleCount <= 0) {
-        liveLogger.warn('[QwenRealtime] playDelta empty samples');
-        return;
-      }
+      if (sampleCount <= 0) return;
 
       const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
       const float32 = new Float32Array(sampleCount);
@@ -1358,20 +749,16 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
 
-      // Hold "speaking" until scheduled audio finishes (+ room acoustic decay margin)
-      const remainingMs = Math.max(0, (this.nextPlayTime - this.outputAudioCtx.currentTime) * 1000);
-      this.teacherSpeakingUntil = Math.max(this.teacherSpeakingUntil, performance.now() + remainingMs + 600);
-
       this.activeAudioSources.push(src);
       src.onended = () => {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
-        if (this.activeAudioSources.length === 0 && (!this.outputAudioCtx || this.outputAudioCtx.currentTime >= this.nextPlayTime)) {
+        if (this.activeAudioSources.length === 0) {
           setTimeout(() => {
-            if (!this.isTeacherSpeaking() && (this.state === 'speaking' || this.state === 'drawing')) {
+            if (this.state === 'speaking' || this.state === 'drawing') {
               this.setState('listening');
             }
-          }, 600);
+          }, 300);
         }
       };
     } catch (err) {
@@ -1384,6 +771,5 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
-    this.teacherSpeakingUntil = 0;
   }
 }

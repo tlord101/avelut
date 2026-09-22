@@ -1,18 +1,17 @@
 /**
  * AvelutLiveClassroomView.tsx
  *
- * Phase 3: Mobile-first live AI classroom interface.
+ * Live AI classroom interface.
  *
  * Layout:
- *   - Full-screen Excalidraw board canvas (92%+ of viewport)
+ *   - Full-screen Excalidraw board canvas
  *   - Translucent top bar: back button, LIVE badge, topic title, teacher state pill
  *   - Floating subtitle pill (scrolling teacher transcript)
- *   - Bottom HUD: text fallback toggle, large mic button with audio pulse ring, clear board
+ *   - Bottom HUD: text input toggle, large mic button, clear board
  *   - Connection error overlay with retry
  *
- * Connects to:
- *   - ExcalidrawLiveBoard   → AvelutBoardController (Phase 1)
- *   - QwenRealtimeTeacherService (Phase 2)
+ * Architecture:
+ *   Student mic → QwenRealtimeTeacherService → Qwen Omni Realtime → audio + board_action → AvelutBoardController → Excalidraw
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -35,10 +34,6 @@ import {
   type TeacherState,
 } from '../../../services/live-classroom/QwenRealtimeTeacherService';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
-import {
-  avelutBoardVisualizer,
-  type VisualizerStatus,
-} from '../../../services/live-classroom/AvelutBoardVisualizerService';
 import type { UserProfile } from '../../../types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -133,10 +128,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
 
-  // Visualizer co-pilot state
-  const [visualizerStatus, setVisualizerStatus] = useState<VisualizerStatus>('idle');
-  const [visualizerMessage, setVisualizerMessage] = useState<string>('');
-
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
 
@@ -146,7 +137,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     return () => { setCustomHeaderConfig?.(null); };
   }, [setCustomHeaderConfig]);
 
-  // ── Store current parameters in refs to avoid re-triggering startSession on object mutations ──
+  // ── Store current parameters in refs to avoid re-triggering startSession ──
   const paramsRef = useRef({
     topicTitle,
     courseName,
@@ -171,7 +162,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   // ── Start realtime session once on mount ───────────────────────────────────
   const startSession = useCallback(() => {
-    // Teardown previous if existing
     if (serviceRef.current) {
       serviceRef.current.endSession();
       serviceRef.current = null;
@@ -190,39 +180,13 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       appSettings: aSettings,
     } = paramsRef.current;
 
-    // Initialize the AI Visualizer Co-Pilot with topic & settings
-    avelutBoardVisualizer.initialize(
-      {
-        topicTitle: tTitle,
-        courseName: cName,
-        syllabusContext: sCtx,
-        studentName: sName,
-        durationMinutes: dMinutes,
-        learningPath: lPath,
-      },
-      aSettings,
-    );
-
-    avelutBoardVisualizer.setCallbacks({
-      onStatusChange: (s, msg) => {
-        setVisualizerStatus(s);
-        if (msg) setVisualizerMessage(msg);
-      },
-      onVisualDrawn: (summary) => {
-        setVisualizerMessage(summary);
-        setTimeout(() => setVisualizerMessage(''), 4000);
-      },
-    });
-
     svc.setCallbacks({
       onStateChange: (s) => {
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
       },
-      onTranscript: (text, isFinal) => {
+      onTranscript: (text, _isFinal) => {
         setTranscript(text);
-        // Forward speech to visualizer co-pilot for real-time board illustrations
-        avelutBoardVisualizer.processSpeechTranscript(text, isFinal);
       },
       onAudioLevel: (level) => setAudioLevel(level),
       onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
@@ -242,25 +206,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     if (!startedSessionRef.current) {
       startedSessionRef.current = true;
       startSession();
     }
     return () => {
-      cancelled = true;
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
       }
-      avelutBoardVisualizer.endSession();
-      // Do not reset startedSessionRef.current here to prevent double-connects in StrictMode.
-      // Or we can just leave it as it is because we need it to reconnect if the component actually unmounts and remounts.
-      // The issue says: "Prefer a pattern that guarantees startSession runs once per navigation into the classroom, not twice."
     };
   }, [startSession]);
 
-  // Ensure AudioContext is unlocked on any user gesture in the classroom
+  // Ensure AudioContext is unlocked on any user gesture
   const ensureAudioUnlocked = useCallback(() => {
     if (serviceRef.current && !serviceRef.current.isAudioUnlocked()) {
       serviceRef.current.resumeAudio().catch(() => {});
@@ -271,7 +229,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     if (!serviceRef.current) return;
 
     const unlocked = await serviceRef.current.resumeAudio();
-    // Small delay helps Capacitor / some WebViews finish resume
     await new Promise((r) => setTimeout(r, 80));
 
     if (!unlocked) {
@@ -296,9 +253,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const handleSendText = (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim() || !serviceRef.current) return;
-    const q = textInput.trim();
-    serviceRef.current.sendTextMessage(q);
-    void avelutBoardVisualizer.handleStudentQuery(q);
+    serviceRef.current.sendTextMessage(textInput.trim());
     setTextInput('');
     setShowTextInput(false);
   };
@@ -350,19 +305,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           </div>
         </div>
 
-        {/* Right: visualizer status pill + teacher state pill */}
+        {/* Right: teacher state pill */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {visualizerStatus === 'visualizing' && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-medium backdrop-blur-md animate-pulse">
-              <Sparkles className="w-3.5 h-3.5 animate-spin" />
-              <span className="hidden xs:inline">Illustrating…</span>
-            </div>
-          )}
-          {visualizerMessage && visualizerStatus !== 'visualizing' && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-medium backdrop-blur-md">
-              <span>{visualizerMessage}</span>
-            </div>
-          )}
           <TeacherStatePill state={teacherState} />
         </div>
       </header>
@@ -517,4 +461,3 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 };
 
 export default AvelutLiveClassroomView;
-

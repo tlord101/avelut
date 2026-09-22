@@ -1582,6 +1582,130 @@ export class AvelutBoardController {
     ];
     this.appendElements(els, 'stage');
   }
+  // ── Public AI Interface ──────────────────────────────────────────────────
+  // This is the ONLY method the realtime model calls. Everything else is internal.
+
+  /**
+   * Execute a board_action from the realtime teacher model.
+   * Returns a small result object — never a full board dump.
+   */
+  public executeBoardAction(args: {
+    action: 'draw' | 'write' | 'clear' | 'highlight' | 'erase';
+    elements?: Array<{
+      kind: 'box' | 'circle' | 'diamond' | 'arrow' | 'text';
+      id?: string;
+      text?: string;
+      x?: number;
+      y?: number;
+      from?: string;
+      to?: string;
+      label?: string;
+    }>;
+    text?: string;
+    target?: string;
+  }): { status: 'ok' | 'error'; action: string; ids?: string[]; message?: string } {
+    try {
+      const ids: string[] = [];
+
+      switch (args.action) {
+        case 'draw': {
+          if (!args.elements || args.elements.length === 0) {
+            return { status: 'error', action: 'draw', message: 'No elements provided.' };
+          }
+
+          // Pass 1: shapes (must exist before arrows reference them)
+          for (const el of args.elements) {
+            if (el.kind === 'arrow') continue;
+            const id = el.id || `el_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+            ids.push(id);
+
+            if (el.kind === 'text') {
+              this.writeText(el.text || '', {
+                x: el.x,
+                y: el.y,
+                fontSize: 'medium',
+              });
+            } else {
+              const shapeType: 'rectangle' | 'ellipse' | 'diamond' =
+                el.kind === 'circle' ? 'ellipse' :
+                el.kind === 'diamond' ? 'diamond' :
+                'rectangle';
+
+              this.drawShape({
+                type: shapeType,
+                id,
+                label: el.text || '',
+                x: el.x ?? 200,
+                y: el.y ?? 200,
+                width: 180,
+                height: 70,
+                backgroundColor: '#1E293B',
+                strokeColor: '#38BDF8',
+              });
+            }
+          }
+
+          // Pass 2: arrows
+          for (const el of args.elements) {
+            if (el.kind !== 'arrow') continue;
+            const id = el.id || `arr_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+            ids.push(id);
+            this.drawArrow({
+              fromId: el.from,
+              toId: el.to,
+              label: el.label,
+            });
+          }
+
+          return { status: 'ok', action: 'draw', ids };
+        }
+
+        case 'write': {
+          const text = args.text?.trim();
+          if (!text) return { status: 'error', action: 'write', message: 'No text provided.' };
+
+          // Detect formulas heuristically (contains =, ^, /, ·, ×, or math symbols)
+          const isFormula = /[=^·×\/]/.test(text) || text.length < 30;
+          if (isFormula && text.length < 40) {
+            this.setFormula(text);
+          } else {
+            this.writeText(text, { fontSize: 'medium' });
+          }
+          return { status: 'ok', action: 'write', ids: [] };
+        }
+
+        case 'clear': {
+          const target = args.target?.toLowerCase();
+          if (!target || target === 'stage' || target === 'board') {
+            this.clearStage();
+          } else {
+            this.clearBoard(true);
+          }
+          return { status: 'ok', action: 'clear', ids: [] };
+        }
+
+        case 'highlight': {
+          const target = args.target?.trim();
+          if (!target) return { status: 'error', action: 'highlight', message: 'No target provided.' };
+          this.highlightConcept(target, 'box');
+          return { status: 'ok', action: 'highlight', ids: [] };
+        }
+
+        case 'erase': {
+          const target = args.target?.trim();
+          if (!target) return { status: 'error', action: 'erase', message: 'No target provided.' };
+          this.removeComponent(target);
+          return { status: 'ok', action: 'erase', ids: [] };
+        }
+
+        default:
+          return { status: 'error', action: String((args as any).action), message: 'Unknown action.' };
+      }
+    } catch (err) {
+      console.error('[BoardController] executeBoardAction error:', err);
+      return { status: 'error', action: args.action, message: String(err) };
+    }
+  }
 }
 
 export const avelutBoardController = new AvelutBoardController();
