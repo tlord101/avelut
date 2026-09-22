@@ -44,7 +44,7 @@ export class AvelutBoardVisualizerService {
   private speechBuffer = '';
   private lastEvaluatedSpeech = '';
   private lastPhraseTriggerAt = 0;
-  private phraseCooldownounceMs = 8000; // do not fire more than once every 8s
+  private phraseDebounceMs = 8000; // do not fire more than once every 8s
   private speechDebounceTimer: any = null;
   private isProcessing = false;
   private hasGeneratedKickoff = false;
@@ -270,11 +270,14 @@ Schema:
   "title": "Short Title",
   "diagramType": "concept_map",
   "data": {
-    "nodes": [{"id": "a", "label": "Label"}],
+    "nodes": [{"id": "a", "label": "Real Term"}],
     "connections": [{"from": "a", "to": "b"}],
-    "steps": ["Step 1", "Step 2"]
+    "steps": ["Topic-Specific Step", "Next Step"]
   }
-}`;
+}
+CRITICAL: Every label MUST be a real topic word from the lesson (e.g. Resistor, Ohm's Law, Color Code, Current).
+NEVER use Concept A, Concept B, Aspect 1, Aspect 2, Core Idea, Stage 1, Node 1, Label, or any placeholder.
+If you cannot name real concepts, return {"action":"write_text","params":{"text":"<topic word>"}} instead of a diagram.`;
 
     const userPrompt = `Topic: "${topicTitle}"
 Course: "${courseName}"
@@ -343,12 +346,15 @@ Prefer:
   "action": "draw_diagram",
   "params": {
     "diagramType": "concept_map" | "flow" | "cycle" | "comparison" | "free_body" | "coordinate_axes",
-    "data": { "nodes": [{"id":"a","label":"Short"}], "connections": [], "steps": [] }
+    "data": { "nodes": [{"id":"a","label":"Real Term"}], "connections": [], "steps": [] }
   }
 }
 Or for a formula: { "action": "set_formula", "params": { "formula": "V = IR" } }
 Or keywords: { "action": "write_keywords", "params": { "keywords": ["term1", "term2"] } }
-Labels max 4 words. No long descriptions.`;
+Labels max 4 words. No long descriptions.
+CRITICAL: Every label MUST be a real topic word from the lesson (e.g. Resistor, Ohm's Law, Color Code, Current).
+NEVER use Concept A, Concept B, Aspect 1, Aspect 2, Core Idea, Stage 1, Node 1, Label, or any placeholder.
+If you cannot name real concepts, return {"action":"write_text","params":{"text":"<topic word>"}} instead of a diagram.`;
 
     const userPrompt = `Topic: "${this.config.topicTitle}"
 Recent teacher speech: "${recentSpeech.slice(-350)}"
