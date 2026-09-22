@@ -619,8 +619,9 @@ function resolveAlibabaEndpoints(
     ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
     : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
 
-  // For study guide chat, strictly call backend proxy endpoint directly as requested
-  if (options?.feature === 'study_guide_chat') {
+  // For study guide chat or any browser web client, strictly call backend proxy endpoint directly.
+  // In web browsers, direct cross-origin fetches to Alibaba MaaS fail CORS preflight checks.
+  if (!isNative || options?.feature === 'study_guide_chat' || options?.feature === 'live_classroom_visual') {
     return proxyEndpoints;
   }
 
@@ -650,7 +651,7 @@ async function callAlibabaQwen(
   const primaryModel = appSettings?.alibaba_model?.trim() || (hasImage ? 'qwen-vl-plus' : 'qwen3.7-flash');
   const candidateModels = hasImage
     ? Array.from(new Set([params?.model || primaryModel, 'qwen-vl-plus', 'qwen-vl-max']))
-    : Array.from(new Set([primaryModel, 'qwen-max', 'qwen-plus', 'qwen-turbo']));
+    : Array.from(new Set([params?.model || primaryModel, primaryModel, 'qwen3.8-flash', 'qwen-plus', 'qwen-turbo']));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||

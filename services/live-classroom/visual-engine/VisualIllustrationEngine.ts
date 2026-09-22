@@ -33,7 +33,7 @@ import type {
   VisualElement,
 } from './types';
 import { SvgRenderer } from './SvgRenderer';
-import { createAvelutAI } from '../../../utils/inference';
+import { createAvelutAI, getResponseText } from '../../../utils/inference';
 import type { AppSettings, UserProfile } from '../../../types';
 
 export interface VisualEngineCallbacks {
@@ -238,7 +238,9 @@ export class VisualIllustrationEngine {
       console.log('[VisualEngine] Requesting illustration decision from qwen3.8-flash...');
       this.callbacks.onStatusChange?.('generating');
 
-      const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile);
+      const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile, {
+        feature: 'live_classroom_visual',
+      });
 
       const response = await ai.models.generateContent({
         model: 'qwen3.8-flash',
@@ -263,7 +265,7 @@ export class VisualIllustrationEngine {
         },
       });
 
-      const rawText = response?.text || (typeof response === 'string' ? response : '');
+      const rawText = getResponseText(response) || (typeof response?.text === 'function' ? response.text() : response?.text || (typeof response === 'string' ? response : ''));
       const parsedSpec = this.safeParseJson(rawText);
 
       if (!parsedSpec || typeof parsedSpec !== 'object') {

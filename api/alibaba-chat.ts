@@ -57,19 +57,25 @@ export async function POST(req: Request) {
       Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
     );
 
-    let rawModel = (body.model ? String(body.model).trim() : 'qwen3.7-flash');
+    let rawModel = (body.model ? String(body.model).trim() : '');
     rawModel = rawModel.replace(/^qwen\//i, '').replace(/^alibaba\//i, '');
-    if (!rawModel) rawModel = 'qwen3.7-flash';
 
-    const dashscopeModel = hasImage ? 'qwen-vl-plus' : 'qwen-turbo';
-    const openrouterModel = hasImage ? 'qwen/qwen-vl-plus' : 'qwen/qwen3.7-flash';
+    const dashscopeModel = hasImage
+      ? (rawModel || 'qwen-vl-plus')
+      : (rawModel || 'qwen3.8-flash');
+    const openrouterModel = hasImage
+      ? 'qwen/qwen-vl-plus'
+      : (rawModel ? `qwen/${rawModel}` : 'qwen/qwen3.8-flash');
 
-    // 1. If Alibaba DashScope API key exists, attempt DashScope international / regional endpoints
+    // 1. If Alibaba DashScope API key exists, attempt Model Studio MaaS / DashScope endpoints
     if (alibabaApiKey) {
+      const maasBaseUrl = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`;
       const customEnvUrl = process.env.ALIBABA_OPENAI_COMPATIBLE_URL || process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL;
-      const targetBases = customEnvUrl && !customEnvUrl.includes('maas.aliyuncs.com')
-        ? [customEnvUrl, ...DASHSCOPE_BASE_URLS]
-        : DASHSCOPE_BASE_URLS;
+      const targetBases = Array.from(new Set([
+        maasBaseUrl,
+        ...(customEnvUrl ? [customEnvUrl] : []),
+        ...DASHSCOPE_BASE_URLS,
+      ]));
 
       for (const baseUrl of targetBases) {
         try {
@@ -126,20 +132,24 @@ export async function POST(req: Request) {
                 'Access-Control-Allow-Origin': '*',
               },
             });
-          } else if (response.status === 429) {
-            return new Response(
-              JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
-              {
-                status: 429,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Access-Control-Allow-Origin': '*',
-                },
-              }
-            );
+          } else {
+            const errText = await response.text().catch(() => '');
+            console.warn(`[Alibaba Chat Proxy] Upstream ${baseUrl} (${dashscopeModel}) HTTP ${response.status}:`, errText);
+            if (response.status === 429) {
+              return new Response(
+                JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
+                {
+                  status: 429,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                  },
+                }
+              );
+            }
           }
-        } catch {
-          // Continue to next endpoint or OpenRouter fallback
+        } catch (fetchErr: any) {
+          console.warn(`[Alibaba Chat Proxy] Upstream fetch to ${baseUrl} failed:`, fetchErr?.message);
         }
       }
     }
