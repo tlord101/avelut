@@ -93,7 +93,7 @@ export class AvelutBoardController {
   private pendingSkeletons: any[] = [];
   private flushScheduled = false;
 
-  // Mobile-first board geometry
+  // Mobile-first & Responsive board geometry
   private readonly MOBILE_BOARD_WIDTH = 360;
   private readonly MOBILE_CARD_WIDTH = 300;
   private readonly MOBILE_CARD_HEIGHT = 76;
@@ -102,9 +102,28 @@ export class AvelutBoardController {
   private readonly NOTES_TOP = 410;
   private readonly NOTES_BOTTOM = 2800;
 
+  // Track most recent active element center for auto-centering viewport
+  private lastActivePoint: { x: number; y: number } | null = null;
+
+  private isMobileView(): boolean {
+    if (this.api && (this.api as any).getAppState) {
+      const appState = (this.api as any).getAppState();
+      const w = appState?.width;
+      if (typeof w === 'number' && w > 0) return w < 768;
+    }
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return true;
+  }
+
   private clampX(x: number, w = 300) {
-    const maxX = Math.max(20, this.MOBILE_BOARD_WIDTH - w - 10);
-    return Math.max(20, Math.min(x, maxX));
+    if (this.isMobileView()) {
+      const maxX = Math.max(20, this.MOBILE_BOARD_WIDTH - w - 10);
+      return Math.max(20, Math.min(x, maxX));
+    }
+    const maxDesktopX = Math.max(40, 1100 - w - 20);
+    return Math.max(30, Math.min(x, maxDesktopX));
   }
 
   private clampY(y: number, h = 0) {
@@ -237,15 +256,39 @@ export class AvelutBoardController {
       return;
     }
     try {
-      // Auto-scroll vertically when content extends below 360px
-      // Keep scrollX locked at 0 so the mobile column remains fixed horizontally
-      const targetScrollY = this.cursorY > 360 ? -(this.cursorY - 260) : 0;
+      const appState = (this.api.getAppState ? this.api.getAppState() : null) as any;
+      const viewWidth = appState?.width || (typeof window !== 'undefined' ? window.innerWidth : 360);
+      const viewHeight = appState?.height || (typeof window !== 'undefined' ? window.innerHeight : 700);
+      const zoom = appState?.zoom?.value || 1.0;
+
+      const isMobile = this.isMobileView();
+
+      let targetScrollX = 0;
+      let targetScrollY = 0;
+
+      if (this.lastActivePoint) {
+        // Keep the most recent element centered on the board so user sees all of it in any direction
+        const targetCenterY = (viewHeight / 2) / zoom - this.lastActivePoint.y;
+        // Never scroll above the top header (keep scrollY <= 0)
+        targetScrollY = Math.min(0, Math.round(targetCenterY));
+
+        if (isMobile) {
+          // On mobile, center the vertical column horizontally
+          const columnCenter = this.MOBILE_BOARD_WIDTH / 2; // 180
+          targetScrollX = Math.round((viewWidth / 2) / zoom - columnCenter);
+        } else {
+          // On desktop, center horizontally on the active element
+          targetScrollX = Math.round((viewWidth / 2) / zoom - this.lastActivePoint.x);
+        }
+      } else {
+        targetScrollY = this.cursorY > 360 ? -(this.cursorY - 260) : 0;
+      }
 
       this.api.updateScene({
         elements: [...this.elements],
         appState: {
           zoom: { value: 1.0 as any },
-          scrollX: 0,
+          scrollX: targetScrollX,
           scrollY: targetScrollY,
         },
       });
@@ -341,6 +384,12 @@ export class AvelutBoardController {
     const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
     const color = args?.color ?? '#F8FAFC';
 
+    const lines = text.split('\n');
+    const longestLine = Math.max(...lines.map(l => l.length));
+    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), 320);
+    const approxH = Math.max(lines.length * fontSize * 1.4, 30);
+    this.lastActivePoint = { x: x + approxW / 2, y: y + approxH / 2 };
+
     this.appendElements([{
       type: 'text',
       x, y,
@@ -353,8 +402,7 @@ export class AvelutBoardController {
     }], y >= 400 ? 'notes' : 'stage');
 
     if (args?.y === undefined) {
-      const lines = text.split('\n').length;
-      this.cursorY = y + Math.max(36, lines * fontSize * 1.4 + 14);
+      this.cursorY = y + Math.max(36, lines.length * fontSize * 1.4 + 14);
     }
   }
 
@@ -365,17 +413,26 @@ export class AvelutBoardController {
     if (!formulaText?.trim()) return;
     this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
 
+    // Ensure KaTeX / LaTeX clean display formatting delimiters
+    let cleanFormula = formulaText.trim();
+    if (!cleanFormula.startsWith('$') && !cleanFormula.startsWith('\\[')) {
+      cleanFormula = `$$ ${cleanFormula} $$`;
+    }
+
+    const cardWidth = Math.min(Math.max(cleanFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
+    this.lastActivePoint = { x: 30 + cardWidth / 2, y: this.cursorY + 34 };
+
     const els = convertToExcalidrawElements([{
       type: 'rectangle',
       x: 30,
       y: this.cursorY + 10,
-      width: Math.min(Math.max(formulaText.length * 14 + 40, 240), this.MOBILE_CARD_WIDTH),
+      width: cardWidth,
       height: 48,
       strokeColor: '#FDE047',
       backgroundColor: '#1E1B4B',
       fillStyle: 'solid',
       roundness: { type: 3 },
-      label: { text: formulaText.trim(), fontSize: 18, strokeColor: '#FDE047' },
+      label: { text: cleanFormula, fontSize: 18, strokeColor: '#FDE047' },
       customData: { zone: 'notes', slot: 'formula' },
     }]);
 
@@ -405,14 +462,18 @@ export class AvelutBoardController {
 
     const clampedX = this.clampX(x, width);
     const clampedY = Math.max(this.STAGE_TOP, y);
+    const cardWidth = Math.min(width, this.MOBILE_CARD_WIDTH);
+    const cardHeight = Math.min(height, 120);
+
+    this.lastActivePoint = { x: clampedX + cardWidth / 2, y: clampedY + cardHeight / 2 };
 
     const el: any = {
       type,
       id,
       x: clampedX,
       y: clampedY,
-      width: Math.min(width, this.MOBILE_CARD_WIDTH),
-      height: Math.min(height, 120),
+      width: cardWidth,
+      height: cardHeight,
       strokeColor,
       backgroundColor,
       fillStyle,
@@ -505,6 +566,7 @@ export class AvelutBoardController {
         };
       }
 
+      this.lastActivePoint = { x: (startX + endX) / 2, y: (startY + endY) / 2 };
       this.appendElements([skeleton], 'stage');
     });
   }
@@ -1639,8 +1701,9 @@ export class AvelutBoardController {
             return { status: 'error', action: 'draw', message: 'No elements provided.' };
           }
 
-          const NEON_PALETTE = ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6'];
+          const NEON_PALETTE = ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#38BDF8'];
           let colorIdx = 0;
+          const isMobile = this.isMobileView();
 
           // Pass 1: shapes (must exist before arrows reference them)
           for (const el of args.elements) {
@@ -1650,7 +1713,7 @@ export class AvelutBoardController {
 
             if (el.kind === 'text') {
               this.writeText(el.text || '', {
-                x: el.x ?? 30,
+                x: isMobile ? 30 : el.x,
                 y: el.y,
                 fontSize: 'medium',
               });
@@ -1667,9 +1730,9 @@ export class AvelutBoardController {
                 type: shapeType,
                 id,
                 label: el.text || '',
-                x: el.x ?? 30,
-                y: el.y,
-                width: this.MOBILE_CARD_WIDTH,
+                x: isMobile ? 30 : (el.x ?? 30),
+                y: isMobile ? undefined : el.y,
+                width: isMobile ? this.MOBILE_CARD_WIDTH : (el.x ? 240 : this.MOBILE_CARD_WIDTH),
                 height: this.MOBILE_CARD_HEIGHT,
                 backgroundColor: '#1E293B',
                 strokeColor,
@@ -1696,9 +1759,9 @@ export class AvelutBoardController {
           const text = args.text?.trim();
           if (!text) return { status: 'error', action: 'write', message: 'No text provided.' };
 
-          // Detect formulas heuristically (contains mathematical operators =, ^, ·, ×, ±, √)
-          const isFormula = /[=^·×±√]/.test(text) && !/[a-zA-Z\s]{15,}/.test(text);
-          if (isFormula && text.length < 40) {
+          // Detect formulas heuristically (contains mathematical operators or LaTeX $, =, ^, ·, ×, ±, √, \)
+          const isFormula = /[$=^·×±√\\]/.test(text) && !/[a-zA-Z\s]{25,}/.test(text);
+          if (isFormula && text.length < 80) {
             this.setFormula(text);
           } else {
             this.writeText(text, { fontSize: 'medium' });

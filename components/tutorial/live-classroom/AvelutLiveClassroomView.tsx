@@ -363,17 +363,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         <ExcalidrawLiveBoard topicTitle={topicTitle} onBoardReady={handleBoardReady} className="w-full h-full" />
       </main>
 
-      {/* ── SUBTITLE PILL ─────────────────────────────────────────────────── */}
-      {transcript && (
-        <div className="absolute bottom-28 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-xl z-20 pointer-events-none">
-          <div className="px-4 py-2.5 rounded-2xl bg-black/75 backdrop-blur-md border border-white/10
-                           shadow-2xl text-center transition-all animate-in fade-in slide-in-from-bottom-2">
-            <p className="text-xs sm:text-sm text-white/90 font-medium leading-snug line-clamp-2">
-              {transcript.slice(-160)}
-            </p>
-          </div>
-        </div>
-      )}
+      {/* ── SUBTITLE PILL (Hidden as requested) ─────────────────────────── */}
 
       {/* ── TEXT INPUT OVERLAY ────────────────────────────────────────────── */}
       {showTextInput && (
