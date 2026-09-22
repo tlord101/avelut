@@ -93,6 +93,23 @@ export class AvelutBoardController {
   private pendingSkeletons: any[] = [];
   private flushScheduled = false;
 
+  // Fixed board geometry
+  private readonly BOARD_WIDTH = 1400;
+  private readonly BOARD_HEIGHT = 700;
+  private readonly STAGE_TOP = 80;
+  private readonly STAGE_BOTTOM = 400;
+  private readonly NOTES_TOP = 410;
+  private readonly NOTES_BOTTOM = 680;
+
+  private clampX(x: number, w = 0) {
+    return Math.max(20, Math.min(x, this.BOARD_WIDTH - w - 20));
+  }
+
+  private clampY(y: number, h = 0) {
+    return Math.max(this.STAGE_TOP, Math.min(y, this.STAGE_BOTTOM - h));
+  }
+
+
   addSkeletonElement(skeleton: any): void {
     this.pendingSkeletons.push(skeleton);
     if (!this.flushScheduled) {
@@ -218,17 +235,13 @@ export class AvelutBoardController {
       return;
     }
     try {
-      const scrollY =
-        this.cursorY > this.VIEWPORT_HEIGHT
-          ? -(this.cursorY - this.VIEWPORT_HEIGHT + 40)
-          : 0;
 
       this.api.updateScene({
         elements: [...this.elements],
         appState: {
           zoom: { value: 1.0 as any },
           scrollX: 0,
-          scrollY,
+          scrollY: 0,
         },
       });
     } catch (e) {
@@ -270,7 +283,7 @@ export class AvelutBoardController {
   }
 
   private isStageFull(): boolean {
-    return this.cursorY >= this.STAGE_FULL_Y;
+    return this.cursorY >= this.STAGE_BOTTOM - 40;
   }
 
   private clearStageIfFull(): void {
@@ -319,8 +332,8 @@ export class AvelutBoardController {
     this.clearStageIfFull();
 
     const fontSize = this.fontSizeToNumber(args?.fontSize);
-    const x = args?.x ?? 50;
-    const y = args?.y ?? this.cursorY;
+    const x = this.clampX(args?.x ?? 50, 100);
+    const y = this.clampY(args?.y ?? this.cursorY, 40);
     const color = args?.color ?? '#FAFAFA';
 
     this.appendElements([{
@@ -387,8 +400,8 @@ export class AvelutBoardController {
     const el: any = {
       type,
       id,
-      x: Math.max(20, Math.min(x, 1500)),
-      y: Math.max(80, y),
+      x: this.clampX(x, width),
+      y: this.clampY(y, height),
       width: Math.min(width, 800),
       height: Math.min(height, 400),
       strokeColor,
@@ -492,10 +505,10 @@ export class AvelutBoardController {
       if (!text?.trim()) return;
 
       const skeleton = {
-        type: 'stickynote',
+        type: 'rectangle', fillStyle: 'solid',
         id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        x,
-        y,
+        x: this.clampX(x, width),
+        y: this.clampY(y, height),
         width,
         height,
         backgroundColor,
@@ -1104,8 +1117,8 @@ export class AvelutBoardController {
     const { component, label, caption } = args;
     const norm = (component || '').toLowerCase().replace(/[\s_-]+/g, '');
     const reserve = this.reserveVerticalSpace(280);
-    const sx = args.x ?? 120;
-    const sy = args.y ?? reserve.y;
+    const sx = this.clampX(args.x ?? 120, 200);
+    const sy = this.clampY(args.y ?? reserve.y, 150);
 
     if (norm.includes('resistor')) {
       this.drawResistorComponent(sx, sy, label, caption);

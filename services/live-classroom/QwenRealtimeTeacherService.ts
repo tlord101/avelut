@@ -416,8 +416,8 @@ export class QwenRealtimeTeacherService {
               type: 'string',
               description: 'Border outline color (e.g. #0284c7, #b45309, #16a34a, #dc2626, #1e1e1e).',
             },
-            x: { type: 'number', description: 'Canvas X position (0 to 1400).' },
-            y: { type: 'number', description: 'Canvas Y position (0 to 800).' },
+            x: { type: 'number', description: 'Canvas X position (40 to 1200).' },
+            y: { type: 'number', description: 'Canvas Y position (90 to 380).' },
             width: { type: 'number', description: 'Shape width (default 200).' },
             height: { type: 'number', description: 'Shape height (default 90).' },
           },
@@ -468,8 +468,8 @@ export class QwenRealtimeTeacherService {
               type: 'string',
               description: 'Color: #fef08a (yellow), #bae6fd (blue), #bbf7d0 (green), #fbcfe8 (pink), #fed7aa (orange).',
             },
-            x: { type: 'number', description: 'Canvas X position (0 to 1400).' },
-            y: { type: 'number', description: 'Canvas Y position (0 to 800).' },
+            x: { type: 'number', description: 'Canvas X position (40 to 1200).' },
+            y: { type: 'number', description: 'Canvas Y position (90 to 380).' },
           },
           required: ['text'],
         },
@@ -498,8 +498,8 @@ export class QwenRealtimeTeacherService {
           type: 'object',
           properties: {
             text: { type: 'string' },
-            x: { type: 'number', description: '0-1600. Default 300.' },
-            y: { type: 'number', description: '0-900. Default auto-place below last annotation.' },
+            x: { type: 'number', description: '40-1200. Default 300.' },
+            y: { type: 'number', description: '90-380. Default auto-place below last annotation.' },
             fontSize: { type: 'number', description: 'Default 24. Use 48+ for headings.' },
             color: { type: 'string', description: 'Hex. Default #1e1e1e.' },
           },
@@ -820,10 +820,11 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
            const timeChanged = this.stateMachine.evaluateState();
            const minuteAdvanceChanged = this.stateMachine.evaluateMinuteBasedAdvance();
            liveLogger.setStage(this.stateMachine.getCurrentStage());
-           const turnChanged = this.stateMachine.advance();
+           // turnChanged logic removed per instructions
+           const turnChanged = false;
            if (timeChanged || minuteAdvanceChanged || turnChanged) {
              if (this.stateMachine.getCurrentStage() !== prevStage) {
-               avelutBoardController.clearStage();
+               // avelutBoardController.clearStage(); // Removed to preserve sticky notes and tools across stage transitions
              }
              this.sendSessionInit(); // Send session update to update prompt with new state
            }
@@ -1119,7 +1120,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
     this.proactiveTimer = setTimeout(() => {
       if (this.state !== 'listening' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      liveLogger.log('[QwenRealtime] Student has been quiet for 9s — proactively advancing lesson...');
+      liveLogger.log('[QwenRealtime] Student has been quiet for 30s — proactively advancing lesson...');
 
       const topic = this.promptConfig?.topicTitle || 'the topic';
       const stageInst = this.stateMachine?.getNextInstruction() || '';
@@ -1134,7 +1135,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           tool_choice: 'auto',
         },
       });
-    }, 9000);
+    }, 30000);
   }
 
   private clearProactiveTimer(): void {

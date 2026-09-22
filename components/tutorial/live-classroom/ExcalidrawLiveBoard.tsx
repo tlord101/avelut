@@ -34,6 +34,17 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
   const handleApiSet = (api: ExcalidrawImperativeAPI) => {
     console.log('[ExcalidrawLiveBoard] API ready');
     apiRef.current = api;
+
+    // Lock the board immediately on load
+    api.updateScene({
+      appState: {
+        viewModeEnabled: true,
+        zenModeEnabled: true,
+        zoom: { value: 1.0 as any },
+        scrollX: 0,
+        scrollY: 0,
+      }
+    });
     avelutBoardController.setApi(api);
     avelutBoardController.setLessonTitle(topicTitle);
     onBoardReady?.(api);
