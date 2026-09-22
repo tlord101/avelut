@@ -1,19 +1,35 @@
 /**
- * AvelutBoardVisualizerService.ts
+ * AvelutBoardVisualizerService.ts (Board Designer Service)
  *
- * Co-Pilot AI Board Illustrator that runs alongside the Realtime Voice Teacher.
+ * Director in the Director/Actor split:
+ *  - Realtime audio model (Actor) narrates and issues semantic intents (illustrate / annotate).
+ *  - This service (Director / Board Designer) generates Excalidraw skeleton JSON diagrams.
+ *  - AvelutBoardController (Stage) acts as a pure renderer.
  *
- * Design:
- *  - Realtime model only writes TEXT (write_text / set_formula / write_keywords).
- *  - This service generates DIAGRAMS when the teacher speech contains illustration phrases
- *    ("imagine", "let me draw", "on the board", "picture this", etc.).
- *  - Kickoff illustration runs once at lesson start with a COMPACT JSON schema
- *    so responses are not truncated by max_tokens.
+ * Dual duty:
+ *  1. Primary backend for realtime `illustrate` tool calls via `generateStructuredDiagram`.
+ *  2. Fallback illustrator for missed tool calls in illustratable stages.
  */
 
 import { avelutBoardController } from './AvelutBoardController';
 import { getAlibabaApiKey } from '../../utils/appSettings';
+import { BOARD_DESIGNER_SYSTEM_PROMPT } from './boardDesignerPrompt';
 import type { AppSettings } from '../../types';
+
+export interface StructuredDiagramRequest {
+  topic: string;
+  template: 'flowchart' | 'concept_map' | 'comparison' | 'cycle' | 'equation_setup' | 'custom';
+  context: string;
+  constraints: { max_nodes?: number; orientation?: 'horizontal' | 'vertical'; color_palette?: string };
+  canvas: { width: number; height: number; reservedTop: number };
+  yOffset: number;
+  existingBoardSummary: string;
+}
+
+export interface StructuredDiagramResult {
+  elements: any[];                 // Excalidraw skeletons
+  meta: { title?: string; beat?: string; continuation?: boolean };
+}
 
 export interface VisualizerConfig {
   topicTitle: string;
@@ -82,52 +98,109 @@ export class AvelutBoardVisualizerService {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
 
-  private salvageTruncatedJson(raw: string): any | null {
-    let s = raw.trim();
-    // Strip trailing incomplete token
-    s = s.replace(/,\s*$/, '');
-    s = s.replace(/:\s*$/, ': null');
-    // Balance braces/brackets
-    let openBraces = 0, openBrackets = 0;
-    for (const ch of s) {
-      if (ch === '{') openBraces++;
-      else if (ch === '}') openBraces--;
-      else if (ch === '[') openBrackets++;
-      else if (ch === ']') openBrackets--;
-    }
-    while (openBrackets-- > 0) s += ']';
-    while (openBraces-- > 0) s += '}';
-    try { return JSON.parse(s); } catch { return null; }
+  private buildDesignerUserPrompt(req: StructuredDiagramRequest): string {
+    return `Design a ${req.template} for the topic: "${req.topic}".
+
+Teaching context: ${req.context || 'general university lecture'}
+
+Constraints:
+- max_nodes: ${req.constraints.max_nodes ?? 8}
+- orientation: ${req.constraints.orientation ?? 'auto'}
+- color_palette: ${req.constraints.color_palette ?? 'default'}
+
+Existing board content (avoid duplicating; position new diagram below it):
+${req.existingBoardSummary || '(empty board)'}
+
+The diagram will be placed starting at y-offset ${req.yOffset} on a 1600x900 canvas.
+Return ONLY the JSON object described in the system prompt.`;
   }
 
-  private safeJsonParse(text: string): any {
-    try {
-      let s = text.trim();
-      // Strip markdown fences if present
-      s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-      return JSON.parse(s);
-    } catch {
-      const salvaged = this.salvageTruncatedJson(text);
-      if (salvaged) {
-        console.warn('[BoardVisualizer] Recovered from truncated JSON');
-        return salvaged;
-      }
-      // Try to extract the largest {...} block
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[0]);
-        } catch {
-          const salvagedPartial = this.salvageTruncatedJson(jsonMatch[0]);
-          if (salvagedPartial) {
-            console.warn('[BoardVisualizer] Recovered from truncated partial JSON');
-            return salvagedPartial;
-          }
-          console.error('[BoardVisualizer] JSON payload truncated. Unrecoverable.', text.slice(0, 400));
-          return null;
+  async generateStructuredDiagram(req: StructuredDiagramRequest): Promise<StructuredDiagramResult | null> {
+    console.log(`[BoardDesigner] generating ${req.template} layout for: ${req.topic}`);
+    const systemPrompt = BOARD_DESIGNER_SYSTEM_PROMPT;
+    const userPrompt = this.buildDesignerUserPrompt(req);
+
+    const raw = await this.callAlibabaTextModel({
+      systemPrompt,
+      userPrompt,
+      maxTokens: 2048,                // MUST be at least 2048
+      responseFormat: 'json_object',
+    });
+
+    let parsed: any = null;
+    if (raw && typeof raw === 'object' && Array.isArray(raw.elements)) {
+      parsed = raw;
+    } else if (typeof raw === 'string') {
+      parsed = this.safeJsonParse(raw);
+    } else if (raw && typeof raw === 'object') {
+      parsed = raw;
+    }
+
+    if (!parsed || !Array.isArray(parsed.elements)) {
+      console.error('[BoardDesigner] Unparseable or malformed response');
+      return null;
+    }
+
+    // Apply yOffset to all element y-coordinates so diagrams stack instead of overlapping
+    for (const el of parsed.elements) {
+      if (typeof el.y === 'number') el.y += req.yOffset;
+    }
+
+    return parsed as StructuredDiagramResult;
+  }
+
+  private safeJsonParse(raw: string): any | null {
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { /* fall through */ }
+
+    let s = String(raw).trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .replace(/,\s*([}\]])/g, '$1');       // remove trailing commas
+
+    // Strip trailing incomplete key or unclosed string
+    let inStr = false, esc = false;
+    for (const ch of s) {
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') inStr = !inStr;
+    }
+    if (inStr) s += '"';
+    s = s.replace(/,\s*$/, '');
+    s = s.replace(/:\s*$/, ': null');
+
+    // Balance braces/brackets using stack
+    const stack: string[] = [];
+    inStr = false;
+    esc = false;
+    for (const ch of s) {
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') stack.push('}');
+      else if (ch === '[') stack.push(']');
+      else if (ch === '}' || ch === ']') {
+        if (stack.length && stack[stack.length - 1] === ch) {
+          stack.pop();
         }
       }
-      console.warn('[BoardVisualizer] Failed to parse JSON from response:', text.slice(0, 200));
+    }
+    while (stack.length > 0) {
+      s += stack.pop();
+    }
+
+    try {
+      const parsed = JSON.parse(s);
+      console.warn('[BoardDesigner] Salvaged truncated JSON');
+      return parsed;
+    } catch {
+      // Try to extract the largest {...} block if any
+      const jsonMatch = String(raw).match(/\{[\s\S]*\}/);
+      if (jsonMatch && jsonMatch[0] !== s) {
+        try { return JSON.parse(jsonMatch[0]); } catch { /* fall through */ }
+      }
+      console.error('[BoardDesigner] Unrecoverable JSON:', String(raw).slice(-300));
       return null;
     }
   }
@@ -135,11 +208,20 @@ export class AvelutBoardVisualizerService {
   // ── Network Fetch to Alibaba Text Models ───────────────────────────────────
 
   private async callAlibabaTextModel(
-    systemPrompt: string,
-    userPrompt: string,
-    requestId: string,
-    isComplex = false,
+    systemPromptOrOptions: string | { systemPrompt: string; userPrompt: string; maxTokens?: number; responseFormat?: any; requestId?: string },
+    userPromptArg?: string,
+    requestIdArg?: string,
+    isComplexArg = false,
   ): Promise<any> {
+    const isOptionsObj = typeof systemPromptOrOptions === 'object';
+    const systemPrompt = isOptionsObj ? systemPromptOrOptions.systemPrompt : systemPromptOrOptions;
+    const userPrompt = isOptionsObj ? systemPromptOrOptions.userPrompt : (userPromptArg || '');
+    const requestId = isOptionsObj
+      ? (systemPromptOrOptions.requestId || `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`)
+      : (requestIdArg || `req_${Date.now()}`);
+    const isComplex = isOptionsObj ? true : isComplexArg;
+    const maxTokens = isOptionsObj ? (systemPromptOrOptions.maxTokens ?? 2048) : (isComplex ? 2048 : 1024);
+
     const apiKey = getAlibabaApiKey(this.appSettings);
     const workspaceId =
       (this.appSettings as any)?.alibaba_workspace_id ||
@@ -162,7 +244,7 @@ export class AvelutBoardVisualizerService {
       isNative ? 'https://www.avelut.xyz/api/openrouter-chat' : '/api/openrouter-chat',
     ];
 
-    // Compact responses for diagrams — higher max_tokens only when needed
+    // Compact responses for diagrams — max_tokens MUST be at least 2048
     const payload = {
       model: 'qwen3.7-flash',
       messages: [
@@ -171,7 +253,7 @@ export class AvelutBoardVisualizerService {
       ],
       temperature: 0.2,
       response_format: { type: 'json_object' },
-      max_tokens: isComplex ? 2048 : 1024,
+      max_tokens: Math.max(2048, maxTokens),
       stream: false,
     };
 
@@ -627,3 +709,5 @@ Generate the visual.`;
 
 // ── Singleton export ─────────────────────────────────────────────────────────
 export const avelutBoardVisualizer = new AvelutBoardVisualizerService();
+export const avelutBoardDesigner = avelutBoardVisualizer;
+export const AvelutBoardDesignerService = AvelutBoardVisualizerService;

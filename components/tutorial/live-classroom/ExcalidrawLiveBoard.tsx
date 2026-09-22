@@ -100,7 +100,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
             currentItemBackgroundColor: 'transparent',
             currentItemFontFamily: 1,
             gridSize: null,
-            zoom: { value: 1.0 },
+            zoom: { value: 1.0 as any },
             scrollX: 0,
             scrollY: 0,
           },

@@ -13,6 +13,7 @@ import { liveLogger } from "./logger";
  */
 
 import { avelutBoardController } from './AvelutBoardController';
+import { avelutBoardVisualizer } from './AvelutBoardVisualizerService';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
 import { PedagogicalStateMachine } from './PedagogicalStateMachine';
 import type { AppSettings } from '../../types';
@@ -70,6 +71,8 @@ export class QwenRealtimeTeacherService {
   private stateMachine: PedagogicalStateMachine | null = null;
 
   private teacherSpeakingUntil = 0;
+  private avelutBoardController = avelutBoardController;
+  private boardVisualizerService = avelutBoardVisualizer;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -360,57 +363,53 @@ export class QwenRealtimeTeacherService {
     return [
       {
         type: "function",
-        name: "draw_shape",
-        description: "Draw a geometric shape on the board. Use for diagrams, concept maps, flowcharts, and illustrations. Supports rectangle, ellipse, diamond, and arrow.",
+        name: "illustrate",
+        description: `Request a detailed diagram from the board designer. Use this for ANY diagram with more than 3 shapes, concept maps, flowcharts, energy-flow diagrams, cycles, or equation setups.
+
+CRITICAL BEHAVIORAL RULE: Before calling this tool, you MUST verbally announce it AND continue speaking for at least 5 seconds. Then call the tool while still narrating. After it returns, keep teaching by referring to what was drawn.
+
+Examples of the required preamble:
+- "So let me show you an example on the board. One minute please..."
+- "Let me sketch this out for you so it's clearer..."
+- "Watch the board — I'm putting this together now..."
+
+You must NEVER call this tool silently. Never go silent while it runs.`,
         parameters: {
           type: "object",
           properties: {
-            type: { type: "string", enum: ["rectangle", "ellipse", "diamond", "arrow", "line"], description: "Shape type" },
-            id: { type: "string", description: "Unique element ID, e.g. 'box1', 'arrow1'" },
-            x: { type: "number", description: "X coordinate (left edge)" },
-            y: { type: "number", description: "Y coordinate (top edge)" },
-            width: { type: "number", description: "Width in pixels" },
-            height: { type: "number", description: "Height in pixels" },
-            label: { type: "string", description: "Text to display inside/on the shape" },
-            backgroundColor: { type: "string", description: "Fill color hex, e.g. '#a5d8ff'" },
-            strokeColor: { type: "string", description: "Border color hex, default '#1e1e1e'" },
-            points: { type: "array", items: { type: "array", items: { type: "number" } }, description: "For arrows/lines: [[0,0],[dx,dy]] offsets" },
-            startId: { type: "string", description: "For arrows: ID of shape to bind start" },
-            endId: { type: "string", description: "For arrows: ID of shape to bind end" },
-            endArrowhead: { type: "string", enum: ["arrow", "bar", "dot", "triangle"], description: "Arrowhead style" }
+            topic: { type: "string", description: "What the diagram should teach, e.g. 'heat engine energy flow with efficiency equation'" },
+            template: {
+              type: "string",
+              enum: ["flowchart", "concept_map", "comparison", "cycle", "equation_setup", "custom"],
+              description: "Layout template. Prefer a named template. Use 'custom' only for illustrative scenes that don't fit any template (e.g. 'stacked balls vs scattered balls')."
+            },
+            context: { type: "string", description: "Teaching context to inform tone and complexity, e.g. 'first-year university, pre-Kelvin discussion'" },
+            constraints: {
+              type: "object",
+              properties: {
+                max_nodes: { type: "number" },
+                orientation: { type: "string", enum: ["horizontal", "vertical"] },
+                color_palette: { type: "string", enum: ["default", "thermal", "cool", "warn"] }
+              }
+            }
           },
-          required: ["type", "id", "x", "y"]
+          required: ["topic", "template"]
         }
       },
       {
         type: "function",
-        name: "draw_text",
-        description: "Draw standalone text on the board (titles, annotations, labels outside shapes).",
+        name: "annotate",
+        description: "Write a short phrase directly on the board at a specific position. Use for quick callouts while talking: formulas you're deriving, step labels, terminology, quick definitions. This is FAST (no design step). Use it liberally between illustrate calls.",
         parameters: {
           type: "object",
           properties: {
-            id: { type: "string", description: "Unique element ID" },
-            x: { type: "number" },
-            y: { type: "number" },
             text: { type: "string" },
-            fontSize: { type: "number", description: "Default 20. Use 28+ for titles." }
+            x: { type: "number", description: "0-1600. Default 300." },
+            y: { type: "number", description: "0-900. Default auto-place below last annotation." },
+            fontSize: { type: "number", description: "Default 24. Use 48+ for headings." },
+            color: { type: "string", description: "Hex. Default #1e1e1e." }
           },
-          required: ["id", "x", "y", "text"]
-        }
-      },
-      {
-        type: "function",
-        name: "draw_mermaid",
-        description: "Draw a diagram from a Mermaid string. Use for complex flowcharts, sequence diagrams, and architecture diagrams. Excalidraw converts it to editable shapes automatically.",
-        parameters: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            x: { type: "number" },
-            y: { type: "number" },
-            mermaid: { type: "string", description: "Mermaid diagram definition, e.g. 'graph TD\\n A[Start] --> B{Decision}'" }
-          },
-          required: ["id", "x", "y", "mermaid"]
+          required: ["text"]
         }
       },
       {
@@ -702,17 +701,16 @@ export class QwenRealtimeTeacherService {
 
   // ── Tool execution → AvelutBoardController ────────────────────────────────
 
-  private executeToolCall(callId: string, name: string, argsRaw: any): void {
+  private async executeToolCall(callId: string, name: string, argsRaw: any): Promise<void> {
     if (this.executedCallIds.has(callId)) return;
     this.executedCallIds.add(callId);
 
     // Prevent double-draw of diagram
-    if (name === 'draw_diagram') {
+    if (name === 'illustrate' || name === 'draw_diagram') {
       if (this.hasDrawnDiagramInTurn) {
-        liveLogger.warn('[QwenRealtime] Skipping duplicate draw_diagram in same turn:', argsRaw);
+        liveLogger.warn('[QwenRealtime] Skipping duplicate illustrate/diagram in same turn:', argsRaw);
         return;
       }
-      this.hasDrawnDiagramInTurn = true;
     }
 
     this.hasCalledToolInTurn = true;
@@ -729,76 +727,108 @@ export class QwenRealtimeTeacherService {
 
     liveLogger.log('[QwenRealtime] Executing board tool:', name, args);
 
+    let toolResult: any = { success: true, tool: name };
+
     try {
       switch (name) {
-        case 'draw_shape': {
-          const skeleton: any = {
-            type: args.type,
-            id: args.id,
-            x: args.x,
-            y: args.y,
-            width: args.width || 200,
-            height: args.height || 80,
-          };
-          if (args.label) {
-            skeleton.label = { text: args.label, fontSize: 20 };
-            skeleton.roundness = { type: 3 };
-          }
-          if (args.backgroundColor) skeleton.backgroundColor = args.backgroundColor;
-          if (args.strokeColor) skeleton.strokeColor = args.strokeColor;
-          if (args.type === 'arrow' || args.type === 'line') {
-            skeleton.points = args.points || [[0,0],[args.width || 100, 0]];
-            skeleton.endArrowhead = args.endArrowhead || 'arrow';
-            if (args.startId) skeleton.start = { id: args.startId };
-            if (args.endId) skeleton.end = { id: args.endId };
-          }
-          avelutBoardController.addSkeletonElement(skeleton);
-          break;
-        }
-        case 'draw_text': {
-          avelutBoardController.addSkeletonElement({
+        case 'annotate': {
+          this.hasCalledToolInTurn = true;
+          const x = args.x ?? 300;
+          const y = args.y ?? this.avelutBoardController.nextAnnotationY();
+          const fontSize = args.fontSize ?? 24;
+          const color = args.color ?? '#1e1e1e';
+          this.avelutBoardController.addSkeletonElement({
             type: 'text',
-            id: args.id,
-            x: args.x,
-            y: args.y,
+            id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            x,
+            y,
             text: args.text,
-            fontSize: args.fontSize || 20,
+            fontSize,
+            strokeColor: color,
           });
+          toolResult = { status: 'ok' };
           break;
         }
-        case 'draw_mermaid': {
-          avelutBoardController.addSkeletonElement({
-            type: 'mermaid',
-            id: args.id,
-            x: args.x,
-            y: args.y,
-            mermaid: args.mermaid,
-          });
+
+        case 'illustrate': {
+          this.hasCalledToolInTurn = true;
+
+          // Deduplicate: refuse a second illustrate in the same turn
+          if (this.hasDrawnDiagramInTurn) {
+            liveLogger.warn('[QwenRealtime] illustrate called twice in one turn — ignoring second');
+            toolResult = { status: 'skipped', reason: 'already_drew_this_turn' };
+            break;
+          }
+          this.hasDrawnDiagramInTurn = true;
+
+          const boardSummary = this.avelutBoardController.getCompactSummary();
+          const reserve = this.avelutBoardController.reserveVerticalSpace(600);
+
+          try {
+            const result = await this.boardVisualizerService.generateStructuredDiagram({
+              topic: args.topic,
+              template: args.template,
+              context: args.context || '',
+              constraints: args.constraints || {},
+              canvas: { width: 1600, height: 900, reservedTop: 80 },
+              yOffset: reserve.y,
+              existingBoardSummary: boardSummary,
+            });
+
+            if (!result || !Array.isArray(result.elements) || result.elements.length === 0) {
+              liveLogger.error('[QwenRealtime] illustrate returned empty result');
+              toolResult = { status: 'failed', reason: 'designer_empty' };
+              break;
+            }
+
+            // Enforce skeleton ordering: shapes → arrows → text
+            const ordered = [
+              ...result.elements.filter((e: any) => ['rectangle', 'ellipse', 'diamond'].includes(e.type)),
+              ...result.elements.filter((e: any) => ['arrow', 'line'].includes(e.type)),
+              ...result.elements.filter((e: any) => e.type === 'text'),
+            ];
+
+            this.avelutBoardController.drawStructured(ordered);
+
+            // Inject board summary back into realtime context (NON-BLOCKING)
+            const newSummary = this.avelutBoardController.getCompactSummary();
+            this.injectBoardStateMessage(newSummary);
+
+            toolResult = {
+              status: 'rendered',
+              title: result.meta?.title,
+              board_summary: newSummary,
+            };
+          } catch (err) {
+            liveLogger.error('[QwenRealtime] illustrate failed:', err);
+            toolResult = { status: 'failed', reason: String(err) };
+          }
           break;
         }
+
         case 'write_text':
-          avelutBoardController.writeText(args.text ?? args.content ?? '');
+          this.avelutBoardController.writeText(args.text ?? args.content ?? '');
           break;
         case 'set_formula':
-          avelutBoardController.setFormula(args.formula ?? args.text ?? args.content ?? '');
+          this.avelutBoardController.setFormula(args.formula ?? args.text ?? args.content ?? '');
           break;
         case 'write_keywords':
-          avelutBoardController.writeKeywords(args.keywords ?? []);
+          this.avelutBoardController.writeKeywords(args.keywords ?? []);
           break;
         case 'highlight_concept':
-          avelutBoardController.highlightConcept(args.targetText ?? '', args.style);
+          this.avelutBoardController.highlightConcept(args.targetText ?? '', args.style);
           break;
         case 'clear_stage':
-          avelutBoardController.clearStage();
+          this.avelutBoardController.clearStage();
           break;
         case 'clear_board':
-          avelutBoardController.clearBoard();
+          this.avelutBoardController.clearBoard();
           break;
         case 'update_text':
-          avelutBoardController.updateText(args.targetText ?? '', args.newText ?? '');
+          this.avelutBoardController.updateText(args.targetText ?? '', args.newText ?? '');
           break;
         case 'remove_component':
-          avelutBoardController.removeComponent(args.targetText ?? '');
+          this.avelutBoardController.removeComponent(args.targetText ?? '');
           break;
 
         default:
@@ -817,7 +847,7 @@ export class QwenRealtimeTeacherService {
         item: {
           type: 'function_call_output',
           call_id: callId,
-          output: JSON.stringify({ success: true, tool: name }),
+          output: JSON.stringify(toolResult),
         },
       });
       this.sendJson({
@@ -825,6 +855,19 @@ export class QwenRealtimeTeacherService {
         type: 'response.create',
       });
     }
+  }
+
+  private injectBoardStateMessage(summary: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    liveLogger.log('[QwenRealtime] injected board state summary:', summary);
+    this.ws.send(JSON.stringify({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "system",
+        content: [{ type: "input_text", text: `[BOARD STATE] ${summary}` }]
+      }
+    }));
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────

@@ -24,7 +24,7 @@ export interface WriteTextArgs {
 }
 
 export interface DrawShapeArgs {
-  type: 'rectangle' | 'ellipse' | 'arrow' | 'line';
+  type: 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'line';
   x: number;
   y: number;
   width?: number;
@@ -100,20 +100,80 @@ export class AvelutBoardController {
         this.pendingSkeletons = [];
         this.flushScheduled = false;
 
-        if (!this.api) {
-            console.warn('[BoardController] Cannot add skeletons — Excalidraw API not bound.');
-            return;
-        }
-
         const elements = convertToExcalidrawElements(skeletons, { regenerateIds: false });
-        this.api.updateScene({
-          elements: [...this.api.getSceneElements(), ...elements],
-        });
+        if (this.api) {
+          this.api.updateScene({
+            elements: [...this.api.getSceneElements(), ...elements],
+          });
+        } else {
+          console.warn('[BoardController] Buffered skeletons before Excalidraw API bound.');
+        }
 
         // Also add to elements array to persist state
         this.elements = [...this.elements, ...elements];
       }, 50);
     }
+  }
+
+  private nextFreeY = 100;
+  private lastAnnotationY = 100;
+
+  nextAnnotationY(): number {
+    const y = this.lastAnnotationY;
+    this.lastAnnotationY += 60;  // 60px line spacing for successive annotations
+    return y;
+  }
+
+  reserveVerticalSpace(estimatedHeight: number): { y: number } {
+    const y = this.nextFreeY;
+    this.nextFreeY += estimatedHeight + 80;   // 80px gap between diagrams
+    this.cursorY = this.nextFreeY;
+    return { y };
+  }
+
+  drawStructured(elements: any[]): void {
+    if (!elements || elements.length === 0) return;
+    console.log(`[BoardController] drawStructured called with ${elements.length} elements`);
+
+    // Elements already ordered shapes → arrows → text by the caller.
+    // Add all at once so bindings resolve in a single conversion.
+    for (const el of elements) {
+      this.addSkeletonElement(el);
+    }
+
+    // After commit, expand layout cursor if the diagram was tall
+    const maxY = Math.max(...elements.map(e => (e.y || 0) + (e.height || 0)));
+    if (maxY > this.nextFreeY) {
+      this.nextFreeY = maxY + 80;
+      this.cursorY = this.nextFreeY;
+    }
+  }
+
+  getCompactSummary(): string {
+    const els = this.elements.slice(-60);
+    const shapes = els
+      .filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))
+      .map(e => {
+        const label = (e as any).label?.text;
+        return label ? `${e.id}("${label.replace(/\n/g, ' ')}")` : e.id;
+      });
+    const arrows = els
+      .filter(e => e.type === 'arrow')
+      .map(e => {
+        const s = (e as any).start?.id || '?';
+        const t = (e as any).end?.id || '?';
+        const lbl = (e as any).label?.text;
+        return lbl ? `${s}→${t}("${lbl}")` : `${s}→${t}`;
+      });
+    const texts = els
+      .filter(e => e.type === 'text')
+      .map(e => `"${((e as any).text || '').slice(0, 40)}"`);
+
+    const parts: string[] = [];
+    if (shapes.length) parts.push(`Shapes: ${shapes.join(', ')}`);
+    if (arrows.length) parts.push(`Arrows: ${arrows.join(', ')}`);
+    if (texts.length)  parts.push(`Text: ${texts.join(' | ')}`);
+    return parts.join('. ') || 'Board is empty.';
   }
 
   private readonly STAGE_FULL_Y = 420;
@@ -141,6 +201,8 @@ export class AvelutBoardController {
   public initBoard(title: string): void {
     this.lessonTitle = title;
     this.cursorY = 90;
+    this.nextFreeY = 100;
+    this.lastAnnotationY = 100;
     try {
       const titleEls = convertToExcalidrawElements([
         {
@@ -222,12 +284,6 @@ export class AvelutBoardController {
     }
   }
 
-  private reserveVerticalSpace(height: number): number {
-    const y = this.cursorY;
-    this.cursorY += height + 80; // 80px gap
-    return y;
-  }
-
   private isStageFull(): boolean {
     return this.cursorY >= this.STAGE_FULL_Y;
   }
@@ -245,6 +301,8 @@ export class AvelutBoardController {
   private _clearStage(): void {
     this.elements = this.elements.filter(el => el.customData?.zone !== 'stage');
     this.cursorY = 90;
+    this.nextFreeY = 100;
+    this.lastAnnotationY = 100;
     this.syncScene();
   }
 
@@ -405,9 +463,13 @@ export class AvelutBoardController {
       const titleEl = this.elements.find(el => el.customData?.zone === 'header' || (el.type === 'text' && el.y < 60));
       this.elements = titleEl ? [titleEl] : [];
       this.cursorY = 90;
+      this.nextFreeY = 100;
+      this.lastAnnotationY = 100;
     } else {
       this.elements = [];
       this.cursorY = 90;
+      this.nextFreeY = 100;
+      this.lastAnnotationY = 100;
     }
     this.syncScene();
   }
@@ -533,7 +595,7 @@ export class AvelutBoardController {
       estimatedHeight = 240;
     }
 
-    const startY = this.reserveVerticalSpace(estimatedHeight);
+    const startY = this.reserveVerticalSpace(estimatedHeight).y;
 
     switch (diagramType) {
       case 'collision': this.drawCollisionDiagram(startX, startY, data); break;
