@@ -441,6 +441,7 @@ export class AvelutBoardController {
     color?: string;
     strokeColor?: string;
     strokeWidth?: number;
+    strokeStyle?: 'solid' | 'dashed' | 'dotted';
   }): void {
     this.actionQueue.push(() => {
       const {
@@ -456,6 +457,7 @@ export class AvelutBoardController {
         color,
         strokeColor = color || '#1971c2',
         strokeWidth = 2,
+        strokeStyle,
       } = args;
 
       const skeleton: any = {
@@ -468,6 +470,7 @@ export class AvelutBoardController {
         points: [[0, 0], [endX - startX, endY - startY]],
         strokeColor,
         strokeWidth,
+        ...(strokeStyle ? { strokeStyle } : {}),
         endArrowhead: 'arrow',
         customData: { zone: 'stage' },
       };
