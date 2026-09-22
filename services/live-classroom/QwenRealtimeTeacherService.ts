@@ -330,7 +330,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Immediately call board_action to write the lesson topic title at the top of the whiteboard, greet the student warmly in one sentence, and begin teaching right away.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Immediately call board_action to write the lesson topic title at the top of the whiteboard. Greet the student warmly in one sentence, and then continuously teach the first core concept without stopping to wait.`,
         }],
       },
     });

@@ -93,16 +93,18 @@ export class AvelutBoardController {
   private pendingSkeletons: any[] = [];
   private flushScheduled = false;
 
-  // Fixed board geometry
-  private readonly BOARD_WIDTH = 1400;
-  private readonly BOARD_HEIGHT = 700;
+  // Mobile-first board geometry
+  private readonly MOBILE_BOARD_WIDTH = 360;
+  private readonly MOBILE_CARD_WIDTH = 300;
+  private readonly MOBILE_CARD_HEIGHT = 76;
   private readonly STAGE_TOP = 80;
-  private readonly STAGE_BOTTOM = 400;
+  private readonly STAGE_BOTTOM = 3000;
   private readonly NOTES_TOP = 410;
-  private readonly NOTES_BOTTOM = 680;
+  private readonly NOTES_BOTTOM = 2800;
 
-  private clampX(x: number, w = 0) {
-    return Math.max(20, Math.min(x, this.BOARD_WIDTH - w - 20));
+  private clampX(x: number, w = 300) {
+    const maxX = Math.max(20, this.MOBILE_BOARD_WIDTH - w - 10);
+    return Math.max(20, Math.min(x, maxX));
   }
 
   private clampY(y: number, h = 0) {
@@ -235,13 +237,16 @@ export class AvelutBoardController {
       return;
     }
     try {
+      // Auto-scroll vertically when content extends below 360px
+      // Keep scrollX locked at 0 so the mobile column remains fixed horizontally
+      const targetScrollY = this.cursorY > 360 ? -(this.cursorY - 260) : 0;
 
       this.api.updateScene({
         elements: [...this.elements],
         appState: {
           zoom: { value: 1.0 as any },
           scrollX: 0,
-          scrollY: 0,
+          scrollY: targetScrollY,
         },
       });
     } catch (e) {
@@ -332,9 +337,9 @@ export class AvelutBoardController {
     this.clearStageIfFull();
 
     const fontSize = this.fontSizeToNumber(args?.fontSize);
-    const x = this.clampX(args?.x ?? 50, 100);
-    const y = this.clampY(args?.y ?? this.cursorY, 40);
-    const color = args?.color ?? '#FAFAFA';
+    const x = this.clampX(args?.x ?? 30, 20);
+    const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
+    const color = args?.color ?? '#F8FAFC';
 
     this.appendElements([{
       type: 'text',
@@ -349,7 +354,7 @@ export class AvelutBoardController {
 
     if (args?.y === undefined) {
       const lines = text.split('\n').length;
-      this.cursorY = y + Math.max(36, lines * fontSize * 1.4 + 12);
+      this.cursorY = y + Math.max(36, lines * fontSize * 1.4 + 14);
     }
   }
 
@@ -362,9 +367,9 @@ export class AvelutBoardController {
 
     const els = convertToExcalidrawElements([{
       type: 'rectangle',
-      x: 50,
-      y: 410,
-      width: Math.min(Math.max(formulaText.length * 14 + 40, 240), 550),
+      x: 30,
+      y: this.cursorY + 10,
+      width: Math.min(Math.max(formulaText.length * 14 + 40, 240), this.MOBILE_CARD_WIDTH),
       height: 48,
       strokeColor: '#FDE047',
       backgroundColor: '#1E1B4B',
@@ -375,6 +380,7 @@ export class AvelutBoardController {
     }]);
 
     this.elements = [...this.elements, ...els];
+    this.cursorY += 68;
     this.syncScene();
   }
 
@@ -385,45 +391,49 @@ export class AvelutBoardController {
     const {
       id = `shape_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
-      x = 300,
+      x = 30,
       y = this.cursorY,
-      width = 180,
-      height = 90,
+      width = this.MOBILE_CARD_WIDTH,
+      height = this.MOBILE_CARD_HEIGHT,
       label,
       color,
-      strokeColor = color || '#1e1e1e',
-      backgroundColor = '#ffec99',
+      strokeColor = color || '#38BDF8',
+      backgroundColor = args.backgroundColor || '#1E293B',
       strokeStyle = 'solid',
       fillStyle = 'solid',
     } = args;
 
+    const clampedX = this.clampX(x, width);
+    const clampedY = Math.max(this.STAGE_TOP, y);
+
     const el: any = {
       type,
       id,
-      x: this.clampX(x, width),
-      y: this.clampY(y, height),
-      width: Math.min(width, 800),
-      height: Math.min(height, 400),
+      x: clampedX,
+      y: clampedY,
+      width: Math.min(width, this.MOBILE_CARD_WIDTH),
+      height: Math.min(height, 120),
       strokeColor,
       backgroundColor,
       fillStyle,
       strokeWidth: 2,
       strokeStyle,
-      roughness: 1,
+      roughness: 0.5,
       roundness: { type: 3 },
       customData: { zone: 'stage' },
     };
 
     if (label) {
-      if (typeof label === 'string') {
-        el.label = { text: label.trim(), fontSize: 18, strokeColor: '#1e1e1e' };
-      } else {
-        el.label = label;
-      }
+      const text = typeof label === 'string' ? label.trim() : label.text.trim();
+      el.label = {
+        text,
+        fontSize: 16,
+        strokeColor: '#FFFFFF', // High-contrast white label inside dark card
+      };
     }
 
     this.appendElements([el], 'stage');
-    this.cursorY = Math.max(this.cursorY, y + height + 30);
+    this.cursorY = Math.max(this.cursorY, clampedY + height + 24);
   }
 
   public drawArrow(args: {
@@ -444,40 +454,56 @@ export class AvelutBoardController {
     strokeStyle?: 'solid' | 'dashed' | 'dotted';
   }): void {
     this.actionQueue.push(() => {
-      const {
-        fromId,
-        toId,
-        startId = fromId,
-        endId = toId,
-        startX = args.x ?? 200,
-        startY = args.y ?? 200,
-        endX = (args.x ?? 200) + 160,
-        endY = args.y ?? 200,
-        label,
-        color,
-        strokeColor = color || '#1971c2',
-        strokeWidth = 2,
-        strokeStyle,
-      } = args;
+      const from = args.fromId || args.startId;
+      const to = args.toId || args.endId;
+
+      const fromEl = from ? this.elements.find(e => e.id === from) : null;
+      const toEl = to ? this.elements.find(e => e.id === to) : null;
+
+      let startX: number;
+      let startY: number;
+      let endX: number;
+      let endY: number;
+
+      if (fromEl && toEl) {
+        // Vertical connector: from bottom center of fromEl to top center of toEl
+        startX = fromEl.x + fromEl.width / 2;
+        startY = fromEl.y + fromEl.height;
+        endX = toEl.x + toEl.width / 2;
+        endY = toEl.y;
+      } else {
+        startX = this.clampX(args.startX ?? (this.MOBILE_BOARD_WIDTH / 2), 20);
+        startY = args.startY ?? Math.max(this.STAGE_TOP, this.cursorY - 24);
+        endX = startX;
+        endY = args.endY ?? startY + 36;
+      }
+
+      const strokeColor = args.color || args.strokeColor || '#38BDF8';
 
       const skeleton: any = {
         type: 'arrow',
         id: `arr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         x: startX,
         y: startY,
-        width: Math.abs(endX - startX) || 20,
-        height: Math.abs(endY - startY) || 20,
+        width: Math.abs(endX - startX) || 10,
+        height: Math.abs(endY - startY) || 30,
         points: [[0, 0], [endX - startX, endY - startY]],
         strokeColor,
-        strokeWidth,
-        ...(strokeStyle ? { strokeStyle } : {}),
+        strokeWidth: 2,
+        ...(args.strokeStyle ? { strokeStyle: args.strokeStyle } : {}),
         endArrowhead: 'arrow',
         customData: { zone: 'stage' },
       };
 
-      if (startId) skeleton.start = { id: startId };
-      if (endId) skeleton.end = { id: endId };
-      if (label) skeleton.label = { text: label.trim(), fontSize: 14, strokeColor };
+      if (from) skeleton.start = { id: from };
+      if (to) skeleton.end = { id: to };
+      if (args.label) {
+        skeleton.label = {
+          text: args.label.trim(),
+          fontSize: 13,
+          strokeColor: '#E2E8F0', // High contrast readable text
+        };
+      }
 
       this.appendElements([skeleton], 'stage');
     });
@@ -1613,6 +1639,9 @@ export class AvelutBoardController {
             return { status: 'error', action: 'draw', message: 'No elements provided.' };
           }
 
+          const NEON_PALETTE = ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6'];
+          let colorIdx = 0;
+
           // Pass 1: shapes (must exist before arrows reference them)
           for (const el of args.elements) {
             if (el.kind === 'arrow') continue;
@@ -1621,7 +1650,7 @@ export class AvelutBoardController {
 
             if (el.kind === 'text') {
               this.writeText(el.text || '', {
-                x: el.x,
+                x: el.x ?? 30,
                 y: el.y,
                 fontSize: 'medium',
               });
@@ -1631,16 +1660,19 @@ export class AvelutBoardController {
                 el.kind === 'diamond' ? 'diamond' :
                 'rectangle';
 
+              const strokeColor = NEON_PALETTE[colorIdx % NEON_PALETTE.length];
+              colorIdx++;
+
               this.drawShape({
                 type: shapeType,
                 id,
                 label: el.text || '',
-                x: el.x ?? 200,
-                y: el.y ?? 200,
-                width: 180,
-                height: 70,
+                x: el.x ?? 30,
+                y: el.y,
+                width: this.MOBILE_CARD_WIDTH,
+                height: this.MOBILE_CARD_HEIGHT,
                 backgroundColor: '#1E293B',
-                strokeColor: '#38BDF8',
+                strokeColor,
               });
             }
           }
