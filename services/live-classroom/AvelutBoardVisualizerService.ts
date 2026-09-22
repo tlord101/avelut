@@ -414,26 +414,14 @@ Return ONLY the JSON object described in the system prompt.`;
 
   /**
    * Called as speech transcripts arrive from QwenRealtimeTeacherService.
-   * When illustration phrases are detected (imagine, draw, on the board, …),
-   * triggers the text model to generate a diagram.
+   * Stores the latest transcript for context without triggering unrequested background diagrams.
    */
-  public processSpeechTranscript(transcript: string, isTurnFinal = false): void {
+  public processSpeechTranscript(transcript: string, _isTurnFinal = false): void {
     if (!transcript) return;
     this.speechBuffer = transcript;
-
-    const slice = transcript.slice(-400);
-    if (!ILLUSTRATION_PHRASE_RE.test(slice)) return;
-
-    const now = Date.now();
-    if (now - this.lastPhraseTriggerAt < this.phraseDebounceMs) return;
-    if (this.isProcessing) return;
-
-    // Debounce slightly so we get a fuller sentence after the trigger phrase
-    if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
-    this.speechDebounceTimer = setTimeout(() => {
-      this.lastPhraseTriggerAt = Date.now();
-      void this.triggerIllustrationFromSpeech(slice);
-    }, isTurnFinal ? 400 : 900);
+    // Autonomous phrase-triggered illustration is disabled:
+    // In Director/Actor architecture, diagrams are drawn exclusively via the teacher's
+    // explicit tool calls (draw_component, illustrate, annotate) or student queries.
   }
 
   private async triggerIllustrationFromSpeech(recentSpeech: string): Promise<void> {

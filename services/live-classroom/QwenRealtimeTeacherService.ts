@@ -327,6 +327,10 @@ export class QwenRealtimeTeacherService {
     this.sendJson({
       event_id: `greet_manual_${Date.now()}`,
       type: 'response.create',
+      response: {
+        modalities: ['text', 'audio'],
+        instructions: `Greet the student warmly in 1-2 short sentences and immediately call your board tool ${compHint} to render the illustration on the board!`,
+      },
     });
   }
 
@@ -366,7 +370,6 @@ export class QwenRealtimeTeacherService {
         },
         tools: this.buildToolDeclarations(),
         tool_choice: 'auto',
-        parallel_tool_calls: true,
       },
     });
 
@@ -374,10 +377,41 @@ export class QwenRealtimeTeacherService {
   }
 
   private buildToolDeclarations() {
-    return [
+    const rawTools = [
       {
-        type: "function",
-        name: "illustrate",
+        name: 'draw_component',
+        description: 'Render a pre-made, authentic engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate". Always call this immediately whenever discussing these physical components or introducing the lesson topic!',
+        parameters: {
+          type: 'object',
+          properties: {
+            component: {
+              type: 'string',
+              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate'],
+              description: 'The pre-made component to render',
+            },
+            label: { type: 'string', description: 'Component label or value (e.g. "100 Ω", "9V", "AND Gate")' },
+            caption: { type: 'string', description: 'Governing equation or short note (e.g. "V = I · R")' },
+          },
+          required: ['component'],
+        },
+      },
+      {
+        name: 'annotate',
+        description: 'Write a short phrase directly on the board at a specific position. Use for quick callouts while talking: formulas you\'re deriving, step labels, terminology, quick definitions. This is FAST (no design step). Use it liberally between illustrate calls.',
+        parameters: {
+          type: 'object',
+          properties: {
+            text: { type: 'string' },
+            x: { type: 'number', description: '0-1600. Default 300.' },
+            y: { type: 'number', description: '0-900. Default auto-place below last annotation.' },
+            fontSize: { type: 'number', description: 'Default 24. Use 48+ for headings.' },
+            color: { type: 'string', description: 'Hex. Default #1e1e1e.' },
+          },
+          required: ['text'],
+        },
+      },
+      {
+        name: 'illustrate',
         description: `Request a detailed diagram from the board designer. Use this for ANY diagram with more than 3 shapes, concept maps, flowcharts, energy-flow diagrams, cycles, or equation setups.
 
 CRITICAL BEHAVIORAL RULE: Before calling this tool, you MUST verbally announce it AND continue speaking for at least 5 seconds. Then call the tool while still narrating. After it returns, keep teaching by referring to what was drawn.
@@ -389,112 +423,73 @@ Examples of the required preamble:
 
 You must NEVER call this tool silently. Never go silent while it runs.`,
         parameters: {
-          type: "object",
-          properties: {
-            topic: { type: "string", description: "What the diagram should teach, e.g. 'heat engine energy flow with efficiency equation'" },
-            template: {
-              type: "string",
-              enum: ["flowchart", "concept_map", "comparison", "cycle", "equation_setup", "custom"],
-              description: "Layout template. Prefer a named template. Use 'custom' only for illustrative scenes that don't fit any template (e.g. 'stacked balls vs scattered balls')."
-            },
-            context: { type: "string", description: "Teaching context to inform tone and complexity, e.g. 'first-year university, pre-Kelvin discussion'" },
-            constraints: {
-              type: "object",
-              properties: {
-                max_nodes: { type: "number" },
-                orientation: { type: "string", enum: ["horizontal", "vertical"] },
-                color_palette: { type: "string", enum: ["default", "thermal", "cool", "warn"] }
-              }
-            }
-          },
-          required: ["topic", "template"]
-        }
-      },
-      {
-        type: "function",
-        name: "annotate",
-        description: "Write a short phrase directly on the board at a specific position. Use for quick callouts while talking: formulas you're deriving, step labels, terminology, quick definitions. This is FAST (no design step). Use it liberally between illustrate calls.",
-        parameters: {
-          type: "object",
-          properties: {
-            text: { type: "string" },
-            x: { type: "number", description: "0-1600. Default 300." },
-            y: { type: "number", description: "0-900. Default auto-place below last annotation." },
-            fontSize: { type: "number", description: "Default 24. Use 48+ for headings." },
-            color: { type: "string", description: "Hex. Default #1e1e1e." }
-          },
-          required: ["text"]
-        }
-      },
-      {
-        type: 'function',
-        name: 'draw_component',
-        description: 'Render a pre-made, high-quality engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate". Always prefer this whenever introducing physical components!',
-        parameters: {
           type: 'object',
           properties: {
-            component: {
+            topic: { type: 'string', description: 'What the diagram should teach, e.g. "heat engine energy flow with efficiency equation"' },
+            template: {
               type: 'string',
-              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate'],
-              description: 'The pre-made component to render'
+              enum: ['flowchart', 'concept_map', 'comparison', 'cycle', 'equation_setup', 'custom'],
+              description: 'Layout template. Prefer a named template.',
             },
-            label: { type: 'string', description: 'Component label or value (e.g. "100 Ω", "9V", "AND Gate")' },
-            caption: { type: 'string', description: 'Governing equation or short note (e.g. "V = I · R")' }
+            context: { type: 'string', description: 'Teaching context to inform tone and complexity' },
+            constraints: {
+              type: 'object',
+              properties: {
+                max_nodes: { type: 'number' },
+                orientation: { type: 'string', enum: ['horizontal', 'vertical'] },
+                color_palette: { type: 'string', enum: ['default', 'thermal', 'cool', 'warn'] },
+              },
+            },
           },
-          required: ['component']
-        }
+          required: ['topic', 'template'],
+        },
       },
       {
-        type: 'function',
         name: 'write_text',
         description: 'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
         parameters: {
           type: 'object',
           properties: {
-            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' }
+            text: { type: 'string', description: 'Text or formula to display (formulas, key definitions, or concise points only)' },
           },
           required: ['text'],
         },
       },
       {
-        type: 'function',
         name: 'set_formula',
         description: 'Display a highlighted law or equation in the formula card slot.',
         parameters: {
           type: 'object',
           properties: {
-            formula: { type: 'string', description: 'The formula to display (e.g. F = ma)' }
+            formula: { type: 'string', description: 'The formula to display (e.g. F = ma)' },
           },
           required: ['formula'],
         },
       },
       {
-        type: 'function',
         name: 'write_keywords',
         description: 'Write a row of highlighted keyword pills.',
         parameters: {
           type: 'object',
           properties: {
-            keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' }
+            keywords: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 technical terms' },
           },
           required: ['keywords'],
         },
       },
       {
-        type: 'function',
         name: 'highlight_concept',
         description: 'Highlight or circle an existing board element by label text.',
         parameters: {
           type: 'object',
           properties: {
             targetText: { type: 'string' },
-            style: { type: 'string', enum: ['circle', 'box', 'underline'] }
+            style: { type: 'string', enum: ['circle', 'box', 'underline'] },
           },
           required: ['targetText'],
         },
       },
       {
-        type: 'function',
         name: 'clear_stage',
         description: 'Clears the main diagram stage so new diagrams replace old ones cleanly.',
         parameters: {
@@ -503,7 +498,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         },
       },
       {
-        type: 'function',
         name: 'clear_board',
         description: 'Clear the entire canvas (keeps lesson title).',
         parameters: {
@@ -512,31 +506,43 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         },
       },
       {
-        type: 'function',
         name: 'update_text',
         description: 'Update or edit the text of an existing element.',
         parameters: {
           type: 'object',
           properties: {
             targetText: { type: 'string' },
-            newText: { type: 'string' }
+            newText: { type: 'string' },
           },
           required: ['targetText', 'newText'],
         },
       },
       {
-        type: 'function',
         name: 'remove_component',
         description: 'Remove a component or text matching target text from the board.',
         parameters: {
           type: 'object',
           properties: {
-            targetText: { type: 'string' }
+            targetText: { type: 'string' },
           },
           required: ['targetText'],
         },
       },
     ];
+
+    // Dual format: satisfies both OpenAI Realtime API (flat properties)
+    // and DashScope Realtime API (nested function property)
+    return rawTools.map((t) => ({
+      type: 'function',
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
   }
 
   // ── Message handler ───────────────────────────────────────────────────────
@@ -621,14 +627,14 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
       case 'response.output_item.added': {
         liveLogger.log(`[QwenRealtime] response.output_item.added:`, event.item?.type);
-        if (event.item?.type === 'function_call') {
+        if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
           const key = item.call_id || item.id;
           if (key) {
             const entry = {
-              name: item.name,
+              name: item.name || item.function?.name,
               call_id: item.call_id || item.id,
-              arguments: item.arguments || '',
+              arguments: item.arguments || item.function?.arguments || '',
             };
             this.pendingToolCalls.set(key, entry);
             if (item.id) this.pendingToolCalls.set(item.id, entry);
@@ -649,9 +655,9 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       case 'response.function_call_arguments.done': {
         const key = event.call_id || event.item_id;
         const pending = key ? this.pendingToolCalls.get(key) : null;
-        const toolName = event.name || pending?.name;
+        const toolName = event.name || event.function?.name || pending?.name;
         const callId = event.call_id || pending?.call_id || key;
-        const argsStr = event.arguments || pending?.arguments || '{}';
+        const argsStr = event.arguments || event.function?.arguments || pending?.arguments || '{}';
 
         liveLogger.log('[QwenRealtime] TOOL CALL arguments.done:', {
           name: toolName,
@@ -667,11 +673,11 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
       case 'response.output_item.done': {
         liveLogger.log(`[QwenRealtime] response.output_item.done:`, event.item?.type);
-        if (event.item?.type === 'function_call') {
+        if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
           const callId = item.call_id || item.id;
-          const toolName = item.name;
-          const argsStr = item.arguments || '{}';
+          const toolName = item.name || item.function?.name;
+          const argsStr = item.arguments || item.function?.arguments || '{}';
           if (toolName && callId) {
             this.executeToolCall(callId, toolName, argsStr);
           }
