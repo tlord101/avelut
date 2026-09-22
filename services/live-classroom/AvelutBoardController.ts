@@ -239,7 +239,7 @@ export class AvelutBoardController {
         ...el,
         customData: { ...(el.customData || {}), zone },
       }));
-      const converted = convertToExcalidrawElements(tagged);
+      const converted = convertToExcalidrawElements(tagged, { regenerateIds: false });
       this.elements = [...this.elements, ...converted];
       this.syncScene();
     } catch (err) {
