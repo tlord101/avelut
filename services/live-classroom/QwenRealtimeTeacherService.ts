@@ -14,9 +14,8 @@ import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
 import type { AppSettings } from '../../types';
 
-// ─── Centralized model identifier ────────────────────────────────────────────
-// Update this single constant when Alibaba releases a newer realtime model.
-export const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
+export const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
+export const QWEN_FALLBACK_MODEL = 'qwen-omni-turbo-realtime';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -67,7 +66,7 @@ export class QwenRealtimeTeacherService {
   private isStarting = false;
   private isSessionUpdated = false;
   private retriedWithDefaultVoice = false;
-
+  private currentModel = QWEN_REALTIME_MODEL;
   private boardController = avelutBoardController;
 
   // ── State helpers ─────────────────────────────────────────────────────────
@@ -187,11 +186,14 @@ export class QwenRealtimeTeacherService {
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
 
-  private async connectWebSocket(): Promise<void> {
+  private async connectWebSocket(modelToUse: string = this.currentModel): Promise<void> {
+    this.currentModel = modelToUse;
     let wsUrl: string;
+    const modelParam = `model=${encodeURIComponent(modelToUse)}`;
 
     if (import.meta.env.VITE_QWEN_PROXY_URL) {
-      wsUrl = import.meta.env.VITE_QWEN_PROXY_URL;
+      const base = import.meta.env.VITE_QWEN_PROXY_URL;
+      wsUrl = base.includes('?') ? `${base}&${modelParam}` : `${base}?${modelParam}`;
     } else {
       const isCapacitorNative =
         typeof window !== 'undefined' &&
@@ -201,14 +203,14 @@ export class QwenRealtimeTeacherService {
 
       if (isCapacitorNative) {
         const productionHost = import.meta.env.VITE_APP_HOST || 'www.avelut.xyz';
-        wsUrl = `wss://${productionHost}/api/qwen-realtime`;
+        wsUrl = `wss://${productionHost}/api/qwen-realtime?${modelParam}`;
       } else {
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        wsUrl = `${proto}://${window.location.host}/api/qwen-realtime`;
+        wsUrl = `${proto}://${window.location.host}/api/qwen-realtime?${modelParam}`;
       }
     }
 
-    liveLogger.log('[QwenRealtime] Connecting via proxy:', wsUrl);
+    liveLogger.log('[QwenRealtime] Connecting via proxy:', wsUrl, `(model: ${modelToUse})`);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
@@ -288,7 +290,14 @@ export class QwenRealtimeTeacherService {
    * The session is already configured — just ask the model to begin.
    */
   public triggerInitialGreeting(): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      liveLogger.warn('[QwenRealtime] triggerInitialGreeting called but WebSocket is not open');
+      return;
+    }
+    if (this.state === 'error' || this.state === 'closed') {
+      liveLogger.warn('[QwenRealtime] triggerInitialGreeting skipped because state is:', this.state);
+      return;
+    }
     if (this.hasGreeted) {
       liveLogger.log('[QwenRealtime] Greeting already sent — skip');
       return;
@@ -412,7 +421,32 @@ export class QwenRealtimeTeacherService {
     }
 
     if (!event?.type) {
-      liveLogger.warn('[QwenRealtime] Event missing type. Payload:', event);
+      if (event?.code || event?.message) {
+        const errMsg = event.message || event.code;
+        liveLogger.error('[QwenRealtime] DashScope error response:', event);
+
+        // If the model does not exist on this workspace, auto-fallback to QWEN_FALLBACK_MODEL
+        if (typeof errMsg === 'string' && errMsg.includes('Model not exist') && this.currentModel !== QWEN_FALLBACK_MODEL) {
+          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" not available on workspace. Retrying automatically with "${QWEN_FALLBACK_MODEL}"...`);
+          this.currentModel = QWEN_FALLBACK_MODEL;
+          this.isSessionUpdated = false;
+          if (this.ws) {
+            try { this.ws.close(); } catch {}
+            this.ws = null;
+          }
+          this.connectWebSocket(QWEN_FALLBACK_MODEL).catch((err) => {
+            liveLogger.error('[QwenRealtime] Fallback connection failed:', err);
+            this.setState('error');
+            this.callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+          });
+          return;
+        }
+
+        this.setState('error');
+        this.callbacks.onError?.(new Error(`DashScope error [${event.code || 'UNKNOWN'}]: ${errMsg}`));
+      } else {
+        liveLogger.warn('[QwenRealtime] Event missing type. Payload:', event);
+      }
       return;
     }
 
@@ -544,6 +578,22 @@ export class QwenRealtimeTeacherService {
           this.sendSessionInit('Tina');
           return;
         }
+        if (typeof event.error?.message === 'string' && event.error.message.includes('Model not exist') && this.currentModel !== QWEN_FALLBACK_MODEL) {
+          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" not available on workspace. Retrying automatically with "${QWEN_FALLBACK_MODEL}"...`);
+          this.currentModel = QWEN_FALLBACK_MODEL;
+          this.isSessionUpdated = false;
+          if (this.ws) {
+            try { this.ws.close(); } catch {}
+            this.ws = null;
+          }
+          this.connectWebSocket(QWEN_FALLBACK_MODEL).catch((err) => {
+            liveLogger.error('[QwenRealtime] Fallback connection failed:', err);
+            this.setState('error');
+            this.callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+          });
+          return;
+        }
+        this.setState('error');
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
         break;
 

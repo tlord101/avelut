@@ -35,12 +35,17 @@ export const maxDuration = 300;
 
 // ── DashScope upstream ────────────────────────────────────────────────────────
 // Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts
-const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
+const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
 const WORKSPACE_ID =
   process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
-const DASHSCOPE_URL =
-  `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
-  `/api-ws/v1/realtime?model=${QWEN_REALTIME_MODEL}`;
+
+function getDashScopeUrl(targetModel?: string | null): string {
+  const model = (targetModel || process.env.QWEN_REALTIME_MODEL || QWEN_REALTIME_MODEL).trim();
+  return (
+    `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
+    `/api-ws/v1/realtime?model=${model}`
+  );
+}
 
 // ── Singleton WSS (reused across warm invocations) ────────────────────────────
 const wss = new WebSocketServer({ noServer: true });
@@ -77,9 +82,14 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
   const socket = req.socket as Socket;
   const head = Buffer.alloc(0);
 
+  // Extract model param from query string if supplied by client
+  const parsedUrl = new URL(req.url || '', 'http://localhost');
+  const clientRequestedModel = parsedUrl.searchParams.get('model');
+  const dashscopeUrl = getDashScopeUrl(clientRequestedModel);
+
   wss.handleUpgrade(req, socket, head, (clientWs) => {
     // Open the upstream connection to DashScope — with the auth header injected
-    const upstream = new WebSocket(DASHSCOPE_URL, {
+    const upstream = new WebSocket(dashscopeUrl, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'X-DashScope-WorkSpace': WORKSPACE_ID,

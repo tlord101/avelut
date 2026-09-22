@@ -50,7 +50,7 @@ export default defineConfig(({ command, mode }) => {
             target: 'ws://localhost:3001',
             ws: true,
             changeOrigin: true,
-            rewrite: () => '/qwen-realtime',
+            rewrite: (path) => path.replace(/^\/api\/qwen-realtime/, '/qwen-realtime'),
           },
           // Dev HTTP proxy: /api/alibaba-chat → backend API
           '/api/alibaba-chat': {

@@ -30,10 +30,15 @@ const PORT = parseInt(process.env.PORT_WS || '3001', 10);
 const API_KEY = process.env.ALIBABA_API_KEY || process.env.VITE_ALIBABA_API_KEY || '';
 const WORKSPACE_ID = process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
 // Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts and api/qwen-realtime.ts
-const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
-const DASHSCOPE_WS_URL =
-  `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
-  `/api-ws/v1/realtime?model=${QWEN_REALTIME_MODEL}`;
+const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
+
+function getDashScopeUrl(targetModel) {
+  const model = (targetModel || process.env.QWEN_REALTIME_MODEL || QWEN_REALTIME_MODEL).trim();
+  return (
+    `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
+    `/api-ws/v1/realtime?model=${model}`
+  );
+}
 
 if (!API_KEY) {
   console.error('[qwen-ws-proxy] ❌  ALIBABA_API_KEY is not set. Export it before starting.');
@@ -56,10 +61,14 @@ const wss = new WebSocketServer({ server: httpServer, path: '/qwen-realtime' });
 
 wss.on('connection', (clientSocket, req) => {
   const clientIp = req.socket.remoteAddress || 'unknown';
-  console.log(`[qwen-ws-proxy] 🔗 Client connected from ${clientIp}`);
+  const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const clientRequestedModel = parsedUrl.searchParams.get('model');
+  const upstreamUrl = getDashScopeUrl(clientRequestedModel);
+
+  console.log(`[qwen-ws-proxy] 🔗 Client connected from ${clientIp} (model: ${clientRequestedModel || QWEN_REALTIME_MODEL})`);
 
   // Open the upstream DashScope connection with proper Authorization header
-  const upstreamSocket = new WebSocket(DASHSCOPE_WS_URL, {
+  const upstreamSocket = new WebSocket(upstreamUrl, {
     headers: {
       'Authorization': `Bearer ${API_KEY}`,
       'X-DashScope-WorkSpace': WORKSPACE_ID,
