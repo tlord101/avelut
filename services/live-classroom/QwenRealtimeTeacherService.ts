@@ -70,6 +70,9 @@ export class QwenRealtimeTeacherService {
   private boardController = avelutBoardController;
   private hasReceivedAudioInCurrentResponse = false;
   private isAwaitingContinuation = false;
+  private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly STUDENT_WAIT_MAX_MS = 5000;
+  private isStudentSpeaking = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -81,6 +84,12 @@ export class QwenRealtimeTeacherService {
     if (this.state === s) return;
     this.state = s;
     this.callbacks.onStateChange?.(s);
+
+    if (s === 'listening') {
+      this.startStudentWaitTimer();
+    } else {
+      this.clearStudentWaitTimer();
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -141,6 +150,7 @@ export class QwenRealtimeTeacherService {
   /** Send a typed message into the realtime conversation */
   public sendTextMessage(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !text.trim()) return;
+    this.clearStudentWaitTimer();
     this.sendJson({
       event_id: `user_txt_${Date.now()}`,
       type: 'conversation.item.create',
@@ -159,6 +169,8 @@ export class QwenRealtimeTeacherService {
 
   /** Stop all audio and close the WebSocket cleanly */
   public endSession(): void {
+    this.clearStudentWaitTimer();
+    this.isStudentSpeaking = false;
     this.stopPlayback();
 
     this.processorNode?.disconnect();
@@ -330,7 +342,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Immediately call board_action to write the lesson topic title at the top of the whiteboard. Greet the student warmly in one sentence, and then continuously teach the first core concept without stopping to wait.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. In this opening stage, call board_action to write the lesson topic title at the top of the whiteboard and draw the first concept element. Greet the student warmly, explain the intuition, and teach interactively!`,
         }],
       },
     });
@@ -342,6 +354,65 @@ export class QwenRealtimeTeacherService {
         modalities: ['text', 'audio'],
       },
     });
+  }
+
+  // ── 5-Second Student Silence Watchdog ─────────────────────────────────────
+
+  private startStudentWaitTimer(): void {
+    this.clearStudentWaitTimer();
+    if (
+      this.isStudentSpeaking ||
+      !this.hasGreeted ||
+      this.isAwaitingContinuation ||
+      this.state !== 'listening' ||
+      !this.ws ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    this.studentWaitTimer = setTimeout(() => {
+      this.studentWaitTimer = null;
+      if (
+        this.isStudentSpeaking ||
+        this.state !== 'listening' ||
+        this.isAwaitingContinuation ||
+        !this.ws ||
+        this.ws.readyState !== WebSocket.OPEN
+      ) {
+        return;
+      }
+
+      liveLogger.log('[QwenRealtime] ⏱️ 5s student silence elapsed — prompting teacher to step in and continue');
+
+      this.sendJson({
+        event_id: `silence_nudge_${Date.now()}`,
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{
+            type: 'input_text',
+            text: '[The student was quiet for 5 seconds. As an encouraging, expert human tutor, warmly step in, provide the explanation or answer, call board_action to illustrate or write on the board, and smoothly continue teaching!]',
+          }],
+        },
+      });
+
+      this.sendJson({
+        event_id: `resp_silence_${Date.now()}`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+        },
+      });
+    }, this.STUDENT_WAIT_MAX_MS);
+  }
+
+  private clearStudentWaitTimer(): void {
+    if (this.studentWaitTimer) {
+      clearTimeout(this.studentWaitTimer);
+      this.studentWaitTimer = null;
+    }
   }
 
   // ── Session initialisation ────────────────────────────────────────────────
@@ -389,9 +460,9 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'board_action',
         description:
-          'Control the educational whiteboard while teaching. Use this whenever a visual, ' +
-          'keyword, equation, diagram, relationship, or written concept will improve understanding. ' +
-          'Call it naturally as part of teaching — do not narrate that you are calling it.',
+          'Control the educational whiteboard while teaching. Drawing an element or writing on the board is MANDATORY in each stage. ' +
+          'Call this tool whenever explaining a concept, introducing a formula, connecting ideas with arrows, or working an example. ' +
+          'Call it naturally as part of teaching — do not narrate that you are calling a function.',
         parameters: {
           type: 'object',
           properties: {
@@ -512,6 +583,7 @@ export class QwenRealtimeTeacherService {
         // New response turn — reset transcript accumulator
         this.fullTranscript = '';
         this.hasReceivedAudioInCurrentResponse = false;
+        this.clearStudentWaitTimer();
         liveLogger.log('[QwenRealtime] response.created');
         break;
 
@@ -519,15 +591,16 @@ export class QwenRealtimeTeacherService {
       case 'input_audio_buffer.speech_started':
         // Qwen's VAD says the student is speaking — stop teacher audio cleanly.
         liveLogger.log('[QwenRealtime] 🎙️ Student speech started — stopping teacher audio');
+        this.isStudentSpeaking = true;
+        this.clearStudentWaitTimer();
         this.stopPlayback();
         this.setState('listening');
         break;
 
       case 'input_audio_buffer.speech_stopped':
         liveLogger.log('[QwenRealtime] 🎙️ Student speech stopped — awaiting model response');
-        if (this.state === 'listening') {
-          // Will transition to speaking when response audio arrives
-        }
+        this.isStudentSpeaking = false;
+        this.clearStudentWaitTimer();
         break;
 
       case 'input_audio_buffer.committed':
@@ -750,6 +823,11 @@ export class QwenRealtimeTeacherService {
       for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
       const rms = Math.sqrt(sum / samples.length);
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
+
+      // If student is speaking (rms > 0.04) while in listening state, defer/reset the 5s silence watchdog
+      if (rms > 0.04 && this.state === 'listening' && this.studentWaitTimer) {
+        this.startStudentWaitTimer();
+      }
 
       // Float32 → Int16 → Base64
       const pcm16 = new Int16Array(samples.length);
