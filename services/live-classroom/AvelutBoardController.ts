@@ -1121,9 +1121,131 @@ export class AvelutBoardController {
       this.drawHeatEngineComponent(sx, sy, label, caption);
     } else if (norm.includes('water') || norm.includes('pipe')) {
       this.drawWaterPipeAnalogy(sx, sy, label, caption);
+    } else if (norm.includes('diode') || norm.includes('led') || norm.includes('pnjunction')) {
+      this.drawDiodeComponent(sx, sy, label, caption);
     } else {
       this.drawResistorComponent(sx, sy, label, caption);
     }
+  }
+
+  private drawDiodeComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      // Left terminal wire (Anode)
+      {
+        type: 'line',
+        x: sx,
+        y: sy + 40,
+        width: 80,
+        height: 0,
+        points: [[0, 0], [80, 0]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 3,
+      },
+      // Terminal dot left
+      {
+        type: 'ellipse',
+        x: sx - 4,
+        y: sy + 36,
+        width: 8,
+        height: 8,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#38BDF8',
+        fillStyle: 'solid',
+      },
+      // Anode label
+      {
+        type: 'text',
+        x: sx + 10,
+        y: sy + 15,
+        text: 'Anode (+)',
+        fontSize: 14,
+        strokeColor: '#38BDF8',
+      },
+      // Diode triangle (points right)
+      {
+        type: 'line',
+        x: sx + 80,
+        y: sy + 40,
+        width: 50,
+        height: 50,
+        points: [
+          [0, -25],
+          [50, 0],
+          [0, 25],
+          [0, -25],
+        ],
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0284C7',
+        fillStyle: 'solid',
+        strokeWidth: 2.5,
+      },
+      // Cathode vertical bar
+      {
+        type: 'line',
+        x: sx + 130,
+        y: sy + 40,
+        width: 0,
+        height: 54,
+        points: [
+          [0, -27],
+          [0, 27],
+        ],
+        strokeColor: '#38BDF8',
+        strokeWidth: 3.5,
+      },
+      // Right terminal wire (Cathode)
+      {
+        type: 'line',
+        x: sx + 130,
+        y: sy + 40,
+        width: 80,
+        height: 0,
+        points: [[0, 0], [80, 0]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 3,
+      },
+      // Terminal dot right
+      {
+        type: 'ellipse',
+        x: sx + 206,
+        y: sy + 36,
+        width: 8,
+        height: 8,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#38BDF8',
+        fillStyle: 'solid',
+      },
+      // Cathode label
+      {
+        type: 'text',
+        x: sx + 140,
+        y: sy + 15,
+        text: 'Cathode (-)',
+        fontSize: 14,
+        strokeColor: '#34D399',
+      },
+      // Component label
+      {
+        type: 'text',
+        x: sx + 70,
+        y: sy + 75,
+        text: label || 'PN Junction Diode',
+        fontSize: 16,
+        strokeColor: '#FAFAFA',
+      },
+      // Governing equation / caption
+      {
+        type: 'text',
+        x: sx + 10,
+        y: sy + 110,
+        text: caption || 'Forward Bias: V_f ≈ 0.7V (Silicon) | Unidirectional Current Flow',
+        fontSize: 14,
+        strokeColor: '#FDE047',
+      },
+    ];
+
+    this.appendElements(els, 'stage');
+    this.cursorY = Math.max(this.cursorY, sy + 150);
   }
 
   private drawResistorComponent(sx: number, sy: number, label?: string, caption?: string): void {

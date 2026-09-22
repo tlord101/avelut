@@ -123,6 +123,17 @@ Return ONLY the JSON object described in the system prompt.`;
     const norm = topic.toLowerCase();
 
     // 1. Check for physical / electrical components first
+    if (norm.includes('diode') || norm.includes('led') || norm.includes('pn junction')) {
+      elements.push(
+        { type: 'rectangle', id: 'anode_box', x: 260, y: y0 + 60, width: 200, height: 90, roundness: { type: 3 }, backgroundColor: '#ffec99', label: { text: 'Anode (+)\nP-type semiconductor', fontSize: 16 } },
+        { type: 'rectangle', id: 'cathode_box', x: 680, y: y0 + 60, width: 200, height: 90, roundness: { type: 3 }, backgroundColor: '#a5d8ff', label: { text: 'Cathode (-)\nN-type semiconductor', fontSize: 16 } },
+        { type: 'arrow', id: 'forward_current', x: 460, y: y0 + 105, width: 220, height: 0, points: [[0, 0], [220, 0]], endArrowhead: 'arrow', start: { id: 'anode_box' }, end: { id: 'cathode_box' }, label: { text: 'Forward Current (I_F) →', fontSize: 14 } },
+        { type: 'text', id: 'eq', x: 420, y: y0 + 190, text: 'I = I_s · (e^{V / (η V_T)} - 1)', fontSize: 26 },
+        { type: 'text', id: 'note', x: 380, y: y0 + 240, text: 'Forward Knee Voltage V_f ≈ 0.7V (Silicon) | Conducts one-way only', fontSize: 16 },
+      );
+      return { elements, meta: { title: 'Semiconductor Diode Operation' } };
+    }
+
     if (norm.includes('resistor') || norm.includes('circuit')) {
       elements.push(
         { type: 'rectangle', id: 'src', x: 260, y: y0 + 60, width: 160, height: 90, roundness: { type: 3 }, backgroundColor: '#ffec99', label: { text: 'DC Source\n[ 9V Battery ]', fontSize: 16 } },
@@ -297,7 +308,7 @@ Return ONLY the JSON object described in the system prompt.`;
     try {
       const norm = (topicTitle || '').toLowerCase();
       // Fast path for pre-made engineering and physical components
-      if (norm.includes('resistor') || norm.includes('circuit') || norm.includes('capacitor') || norm.includes('battery') || norm.includes('engine') || norm.includes('gate') || norm.includes('pipe')) {
+      if (norm.includes('resistor') || norm.includes('circuit') || norm.includes('capacitor') || norm.includes('battery') || norm.includes('engine') || norm.includes('gate') || norm.includes('pipe') || norm.includes('diode') || norm.includes('led')) {
         let comp = 'resistor';
         if (norm.includes('circuit')) comp = 'circuit';
         else if (norm.includes('capacitor')) comp = 'capacitor';
@@ -305,6 +316,7 @@ Return ONLY the JSON object described in the system prompt.`;
         else if (norm.includes('engine')) comp = 'heat_engine';
         else if (norm.includes('gate')) comp = 'logic_gate';
         else if (norm.includes('pipe')) comp = 'water_pipe';
+        else if (norm.includes('diode') || norm.includes('led')) comp = 'diode';
 
         avelutBoardController.drawComponent({ component: comp });
         this.hasGeneratedKickoff = true;

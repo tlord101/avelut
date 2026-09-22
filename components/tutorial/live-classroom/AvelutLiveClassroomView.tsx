@@ -281,12 +281,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     serviceRef.current.triggerInitialGreeting();
     setHasStarted(true);
 
-    // If the teacher model doesn't trigger illustrate within 2.5s, run kickoff as a fallback
+    // If the teacher model doesn't trigger illustrate/draw within 4.5s, run kickoff as a fallback
     setTimeout(() => {
       if (!avelutBoardVisualizer.hasGeneratedKickoff) {
         void avelutBoardVisualizer.generateKickoffIllustration();
       }
-    }, 2500);
+    }, 4500);
   };
 
   const handleBoardReady = useCallback(() => {

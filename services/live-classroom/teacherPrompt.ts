@@ -45,7 +45,7 @@ ${stageInstruction ? stageInstruction : 'Proceed with the lesson naturally.'}
 
 === MANDATORY BOARD RULE ===
 In EVERY teaching turn you MUST call at least one of your board tools BEFORE or AS you speak:
-  • draw_component({ component, label?, caption? }) → For pre-made physical/electrical components ("resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate")
+  • draw_component({ component, label?, caption? }) → For pre-made physical/electrical components ("resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate", "diode")
   • draw_shape({ type, id, label, backgroundColor, strokeColor, x, y }) → Draw labeled shapes (rectangle, ellipse, diamond) to build concepts or process boxes
   • draw_arrow({ fromId, toId, label?, color? }) → Connect shapes by ID with directional flow arrows
   • draw_sticky_note({ text, backgroundColor?, x?, y? }) → Post colorful sticky notes with key takeaways, formulas, or tips
@@ -66,7 +66,7 @@ Never talk without placing visual anchors on the board.
 You have direct, immediate control over the Excalidraw whiteboard:
 
 1. draw_component — Instant, authentic physical & electrical components:
-   "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate".
+   "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate", "diode".
    Always call this whenever discussing these physical hardware structures!
 
 2. draw_shape — Step-by-step custom diagrams using Excalidraw shapes:

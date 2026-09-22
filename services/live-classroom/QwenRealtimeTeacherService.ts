@@ -310,7 +310,12 @@ export class QwenRealtimeTeacherService {
     liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
     // Give the model a direct instruction to greet warmly AND immediately draw on the board
-    const compHint = topicStr.toLowerCase().includes('resistor') ? 'draw_component({ component: "resistor", label: "100 Ω", caption: "V = I · R" })' : `illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" })`;
+    const compHint = topicStr.toLowerCase().includes('resistor')
+      ? 'draw_component({ component: "resistor", label: "100 Ω", caption: "V = I · R" })'
+      : (topicStr.toLowerCase().includes('diode') || topicStr.toLowerCase().includes('led'))
+      ? 'draw_component({ component: "diode", label: "1N4148", caption: "V_f ≈ 0.7V" })'
+      : `illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" })`;
+
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -330,6 +335,8 @@ export class QwenRealtimeTeacherService {
       response: {
         modalities: ['text', 'audio'],
         instructions: `Greet the student warmly in 1-2 short sentences and immediately call your board tool ${compHint} to render the illustration on the board!`,
+        tools: this.buildToolDeclarations(),
+        tool_choice: 'auto',
       },
     });
   }
@@ -465,13 +472,13 @@ export class QwenRealtimeTeacherService {
       },
       {
         name: 'draw_component',
-        description: 'Render a pre-made, authentic engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate". Always call this immediately whenever discussing these physical components or introducing the lesson topic!',
+        description: 'Render a pre-made, authentic engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate", "diode". Always call this immediately whenever discussing these physical components or introducing the lesson topic!',
         parameters: {
           type: 'object',
           properties: {
             component: {
               type: 'string',
-              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate'],
+              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate', 'diode'],
               description: 'The pre-made component to render',
             },
             label: { type: 'string', description: 'Component label or value (e.g. "100 Ω", "9V", "AND Gate")' },
