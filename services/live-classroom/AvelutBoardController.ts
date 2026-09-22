@@ -1664,8 +1664,8 @@ export class AvelutBoardController {
           const text = args.text?.trim();
           if (!text) return { status: 'error', action: 'write', message: 'No text provided.' };
 
-          // Detect formulas heuristically (contains =, ^, /, ·, ×, or math symbols)
-          const isFormula = /[=^·×\/]/.test(text) || text.length < 30;
+          // Detect formulas heuristically (contains mathematical operators =, ^, ·, ×, ±, √)
+          const isFormula = /[=^·×±√]/.test(text) && !/[a-zA-Z\s]{15,}/.test(text);
           if (isFormula && text.length < 40) {
             this.setFormula(text);
           } else {

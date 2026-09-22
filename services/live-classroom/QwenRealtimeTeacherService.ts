@@ -264,9 +264,11 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  /** Returns true if the output audio context is currently running */
+  /** Returns true if both audio contexts are currently running */
   public isAudioUnlocked(): boolean {
-    return this.outputAudioCtx?.state === 'running';
+    const outOk = !this.outputAudioCtx || this.outputAudioCtx.state === 'running';
+    const inOk = !this.inputAudioCtx || this.inputAudioCtx.state === 'running';
+    return outOk && inOk;
   }
 
   /** Public method to ensure AudioContext is active on user gesture */
@@ -280,6 +282,12 @@ export class QwenRealtimeTeacherService {
         promises.push(this.outputAudioCtx.resume());
       }
       await Promise.all(promises);
+      liveLogger.log(
+        '[QwenRealtime] resumeAudio completed: input =',
+        this.inputAudioCtx?.state,
+        'output =',
+        this.outputAudioCtx?.state
+      );
       return this.isAudioUnlocked();
     } catch (e) {
       liveLogger.warn('[QwenRealtime] resumeAudio warning:', e);
@@ -306,6 +314,9 @@ export class QwenRealtimeTeacherService {
     }
     this.hasGreeted = true;
 
+    // Ensure audio contexts are resumed on this user gesture
+    void this.resumeAudio();
+
     const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min)`);
@@ -319,7 +330,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Begin naturally.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Immediately call board_action to write the lesson topic title at the top of the whiteboard, greet the student warmly in one sentence, and begin teaching right away.`,
         }],
       },
     });
@@ -358,7 +369,9 @@ export class QwenRealtimeTeacherService {
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
         turn_detection: {
-          type: 'semantic_vad',
+          type: 'server_vad',
+          threshold: 0.5,
+          silence_duration_ms: 800,
         },
         tools: [this.buildBoardActionTool()],
         tool_choice: 'auto',
@@ -502,18 +515,23 @@ export class QwenRealtimeTeacherService {
         liveLogger.log('[QwenRealtime] response.created');
         break;
 
-      // ── Student interruption ────────────────────────────────────────────
+      // ── Student interruption / speech events ─────────────────────────────
       case 'input_audio_buffer.speech_started':
         // Qwen's VAD says the student is speaking — stop teacher audio cleanly.
-        liveLogger.log('[QwenRealtime] Student speech started — stopping teacher audio');
+        liveLogger.log('[QwenRealtime] 🎙️ Student speech started — stopping teacher audio');
         this.stopPlayback();
         this.setState('listening');
         break;
 
       case 'input_audio_buffer.speech_stopped':
+        liveLogger.log('[QwenRealtime] 🎙️ Student speech stopped — awaiting model response');
         if (this.state === 'listening') {
           // Will transition to speaking when response audio arrives
         }
+        break;
+
+      case 'input_audio_buffer.committed':
+        liveLogger.log('[QwenRealtime] input_audio_buffer.committed');
         break;
 
       // ── Tool / function call ────────────────────────────────────────────
@@ -708,20 +726,35 @@ export class QwenRealtimeTeacherService {
   private async startMicRecording(): Promise<void> {
     if (!this.inputAudioCtx || !this.micStream) return;
 
+    if (this.inputAudioCtx.state === 'suspended') {
+      try {
+        await this.inputAudioCtx.resume();
+        liveLogger.log('[QwenRealtime] inputAudioCtx resumed successfully (state:', this.inputAudioCtx.state, ')');
+      } catch (err) {
+        liveLogger.warn('[QwenRealtime] Failed to resume inputAudioCtx in startMicRecording:', err);
+      }
+    }
+
     const source = this.inputAudioCtx.createMediaStreamSource(this.micStream);
 
-    const handleAudioData = (data: Float32Array) => {
+    let bufferChunk: number[] = [];
+    let packetCount = 0;
+    let lastLogTime = 0;
+
+    const flushChunk = (samples: Float32Array | number[]) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
+      if (!samples || samples.length === 0) return;
 
       // Compute RMS for UI visualisation
       let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-      this.callbacks.onAudioLevel?.(Math.min(1, Math.sqrt(sum / data.length) * 4));
+      for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+      const rms = Math.sqrt(sum / samples.length);
+      this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
 
       // Float32 → Int16 → Base64
-      const pcm16 = new Int16Array(data.length);
-      for (let i = 0; i < data.length; i++) {
-        const s = Math.max(-1, Math.min(1, data[i]));
+      const pcm16 = new Int16Array(samples.length);
+      for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
         pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
       const bytes = new Uint8Array(pcm16.buffer);
@@ -735,6 +768,26 @@ export class QwenRealtimeTeacherService {
         type: 'input_audio_buffer.append',
         audio: btoa(bin),
       });
+
+      packetCount++;
+      const now = Date.now();
+      // Diagnostic log on first packet, or when voice detected (rms > 0.04) throttled to 3s
+      if (packetCount === 1 || (rms > 0.04 && now - lastLogTime > 3000)) {
+        lastLogTime = now;
+        liveLogger.log(`[QwenRealtime] 🎙️ Mic streaming audio to server (chunk #${packetCount}, rms: ${rms.toFixed(3)})`);
+      }
+    };
+
+    const handleAudioData = (data: Float32Array) => {
+      // Accumulate samples into ~100ms (1600 samples @ 16kHz) chunks
+      for (let i = 0; i < data.length; i++) {
+        bufferChunk.push(data[i]);
+      }
+      if (bufferChunk.length >= 1600) {
+        const toSend = bufferChunk;
+        bufferChunk = [];
+        flushChunk(toSend);
+      }
     };
 
     // 1. Try AudioWorkletNode first (avoids ScriptProcessorNode deprecation warning)
@@ -759,8 +812,8 @@ export class QwenRealtimeTeacherService {
 
         const workletNode = new AudioWorkletNode(this.inputAudioCtx, 'pcm16-recorder-processor');
         workletNode.port.onmessage = (e) => {
-          if (e.data && e.data instanceof Float32Array) {
-            handleAudioData(e.data);
+          if (e.data && (ArrayBuffer.isView(e.data) || e.data instanceof Float32Array || e.data.constructor?.name === 'Float32Array')) {
+            handleAudioData(e.data as Float32Array);
           }
         };
 
@@ -770,6 +823,7 @@ export class QwenRealtimeTeacherService {
         workletNode.connect(muteNode);
         muteNode.connect(this.inputAudioCtx.destination);
         this.processorNode = workletNode;
+        liveLogger.log('[QwenRealtime] AudioWorklet input processor initialized ✅');
         return;
       } catch (workletErr) {
         liveLogger.warn('[QwenRealtime] AudioWorklet init failed, falling back to ScriptProcessor:', workletErr);
@@ -779,7 +833,7 @@ export class QwenRealtimeTeacherService {
     // 2. Fallback: ScriptProcessorNode for legacy browser/webview compatibility
     const scriptProcessor = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
     scriptProcessor.onaudioprocess = (e) => {
-      handleAudioData(e.inputBuffer.getChannelData(0));
+      flushChunk(e.inputBuffer.getChannelData(0));
     };
     const muteNode = this.inputAudioCtx.createGain();
     muteNode.gain.value = 0;
@@ -787,6 +841,7 @@ export class QwenRealtimeTeacherService {
     scriptProcessor.connect(muteNode);
     muteNode.connect(this.inputAudioCtx.destination);
     this.processorNode = scriptProcessor;
+    liveLogger.log('[QwenRealtime] ScriptProcessor fallback input initialized ✅');
   }
 
   // ── Audio output (WebSocket → speaker) ───────────────────────────────────
