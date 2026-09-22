@@ -81,6 +81,25 @@ export class AvelutBoardVisualizerService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+
+  private salvageTruncatedJson(raw: string): any | null {
+    let s = raw.trim();
+    // Strip trailing incomplete token
+    s = s.replace(/,\s*$/, '');
+    s = s.replace(/:\s*$/, ': null');
+    // Balance braces/brackets
+    let openBraces = 0, openBrackets = 0;
+    for (const ch of s) {
+      if (ch === '{') openBraces++;
+      else if (ch === '}') openBraces--;
+      else if (ch === '[') openBrackets++;
+      else if (ch === ']') openBrackets--;
+    }
+    while (openBrackets-- > 0) s += ']';
+    while (openBraces-- > 0) s += '}';
+    try { return JSON.parse(s); } catch { return null; }
+  }
+
   private safeJsonParse(text: string): any {
     try {
       let s = text.trim();
@@ -88,27 +107,24 @@ export class AvelutBoardVisualizerService {
       s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
       return JSON.parse(s);
     } catch {
+      const salvaged = this.salvageTruncatedJson(text);
+      if (salvaged) {
+        console.warn('[BoardVisualizer] Recovered from truncated JSON');
+        return salvaged;
+      }
       // Try to extract the largest {...} block
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[0]);
         } catch {
-          // Truncated JSON — try to close open braces/brackets roughly
-          let partial = jsonMatch[0];
-          // Remove trailing incomplete string
-          partial = partial.replace(/,\s*"[^"]*$/, '');
-          partial = partial.replace(/,\s*$/, '');
-          // Balance braces
-          const opens = (partial.match(/\{/g) || []).length;
-          const closes = (partial.match(/\}/g) || []).length;
-          for (let i = 0; i < opens - closes; i++) partial += '}';
-          try {
-            return JSON.parse(partial);
-          } catch (e2) {
-            console.error('[BoardVisualizer] JSON payload truncated. Check max_tokens or stream accumulation.', text.slice(0, 400));
-            return null;
+          const salvagedPartial = this.salvageTruncatedJson(jsonMatch[0]);
+          if (salvagedPartial) {
+            console.warn('[BoardVisualizer] Recovered from truncated partial JSON');
+            return salvagedPartial;
           }
+          console.error('[BoardVisualizer] JSON payload truncated. Unrecoverable.', text.slice(0, 400));
+          return null;
         }
       }
       console.warn('[BoardVisualizer] Failed to parse JSON from response:', text.slice(0, 200));
@@ -155,7 +171,8 @@ export class AvelutBoardVisualizerService {
       ],
       temperature: 0.2,
       response_format: { type: 'json_object' },
-      max_tokens: isComplex ? 1800 : 900,
+      max_tokens: isComplex ? 2048 : 1024,
+      stream: false,
     };
 
     let lastError: any = null;
@@ -224,7 +241,8 @@ export class AvelutBoardVisualizerService {
           const parsedJson = this.safeJsonParse(rawForParse);
           if (parsedJson) return parsedJson;
 
-          throw new Error('Unable to parse JSON from AI response: ' + contentStr.slice(0, 120));
+          console.error('[BoardVisualizer] Unrecoverable JSON:', rawForParse.slice(-200));
+          return null; // cleanly abort instead of noisy fetch fail
         } catch (err: any) {
           if (err.name === 'AbortError') throw err;
           if (err.message === 'RATE_LIMIT') throw err;

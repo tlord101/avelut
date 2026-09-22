@@ -62,6 +62,7 @@ export class QwenRealtimeTeacherService {
   private fullTranscript = '';
   private lastTranscriptSlice = '';
   private hasCalledToolInTurn = false;
+  private hasDrawnDiagramInTurn = false;
   private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
   private executedCallIds = new Set<string>();
   private hasGreeted = false;
@@ -555,6 +556,11 @@ export class QwenRealtimeTeacherService {
       case 'response.audio_transcript.done':
         this.callbacks.onTranscript?.(this.fullTranscript, true);
         break;
+      case 'response.created':
+        this.hasCalledToolInTurn = false;
+        this.hasDrawnDiagramInTurn = false;
+        break;
+
 
       // ── Semantic barge-in ───────────────────────────────────────────────
       case 'input_audio_buffer.speech_started':
@@ -645,7 +651,10 @@ export class QwenRealtimeTeacherService {
         // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
         // We demote the phrase-trigger backup so it only triggers as a last resort, avoiding dual-writer chaos.
         // Also removed autonomous visualizer processing.
-        if (!this.hasCalledToolInTurn && this.lastTranscriptSlice.trim().length >= 25) {
+        const stage = this.stateMachine?.getCurrentStage?.() ?? 'GREETING';
+        const ILLUSTRATABLE_STAGES = new Set(['EXPLANATION', 'DEMONSTRATION', 'EXAMPLE']);
+
+        if (!this.hasCalledToolInTurn && ILLUSTRATABLE_STAGES.has(stage) && this.lastTranscriptSlice.trim().length >= 25) {
           const triggered = /(let me draw|on the board|let me show you)/i.test(this.lastTranscriptSlice);
           if (triggered) {
             liveLogger.log('[QwenRealtime] Fallback: Model spoke drawing phrases but missed tool call. Asking visualizer.');
@@ -696,6 +705,16 @@ export class QwenRealtimeTeacherService {
   private executeToolCall(callId: string, name: string, argsRaw: any): void {
     if (this.executedCallIds.has(callId)) return;
     this.executedCallIds.add(callId);
+
+    // Prevent double-draw of diagram
+    if (name === 'draw_diagram') {
+      if (this.hasDrawnDiagramInTurn) {
+        liveLogger.warn('[QwenRealtime] Skipping duplicate draw_diagram in same turn:', argsRaw);
+        return;
+      }
+      this.hasDrawnDiagramInTurn = true;
+    }
+
     this.hasCalledToolInTurn = true;
     this.setState('drawing');
 
