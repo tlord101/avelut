@@ -21,10 +21,42 @@ export class PedagogicalStateMachine {
   private currentState: PedagogicalState = 'GREETING';
   private startTime: number = Date.now();
   private turnCountInStage: number = 0;
+  private minutesPerStage: number = 0;
+
+  private stages: PedagogicalState[] = [
+    'GREETING',
+    'STAGE_1_INTUITION',
+    'STAGE_2_VISUAL',
+    'STAGE_3_EXPLANATION',
+    'STAGE_4_FORMULA',
+    'STAGE_5_SOCRATIC',
+    'MASTERY_CHECK',
+    'SUMMARY',
+    'COMPLETE'
+  ];
 
   constructor(config: StateMachineConfig) {
     this.config = config;
+    this.initialize(config.durationMinutes);
+  }
+
+  public initialize(durationMinutes: number, totalStages: number = 8): void {
     this.startTime = Date.now();
+    this.minutesPerStage = durationMinutes / totalStages;
+  }
+
+  public evaluateMinuteBasedAdvance(): boolean {
+    if (this.minutesPerStage <= 0) return false;
+    const elapsedMinutes = (Date.now() - this.startTime) / 60000;
+    const expectedStageIndex = Math.floor(elapsedMinutes / this.minutesPerStage);
+    const currentStageIndex = this.stages.indexOf(this.currentState);
+
+    if (expectedStageIndex > currentStageIndex && expectedStageIndex < this.stages.length) {
+      this.currentState = this.stages[expectedStageIndex];
+      this.turnCountInStage = 0;
+      return true; // stage changed
+    }
+    return false;
   }
 
   public reset(): void {

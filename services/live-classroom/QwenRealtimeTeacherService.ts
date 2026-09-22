@@ -358,6 +358,61 @@ export class QwenRealtimeTeacherService {
   private buildToolDeclarations() {
     return [
       {
+        type: "function",
+        name: "draw_shape",
+        description: "Draw a geometric shape on the board. Use for diagrams, concept maps, flowcharts, and illustrations. Supports rectangle, ellipse, diamond, and arrow.",
+        parameters: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["rectangle", "ellipse", "diamond", "arrow", "line"], description: "Shape type" },
+            id: { type: "string", description: "Unique element ID, e.g. 'box1', 'arrow1'" },
+            x: { type: "number", description: "X coordinate (left edge)" },
+            y: { type: "number", description: "Y coordinate (top edge)" },
+            width: { type: "number", description: "Width in pixels" },
+            height: { type: "number", description: "Height in pixels" },
+            label: { type: "string", description: "Text to display inside/on the shape" },
+            backgroundColor: { type: "string", description: "Fill color hex, e.g. '#a5d8ff'" },
+            strokeColor: { type: "string", description: "Border color hex, default '#1e1e1e'" },
+            points: { type: "array", items: { type: "array", items: { type: "number" } }, description: "For arrows/lines: [[0,0],[dx,dy]] offsets" },
+            startId: { type: "string", description: "For arrows: ID of shape to bind start" },
+            endId: { type: "string", description: "For arrows: ID of shape to bind end" },
+            endArrowhead: { type: "string", enum: ["arrow", "bar", "dot", "triangle"], description: "Arrowhead style" }
+          },
+          required: ["type", "id", "x", "y"]
+        }
+      },
+      {
+        type: "function",
+        name: "draw_text",
+        description: "Draw standalone text on the board (titles, annotations, labels outside shapes).",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Unique element ID" },
+            x: { type: "number" },
+            y: { type: "number" },
+            text: { type: "string" },
+            fontSize: { type: "number", description: "Default 20. Use 28+ for titles." }
+          },
+          required: ["id", "x", "y", "text"]
+        }
+      },
+      {
+        type: "function",
+        name: "draw_mermaid",
+        description: "Draw a diagram from a Mermaid string. Use for complex flowcharts, sequence diagrams, and architecture diagrams. Excalidraw converts it to editable shapes automatically.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            x: { type: "number" },
+            y: { type: "number" },
+            mermaid: { type: "string", description: "Mermaid diagram definition, e.g. 'graph TD\\n A[Start] --> B{Decision}'" }
+          },
+          required: ["id", "x", "y", "mermaid"]
+        }
+      },
+      {
         type: 'function',
         name: 'write_text',
         description: 'Write a key title, definition, core principle, or mathematical formula on the teaching board. Never write speech transcripts.',
@@ -612,10 +667,15 @@ export class QwenRealtimeTeacherService {
         this.lastTranscriptSlice = '';
 
         if (this.stateMachine) {
+           const prevStage = this.stateMachine.getCurrentStage();
            const timeChanged = this.stateMachine.evaluateState();
+           const minuteAdvanceChanged = this.stateMachine.evaluateMinuteBasedAdvance();
            liveLogger.setStage(this.stateMachine.getCurrentStage());
            const turnChanged = this.stateMachine.advance();
-           if (timeChanged || turnChanged) {
+           if (timeChanged || minuteAdvanceChanged || turnChanged) {
+             if (this.stateMachine.getCurrentStage() !== prevStage) {
+               avelutBoardController.clearStage();
+             }
              this.sendSessionInit(); // Send session update to update prompt with new state
            }
         }
@@ -652,6 +712,51 @@ export class QwenRealtimeTeacherService {
 
     try {
       switch (name) {
+        case 'draw_shape': {
+          const skeleton: any = {
+            type: args.type,
+            id: args.id,
+            x: args.x,
+            y: args.y,
+            width: args.width || 200,
+            height: args.height || 80,
+          };
+          if (args.label) {
+            skeleton.label = { text: args.label, fontSize: 20 };
+            skeleton.roundness = { type: 3 };
+          }
+          if (args.backgroundColor) skeleton.backgroundColor = args.backgroundColor;
+          if (args.strokeColor) skeleton.strokeColor = args.strokeColor;
+          if (args.type === 'arrow' || args.type === 'line') {
+            skeleton.points = args.points || [[0,0],[args.width || 100, 0]];
+            skeleton.endArrowhead = args.endArrowhead || 'arrow';
+            if (args.startId) skeleton.start = { id: args.startId };
+            if (args.endId) skeleton.end = { id: args.endId };
+          }
+          avelutBoardController.addSkeletonElement(skeleton);
+          break;
+        }
+        case 'draw_text': {
+          avelutBoardController.addSkeletonElement({
+            type: 'text',
+            id: args.id,
+            x: args.x,
+            y: args.y,
+            text: args.text,
+            fontSize: args.fontSize || 20,
+          });
+          break;
+        }
+        case 'draw_mermaid': {
+          avelutBoardController.addSkeletonElement({
+            type: 'mermaid',
+            id: args.id,
+            x: args.x,
+            y: args.y,
+            mermaid: args.mermaid,
+          });
+          break;
+        }
         case 'write_text':
           avelutBoardController.writeText(args.text ?? args.content ?? '');
           break;
