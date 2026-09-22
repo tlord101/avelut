@@ -425,9 +425,14 @@ export class QwenRealtimeTeacherService {
         const errMsg = event.message || event.code;
         liveLogger.error('[QwenRealtime] DashScope error response:', event);
 
-        // If the model does not exist on this workspace, auto-fallback to QWEN_FALLBACK_MODEL
-        if (typeof errMsg === 'string' && errMsg.includes('Model not exist') && this.currentModel !== QWEN_FALLBACK_MODEL) {
-          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" not available on workspace. Retrying automatically with "${QWEN_FALLBACK_MODEL}"...`);
+        // If the model does not exist or is restricted on this key/workspace, auto-fallback to QWEN_FALLBACK_MODEL
+        const isModelRejected =
+          typeof errMsg === 'string' &&
+          (errMsg.includes('Model not exist') || errMsg.includes('API-Key restrictions') || errMsg.includes('Access denied')) &&
+          this.currentModel !== QWEN_FALLBACK_MODEL;
+
+        if (isModelRejected) {
+          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" rejected (${errMsg}). Retrying automatically with fallback model "${QWEN_FALLBACK_MODEL}"...`);
           this.currentModel = QWEN_FALLBACK_MODEL;
           this.isSessionUpdated = false;
           if (this.ws) {
@@ -578,8 +583,13 @@ export class QwenRealtimeTeacherService {
           this.sendSessionInit('Tina');
           return;
         }
-        if (typeof event.error?.message === 'string' && event.error.message.includes('Model not exist') && this.currentModel !== QWEN_FALLBACK_MODEL) {
-          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" not available on workspace. Retrying automatically with "${QWEN_FALLBACK_MODEL}"...`);
+        const isModelRejectedInEvent =
+          typeof event.error?.message === 'string' &&
+          (event.error.message.includes('Model not exist') || event.error.message.includes('API-Key restrictions') || event.error.message.includes('Access denied')) &&
+          this.currentModel !== QWEN_FALLBACK_MODEL;
+
+        if (isModelRejectedInEvent) {
+          liveLogger.warn(`[QwenRealtime] Model "${this.currentModel}" rejected (${event.error.message}). Retrying automatically with "${QWEN_FALLBACK_MODEL}"...`);
           this.currentModel = QWEN_FALLBACK_MODEL;
           this.isSessionUpdated = false;
           if (this.ws) {
