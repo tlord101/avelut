@@ -30,7 +30,7 @@ const PORT = parseInt(process.env.PORT_WS || '3001', 10);
 const API_KEY = process.env.ALIBABA_API_KEY || process.env.VITE_ALIBABA_API_KEY || '';
 const WORKSPACE_ID = process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
 // Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts and api/qwen-realtime.ts
-const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
+const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
 const DASHSCOPE_WS_URL =
   `wss://${WORKSPACE_ID}.ap-southeast-1.maas.aliyuncs.com` +
   `/api-ws/v1/realtime?model=${QWEN_REALTIME_MODEL}`;

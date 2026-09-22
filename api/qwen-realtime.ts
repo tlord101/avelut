@@ -35,7 +35,7 @@ export const maxDuration = 300;
 
 // ── DashScope upstream ────────────────────────────────────────────────────────
 // Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts
-const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
+const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
 const WORKSPACE_ID =
   process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
 const DASHSCOPE_URL =

@@ -16,7 +16,7 @@ import type { AppSettings } from '../../types';
 
 // ─── Centralized model identifier ────────────────────────────────────────────
 // Update this single constant when Alibaba releases a newer realtime model.
-export const QWEN_REALTIME_MODEL = 'qwen-omni-turbo-realtime';
+export const QWEN_REALTIME_MODEL = 'Qwen3.8-Omni-Flash-Realtime';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
