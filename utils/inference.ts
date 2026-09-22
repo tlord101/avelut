@@ -772,7 +772,7 @@ async function* callAlibabaQwenStream(
       }
 
       const fetchController = new AbortController();
-      const timeoutId = setTimeout(() => fetchController.abort(), 6000);
+      const timeoutId = setTimeout(() => fetchController.abort(), 35000);
 
       let res: Response;
       try {

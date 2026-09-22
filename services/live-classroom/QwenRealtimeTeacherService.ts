@@ -379,6 +379,91 @@ export class QwenRealtimeTeacherService {
   private buildToolDeclarations() {
     const rawTools = [
       {
+        name: 'draw_shape',
+        description: 'Draw an Excalidraw shape (rectangle, ellipse, diamond) with text label on the board. Use this to construct diagrams, cards, or state boxes step-by-step.',
+        parameters: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['rectangle', 'ellipse', 'diamond'],
+              description: 'Shape geometric type. Default rectangle.',
+            },
+            id: {
+              type: 'string',
+              description: 'Unique element ID (e.g. "box1", "source", "stepA"). Used to connect arrows.',
+            },
+            label: {
+              type: 'string',
+              description: 'Text displayed inside the shape (e.g. "Step 1: Input" or "Battery 9V").',
+            },
+            backgroundColor: {
+              type: 'string',
+              description: 'Color: #e0f2fe (sky blue), #fef3c7 (amber), #dcfce7 (mint green), #fee2e2 (rose), #f3e8ff (purple), #ffffff (white).',
+            },
+            strokeColor: {
+              type: 'string',
+              description: 'Border outline color (e.g. #0284c7, #b45309, #16a34a, #dc2626, #1e1e1e).',
+            },
+            x: { type: 'number', description: 'Canvas X position (0 to 1400).' },
+            y: { type: 'number', description: 'Canvas Y position (0 to 800).' },
+            width: { type: 'number', description: 'Shape width (default 200).' },
+            height: { type: 'number', description: 'Shape height (default 90).' },
+          },
+          required: ['label'],
+        },
+      },
+      {
+        name: 'draw_arrow',
+        description: 'Draw a directional arrow between two shapes or points on the board. Can bind to shapes by ID with fromId and toId.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fromId: {
+              type: 'string',
+              description: 'ID of source shape (e.g. "box1"). Binds arrow start.',
+            },
+            toId: {
+              type: 'string',
+              description: 'ID of destination shape (e.g. "box2"). Binds arrow end.',
+            },
+            label: {
+              type: 'string',
+              description: 'Label along arrow shaft (e.g. "current I", "flow Qh", "causes").',
+            },
+            color: {
+              type: 'string',
+              description: 'Arrow stroke color (e.g. #1e1e1e, #0284c7, #dc2626).',
+            },
+            strokeStyle: {
+              type: 'string',
+              enum: ['solid', 'dashed', 'dotted'],
+              description: 'Style of the arrow shaft. Default solid.',
+            },
+          },
+        },
+      },
+      {
+        name: 'draw_sticky_note',
+        description: 'Place a colorful Excalidraw sticky note on the board for key insights, definitions, formulas, or student reminders.',
+        parameters: {
+          type: 'object',
+          properties: {
+            text: {
+              type: 'string',
+              description: 'Note text content (e.g. "Key takeaway: V is directly proportional to I!").',
+            },
+            backgroundColor: {
+              type: 'string',
+              description: 'Color: #fef08a (yellow), #bae6fd (blue), #bbf7d0 (green), #fbcfe8 (pink), #fed7aa (orange).',
+            },
+            x: { type: 'number', description: 'Canvas X position (0 to 1400).' },
+            y: { type: 'number', description: 'Canvas Y position (0 to 800).' },
+          },
+          required: ['text'],
+        },
+      },
+      {
         name: 'draw_component',
         description: 'Render a pre-made, authentic engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate". Always call this immediately whenever discussing these physical components or introducing the lesson topic!',
         parameters: {
@@ -856,6 +941,58 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           break;
         }
 
+        case 'draw_shape': {
+          this.hasCalledToolInTurn = true;
+          this.avelutBoardController.drawShape({
+            type: args.type || 'rectangle',
+            id: args.id,
+            label: args.label,
+            backgroundColor: args.backgroundColor,
+            strokeColor: args.strokeColor,
+            x: args.x,
+            y: args.y,
+            width: args.width,
+            height: args.height,
+            fillStyle: args.fillStyle,
+          });
+          const summary = this.avelutBoardController.getCompactSummary();
+          this.injectBoardStateMessage(summary);
+          toolResult = { status: 'rendered', id: args.id, board_summary: summary };
+          break;
+        }
+
+        case 'draw_arrow': {
+          this.hasCalledToolInTurn = true;
+          this.avelutBoardController.drawArrow({
+            fromId: args.fromId,
+            toId: args.toId,
+            label: args.label,
+            color: args.color,
+            strokeWidth: args.strokeWidth,
+            strokeStyle: args.strokeStyle,
+          });
+          const summary = this.avelutBoardController.getCompactSummary();
+          this.injectBoardStateMessage(summary);
+          toolResult = { status: 'rendered', fromId: args.fromId, toId: args.toId, board_summary: summary };
+          break;
+        }
+
+        case 'draw_sticky_note': {
+          this.hasCalledToolInTurn = true;
+          this.avelutBoardController.drawStickyNote({
+            text: args.text,
+            backgroundColor: args.backgroundColor,
+            x: args.x,
+            y: args.y,
+            width: args.width,
+            height: args.height,
+          });
+          const summary = this.avelutBoardController.getCompactSummary();
+          this.injectBoardStateMessage(summary);
+          toolResult = { status: 'rendered', board_summary: summary };
+          break;
+        }
+
         case 'draw_component': {
           this.hasCalledToolInTurn = true;
           this.boardVisualizerService.hasGeneratedKickoff = true;
@@ -863,6 +1000,8 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             component: args.component,
             label: args.label,
             caption: args.caption,
+            x: args.x,
+            y: args.y,
           });
           const summary = this.avelutBoardController.getCompactSummary();
           this.injectBoardStateMessage(summary);

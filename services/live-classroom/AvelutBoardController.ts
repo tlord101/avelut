@@ -24,15 +24,18 @@ export interface WriteTextArgs {
 }
 
 export interface DrawShapeArgs {
+  id?: string;
   type: 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'line';
   x: number;
   y: number;
   width?: number;
   height?: number;
-  label?: string;
+  label?: string | { text: string; fontSize?: number; strokeColor?: string };
   color?: string;
+  strokeColor?: string;
   backgroundColor?: string;
   strokeStyle?: 'solid' | 'dashed' | 'dotted';
+  fillStyle?: 'solid' | 'hachure' | 'cross-hatch';
 }
 
 const GENERIC_LABEL_RE =
@@ -367,35 +370,146 @@ export class AvelutBoardController {
   }
   private _drawShape(args: DrawShapeArgs): void {
     const {
-      type, x, y,
-      width = 120, height = 70,
-      label, color = '#38BDF8',
-      backgroundColor = 'transparent',
+      id = `shape_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type,
+      x = 300,
+      y = this.cursorY,
+      width = 180,
+      height = 90,
+      label,
+      color,
+      strokeColor = color || '#1e1e1e',
+      backgroundColor = '#ffec99',
       strokeStyle = 'solid',
+      fillStyle = 'solid',
     } = args;
-    const safeY = y;
 
     const el: any = {
       type,
-      x: Math.min(x, 650),
-      y: safeY,
-      width: Math.min(width, 600),
-      height: Math.min(height, 260),
-      strokeColor: color,
+      id,
+      x: Math.max(20, Math.min(x, 1500)),
+      y: Math.max(80, y),
+      width: Math.min(width, 800),
+      height: Math.min(height, 400),
+      strokeColor,
       backgroundColor,
-      fillStyle: backgroundColor !== 'transparent' ? 'solid' : 'hachure',
+      fillStyle,
       strokeWidth: 2,
       strokeStyle,
       roughness: 1,
       roundness: { type: 3 },
+      customData: { zone: 'stage' },
     };
 
-    if (label && !isGenericLabel(label)) {
-      el.label = { text: sanitizeLabel(label), fontSize: 16, strokeColor: '#FAFAFA' };
+    if (label) {
+      if (typeof label === 'string') {
+        el.label = { text: label.trim(), fontSize: 18, strokeColor: '#1e1e1e' };
+      } else {
+        el.label = label;
+      }
     }
 
     this.appendElements([el], 'stage');
-    this.cursorY = Math.max(this.cursorY, safeY + (height || 70) + 24);
+    this.cursorY = Math.max(this.cursorY, y + height + 30);
+  }
+
+  public drawArrow(args: {
+    fromId?: string;
+    toId?: string;
+    startId?: string;
+    endId?: string;
+    startX?: number;
+    startY?: number;
+    endX?: number;
+    endY?: number;
+    x?: number;
+    y?: number;
+    label?: string;
+    color?: string;
+    strokeColor?: string;
+    strokeWidth?: number;
+  }): void {
+    this.actionQueue.push(() => {
+      const {
+        fromId,
+        toId,
+        startId = fromId,
+        endId = toId,
+        startX = args.x ?? 200,
+        startY = args.y ?? 200,
+        endX = (args.x ?? 200) + 160,
+        endY = args.y ?? 200,
+        label,
+        color,
+        strokeColor = color || '#1971c2',
+        strokeWidth = 2,
+      } = args;
+
+      const skeleton: any = {
+        type: 'arrow',
+        id: `arr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        x: startX,
+        y: startY,
+        width: Math.abs(endX - startX) || 20,
+        height: Math.abs(endY - startY) || 20,
+        points: [[0, 0], [endX - startX, endY - startY]],
+        strokeColor,
+        strokeWidth,
+        endArrowhead: 'arrow',
+        customData: { zone: 'stage' },
+      };
+
+      if (startId) skeleton.start = { id: startId };
+      if (endId) skeleton.end = { id: endId };
+      if (label) skeleton.label = { text: label.trim(), fontSize: 14, strokeColor };
+
+      this.appendElements([skeleton], 'stage');
+    });
+  }
+
+  public drawStickyNote(args: {
+    text: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    color?: string;
+    backgroundColor?: string;
+    strokeColor?: string;
+  }): void {
+    this.actionQueue.push(() => {
+      const {
+        text,
+        x = 950,
+        y = 120,
+        width = 240,
+        height = 200,
+        color,
+        backgroundColor = color || '#fff3bf',
+        strokeColor = '#1e1e1e',
+      } = args;
+
+      if (!text?.trim()) return;
+
+      const skeleton = {
+        type: 'stickynote',
+        id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        x,
+        y,
+        width,
+        height,
+        backgroundColor,
+        strokeColor,
+        label: {
+          text: text.trim(),
+          fontSize: 20,
+        },
+        created: null,
+        customData: { zone: 'stage' },
+      };
+
+      this.appendElements([skeleton], 'stage');
+    });
   }
 
   public highlightConcept(targetText: string, style: 'circle' | 'box' | 'underline' = 'box'): void {
