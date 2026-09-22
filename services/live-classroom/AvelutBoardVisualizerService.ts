@@ -160,7 +160,34 @@ Return ONLY the JSON object described in the system prompt.`;
       return { elements, meta: { title: 'Heat Engine Cycle' } };
     }
 
-    // 2. Templates: flowchart, comparison, cycle, equation_setup, concept_map
+    // 2. Specific Subject & Context Layouts
+    if (norm.includes('probability') || norm.includes('statistic') || norm.includes('random') || norm.includes('permutation') || norm.includes('combination')) {
+      elements.push(
+        { type: 'rectangle', id: 'prob_s', x: 140, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#e0f2fe', strokeColor: '#0284c7', label: { text: '1. Sample Space (S)\nAll possible outcomes\ne.g. Die roll: {1, 2, 3, 4, 5, 6}', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'rectangle', id: 'prob_e', x: 480, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#fef3c7', strokeColor: '#d97706', label: { text: '2. Event (E)\nFavorable subset\ne.g. Even number: {2, 4, 6}', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'rectangle', id: 'prob_calc', x: 820, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#dcfce7', strokeColor: '#16a34a', label: { text: '3. Probability P(E)\nP(E) = n(E) / n(S)\nP(Even) = 3 / 6 = 0.5', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'arrow', id: 'arr_se', x: 400, y: y0 + 75, width: 80, height: 0, points: [[0, 0], [80, 0]], endArrowhead: 'arrow', strokeColor: '#0284c7', label: { text: 'subset of', fontSize: 12 } },
+        { type: 'arrow', id: 'arr_ec', x: 740, y: y0 + 75, width: 80, height: 0, points: [[0, 0], [80, 0]], endArrowhead: 'arrow', strokeColor: '#d97706', label: { text: 'yields', fontSize: 12 } },
+        { type: 'stickynote', id: 'prob_note', x: 400, y: y0 + 160, width: 440, height: 110, backgroundColor: '#fef08a', strokeColor: '#ca8a04', label: { text: 'Axioms of Probability:\n• 0 ≤ P(E) ≤ 1 (Always 0% to 100%)\n• P(Certain Event) = 1 | P(Impossible) = 0\n• ∑ P(all outcomes) = 1', fontSize: 16 } },
+      );
+      return { elements, meta: { title: 'Probability Fundamentals & Sample Space' } };
+    }
+
+    if (norm.includes('overview') || norm.includes('syllabus') || norm.includes('curriculum') || norm.includes('roadmap') || norm.includes('intro')) {
+      elements.push(
+        { type: 'rectangle', id: 'step_intro', x: 100, y: y0 + 30, width: 230, height: 90, roundness: { type: 3 }, backgroundColor: '#e0f2fe', strokeColor: '#0284c7', label: { text: '1. Foundations\nCore Principles & Terms', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'rectangle', id: 'step_laws', x: 390, y: y0 + 30, width: 230, height: 90, roundness: { type: 3 }, backgroundColor: '#fef3c7', strokeColor: '#d97706', label: { text: '2. Mathematical Rules\nFormulas & Definitions', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'rectangle', id: 'step_mastery', x: 680, y: y0 + 30, width: 230, height: 90, roundness: { type: 3 }, backgroundColor: '#dcfce7', strokeColor: '#16a34a', label: { text: '3. Worked Examples\nStep-by-Step Solutions', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'rectangle', id: 'step_exam', x: 970, y: y0 + 30, width: 230, height: 90, roundness: { type: 3 }, backgroundColor: '#f3e8ff', strokeColor: '#9333ea', label: { text: '4. Active Practice\nMastery Check & Intuition', fontSize: 15, strokeColor: '#0f172a' } },
+        { type: 'arrow', id: 'arr_12', x: 330, y: y0 + 75, width: 60, height: 0, points: [[0, 0], [60, 0]], endArrowhead: 'arrow', strokeColor: '#0284c7' },
+        { type: 'arrow', id: 'arr_23', x: 620, y: y0 + 75, width: 60, height: 0, points: [[0, 0], [60, 0]], endArrowhead: 'arrow', strokeColor: '#d97706' },
+        { type: 'arrow', id: 'arr_34', x: 910, y: y0 + 75, width: 60, height: 0, points: [[0, 0], [60, 0]], endArrowhead: 'arrow', strokeColor: '#16a34a' },
+        { type: 'stickynote', id: 'roadmap_note', x: 390, y: y0 + 155, width: 520, height: 100, backgroundColor: '#fef08a', strokeColor: '#ca8a04', label: { text: `Target Topic: ${topic}\nWe will conquer each milestone step-by-step!`, fontSize: 17 } },
+      );
+      return { elements, meta: { title: `${topic} Roadmap` } };
+    }
+
+    // 3. Templates: flowchart, comparison, cycle
     if (req.template === 'flowchart') {
       elements.push(
         { type: 'rectangle', id: 'step1', x: 500, y: y0 + 20, width: 240, height: 80, roundness: { type: 3 }, backgroundColor: '#ffec99', label: { text: '1. Input State', fontSize: 18 } },
@@ -195,17 +222,17 @@ Return ONLY the JSON object described in the system prompt.`;
       return { elements, meta: { title: `${topic} Cycle` } };
     }
 
-    // Default: Concept Map
+    // Default: Clean 3-Pillar Concept Pipeline (no overlapping arrows, real topic wording)
+    const cleanTopic = topic.slice(0, 40);
     elements.push(
-      { type: 'ellipse', id: 'center', x: 480, y: y0 + 80, width: 260, height: 110, roundness: { type: 3 }, backgroundColor: '#ffec99', label: { text: topic, fontSize: 20 } },
-      { type: 'rectangle', id: 'node1', x: 140, y: y0 + 30, width: 220, height: 80, roundness: { type: 3 }, backgroundColor: '#a5d8ff', label: { text: 'Core Principle', fontSize: 16 } },
-      { type: 'rectangle', id: 'node2', x: 860, y: y0 + 30, width: 220, height: 80, roundness: { type: 3 }, backgroundColor: '#b2f2bb', label: { text: 'Governing Formula', fontSize: 16 } },
-      { type: 'rectangle', id: 'node3', x: 500, y: y0 + 280, width: 220, height: 80, roundness: { type: 3 }, backgroundColor: '#ffc9c9', label: { text: 'Real Application', fontSize: 16 } },
-      { type: 'arrow', id: 'a1', x: 480, y: y0 + 120, start: { id: 'center' }, end: { id: 'node1' }, endArrowhead: 'arrow' },
-      { type: 'arrow', id: 'a2', x: 740, y: y0 + 120, start: { id: 'center' }, end: { id: 'node2' }, endArrowhead: 'arrow' },
-      { type: 'arrow', id: 'a3', x: 610, y: y0 + 190, start: { id: 'center' }, end: { id: 'node3' }, endArrowhead: 'arrow' },
+      { type: 'rectangle', id: 'p1', x: 140, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#e0f2fe', strokeColor: '#0284c7', label: { text: `1. Core Topic\n${cleanTopic}`, fontSize: 16, strokeColor: '#0f172a' } },
+      { type: 'rectangle', id: 'p2', x: 480, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#fef3c7', strokeColor: '#d97706', label: { text: '2. Principles & Laws\nTheoretical setup', fontSize: 16, strokeColor: '#0f172a' } },
+      { type: 'rectangle', id: 'p3', x: 820, y: y0 + 30, width: 260, height: 95, roundness: { type: 3 }, backgroundColor: '#dcfce7', strokeColor: '#16a34a', label: { text: '3. Real Practice\nExamples & Mastery', fontSize: 16, strokeColor: '#0f172a' } },
+      { type: 'arrow', id: 'arr_p12', x: 400, y: y0 + 75, width: 80, height: 0, points: [[0, 0], [80, 0]], endArrowhead: 'arrow', strokeColor: '#0284c7' },
+      { type: 'arrow', id: 'arr_p23', x: 740, y: y0 + 75, width: 80, height: 0, points: [[0, 0], [80, 0]], endArrowhead: 'arrow', strokeColor: '#d97706' },
+      { type: 'stickynote', id: 'note_pillar', x: 430, y: y0 + 155, width: 440, height: 100, backgroundColor: '#fef08a', strokeColor: '#ca8a04', label: { text: `Key Takeaway:\nMaster the foundational logic of ${cleanTopic}!`, fontSize: 16 } },
     );
-    return { elements, meta: { title: `${topic} Concept Map` } };
+    return { elements, meta: { title: `${cleanTopic} Overview` } };
   }
 
   private safeJsonParse(raw: string): any | null {

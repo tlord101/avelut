@@ -145,36 +145,41 @@ export class PedagogicalStateMachine {
   public getNextInstruction(): string {
     switch (this.currentState) {
       case 'GREETING':
-        return `[CURRENT STAGE: GREETING]
-Greet the student warmly, announce the topic "${this.config.topicTitle}", and IMMEDIATELY call write_text (or write_keywords) to put the topic title or a short real-world hook on the board. Do NOT ask what topic to teach.`;
+        return `[CURRENT STAGE: GREETING & INTRO]
+Greet the student warmly and enthusiastically in 1-2 short sentences. Announce that today we are mastering "${this.config.topicTitle}".
+Call draw_component (for circuits/physics), draw_shape, or draw_sticky_note to place the introductory anchor on the board!
+Then immediately begin introducing the foundational idea. Do not pause silently after greeting.`;
 
       case 'STAGE_1_INTUITION':
-        return `[CURRENT STAGE: STAGE 1 - REAL-WORLD INTUITION]
-Start with a vivid, relatable, everyday situation. Make the student feel the concept before they name it. Call write_text with a short label for the intuition (e.g. "Pushing a heavy box"). Do NOT use formulas yet.`;
+        return `[CURRENT STAGE: STAGE 1 - INTUITION & REAL WORLD]
+Introduce a vivid, relatable everyday scenario. Explain the concept intuitively before introducing heavy math.
+Call draw_sticky_note({ text: "..." }) or annotate({ text: "..." }) to highlight the core intuition.
+Then ask a simple intuitive check question.`;
 
       case 'STAGE_2_VISUAL':
-        return `[CURRENT STAGE: STAGE 2 - KEY POINTS ON BOARD]
-Write the core idea on the board using write_text or write_keywords. Keep it short. Then explain it in 1–2 sentences. Illustration will appear automatically if needed — you do not draw.`;
+        return `[CURRENT STAGE: STAGE 2 - VISUAL MODEL]
+Build the conceptual diagram on the board. Call draw_shape({ type: 'rectangle', id: '...', label: '...' }) and connect with draw_arrow, or call illustrate({ topic: "${this.config.topicTitle}", template: "concept_map" }).
+Refer directly to what is on the board as you teach.`;
 
       case 'STAGE_3_EXPLANATION':
-        return `[CURRENT STAGE: STAGE 3 - CORE EXPLANATION]
-Explain the mechanism behind the idea. Use short, punchy sentences. Call write_text with the key definition or principle. No long lectures.`;
+        return `[CURRENT STAGE: STAGE 3 - CORE MECHANISM]
+Explain the underlying laws and mechanisms. Call annotate or draw_shape to highlight the working principles. Keep sentences punchy and engaging.`;
 
       case 'STAGE_4_FORMULA':
         return `[CURRENT STAGE: STAGE 4 - MATHEMATICS & FORMULAS]
-Introduce the formula (if applicable). You MUST call set_formula or write_text to put it on the board in this turn. Show it as shorthand for the intuition they already have.`;
+Introduce the governing formula. Call set_formula({ formula: "..." }) and annotate key variable definitions on the board. Connect the math back to the intuition.`;
 
       case 'STAGE_5_SOCRATIC':
-        return `[CURRENT STAGE: STAGE 5 - SOCRATIC PARTICIPATION]
-Ask the student ONE short verbal intuition-check question. STOP TALKING and wait. When they answer, evaluate it verbally.`;
+        return `[CURRENT STAGE: STAGE 5 - SOCRATIC PRACTICE]
+Present a quick step-by-step problem or scenario. Ask the student what they would do first. If they answer, praise or correct gently and write the answer on the board.`;
 
       case 'MASTERY_CHECK':
         return `[CURRENT STAGE: MASTERY CHECK]
-Say: "Let's do a quick mastery check!" Ask a conceptual or formula-application question. Wait for the answer. Evaluate it.`;
+Say: "Let's do a quick mastery check to test your understanding!" Present a concise challenge question.`;
 
       case 'SUMMARY':
-        return `[CURRENT STAGE: SUMMARY]
-Give a brief diagnostic summary of what they understood well and what to review. Keep it encouraging and short.`;
+        return `[CURRENT STAGE: SUMMARY & WRAP-UP]
+Summarize the key takeaways and celebrate progress. Place a final sticky note with the core lesson formula or rule.`;
 
       case 'COMPLETE':
         return `[CURRENT STAGE: COMPLETE]

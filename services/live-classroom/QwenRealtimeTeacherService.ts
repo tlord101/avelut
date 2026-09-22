@@ -71,6 +71,7 @@ export class QwenRealtimeTeacherService {
   private isSessionUpdated = false;
   private retriedWithDefaultVoice = false;
   private stateMachine: PedagogicalStateMachine | null = null;
+  private proactiveTimer: any = null;
 
   private teacherSpeakingUntil = 0;
   private avelutBoardController = avelutBoardController;
@@ -154,6 +155,7 @@ export class QwenRealtimeTeacherService {
   /** Send a typed message into the realtime conversation */
   public sendTextMessage(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !text.trim()) return;
+    this.clearProactiveTimer();
     this.sendJson({
       event_id: `user_txt_${Date.now()}`,
       type: 'conversation.item.create',
@@ -168,6 +170,7 @@ export class QwenRealtimeTeacherService {
 
   /** Stop all audio and close the WebSocket cleanly */
   public endSession(): void {
+    this.clearProactiveTimer();
     this.stopPlayback();
 
     this.processorNode?.disconnect();
@@ -371,9 +374,10 @@ export class QwenRealtimeTeacherService {
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
         turn_detection: {
-          type: 'semantic_vad',
+          type: 'server_vad',
           threshold: 0.5,
-          silence_duration_ms: 800,
+          silence_duration_ms: 600,
+          prefix_padding_ms: 300,
         },
         tools: this.buildToolDeclarations(),
         tool_choice: 'auto',
@@ -691,6 +695,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         this.callbacks.onTranscript?.(this.fullTranscript, true);
         break;
       case 'response.created':
+        this.clearProactiveTimer();
         this.hasCalledToolInTurn = false;
         this.hasDrawnDiagramInTurn = false;
         break;
@@ -698,6 +703,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
       // ── Semantic barge-in ───────────────────────────────────────────────
       case 'input_audio_buffer.speech_started':
+        this.clearProactiveTimer();
         this.fullTranscript = '';
         this.lastTranscriptSlice = '';
         if (performance.now() < this.teacherSpeakingUntil) {
@@ -820,6 +826,29 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
                avelutBoardController.clearStage();
              }
              this.sendSessionInit(); // Send session update to update prompt with new state
+           }
+
+           if (prevStage === 'GREETING') {
+             const nextStage = this.stateMachine.getCurrentStage();
+             const topic = this.promptConfig?.topicTitle || 'the topic';
+             liveLogger.log(`[QwenRealtime] GREETING complete. Automatically transitioning to ${nextStage}...`);
+             setTimeout(() => {
+               if (this.ws && this.ws.readyState === WebSocket.OPEN && this.state !== 'speaking') {
+                 const stageInst = this.stateMachine?.getNextInstruction() || '';
+                 this.sendJson({
+                   event_id: `teach_step_${Date.now()}`,
+                   type: 'response.create',
+                   response: {
+                     modalities: ['text', 'audio'],
+                     instructions: `${stageInst}\nBegin explaining the foundational idea of ${topic} to the student. Call your board tools (draw_shape, draw_sticky_note, annotate, or draw_component) to illustrate on the board as you speak!`,
+                     tools: this.buildToolDeclarations(),
+                     tool_choice: 'auto',
+                   },
+                 });
+               }
+             }, 1000);
+           } else {
+             this.scheduleProactiveContinuation();
            }
         }
         break;
@@ -1082,6 +1111,37 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         content: [{ type: "input_text", text: `[BOARD STATE] ${summary}` }]
       }
     }));
+  }
+
+  private scheduleProactiveContinuation(): void {
+    this.clearProactiveTimer();
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    this.proactiveTimer = setTimeout(() => {
+      if (this.state !== 'listening' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      liveLogger.log('[QwenRealtime] Student has been quiet for 9s — proactively advancing lesson...');
+
+      const topic = this.promptConfig?.topicTitle || 'the topic';
+      const stageInst = this.stateMachine?.getNextInstruction() || '';
+
+      this.sendJson({
+        event_id: `proactive_nudge_${Date.now()}`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          instructions: `${stageInst}\nThe student is listening attentively or thinking. Proactively guide them forward: either provide a helpful hint, break down the intuition, or explain the next key relationship of ${topic}. Call your board tools (draw_shape, draw_sticky_note, annotate, or draw_component) to draw or write on the board as you speak!`,
+          tools: this.buildToolDeclarations(),
+          tool_choice: 'auto',
+        },
+      });
+    }, 9000);
+  }
+
+  private clearProactiveTimer(): void {
+    if (this.proactiveTimer) {
+      clearTimeout(this.proactiveTimer);
+      this.proactiveTimer = null;
+    }
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
