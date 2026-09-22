@@ -222,6 +222,12 @@ export class AvelutBoardController {
     }
   }
 
+  private reserveVerticalSpace(height: number): number {
+    const y = this.cursorY;
+    this.cursorY += height + 80; // 80px gap
+    return y;
+  }
+
   private isStageFull(): boolean {
     return this.cursorY >= this.STAGE_FULL_Y;
   }
@@ -516,7 +522,18 @@ export class AvelutBoardController {
     this.clearStageIfFull();
 
     const startX = 50;
-    const startY = this.cursorY;
+
+    // Estimate heights based on diagram type to reserve space properly
+    let estimatedHeight = 200;
+    if (diagramType === 'cycle' || diagramType === 'coordinate_axes' || diagramType === 'concept_map' || diagramType === 'mindmap' || diagramType === 'hierarchical_tree') {
+      estimatedHeight = 260;
+    } else if (diagramType === 'flow' || diagramType === 'steps') {
+      estimatedHeight = 120;
+    } else if (diagramType === 'free_body') {
+      estimatedHeight = 240;
+    }
+
+    const startY = this.reserveVerticalSpace(estimatedHeight);
 
     switch (diagramType) {
       case 'collision': this.drawCollisionDiagram(startX, startY, data); break;
@@ -570,7 +587,6 @@ export class AvelutBoardController {
         textAlign: 'left', verticalAlign: 'top',
       }] : []),
     ], 'stage');
-    this.cursorY = sy + 180;
   }
 
   private drawFreeBodyDiagram(sx: number, sy: number, data: any): void {
@@ -604,7 +620,6 @@ export class AvelutBoardController {
     });
 
     this.appendElements(els, 'stage');
-    this.cursorY = sy + 220;
   }
 
   private drawCoordinateAxes(sx: number, sy: number, data: any): void {
@@ -628,7 +643,6 @@ export class AvelutBoardController {
       });
     }
     this.appendElements(els, 'stage');
-    this.cursorY = sy + h + 40;
   }
 
   private drawFlowDiagram(sx: number, sy: number, data: any): void {
@@ -648,26 +662,36 @@ export class AvelutBoardController {
     let cx = sx;
     const bw = 110, bh = 45;
 
+    // Create shapes first
     steps.forEach((step, i) => {
       els.push({
         type: 'rectangle', x: cx, y: sy, width: bw, height: bh,
+        id: `flow-step-${i}`,
         strokeColor: i === 0 ? '#38BDF8' : '#64748B',
         backgroundColor: i === 0 ? '#0369A1' : '#1E293B',
         fillStyle: 'solid', roughness: 1,
         roundness: { type: 3 },
         label: { text: step, fontSize: 14, strokeColor: '#FAFAFA' },
       });
+      cx += bw + 28;
+    });
+
+    // Then create arrows with bindings
+    cx = sx;
+    steps.forEach((step, i) => {
       if (i < steps.length - 1) {
         els.push({
           type: 'arrow', x: cx + bw, y: sy + bh / 2, width: 28, height: 0,
+          points: [[0, 0], [28, 0]],
           strokeColor: '#94A3B8', strokeWidth: 2,
+          start: { id: `flow-step-${i}` },
+          end: { id: `flow-step-${i + 1}` },
         });
       }
       cx += bw + 28;
     });
 
     this.appendElements(els, 'stage');
-    this.cursorY = sy + 90;
   }
 
   private drawCycleDiagram(sx: number, sy: number, data: any): void {
@@ -696,10 +720,12 @@ export class AvelutBoardController {
       };
     });
 
+    // Create shapes first
     steps.forEach((step, i) => {
       const pos = positions[i];
       els.push({
         type: 'rectangle',
+        id: `cycle-step-${i}`,
         x: pos.x,
         y: pos.y,
         width: 90,
@@ -710,25 +736,32 @@ export class AvelutBoardController {
         roundness: { type: 3 },
         label: { text: step, fontSize: 13, strokeColor: '#FAFAFA' },
       });
+    });
 
+    // Then create arrows with bindings
+    steps.forEach((step, i) => {
+      const pos = positions[i];
       const nextPos = positions[(i + 1) % n];
       const startAx = pos.x + 45;
       const startAy = pos.y + 20;
       const endAx = nextPos.x + 45;
       const endAy = nextPos.y + 20;
+
       els.push({
         type: 'arrow',
         x: startAx,
         y: startAy,
-        width: (endAx - startAx) * 0.7,
-        height: (endAy - startAy) * 0.7,
+        width: 1,
+        height: 1,
+        points: [[0, 0], [1, 1]],
         strokeColor: '#94A3B8',
         strokeWidth: 1.8,
+        start: { id: `cycle-step-${i}` },
+        end: { id: `cycle-step-${(i + 1) % n}` },
       });
     });
 
     this.appendElements(els, 'stage');
-    this.cursorY = sy + 260;
   }
 
   private drawComparisonDiagram(sx: number, sy: number, data: any): void {
@@ -794,7 +827,6 @@ export class AvelutBoardController {
     }
 
     this.appendElements(els, 'stage');
-    this.cursorY = Math.max(rowY, sy + 90) + 20;
   }
 
   private drawConceptMapDiagram(sx: number, sy: number, data: any): void {
@@ -839,6 +871,7 @@ export class AvelutBoardController {
     const els: any[] = [
       {
         type: 'ellipse',
+        id: 'concept-central',
         x: cx - 60, y: cy - 25, width: 120, height: 50,
         strokeColor: '#38BDF8', backgroundColor: '#0C4A6E', fillStyle: 'solid',
         label: { text: central, fontSize: 15, strokeColor: '#FAFAFA' },
@@ -847,22 +880,16 @@ export class AvelutBoardController {
 
     const branchDist = 130;
     const n = Math.max(branches.length, 1);
+
+    // Create shapes first
     branches.forEach((b, i) => {
       const angle = (i * 2 * Math.PI) / n - Math.PI / 2;
       const bx = cx + branchDist * Math.cos(angle) - 45;
       const by = cy + (branchDist * 0.7) * Math.sin(angle) - 18;
 
       els.push({
-        type: 'arrow',
-        x: cx, y: cy,
-        width: (bx + 45 - cx) * 0.8,
-        height: (by + 18 - cy) * 0.8,
-        strokeColor: '#94A3B8',
-        strokeWidth: 1.8,
-      });
-
-      els.push({
         type: 'rectangle',
+        id: `concept-branch-${i}`,
         x: bx, y: by, width: 90, height: 36,
         strokeColor: '#A78BFA', backgroundColor: '#1E1B4B', fillStyle: 'solid',
         roundness: { type: 3 },
@@ -870,8 +897,22 @@ export class AvelutBoardController {
       });
     });
 
+    // Then create arrows with bindings
+    branches.forEach((b, i) => {
+      els.push({
+        type: 'arrow',
+        x: cx, y: cy,
+        width: 1,
+        height: 1,
+        points: [[0, 0], [1, 1]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 1.8,
+        start: { id: 'concept-central' },
+        end: { id: `concept-branch-${i}` },
+      });
+    });
+
     this.appendElements(els, 'stage');
-    this.cursorY = sy + 210;
   }
 }
 
