@@ -591,6 +591,15 @@ export class AvelutBoardController {
       case 'concept_map':
       case 'mindmap':
       case 'hierarchical_tree': this.drawConceptMapDiagram(startX, startY, data); break;
+      case 'resistor':
+      case 'circuit':
+      case 'battery':
+      case 'capacitor':
+      case 'water_pipe':
+      case 'heat_engine':
+      case 'logic_gate':
+        this._drawComponent({ component: diagramType, x: startX, y: startY, label: data?.label || data?.title, caption: data?.caption || data?.equation });
+        break;
       default:
         if (data?.title && !isGenericLabel(data.title)) {
           this._writeText(data.title, { fontSize: 'medium', y: startY });
@@ -956,6 +965,369 @@ export class AvelutBoardController {
       });
     });
 
+    this.appendElements(els, 'stage');
+  }
+
+  // ── Pre-Made Engineering & Scientific Components ──────────────────────────
+
+  public drawComponent(args: {
+    component: string;
+    label?: string;
+    caption?: string;
+    x?: number;
+    y?: number;
+  }): void {
+    this.actionQueue.push(() => { this._drawComponent(args); });
+  }
+
+  private _drawComponent(args: {
+    component: string;
+    label?: string;
+    caption?: string;
+    x?: number;
+    y?: number;
+  }): void {
+    const { component, label, caption } = args;
+    const norm = (component || '').toLowerCase().replace(/[\s_-]+/g, '');
+    const reserve = this.reserveVerticalSpace(280);
+    const sx = args.x ?? 120;
+    const sy = args.y ?? reserve.y;
+
+    if (norm.includes('resistor')) {
+      this.drawResistorComponent(sx, sy, label, caption);
+    } else if (norm.includes('circuit')) {
+      this.drawCircuitComponent(sx, sy, label, caption);
+    } else if (norm.includes('battery') || norm.includes('powersource') || norm.includes('source')) {
+      this.drawBatteryComponent(sx, sy, label, caption);
+    } else if (norm.includes('capacitor')) {
+      this.drawCapacitorComponent(sx, sy, label, caption);
+    } else if (norm.includes('logic') || norm.includes('gate')) {
+      this.drawLogicGateComponent(sx, sy, label, caption);
+    } else if (norm.includes('heat') || norm.includes('engine')) {
+      this.drawHeatEngineComponent(sx, sy, label, caption);
+    } else if (norm.includes('water') || norm.includes('pipe')) {
+      this.drawWaterPipeAnalogy(sx, sy, label, caption);
+    } else {
+      this.drawResistorComponent(sx, sy, label, caption);
+    }
+  }
+
+  private drawResistorComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      // Left terminal wire
+      {
+        type: 'line',
+        x: sx,
+        y: sy + 40,
+        width: 70,
+        height: 0,
+        points: [[0, 0], [70, 0]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 3,
+      },
+      // Terminal dot left
+      {
+        type: 'ellipse',
+        x: sx - 4,
+        y: sy + 36,
+        width: 8,
+        height: 8,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#38BDF8',
+        fillStyle: 'solid',
+      },
+      // Resistor Zig-zag Body
+      {
+        type: 'line',
+        x: sx + 70,
+        y: sy + 40,
+        width: 140,
+        height: 0,
+        points: [
+          [0, 0],
+          [17, -24],
+          [35, 24],
+          [53, -24],
+          [71, 24],
+          [89, -24],
+          [107, 24],
+          [125, -24],
+          [140, 0],
+        ],
+        strokeColor: '#38BDF8',
+        strokeWidth: 3.5,
+        roughness: 1,
+      },
+      // Right terminal wire
+      {
+        type: 'line',
+        x: sx + 210,
+        y: sy + 40,
+        width: 70,
+        height: 0,
+        points: [[0, 0], [70, 0]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 3,
+      },
+      // Terminal dot right
+      {
+        type: 'ellipse',
+        x: sx + 276,
+        y: sy + 36,
+        width: 8,
+        height: 8,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#38BDF8',
+        fillStyle: 'solid',
+      },
+      // Resistor Title/Value Pill
+      {
+        type: 'text',
+        x: sx + 70,
+        y: sy - 15,
+        text: `Resistor (R) [ ${label || '100 Ω'} ]`,
+        fontSize: 22,
+        strokeColor: '#FDE047',
+        fontFamily: 1,
+      },
+      // Current flow indicator
+      {
+        type: 'arrow',
+        x: sx + 80,
+        y: sy + 75,
+        width: 120,
+        height: 0,
+        points: [[0, 0], [120, 0]],
+        strokeColor: '#34D399',
+        strokeWidth: 2,
+        label: { text: 'Current I →', fontSize: 14, strokeColor: '#34D399' },
+      },
+      // Governing Equation
+      {
+        type: 'text',
+        x: sx + 50,
+        y: sy + 115,
+        text: caption || "V = I · R  (Ohm's Law)",
+        fontSize: 28,
+        strokeColor: '#FAFAFA',
+        fontFamily: 1,
+      },
+      // Functional explanation
+      {
+        type: 'text',
+        x: sx + 30,
+        y: sy + 165,
+        text: '• Limits electrical current  • Dissipates heat: P = I² · R',
+        fontSize: 16,
+        strokeColor: '#94A3B8',
+        fontFamily: 1,
+      },
+    ];
+
+    this.appendElements(els, 'stage');
+  }
+
+  private drawCircuitComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      // DC Source Box (left)
+      {
+        type: 'rectangle',
+        id: 'dc-source',
+        x: sx,
+        y: sy + 20,
+        width: 150,
+        height: 80,
+        strokeColor: '#F59E0B',
+        backgroundColor: '#78350F',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: `DC Source\n[ ${label || '9V Battery'} ]`, fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      // Top Wire (Source to Resistor) with current arrow
+      {
+        type: 'arrow',
+        x: sx + 150,
+        y: sy + 60,
+        width: 130,
+        height: 0,
+        points: [[0, 0], [130, 0]],
+        strokeColor: '#34D399',
+        strokeWidth: 2.5,
+        label: { text: 'I (Current) →', fontSize: 13, strokeColor: '#34D399' },
+      },
+      // Resistor Box (Center)
+      {
+        type: 'rectangle',
+        id: 'circuit-resistor',
+        x: sx + 280,
+        y: sy + 20,
+        width: 160,
+        height: 80,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0C4A6E',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: 'Resistor (R)\n[ 100 Ω ]', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      // Right Wire to Ground
+      {
+        type: 'arrow',
+        x: sx + 440,
+        y: sy + 60,
+        width: 110,
+        height: 0,
+        points: [[0, 0], [110, 0]],
+        strokeColor: '#94A3B8',
+        strokeWidth: 2,
+        label: { text: 'Return', fontSize: 12, strokeColor: '#94A3B8' },
+      },
+      // Ground Node (Right)
+      {
+        type: 'ellipse',
+        x: sx + 550,
+        y: sy + 45,
+        width: 70,
+        height: 35,
+        strokeColor: '#34D399',
+        backgroundColor: '#064E3B',
+        fillStyle: 'solid',
+        label: { text: 'GND (0V)', fontSize: 12, strokeColor: '#FAFAFA' },
+      },
+      // Ohm's Law Formula Card
+      {
+        type: 'text',
+        x: sx + 140,
+        y: sy + 130,
+        text: caption || "V = I · R    |    I = V / R    |    P = V · I = I²R",
+        fontSize: 24,
+        strokeColor: '#FDE047',
+        fontFamily: 1,
+      },
+    ];
+
+    this.appendElements(els, 'stage');
+  }
+
+  private drawBatteryComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      { type: 'line', x: sx, y: sy + 40, width: 80, height: 0, points: [[0, 0], [80, 0]], strokeColor: '#94A3B8', strokeWidth: 3 },
+      { type: 'line', x: sx + 80, y: sy + 10, width: 0, height: 60, points: [[0, 0], [0, 60]], strokeColor: '#34D399', strokeWidth: 4 },
+      { type: 'text', x: sx + 75, y: sy - 15, text: '+', fontSize: 24, strokeColor: '#34D399' },
+      { type: 'line', x: sx + 105, y: sy + 25, width: 0, height: 30, points: [[0, 0], [0, 30]], strokeColor: '#F87171', strokeWidth: 6 },
+      { type: 'text', x: sx + 100, y: sy - 15, text: '−', fontSize: 24, strokeColor: '#F87171' },
+      { type: 'line', x: sx + 105, y: sy + 40, width: 80, height: 0, points: [[0, 0], [80, 0]], strokeColor: '#94A3B8', strokeWidth: 3 },
+      { type: 'text', x: sx + 30, y: sy + 90, text: `DC Voltage Source: ${label || '9V'}`, fontSize: 22, strokeColor: '#FDE047' },
+      { type: 'text', x: sx + 30, y: sy + 130, text: caption || 'Maintains constant potential difference ΔV', fontSize: 16, strokeColor: '#94A3B8' },
+    ];
+    this.appendElements(els, 'stage');
+  }
+
+  private drawCapacitorComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      { type: 'line', x: sx, y: sy + 40, width: 80, height: 0, points: [[0, 0], [80, 0]], strokeColor: '#94A3B8', strokeWidth: 3 },
+      { type: 'line', x: sx + 80, y: sy + 10, width: 0, height: 60, points: [[0, 0], [0, 60]], strokeColor: '#38BDF8', strokeWidth: 5 },
+      { type: 'text', x: sx + 72, y: sy - 15, text: '+Q', fontSize: 18, strokeColor: '#38BDF8' },
+      { type: 'line', x: sx + 110, y: sy + 10, width: 0, height: 60, points: [[0, 0], [0, 60]], strokeColor: '#F87171', strokeWidth: 5 },
+      { type: 'text', x: sx + 105, y: sy - 15, text: '−Q', fontSize: 18, strokeColor: '#F87171' },
+      { type: 'line', x: sx + 110, y: sy + 40, width: 80, height: 0, points: [[0, 0], [80, 0]], strokeColor: '#94A3B8', strokeWidth: 3 },
+      { type: 'text', x: sx + 30, y: sy + 90, text: caption || 'Q = C · V    |    E = ½ C V²', fontSize: 24, strokeColor: '#FAFAFA' },
+      { type: 'text', x: sx + 30, y: sy + 135, text: `Capacitor (C): ${label || '10 µF'} • Stores electrostatic energy`, fontSize: 16, strokeColor: '#94A3B8' },
+    ];
+    this.appendElements(els, 'stage');
+  }
+
+  private drawWaterPipeAnalogy(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      {
+        type: 'rectangle', x: sx, y: sy + 20, width: 140, height: 80,
+        strokeColor: '#38BDF8', backgroundColor: '#0369A1', fillStyle: 'solid',
+        label: { text: 'Wide Pipe\n(Low Resistance)', fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: sx + 140, y: sy + 60, width: 60, height: 0, points: [[0, 0], [60, 0]],
+        strokeColor: '#34D399', strokeWidth: 2, label: { text: 'Flow →', fontSize: 12, strokeColor: '#34D399' },
+      },
+      {
+        type: 'rectangle', x: sx + 200, y: sy + 40, width: 120, height: 40,
+        strokeColor: '#F59E0B', backgroundColor: '#B45309', fillStyle: 'solid',
+        label: { text: 'Narrow Pipe\n(HIGH RESISTANCE)', fontSize: 12, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: sx + 320, y: sy + 60, width: 60, height: 0, points: [[0, 0], [60, 0]],
+        strokeColor: '#F87171', strokeWidth: 2, label: { text: 'Restricted →', fontSize: 12, strokeColor: '#F87171' },
+      },
+      {
+        type: 'rectangle', x: sx + 380, y: sy + 20, width: 140, height: 80,
+        strokeColor: '#38BDF8', backgroundColor: '#0369A1', fillStyle: 'solid',
+        label: { text: 'Output Pipe\n(Reduced Flow)', fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'text', x: sx + 20, y: sy + 130,
+        text: 'Hydraulic Analogy:\n• Water Pressure ≡ Voltage (V)\n• Flow Rate ≡ Current (I)\n• Pipe Constriction ≡ Resistance (R)\n• Ohm\'s Law: Current = Pressure / Resistance',
+        fontSize: 18, strokeColor: '#FDE047', fontFamily: 1,
+      },
+    ];
+    this.appendElements(els, 'stage');
+  }
+
+  private drawLogicGateComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const gate = (label || 'AND').toUpperCase();
+    const els: any[] = [
+      { type: 'line', x: sx, y: sy + 30, width: 60, height: 0, points: [[0, 0], [60, 0]], strokeColor: '#94A3B8', strokeWidth: 2.5 },
+      { type: 'text', x: sx - 20, y: sy + 20, text: 'A', fontSize: 16, strokeColor: '#38BDF8' },
+      { type: 'line', x: sx + 60, y: sy + 70, width: 60, height: 0, points: [[0, 0], [60, 0]], strokeColor: '#94A3B8', strokeWidth: 2.5 },
+      { type: 'text', x: sx - 20, y: sy + 60, text: 'B', fontSize: 16, strokeColor: '#38BDF8' },
+      {
+        type: 'rectangle', x: sx + 60, y: sy + 15, width: 110, height: 70,
+        strokeColor: '#8B5CF6', backgroundColor: '#4C1D95', fillStyle: 'solid', roundness: { type: 3 },
+        label: { text: `${gate} Gate`, fontSize: 16, strokeColor: '#FAFAFA' },
+      },
+      { type: 'arrow', x: sx + 170, y: sy + 50, width: 80, height: 0, points: [[0, 0], [80, 0]], strokeColor: '#34D399', strokeWidth: 2.5 },
+      { type: 'text', x: sx + 260, y: sy + 40, text: 'Y (Output)', fontSize: 16, strokeColor: '#34D399' },
+      {
+        type: 'text', x: sx + 30, y: sy + 115,
+        text: caption || (gate === 'OR' ? 'Y = A + B' : gate === 'NOT' ? 'Y = ¬A' : 'Y = A · B (Logic AND)'),
+        fontSize: 24, strokeColor: '#FDE047', fontFamily: 1,
+      },
+    ];
+    this.appendElements(els, 'stage');
+  }
+
+  private drawHeatEngineComponent(sx: number, sy: number, label?: string, caption?: string): void {
+    const els: any[] = [
+      {
+        type: 'ellipse', x: sx + 140, y: sy, width: 180, height: 60,
+        strokeColor: '#F87171', backgroundColor: '#7F1D1D', fillStyle: 'solid',
+        label: { text: 'Hot Reservoir (T_H)', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: sx + 230, y: sy + 60, width: 0, height: 60, points: [[0, 0], [0, 60]],
+        strokeColor: '#F87171', strokeWidth: 3, label: { text: 'Q_H', fontSize: 14, strokeColor: '#F87171' },
+      },
+      {
+        type: 'rectangle', x: sx + 160, y: sy + 120, width: 140, height: 70,
+        strokeColor: '#F59E0B', backgroundColor: '#78350F', fillStyle: 'solid', roundness: { type: 3 },
+        label: { text: 'Heat Engine', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: sx + 300, y: sy + 155, width: 90, height: 0, points: [[0, 0], [90, 0]],
+        strokeColor: '#34D399', strokeWidth: 3, label: { text: 'Work (W) →', fontSize: 14, strokeColor: '#34D399' },
+      },
+      {
+        type: 'arrow', x: sx + 230, y: sy + 190, width: 0, height: 60, points: [[0, 0], [0, 60]],
+        strokeColor: '#60A5FA', strokeWidth: 3, label: { text: 'Q_C', fontSize: 14, strokeColor: '#60A5FA' },
+      },
+      {
+        type: 'ellipse', x: sx + 140, y: sy + 250, width: 180, height: 60,
+        strokeColor: '#38BDF8', backgroundColor: '#0C4A6E', fillStyle: 'solid',
+        label: { text: 'Cold Reservoir (T_C)', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'text', x: sx + 30, y: sy + 330,
+        text: caption || 'Efficiency: η = W / Q_H = 1 − (T_C / T_H)',
+        fontSize: 24, strokeColor: '#FDE047', fontFamily: 1,
+      },
+    ];
     this.appendElements(els, 'stage');
   }
 }

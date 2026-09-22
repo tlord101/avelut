@@ -69,6 +69,7 @@ export class QwenRealtimeTeacherService {
   private hasGreeted = false;
   private isStarting = false;
   private isSessionUpdated = false;
+  private retriedWithDefaultVoice = false;
   private stateMachine: PedagogicalStateMachine | null = null;
 
   private teacherSpeakingUntil = 0;
@@ -189,6 +190,7 @@ export class QwenRealtimeTeacherService {
     this.hasGreeted = false;
     this.isStarting = false;
     this.isSessionUpdated = false;
+    this.retriedWithDefaultVoice = false;
 
     this.stateMachine = null;
 
@@ -308,6 +310,7 @@ export class QwenRealtimeTeacherService {
     liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
     // Give the model a direct instruction to greet warmly AND immediately draw on the board
+    const compHint = topicStr.toLowerCase().includes('resistor') ? 'draw_component({ component: "resistor", label: "100 Ω", caption: "V = I · R" })' : `illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" })`;
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -316,7 +319,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and immediately call your board tool illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" }) or annotate({ text: ${JSON.stringify(topicStr)} }) to place the introductory visual anchor on the board as you speak! Do not ask me what topic we are going to discuss.`,
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and immediately call your board tool ${compHint} or annotate({ text: ${JSON.stringify(topicStr)} }) to place the introductory visual anchor on the board as you speak! Do not ask me what topic we are going to discuss.`,
         }],
       },
     });
@@ -329,7 +332,7 @@ export class QwenRealtimeTeacherService {
 
   // ── Session initialisation ────────────────────────────────────────────────
 
-  private sendSessionInit(): void {
+  private sendSessionInit(overrideVoice?: string): void {
     if (!this.promptConfig) return;
 
     const stageInstruction = this.stateMachine ? this.stateMachine.getNextInstruction() : '';
@@ -339,7 +342,12 @@ export class QwenRealtimeTeacherService {
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
 
-    const selectedVoice = this.appSettings?.alibaba_voice_name || 'Cherry';
+    // DashScope Realtime (qwen3.5-omni-flash-realtime) supports 'Tina' as the primary English female voice.
+    // 'Cherry' is a TTS-only voice and is rejected by the Realtime WebSocket endpoint with a 400 error.
+    let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'Tina';
+    if (selectedVoice === 'Cherry' || selectedVoice === 'Catherine' || !selectedVoice) {
+      selectedVoice = 'Tina';
+    }
     liveLogger.log('[QwenRealtime] Configuring session with voice:', selectedVoice);
 
     this.sendJson({
@@ -416,6 +424,24 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             color: { type: "string", description: "Hex. Default #1e1e1e." }
           },
           required: ["text"]
+        }
+      },
+      {
+        type: 'function',
+        name: 'draw_component',
+        description: 'Render a pre-made, high-quality engineering or physical illustration component directly on the board. Available components: "resistor", "circuit", "battery", "capacitor", "water_pipe", "heat_engine", "logic_gate". Always prefer this whenever introducing physical components!',
+        parameters: {
+          type: 'object',
+          properties: {
+            component: {
+              type: 'string',
+              enum: ['resistor', 'circuit', 'battery', 'capacitor', 'water_pipe', 'heat_engine', 'logic_gate'],
+              description: 'The pre-made component to render'
+            },
+            label: { type: 'string', description: 'Component label or value (e.g. "100 Ω", "9V", "AND Gate")' },
+            caption: { type: 'string', description: 'Governing equation or short note (e.g. "V = I · R")' }
+          },
+          required: ['component']
         }
       },
       {
@@ -703,6 +729,12 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
       case 'error':
         liveLogger.error('[QwenRealtime] Server error:', event.error);
+        if (event.error?.message?.includes('Voice') && !this.retriedWithDefaultVoice) {
+          this.retriedWithDefaultVoice = true;
+          liveLogger.warn('[QwenRealtime] Voice error encountered. Auto-recovering session with voice "Tina"...');
+          this.sendSessionInit('Tina');
+          return;
+        }
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
         break;
 
@@ -815,6 +847,24 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             liveLogger.error('[QwenRealtime] illustrate failed:', err);
             toolResult = { status: 'failed', reason: String(err) };
           }
+          break;
+        }
+
+        case 'draw_component': {
+          this.hasCalledToolInTurn = true;
+          this.boardVisualizerService.hasGeneratedKickoff = true;
+          this.avelutBoardController.drawComponent({
+            component: args.component,
+            label: args.label,
+            caption: args.caption,
+          });
+          const summary = this.avelutBoardController.getCompactSummary();
+          this.injectBoardStateMessage(summary);
+          toolResult = {
+            status: 'rendered',
+            component: args.component,
+            board_summary: summary,
+          };
           break;
         }
 

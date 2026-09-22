@@ -360,6 +360,24 @@ Return ONLY the JSON object described in the system prompt.`;
     const { topicTitle, courseName = 'Academic Course', syllabusContext } = this.config;
 
     try {
+      const norm = (topicTitle || '').toLowerCase();
+      // Fast path for pre-made engineering and physical components
+      if (norm.includes('resistor') || norm.includes('circuit') || norm.includes('capacitor') || norm.includes('battery') || norm.includes('engine') || norm.includes('gate') || norm.includes('pipe')) {
+        let comp = 'resistor';
+        if (norm.includes('circuit')) comp = 'circuit';
+        else if (norm.includes('capacitor')) comp = 'capacitor';
+        else if (norm.includes('battery')) comp = 'battery';
+        else if (norm.includes('engine')) comp = 'heat_engine';
+        else if (norm.includes('gate')) comp = 'logic_gate';
+        else if (norm.includes('pipe')) comp = 'water_pipe';
+
+        avelutBoardController.drawComponent({ component: comp });
+        this.hasGeneratedKickoff = true;
+        this.setStatus('ready');
+        this.callbacks.onVisualDrawn?.(`Pre-made ${comp} schematic`);
+        return;
+      }
+
       const reserve = avelutBoardController.reserveVerticalSpace(380);
       const res = await this.generateStructuredDiagram({
         topic: `${topicTitle} - key concept, visual components, circuit/structure, and formula`,
