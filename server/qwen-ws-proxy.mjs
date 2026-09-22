@@ -3,7 +3,7 @@
  * server/qwen-ws-proxy.mjs
  *
  * WebSocket proxy for Alibaba Cloud DashScope Qwen Omni Realtime.
- * Model: qwen-omni-turbo-realtime
+ * Model: Qwen3.8-Omni-Flash-Realtime
  * To update the model, change QWEN_REALTIME_MODEL here and in api/qwen-realtime.ts.
  *
  * WHY THIS EXISTS:

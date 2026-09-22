@@ -3,7 +3,7 @@
  *
  * Vercel Node.js Serverless Function — WebSocket Proxy for DashScope Realtime.
  *
- * Model: qwen-omni-turbo-realtime (Alibaba Cloud Model Studio)
+ * Model: Qwen3.8-Omni-Flash-Realtime (Alibaba Cloud Model Studio)
  * To update the model, change QWEN_REALTIME_MODEL here and in server/qwen-ws-proxy.mjs.
  *
  * WHY:
