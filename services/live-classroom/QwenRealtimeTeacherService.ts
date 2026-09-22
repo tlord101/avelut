@@ -316,7 +316,7 @@ export class QwenRealtimeTeacherService {
   }
 
   /** Triggers the initial teacher greeting manually from the UI */
-  public triggerInitialGreeting(): void {
+  public async triggerInitialGreeting(): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     if (this.hasGreeted) {
       liveLogger.log('[QwenRealtime] Greeting already sent — skip');
@@ -324,27 +324,19 @@ export class QwenRealtimeTeacherService {
     }
     this.hasGreeted = true;
 
+    liveLogger.setStage('GREETING');
+
     const topicStr = this.promptConfig?.topicTitle || 'the topic';
     const topic = `"${topicStr}"`;
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
-    const isPhysicalComp = topicStr.toLowerCase().includes('resistor')
-      || topicStr.toLowerCase().includes('diode')
-      || topicStr.toLowerCase().includes('led')
-      || topicStr.toLowerCase().includes('capacitor')
-      || topicStr.toLowerCase().includes('battery')
-      || topicStr.toLowerCase().includes('circuit')
-      || topicStr.toLowerCase().includes('engine')
-      || topicStr.toLowerCase().includes('gate')
-      || topicStr.toLowerCase().includes('pipe');
+    // 1. Immediately render the introductory illustration onto the whiteboard so the board is NEVER empty!
+    await this.boardVisualizerService.generateKickoffIllustration();
+    const boardSummary = this.avelutBoardController.getCompactSummary();
+    liveLogger.log('[QwenRealtime] Initial board illustrated successfully:', boardSummary);
 
-    const compHint = topicStr.toLowerCase().includes('resistor')
-      ? 'draw_component({ component: "resistor", label: "100 Ω", caption: "V = I · R" })'
-      : (topicStr.toLowerCase().includes('diode') || topicStr.toLowerCase().includes('led'))
-      ? 'draw_component({ component: "diode", label: "1N4148", caption: "V_f ≈ 0.7V" })'
-      : `draw_shape({ type: "rectangle", id: "topic_main", label: ${JSON.stringify(topicStr)}, backgroundColor: "#e0f2fe" })`;
-
+    // 2. Instruct model with the visual context so its speech directly references what is on the board
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -353,7 +345,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin our lesson on ${topic}. Call your board tool ${compHint} immediately to place the visual illustration on the whiteboard, then greet me warmly in 1-2 sentences and introduce ${topic}.`,
+          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. The whiteboard is already illustrated with: ${boardSummary}. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and point directly to what is on the board!`,
         }],
       },
     });
@@ -363,9 +355,9 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        instructions: `MANDATORY: Call your board tool (${compHint}) right now to illustrate the board, then greet the student warmly in 1-2 short sentences!`,
+        instructions: `The whiteboard has been illustrated with: "${boardSummary}". Greet the student warmly in 1-2 short sentences, point directly to what is on the board, and introduce the concept!`,
         tools: this.buildToolDeclarations(),
-        tool_choice: 'required',
+        tool_choice: 'auto',
       },
     });
   }
@@ -652,13 +644,10 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       },
     ];
 
-    // Dual format: satisfies both OpenAI Realtime API (flat properties)
-    // and DashScope Realtime API (nested function property)
+    // Conforms strictly to Alibaba DashScope Realtime tools schema:
+    // array of { type: 'function', function: { name, description, parameters } }
     return rawTools.map((t) => ({
       type: 'function',
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
       function: {
         name: t.name,
         description: t.description,
@@ -854,28 +843,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
            liveLogger.setStage(this.stateMachine.getCurrentStage());
 
            if (prevStage === 'GREETING') {
-             // NEVER get stuck in GREETING! Advance to STAGE_1_INTUITION automatically
-             this.stateMachine.forceAdvance('STAGE_1_INTUITION');
-             const nextStage = this.stateMachine.getCurrentStage();
-             liveLogger.log(`[QwenRealtime] GREETING complete. Automatically transitioning to ${nextStage}...`);
-             this.sendSessionInit();
-
-             const topic = this.promptConfig?.topicTitle || 'the topic';
-             setTimeout(() => {
-               if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.isTeacherSpeaking()) {
-                 const stageInst = this.stateMachine?.getNextInstruction() || '';
-                 this.sendJson({
-                   event_id: `teach_step_${Date.now()}`,
-                   type: 'response.create',
-                   response: {
-                     modalities: ['text', 'audio'],
-                     instructions: `${stageInst}\nBegin Stage 1 (Intuition) for ${topic}. Use an everyday real-world analogy. Call draw_sticky_note or annotate to place the intuition card on the board as you speak!`,
-                     tools: this.buildToolDeclarations(),
-                     tool_choice: 'auto',
-                   },
-                 });
-               }
-             }, 1200);
+             this.advanceFromGreetingToStage1();
            } else {
              if (timeChanged && this.stateMachine.getCurrentStage() !== prevStage) {
                this.sendSessionInit(); // Update prompt for wrap-up stages
@@ -1146,6 +1114,45 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         content: [{ type: "input_text", text: `[BOARD STATE] ${summary}` }]
       }
     }));
+  }
+
+  private advanceFromGreetingToStage1(): void {
+    if (!this.stateMachine || this.stateMachine.getCurrentStage() !== 'GREETING') return;
+
+    const tryAdvance = () => {
+      // If teacher is still speaking the greeting audio, wait and check again
+      if (this.isTeacherSpeaking()) {
+        setTimeout(tryAdvance, 500);
+        return;
+      }
+
+      if (!this.stateMachine || this.stateMachine.getCurrentStage() !== 'GREETING') return;
+
+      this.stateMachine.forceAdvance('STAGE_1_INTUITION');
+      const nextStage = this.stateMachine.getCurrentStage();
+      liveLogger.setStage(nextStage);
+      liveLogger.log(`[QwenRealtime] Greeting speech finished. Automatically starting ${nextStage}...`);
+      this.sendSessionInit();
+
+      const topic = this.promptConfig?.topicTitle || 'the topic';
+      setTimeout(() => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.isTeacherSpeaking()) {
+          const stageInst = this.stateMachine?.getNextInstruction() || '';
+          this.sendJson({
+            event_id: `teach_step_${Date.now()}`,
+            type: 'response.create',
+            response: {
+              modalities: ['text', 'audio'],
+              instructions: `${stageInst}\nBegin Stage 1 (Intuition) for ${topic}. Use an everyday real-world analogy. Call draw_sticky_note or annotate to place the intuition card on the board as you speak!`,
+              tools: this.buildToolDeclarations(),
+              tool_choice: 'auto',
+            },
+          });
+        }
+      }, 500);
+    };
+
+    setTimeout(tryAdvance, 800);
   }
 
   private scheduleProactiveContinuation(): void {
