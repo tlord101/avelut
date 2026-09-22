@@ -184,12 +184,7 @@ export class QwenRealtimeTeacherService {
     this.hasGreeted = false;
     this.isStarting = false;
 
-    this.stateMachine = new PedagogicalStateMachine({
-      topicTitle: config.topicTitle,
-      durationMinutes: config.durationMinutes || 30,
-      learningPath: config.learningPath,
-      syllabusContext: config.syllabusContext
-    });
+    this.stateMachine = null;
 
     this.setState('closed');
   }
