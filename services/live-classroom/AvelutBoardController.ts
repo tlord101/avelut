@@ -1,1 +1,849 @@
-PLACEHOLDER
+/**
+ * AvelutBoardController.ts
+ *
+ * Programmatic bridge between AI tool calls and the live Excalidraw canvas.
+ *
+ * Rules (2026-09 production classroom):
+ *  - Prefer APPEND + scroll down. Do NOT erase unless the viewport is full.
+ *  - Never put generic placeholders (Concept A, Aspect 1, Core Idea) on the board.
+ *  - Accept multiple JSON shapes from the visualizer (nodes[], branches[], steps[]).
+ */
+
+import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+
+export type FontSize = 'small' | 'medium' | 'large' | 'title' | number;
+
+export interface WriteTextArgs {
+  text?: string;
+  fontSize?: FontSize;
+  color?: string;
+  x?: number;
+  y?: number;
+  isFormula?: boolean;
+}
+
+export interface DrawShapeArgs {
+  type: 'rectangle' | 'ellipse' | 'arrow' | 'line';
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  label?: string;
+  color?: string;
+  backgroundColor?: string;
+  strokeStyle?: 'solid' | 'dashed' | 'dotted';
+}
+
+const GENERIC_LABEL_RE =
+  /^(concept\s*[a-z0-9]?|aspect\s*\d+|core\s*idea|stage\s*\d+|node\s*\d+|label\s*\d+|item\s*\d+|topic\s*\d+|untitled|placeholder)$/i;
+
+function isGenericLabel(s: string | undefined | null): boolean {
+  if (!s || !String(s).trim()) return true;
+  return GENERIC_LABEL_RE.test(String(s).trim());
+}
+
+function sanitizeLabel(s: string, fallback = ''): string {
+  const t = String(s || '').trim();
+  if (!t || isGenericLabel(t)) return fallback;
+  return t.length > 28 ? t.slice(0, 26) + '…' : t;
+}
+
+class BoardActionQueue {
+  private queue: Array<() => Promise<void>> = [];
+  private isProcessing = false;
+
+  public push(action: () => Promise<void> | void) {
+    this.queue.push(async () => {
+      await action();
+    });
+    this.processNext();
+  }
+
+  private async processNext() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const action = this.queue.shift();
+      if (action) {
+        try {
+          await action();
+        } catch (e) {
+          console.error('[BoardActionQueue] Error executing action', e);
+        }
+      }
+    }
+
+    this.isProcessing = false;
+  }
+}
+
+export class AvelutBoardController {
+  private actionQueue = new BoardActionQueue();
+
+  private api: ExcalidrawImperativeAPI | null = null;
+  private elements: any[] = [];
+  private cursorY = 90;
+  private lessonTitle = '';
+
+  private readonly STAGE_FULL_Y = 420;
+  private readonly VIEWPORT_HEIGHT = 520;
+
+  public setApi(api: ExcalidrawImperativeAPI | null): void {
+    if (api) {
+      this.api = api;
+      setTimeout(() => {
+        if (this.elements.length > 0) {
+          this.syncScene();
+        }
+      }, 60);
+    }
+  }
+
+  public setLessonTitle(title: string): void {
+    this.lessonTitle = title;
+  }
+
+  public getElements(): any[] {
+    return [...this.elements];
+  }
+
+  public initBoard(title: string): void {
+    this.lessonTitle = title;
+    this.cursorY = 90;
+    try {
+      const titleEls = convertToExcalidrawElements([
+        {
+          type: 'text',
+          x: 48,
+          y: 28,
+          text: `📚 ${title}`,
+          fontSize: 26,
+          fontFamily: 1,
+          textAlign: 'left',
+          verticalAlign: 'top',
+          strokeColor: '#38BDF8',
+          customData: { zone: 'header' },
+        },
+      ]);
+      this.elements = [...titleEls];
+      if (this.api) {
+        this.syncScene();
+      }
+    } catch (e) {
+      console.warn('[BoardController] initBoard error:', e);
+    }
+  }
+
+  private syncScene(): void {
+    if (!this.api) {
+      console.warn('[BoardController] syncScene skipped — API null, elements=', this.elements.length);
+      return;
+    }
+    try {
+      const scrollY =
+        this.cursorY > this.VIEWPORT_HEIGHT
+          ? -(this.cursorY - this.VIEWPORT_HEIGHT + 40)
+          : 0;
+
+      this.api.updateScene({
+        elements: [...this.elements],
+        appState: {
+          zoom: { value: 1.0 as any },
+          scrollX: 0,
+          scrollY,
+        },
+      });
+    } catch (e) {
+      console.warn('[BoardController] syncScene error:', e);
+    }
+  }
+
+  private appendElements(rawElements: any[], zone: 'stage' | 'notes' | 'header' = 'stage'): void {
+    try {
+      const tagged = rawElements.map(el => ({
+        ...el,
+        customData: { ...(el.customData || {}), zone },
+      }));
+      const converted = convertToExcalidrawElements(tagged);
+      this.elements = [...this.elements, ...converted];
+      this.syncScene();
+    } catch (err) {
+      console.error('[BoardController] appendElements error:', err);
+    }
+  }
+
+  public hasElements(): boolean {
+    return this.elements.length > 1;
+  }
+
+  public getElementCount(): number {
+    return this.elements.length;
+  }
+
+  private fontSizeToNumber(size?: FontSize): number {
+    if (typeof size === 'number') return size;
+    switch (size) {
+      case 'small': return 14;
+      case 'medium': return 18;
+      case 'large': return 24;
+      case 'title': return 28;
+      default: return 18;
+    }
+  }
+
+  private isStageFull(): boolean {
+    return this.cursorY >= this.STAGE_FULL_Y;
+  }
+
+  private clearStageIfFull(): void {
+    if (this.isStageFull()) {
+      console.log('[BoardController] Stage full — clearing to make room');
+      this._clearStage();
+    }
+  }
+
+  public clearStage(): void {
+    this.actionQueue.push(() => { this._clearStage(); });
+  }
+  private _clearStage(): void {
+    this.elements = this.elements.filter(el => el.customData?.zone !== 'stage');
+    this.cursorY = 90;
+    this.syncScene();
+  }
+
+  public clearNotes(): void {
+    this.actionQueue.push(() => { this._clearNotes(); });
+  }
+  private _clearNotes(): void {
+    this.elements = this.elements.filter(el => el.customData?.zone !== 'notes');
+    this.syncScene();
+  }
+
+  public writeText(text: string, args?: WriteTextArgs): void {
+    this.actionQueue.push(() => { this._writeText(text, args); });
+  }
+  private _writeText(text: string, args?: WriteTextArgs): void {
+    if (!text?.trim()) return;
+    if (isGenericLabel(text)) {
+      console.warn('[BoardController] Skipping generic write_text:', text);
+      return;
+    }
+
+    console.log('[BoardController] writeText called:', text, args);
+
+    if (args?.isFormula) {
+      this._setFormula(text.trim());
+      return;
+    }
+
+    this.clearStageIfFull();
+
+    const fontSize = this.fontSizeToNumber(args?.fontSize);
+    const x = args?.x ?? 50;
+    const y = args?.y ?? this.cursorY;
+    const color = args?.color ?? '#FAFAFA';
+
+    this.appendElements([{
+      type: 'text',
+      x, y,
+      text: text.trim(),
+      fontSize,
+      fontFamily: 1,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      strokeColor: color,
+    }], y >= 400 ? 'notes' : 'stage');
+
+    if (args?.y === undefined) {
+      const lines = text.split('\n').length;
+      this.cursorY = y + Math.max(36, lines * fontSize * 1.4 + 12);
+    }
+  }
+
+  public setFormula(formulaText: string): void {
+    this.actionQueue.push(() => { this._setFormula(formulaText); });
+  }
+  private _setFormula(formulaText: string): void {
+    if (!formulaText?.trim()) return;
+    this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
+
+    const els = convertToExcalidrawElements([{
+      type: 'rectangle',
+      x: 50,
+      y: 410,
+      width: Math.min(Math.max(formulaText.length * 14 + 40, 240), 550),
+      height: 48,
+      strokeColor: '#FDE047',
+      backgroundColor: '#1E1B4B',
+      fillStyle: 'solid',
+      roundness: { type: 3 },
+      label: { text: formulaText.trim(), fontSize: 18, strokeColor: '#FDE047' },
+      customData: { zone: 'notes', slot: 'formula' },
+    }]);
+
+    this.elements = [...this.elements, ...els];
+    this.syncScene();
+  }
+
+  public drawShape(args: DrawShapeArgs): void {
+    this.actionQueue.push(() => { this._drawShape(args); });
+  }
+  private _drawShape(args: DrawShapeArgs): void {
+    const {
+      type, x, y,
+      width = 120, height = 70,
+      label, color = '#38BDF8',
+      backgroundColor = 'transparent',
+      strokeStyle = 'solid',
+    } = args;
+    const safeY = y;
+
+    const el: any = {
+      type,
+      x: Math.min(x, 650),
+      y: safeY,
+      width: Math.min(width, 600),
+      height: Math.min(height, 260),
+      strokeColor: color,
+      backgroundColor,
+      fillStyle: backgroundColor !== 'transparent' ? 'solid' : 'hachure',
+      strokeWidth: 2,
+      strokeStyle,
+      roughness: 1,
+      roundness: { type: 3 },
+    };
+
+    if (label && !isGenericLabel(label)) {
+      el.label = { text: sanitizeLabel(label), fontSize: 16, strokeColor: '#FAFAFA' };
+    }
+
+    this.appendElements([el], 'stage');
+    this.cursorY = Math.max(this.cursorY, safeY + (height || 70) + 24);
+  }
+
+  public highlightConcept(targetText: string, style: 'circle' | 'box' | 'underline' = 'box'): void {
+    this.actionQueue.push(() => { this._highlightConcept(targetText, style); });
+  }
+  private _highlightConcept(targetText: string, style: 'circle' | 'box' | 'underline' = 'box'): void {
+    if (!targetText?.trim()) return;
+    const target = this.elements.find(el =>
+      (el.type === 'text' && el.text?.toLowerCase().includes(targetText.toLowerCase())) ||
+      el.label?.text?.toLowerCase().includes(targetText.toLowerCase())
+    );
+
+    const tx = target?.x ?? 60;
+    const ty = target?.y ?? (this.cursorY - 40);
+    const tw = Math.max(target?.width ?? 0, 140);
+    const th = Math.max(target?.height ?? 0, 36);
+    const hlColor = '#FBBF24';
+
+    if (style === 'underline') {
+      this.appendElements([{
+        type: 'line', x: tx - 4, y: ty + th + 4,
+        width: tw + 8, height: 0,
+        strokeColor: hlColor, strokeWidth: 3, roughness: 2,
+      }], 'stage');
+    } else if (style === 'circle') {
+      this.appendElements([{
+        type: 'ellipse', x: tx - 12, y: ty - 8,
+        width: tw + 24, height: th + 16,
+        strokeColor: hlColor, strokeWidth: 2.5,
+        backgroundColor: 'transparent', roughness: 2,
+      }], 'stage');
+    } else {
+      this.appendElements([{
+        type: 'rectangle', x: tx - 8, y: ty - 6,
+        width: tw + 16, height: th + 12,
+        strokeColor: hlColor, strokeWidth: 2, strokeStyle: 'dashed',
+        backgroundColor: 'transparent', roughness: 1.2,
+      }], 'stage');
+    }
+  }
+
+  public clearBoard(keepTitle = true): void {
+    this.actionQueue.push(() => { this._clearBoard(keepTitle); });
+  }
+  private _clearBoard(keepTitle = true): void {
+    if (keepTitle && this.lessonTitle) {
+      const titleEl = this.elements.find(el => el.customData?.zone === 'header' || (el.type === 'text' && el.y < 60));
+      this.elements = titleEl ? [titleEl] : [];
+      this.cursorY = 90;
+    } else {
+      this.elements = [];
+      this.cursorY = 90;
+    }
+    this.syncScene();
+  }
+
+  public updateText(targetTextOrLabel: string, newText: string): boolean {
+    this.actionQueue.push(() => { this._updateText(targetTextOrLabel, newText); });
+    return true;
+  }
+  private _updateText(targetTextOrLabel: string, newText: string): boolean {
+    if (!targetTextOrLabel || !newText) return false;
+    if (isGenericLabel(newText)) return false;
+    let found = false;
+    const lower = targetTextOrLabel.toLowerCase();
+
+    this.elements = this.elements.map(el => {
+      if (el.type === 'text' && el.text?.toLowerCase().includes(lower)) {
+        found = true;
+        return {
+          ...el,
+          text: newText,
+          originalText: newText,
+          version: (el.version || 1) + 1,
+          versionNonce: Math.floor(Math.random() * 1000000),
+        };
+      }
+      if (el.label?.text?.toLowerCase().includes(lower)) {
+        found = true;
+        return {
+          ...el,
+          label: { ...el.label, text: newText },
+          version: (el.version || 1) + 1,
+          versionNonce: Math.floor(Math.random() * 1000000),
+        };
+      }
+      return el;
+    });
+
+    if (found) {
+      this.syncScene();
+      console.log(`[BoardController] Updated text matching "${targetTextOrLabel}" -> "${newText}"`);
+    }
+    return found;
+  }
+
+  public removeComponent(targetTextOrLabel: string): boolean {
+    this.actionQueue.push(() => { this._removeComponent(targetTextOrLabel); });
+    return true;
+  }
+  private _removeComponent(targetTextOrLabel: string): boolean {
+    if (!targetTextOrLabel) return false;
+    const initialLen = this.elements.length;
+    const lower = targetTextOrLabel.toLowerCase();
+
+    this.elements = this.elements.filter(el => {
+      const match =
+        (el.type === 'text' && el.text?.toLowerCase().includes(lower)) ||
+        (el.label?.text?.toLowerCase().includes(lower));
+      return !match;
+    });
+
+    if (this.elements.length !== initialLen) {
+      this.syncScene();
+      console.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
+      return true;
+    }
+    return false;
+  }
+
+  public writeKeywords(keywords: string[], startX = 50, startY = 475): void {
+    this.actionQueue.push(() => { this._writeKeywords(keywords, startX, startY); });
+  }
+  private _writeKeywords(keywords: string[], startX = 50, startY = 475): void {
+    if (!keywords || !keywords.length) return;
+    const clean = keywords.map(k => sanitizeLabel(k)).filter(Boolean).slice(0, 4);
+    if (!clean.length) return;
+
+    this.elements = this.elements.filter(el => el.customData?.slot !== 'keywords');
+    let cx = startX;
+    const rawEls: any[] = [];
+
+    clean.forEach((kw) => {
+      const w = Math.max(kw.length * 10 + 20, 75);
+      const h = 32;
+
+      rawEls.push({
+        type: 'rectangle',
+        x: cx,
+        y: startY,
+        width: w,
+        height: h,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0F172A',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: kw, fontSize: 13, strokeColor: '#38BDF8' },
+        customData: { zone: 'notes', slot: 'keywords' },
+      });
+
+      cx += w + 12;
+      if (cx > 650) cx = startX;
+    });
+
+    this.appendElements(rawEls, 'notes');
+  }
+
+  public drawDiagram(diagramType: string, data: Record<string, any>): void {
+    this.actionQueue.push(() => { this._drawDiagram(diagramType, data); });
+  }
+  private _drawDiagram(diagramType: string, data: Record<string, any>): void {
+    console.log('[BoardController] drawDiagram called:', diagramType, data);
+
+    this.clearStageIfFull();
+
+    const startX = 50;
+    const startY = this.cursorY;
+
+    switch (diagramType) {
+      case 'collision': this.drawCollisionDiagram(startX, startY, data); break;
+      case 'free_body': this.drawFreeBodyDiagram(startX, startY, data); break;
+      case 'coordinate_axes':
+      case 'graph': this.drawCoordinateAxes(startX, startY, data); break;
+      case 'flow':
+      case 'steps': this.drawFlowDiagram(startX, startY, data); break;
+      case 'cycle': this.drawCycleDiagram(startX, startY, data); break;
+      case 'comparison': this.drawComparisonDiagram(startX, startY, data); break;
+      case 'concept_map':
+      case 'mindmap':
+      case 'hierarchical_tree': this.drawConceptMapDiagram(startX, startY, data); break;
+      default:
+        if (data?.title && !isGenericLabel(data.title)) {
+          this._writeText(data.title, { fontSize: 'medium', y: startY });
+        }
+        break;
+    }
+  }
+
+  private drawCollisionDiagram(sx: number, sy: number, data: any): void {
+    const r = 30;
+    const ball1X = sx + 30, ball2X = sx + 220;
+    const ballY = sy + 50;
+
+    this.appendElements([
+      {
+        type: 'ellipse', x: ball1X, y: ballY, width: r * 2, height: r * 2,
+        strokeColor: '#38BDF8', backgroundColor: '#0284C7', fillStyle: 'solid',
+        label: { text: data.item1Mass || 'm₁', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: ball1X + r * 2 + 8, y: ballY + r, width: 55, height: 0,
+        strokeColor: '#38BDF8', strokeWidth: 2.5,
+        label: { text: data.item1Velocity || 'v₁ →', fontSize: 13, strokeColor: '#38BDF8' },
+      },
+      {
+        type: 'ellipse', x: ball2X, y: ballY, width: r * 2, height: r * 2,
+        strokeColor: '#34D399', backgroundColor: '#059669', fillStyle: 'solid',
+        label: { text: data.item2Mass || 'm₂', fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'arrow', x: ball2X + r * 2 + 8, y: ballY + r, width: 45, height: 0,
+        strokeColor: '#34D399', strokeWidth: 2,
+        label: { text: data.item2Velocity || 'v₂ = 0', fontSize: 13, strokeColor: '#34D399' },
+      },
+      ...(data.equation ? [{
+        type: 'text', x: sx + 30, y: sy + 130,
+        text: data.equation, fontSize: 18, strokeColor: '#FDE047', fontFamily: 1,
+        textAlign: 'left', verticalAlign: 'top',
+      }] : []),
+    ], 'stage');
+    this.cursorY = sy + 180;
+  }
+
+  private drawFreeBodyDiagram(sx: number, sy: number, data: any): void {
+    const cx = sx + 120, cy = sy + 100, bs = 60;
+    const forces: Array<{ name: string; direction: string }> = data.forces || [
+      { name: 'F_N', direction: 'up' },
+      { name: 'F_g', direction: 'down' },
+      { name: 'F_applied', direction: 'right' },
+      { name: 'F_friction', direction: 'left' },
+    ];
+
+    const els: any[] = [{
+      type: 'rectangle', x: cx - bs / 2, y: cy - bs / 2, width: bs, height: bs,
+      strokeColor: '#38BDF8', backgroundColor: '#0F172A', fillStyle: 'solid',
+      label: { text: sanitizeLabel(data.objectLabel, 'm'), fontSize: 18, strokeColor: '#FAFAFA' },
+    }];
+
+    forces.forEach(f => {
+      const arrowMap: Record<string, [number, number, number, number]> = {
+        up:    [cx, cy - bs / 2, 0, -65],
+        down:  [cx, cy + bs / 2, 0, 65],
+        right: [cx + bs / 2, cy, 75, 0],
+        left:  [cx - bs / 2, cy, -75, 0],
+      };
+      const [ax, ay, aw, ah] = arrowMap[f.direction] || arrowMap.up;
+      els.push({
+        type: 'arrow', x: ax, y: ay, width: aw, height: ah,
+        strokeColor: '#FBBF24', strokeWidth: 2.5,
+        label: { text: f.name, fontSize: 13, strokeColor: '#FBBF24' },
+      });
+    });
+
+    this.appendElements(els, 'stage');
+    this.cursorY = sy + 220;
+  }
+
+  private drawCoordinateAxes(sx: number, sy: number, data: any): void {
+    const w = 280, h = 180;
+    const els: any[] = [
+      { type: 'line', x: sx, y: sy + h, width: w, height: 0, strokeColor: '#94A3B8', strokeWidth: 2 },
+      { type: 'line', x: sx, y: sy + h, width: 0, height: -h, strokeColor: '#94A3B8', strokeWidth: 2 },
+      {
+        type: 'text', x: sx + w - 20, y: sy + h + 8,
+        text: data.xLabel || 'x', fontSize: 14, strokeColor: '#94A3B8', fontFamily: 1,
+      },
+      {
+        type: 'text', x: sx - 20, y: sy,
+        text: data.yLabel || 'y', fontSize: 14, strokeColor: '#94A3B8', fontFamily: 1,
+      },
+    ];
+    if (data.title && !isGenericLabel(data.title)) {
+      els.push({
+        type: 'text', x: sx, y: sy - 24,
+        text: data.title, fontSize: 16, strokeColor: '#38BDF8', fontFamily: 1,
+      });
+    }
+    this.appendElements(els, 'stage');
+    this.cursorY = sy + h + 40;
+  }
+
+  private drawFlowDiagram(sx: number, sy: number, data: any): void {
+    let steps: string[] = [];
+    if (Array.isArray(data.steps)) {
+      steps = data.steps.map((s: any) => typeof s === 'string' ? s : s?.label || s?.text || '').filter(Boolean);
+    } else if (Array.isArray(data.nodes)) {
+      steps = data.nodes.map((n: any) => n?.label || n?.text || n?.id || '').filter(Boolean);
+    }
+    steps = steps.map(s => sanitizeLabel(s)).filter(Boolean);
+    if (steps.length < 2) {
+      console.warn('[BoardController] flow diagram skipped — need ≥2 real steps, got:', data);
+      return;
+    }
+
+    const els: any[] = [];
+    let cx = sx;
+    const bw = 110, bh = 45;
+
+    steps.forEach((step, i) => {
+      els.push({
+        type: 'rectangle', x: cx, y: sy, width: bw, height: bh,
+        strokeColor: i === 0 ? '#38BDF8' : '#64748B',
+        backgroundColor: i === 0 ? '#0369A1' : '#1E293B',
+        fillStyle: 'solid', roughness: 1,
+        roundness: { type: 3 },
+        label: { text: step, fontSize: 14, strokeColor: '#FAFAFA' },
+      });
+      if (i < steps.length - 1) {
+        els.push({
+          type: 'arrow', x: cx + bw, y: sy + bh / 2, width: 28, height: 0,
+          strokeColor: '#94A3B8', strokeWidth: 2,
+        });
+      }
+      cx += bw + 28;
+    });
+
+    this.appendElements(els, 'stage');
+    this.cursorY = sy + 90;
+  }
+
+  private drawCycleDiagram(sx: number, sy: number, data: any): void {
+    let steps: string[] = [];
+    if (Array.isArray(data.steps)) {
+      steps = data.steps.map((s: any) => typeof s === 'string' ? s : s?.label || '').filter(Boolean);
+    } else if (Array.isArray(data.nodes)) {
+      steps = data.nodes.map((n: any) => n?.label || n?.text || '').filter(Boolean);
+    }
+    steps = steps.map(s => sanitizeLabel(s)).filter(Boolean);
+    if (steps.length < 2) {
+      console.warn('[BoardController] cycle diagram skipped — need real steps');
+      return;
+    }
+
+    const n = steps.length;
+    const cx = sx + 160, cy = sy + 130;
+    const rx = 120, ry = 80;
+    const els: any[] = [];
+
+    const positions = steps.map((_, i) => {
+      const angle = (i * 2 * Math.PI) / n - Math.PI / 2;
+      return {
+        x: cx + rx * Math.cos(angle) - 45,
+        y: cy + ry * Math.sin(angle) - 20,
+      };
+    });
+
+    steps.forEach((step, i) => {
+      const pos = positions[i];
+      els.push({
+        type: 'rectangle',
+        x: pos.x,
+        y: pos.y,
+        width: 90,
+        height: 40,
+        strokeColor: '#38BDF8',
+        backgroundColor: '#0F172A',
+        fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: step, fontSize: 13, strokeColor: '#FAFAFA' },
+      });
+
+      const nextPos = positions[(i + 1) % n];
+      const startAx = pos.x + 45;
+      const startAy = pos.y + 20;
+      const endAx = nextPos.x + 45;
+      const endAy = nextPos.y + 20;
+      els.push({
+        type: 'arrow',
+        x: startAx,
+        y: startAy,
+        width: (endAx - startAx) * 0.7,
+        height: (endAy - startAy) * 0.7,
+        strokeColor: '#94A3B8',
+        strokeWidth: 1.8,
+      });
+    });
+
+    this.appendElements(els, 'stage');
+    this.cursorY = sy + 260;
+  }
+
+  private drawComparisonDiagram(sx: number, sy: number, data: any): void {
+    let leftTitle = sanitizeLabel(data.leftTitle || data.left || data.a);
+    let rightTitle = sanitizeLabel(data.rightTitle || data.right || data.b);
+    let leftPoints: string[] = (data.leftPoints || data.leftItems || []).map((p: any) =>
+      sanitizeLabel(typeof p === 'string' ? p : p?.label || p?.text || '')
+    ).filter(Boolean);
+    let rightPoints: string[] = (data.rightPoints || data.rightItems || []).map((p: any) =>
+      sanitizeLabel(typeof p === 'string' ? p : p?.label || p?.text || '')
+    ).filter(Boolean);
+
+    if ((!leftTitle || !rightTitle) && Array.isArray(data.nodes) && data.nodes.length >= 2) {
+      leftTitle = sanitizeLabel(data.nodes[0]?.label || data.nodes[0]?.text);
+      rightTitle = sanitizeLabel(data.nodes[1]?.label || data.nodes[1]?.text);
+    }
+
+    if (!leftTitle || !rightTitle || isGenericLabel(leftTitle) || isGenericLabel(rightTitle)) {
+      console.warn('[BoardController] comparison skipped — generic or missing titles:', data);
+      return;
+    }
+
+    const colW = 160;
+    const els: any[] = [
+      {
+        type: 'rectangle',
+        x: sx, y: sy, width: colW, height: 38,
+        strokeColor: '#38BDF8', backgroundColor: '#0369A1', fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: leftTitle, fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+      {
+        type: 'ellipse',
+        x: sx + colW + 10, y: sy + 4, width: 32, height: 32,
+        strokeColor: '#F59E0B', backgroundColor: '#78350F', fillStyle: 'solid',
+        label: { text: 'VS', fontSize: 11, strokeColor: '#FDE047' },
+      },
+      {
+        type: 'rectangle',
+        x: sx + colW + 52, y: sy, width: colW, height: 38,
+        strokeColor: '#34D399', backgroundColor: '#065F46', fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: rightTitle, fontSize: 14, strokeColor: '#FAFAFA' },
+      },
+    ];
+
+    let rowY = sy + 48;
+    const maxPoints = Math.max(leftPoints.length, rightPoints.length);
+    for (let i = 0; i < maxPoints; i++) {
+      if (leftPoints[i]) {
+        els.push({
+          type: 'text', x: sx + 6, y: rowY,
+          text: `• ${leftPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: 1,
+        });
+      }
+      if (rightPoints[i]) {
+        els.push({
+          type: 'text', x: sx + colW + 58, y: rowY,
+          text: `• ${rightPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: 1,
+        });
+      }
+      rowY += 28;
+    }
+
+    this.appendElements(els, 'stage');
+    this.cursorY = Math.max(rowY, sy + 90) + 20;
+  }
+
+  private drawConceptMapDiagram(sx: number, sy: number, data: any): void {
+    let central = sanitizeLabel(
+      data.centralConcept ||
+      data.centralNode?.label ||
+      data.centralNode?.text ||
+      data.title
+    );
+
+    let branches: Array<{ label: string }> = [];
+    if (Array.isArray(data.branches)) {
+      branches = data.branches
+        .map((b: any) => ({ label: sanitizeLabel(b?.label || b?.text || b) }))
+        .filter((b: any) => b.label);
+    } else if (Array.isArray(data.nodes)) {
+      const nodes = data.nodes
+        .map((n: any) => ({
+          id: n?.id,
+          label: sanitizeLabel(n?.label || n?.text || n?.id),
+        }))
+        .filter((n: any) => n.label);
+
+      if (!central && nodes.length) {
+        central = nodes[0].label;
+        branches = nodes.slice(1).map((n: any) => ({ label: n.label }));
+      } else {
+        branches = nodes
+          .filter((n: any) => n.label.toLowerCase() !== central.toLowerCase())
+          .map((n: any) => ({ label: n.label }));
+      }
+    }
+
+    if (!central || isGenericLabel(central)) {
+      console.warn('[BoardController] concept_map skipped — no real central label:', data);
+      return;
+    }
+
+    branches = branches.slice(0, 6);
+
+    const cx = sx + 160, cy = sy + 90;
+    const els: any[] = [
+      {
+        type: 'ellipse',
+        x: cx - 60, y: cy - 25, width: 120, height: 50,
+        strokeColor: '#38BDF8', backgroundColor: '#0C4A6E', fillStyle: 'solid',
+        label: { text: central, fontSize: 15, strokeColor: '#FAFAFA' },
+      },
+    ];
+
+    const branchDist = 130;
+    const n = Math.max(branches.length, 1);
+    branches.forEach((b, i) => {
+      const angle = (i * 2 * Math.PI) / n - Math.PI / 2;
+      const bx = cx + branchDist * Math.cos(angle) - 45;
+      const by = cy + (branchDist * 0.7) * Math.sin(angle) - 18;
+
+      els.push({
+        type: 'arrow',
+        x: cx, y: cy,
+        width: (bx + 45 - cx) * 0.8,
+        height: (by + 18 - cy) * 0.8,
+        strokeColor: '#94A3B8',
+        strokeWidth: 1.8,
+      });
+
+      els.push({
+        type: 'rectangle',
+        x: bx, y: by, width: 90, height: 36,
+        strokeColor: '#A78BFA', backgroundColor: '#1E1B4B', fillStyle: 'solid',
+        roundness: { type: 3 },
+        label: { text: b.label, fontSize: 12, strokeColor: '#FAFAFA' },
+      });
+    });
+
+    this.appendElements(els, 'stage');
+    this.cursorY = sy + 210;
+  }
+}
+
+export const avelutBoardController = new AvelutBoardController();
