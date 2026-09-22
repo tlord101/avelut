@@ -820,10 +820,11 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
            const timeChanged = this.stateMachine.evaluateState();
            const minuteAdvanceChanged = this.stateMachine.evaluateMinuteBasedAdvance();
            liveLogger.setStage(this.stateMachine.getCurrentStage());
-           const turnChanged = this.stateMachine.advance();
+           // turnChanged logic removed per instructions
+           const turnChanged = false;
            if (timeChanged || minuteAdvanceChanged || turnChanged) {
              if (this.stateMachine.getCurrentStage() !== prevStage) {
-               avelutBoardController.clearStage();
+               // avelutBoardController.clearStage(); // Removed to preserve sticky notes and tools across stage transitions
              }
              this.sendSessionInit(); // Send session update to update prompt with new state
            }
@@ -1119,7 +1120,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
     this.proactiveTimer = setTimeout(() => {
       if (this.state !== 'listening' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      liveLogger.log('[QwenRealtime] Student has been quiet for 9s — proactively advancing lesson...');
+      liveLogger.log('[QwenRealtime] Student has been quiet for 30s — proactively advancing lesson...');
 
       const topic = this.promptConfig?.topicTitle || 'the topic';
       const stageInst = this.stateMachine?.getNextInstruction() || '';
@@ -1134,7 +1135,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           tool_choice: 'auto',
         },
       });
-    }, 9000);
+    }, 30000);
   }
 
   private clearProactiveTimer(): void {
