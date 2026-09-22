@@ -407,13 +407,21 @@ async function callOpenRouterQwen(params: any, appSettings: AppSettings): Promis
         }
 
         const rawText = await response.text();
+        let data: any = null;
+        let extractedText = rawText;
+        try {
+          data = JSON.parse(rawText);
+          if (data?.choices?.[0]?.message?.content !== undefined) {
+            extractedText = data.choices[0].message.content;
+          }
+        } catch (_) {}
 
         return {
-          text: () => rawText,
+          text: () => extractedText,
           candidates: [
             {
               content: {
-                parts: [{ text: rawText }],
+                parts: [{ text: extractedText }],
                 role: 'model',
               },
               finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
@@ -697,13 +705,21 @@ async function callAlibabaQwen(
         }
 
         const rawText = await response.text();
+        let data: any = null;
+        let extractedText = rawText;
+        try {
+          data = JSON.parse(rawText);
+          if (data?.choices?.[0]?.message?.content !== undefined) {
+            extractedText = data.choices[0].message.content;
+          }
+        } catch (_) {}
 
         return {
-          text: () => rawText,
+          text: () => extractedText,
           candidates: [
             {
               content: {
-                parts: [{ text: rawText }],
+                parts: [{ text: extractedText }],
                 role: 'model',
               },
               finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
