@@ -83,6 +83,14 @@ export class QwenRealtimeTeacherService {
   public getState(): TeacherState { return this.state; }
   public getIsMuted(): boolean { return this.isMuted; }
 
+  /** Returns true if teacher audio is physically playing or in room acoustic decay margin */
+  public isTeacherSpeaking(): boolean {
+    if (this.activeAudioSources.length > 0) return true;
+    if (this.outputAudioCtx && this.outputAudioCtx.currentTime < this.nextPlayTime) return true;
+    if (performance.now() < this.teacherSpeakingUntil) return true;
+    return false;
+  }
+
   private setState(s: TeacherState): void {
     if (this.state === s) return;
     this.state = s;
@@ -686,7 +694,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
       case 'response.audio.delta':
         if (event.delta) {
-          this.teacherSpeakingUntil = performance.now() + 400;
+          this.teacherSpeakingUntil = Math.max(this.teacherSpeakingUntil, performance.now() + 1000);
           this.setState('speaking');
           void this.playDelta(event.delta);
         }
@@ -715,8 +723,8 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         this.clearProactiveTimer();
         this.fullTranscript = '';
         this.lastTranscriptSlice = '';
-        if (performance.now() < this.teacherSpeakingUntil) {
-          liveLogger.log('[QwenRealtime] Ignoring barge-in during teacher speech');
+        if (this.isTeacherSpeaking()) {
+          liveLogger.log('[QwenRealtime] Ignoring barge-in/speech_started while teacher is speaking or in echo margin');
           return;
         }
         this.stopPlayback();
@@ -724,12 +732,19 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         break;
 
       case 'input_audio_buffer.speech_stopped':
-        this.setState('listening');
+        if (!this.isTeacherSpeaking()) {
+          this.setState('listening');
+        }
         break;
 
       // ── Tool / function call ────────────────────────────────────────────
       case 'conversation.item.created':
-        liveLogger.log('[QwenRealtime] conversation.item.created', event.item?.id);
+        liveLogger.log('[QwenRealtime] conversation.item.created', event.item?.id, event.item?.role);
+        if (event.item?.role === 'user') {
+          this.clearProactiveTimer();
+          // Student spoke verbally — record in state machine
+          this.stateMachine?.recordStudentAnswer('spoken_answer', true);
+        }
         break;
 
       case 'response.output_item.added': {
@@ -793,8 +808,8 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       }
 
       case 'response.done': {
-        if (this.state === 'speaking' || this.state === 'drawing') {
-          setTimeout(() => { if (this.state !== 'listening') this.setState('listening'); }, 400);
+        if (!this.isTeacherSpeaking() && (this.state === 'speaking' || this.state === 'drawing')) {
+          this.setState('listening');
         }
 
         // NOTE: Verbatim speech transcripts are deliberately NOT dumped to the board!
@@ -949,9 +964,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
             this.avelutBoardController.drawStructured(ordered);
 
-            // Inject board summary back into realtime context (NON-BLOCKING)
             const newSummary = this.avelutBoardController.getCompactSummary();
-            this.injectBoardStateMessage(newSummary);
 
             toolResult = {
               status: 'rendered',
@@ -980,7 +993,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             fillStyle: args.fillStyle,
           });
           const summary = this.avelutBoardController.getCompactSummary();
-          this.injectBoardStateMessage(summary);
           toolResult = { status: 'rendered', id: args.id, board_summary: summary };
           break;
         }
@@ -996,7 +1008,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             strokeStyle: args.strokeStyle,
           });
           const summary = this.avelutBoardController.getCompactSummary();
-          this.injectBoardStateMessage(summary);
           toolResult = { status: 'rendered', fromId: args.fromId, toId: args.toId, board_summary: summary };
           break;
         }
@@ -1012,7 +1023,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             height: args.height,
           });
           const summary = this.avelutBoardController.getCompactSummary();
-          this.injectBoardStateMessage(summary);
           toolResult = { status: 'rendered', board_summary: summary };
           break;
         }
@@ -1028,7 +1038,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
             y: args.y,
           });
           const summary = this.avelutBoardController.getCompactSummary();
-          this.injectBoardStateMessage(summary);
           toolResult = {
             status: 'rendered',
             component: args.component,
@@ -1070,7 +1079,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       liveLogger.error('[QwenRealtime] Tool execution error:', toolErr);
     }
 
-    // Always return tool output so model can continue speaking
+    // Always return tool output so DashScope tool call item is closed cleanly
     if (callId) {
       this.sendJson({
         event_id: `tool_out_${Date.now()}`,
@@ -1081,10 +1090,10 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           output: JSON.stringify(toolResult),
         },
       });
-      this.sendJson({
-        event_id: `resp_after_tool_${Date.now()}`,
-        type: 'response.create',
-      });
+      // NOTE: We deliberately do NOT send `response.create` here.
+      // The teacher model streams spoken audio and tool calls concurrently in the same turn.
+      // Sending `response.create` caused the model to immediately generate another response,
+      // answering its own question, interrupting its own audio playback, and skipping steps!
     }
   }
 
@@ -1153,7 +1162,8 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
     const handleAudioData = (data: Float32Array) => {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
-      if (this.state === 'speaking' || performance.now() < this.teacherSpeakingUntil) return;
+      // Absolute hardware silence gate while teacher is speaking or during room acoustic decay
+      if (this.isTeacherSpeaking()) return;
 
       // Compute RMS for UI visualisation
       let sum = 0;
@@ -1206,8 +1216,13 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           }
         };
 
+        // Connect through a zero-gain mute node to destination so worklet stays active
+        // without routing microphone audio back out of the user's speakers
+        const muteNode = this.inputAudioCtx.createGain();
+        muteNode.gain.value = 0;
         source.connect(workletNode);
-        workletNode.connect(this.inputAudioCtx.destination);
+        workletNode.connect(muteNode);
+        muteNode.connect(this.inputAudioCtx.destination);
         this.processorNode = workletNode;
         return;
       } catch (workletErr) {
@@ -1220,8 +1235,11 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
     scriptProcessor.onaudioprocess = (e) => {
       handleAudioData(e.inputBuffer.getChannelData(0));
     };
+    const muteNode = this.inputAudioCtx.createGain();
+    muteNode.gain.value = 0;
     source.connect(scriptProcessor);
-    scriptProcessor.connect(this.inputAudioCtx.destination);
+    scriptProcessor.connect(muteNode);
+    muteNode.connect(this.inputAudioCtx.destination);
     this.processorNode = scriptProcessor;
   }
 
@@ -1287,14 +1305,21 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
 
-      // Hold "speaking" until scheduled audio finishes (+ small buffer)
+      // Hold "speaking" until scheduled audio finishes (+ room acoustic decay margin)
       const remainingMs = Math.max(0, (this.nextPlayTime - this.outputAudioCtx.currentTime) * 1000);
-      this.teacherSpeakingUntil = performance.now() + remainingMs + 500;
+      this.teacherSpeakingUntil = Math.max(this.teacherSpeakingUntil, performance.now() + remainingMs + 600);
 
       this.activeAudioSources.push(src);
       src.onended = () => {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
+        if (this.activeAudioSources.length === 0 && (!this.outputAudioCtx || this.outputAudioCtx.currentTime >= this.nextPlayTime)) {
+          setTimeout(() => {
+            if (!this.isTeacherSpeaking() && (this.state === 'speaking' || this.state === 'drawing')) {
+              this.setState('listening');
+            }
+          }, 600);
+        }
       };
     } catch (err) {
       liveLogger.warn('[QwenRealtime] playDelta error:', err);
@@ -1306,5 +1331,6 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
+    this.teacherSpeakingUntil = 0;
   }
 }
