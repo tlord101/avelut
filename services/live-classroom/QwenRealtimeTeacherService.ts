@@ -329,12 +329,21 @@ export class QwenRealtimeTeacherService {
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Manually triggering initial greeting and board illustration for', topic, `(${duration} min)`);
 
-    // Give the model a direct instruction to greet warmly AND immediately draw on the board
+    const isPhysicalComp = topicStr.toLowerCase().includes('resistor')
+      || topicStr.toLowerCase().includes('diode')
+      || topicStr.toLowerCase().includes('led')
+      || topicStr.toLowerCase().includes('capacitor')
+      || topicStr.toLowerCase().includes('battery')
+      || topicStr.toLowerCase().includes('circuit')
+      || topicStr.toLowerCase().includes('engine')
+      || topicStr.toLowerCase().includes('gate')
+      || topicStr.toLowerCase().includes('pipe');
+
     const compHint = topicStr.toLowerCase().includes('resistor')
       ? 'draw_component({ component: "resistor", label: "100 Ω", caption: "V = I · R" })'
       : (topicStr.toLowerCase().includes('diode') || topicStr.toLowerCase().includes('led'))
       ? 'draw_component({ component: "diode", label: "1N4148", caption: "V_f ≈ 0.7V" })'
-      : `illustrate({ topic: ${JSON.stringify(topicStr)}, template: "concept_map" })`;
+      : `draw_shape({ type: "rectangle", id: "topic_main", label: ${JSON.stringify(topicStr)}, backgroundColor: "#e0f2fe" })`;
 
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
@@ -344,7 +353,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Begin teaching ${topic} for our ${duration}-minute lesson now. Greet me warmly in 1-2 short sentences, announce that today we are mastering ${topic}, and immediately call your board tool ${compHint} or annotate({ text: ${JSON.stringify(topicStr)} }) to place the introductory visual anchor on the board as you speak! Do not ask me what topic we are going to discuss.`,
+          text: `Begin our lesson on ${topic}. Call your board tool ${compHint} immediately to place the visual illustration on the whiteboard, then greet me warmly in 1-2 sentences and introduce ${topic}.`,
         }],
       },
     });
@@ -354,9 +363,9 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        instructions: `Greet the student warmly in 1-2 short sentences and immediately call your board tool ${compHint} to render the illustration on the board!`,
+        instructions: `MANDATORY: Call your board tool (${compHint}) right now to illustrate the board, then greet the student warmly in 1-2 short sentences!`,
         tools: this.buildToolDeclarations(),
-        tool_choice: 'auto',
+        tool_choice: 'required',
       },
     });
   }
@@ -841,18 +850,38 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
 
         if (this.stateMachine) {
            const prevStage = this.stateMachine.getCurrentStage();
-           // Only allow end-of-lesson time wrap (MASTERY/SUMMARY). Never race stages mid-lesson.
            const timeChanged = this.stateMachine.evaluateState();
-           // Minute-based and per-turn advance disabled (prevents AI talking to itself / skipping steps)
            liveLogger.setStage(this.stateMachine.getCurrentStage());
 
-           if (timeChanged && this.stateMachine.getCurrentStage() !== prevStage) {
-             this.sendSessionInit(); // Update prompt for wrap-up stages only
-           }
+           if (prevStage === 'GREETING') {
+             // NEVER get stuck in GREETING! Advance to STAGE_1_INTUITION automatically
+             this.stateMachine.forceAdvance('STAGE_1_INTUITION');
+             const nextStage = this.stateMachine.getCurrentStage();
+             liveLogger.log(`[QwenRealtime] GREETING complete. Automatically transitioning to ${nextStage}...`);
+             this.sendSessionInit();
 
-           // After any completed response: wait for the student. Do NOT auto-kick the next stage.
-           // Proactive continuation only after a long silence, and only while truly listening.
-           this.scheduleProactiveContinuation();
+             const topic = this.promptConfig?.topicTitle || 'the topic';
+             setTimeout(() => {
+               if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.isTeacherSpeaking()) {
+                 const stageInst = this.stateMachine?.getNextInstruction() || '';
+                 this.sendJson({
+                   event_id: `teach_step_${Date.now()}`,
+                   type: 'response.create',
+                   response: {
+                     modalities: ['text', 'audio'],
+                     instructions: `${stageInst}\nBegin Stage 1 (Intuition) for ${topic}. Use an everyday real-world analogy. Call draw_sticky_note or annotate to place the intuition card on the board as you speak!`,
+                     tools: this.buildToolDeclarations(),
+                     tool_choice: 'auto',
+                   },
+                 });
+               }
+             }, 1200);
+           } else {
+             if (timeChanged && this.stateMachine.getCurrentStage() !== prevStage) {
+               this.sendSessionInit(); // Update prompt for wrap-up stages
+             }
+             this.scheduleProactiveContinuation();
+           }
         }
         break;
       }
@@ -1090,10 +1119,19 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
           output: JSON.stringify(toolResult),
         },
       });
-      // NOTE: We deliberately do NOT send `response.create` here.
-      // The teacher model streams spoken audio and tool calls concurrently in the same turn.
-      // Sending `response.create` caused the model to immediately generate another response,
-      // answering its own question, interrupting its own audio playback, and skipping steps!
+
+      // Immediate feedback: notify model that the tool succeeded so speech continues smoothly
+      const toolLabel = name === 'draw_component' ? `the ${args.component || 'component'}` : name;
+      this.sendJson({
+        event_id: `resp_after_tool_${Date.now()}`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          instructions: `The board drawing for "${toolLabel}" has been placed on the whiteboard for the student. Now continue speaking to the student: refer directly to what you just drew on the board, explain the concept, and teach!`,
+          tools: this.buildToolDeclarations(),
+          tool_choice: 'auto',
+        },
+      });
     }
   }
 
@@ -1120,7 +1158,7 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         this.state !== 'listening' ||
         !this.ws ||
         this.ws.readyState !== WebSocket.OPEN ||
-        performance.now() < this.teacherSpeakingUntil
+        this.isTeacherSpeaking()
       ) {
         // Still speaking or busy — try again later
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -1128,7 +1166,15 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         }
         return;
       }
-      liveLogger.log('[QwenRealtime] Student has been quiet for 30s — gentle continuation (same stage, no auto-advance)...');
+      liveLogger.log('[QwenRealtime] Student quiet for 5s — continuing lesson proactively...');
+
+      if (this.stateMachine) {
+        const advanced = this.stateMachine.advance();
+        if (advanced) {
+          liveLogger.log('[QwenRealtime] Advanced stage to:', this.stateMachine.getCurrentStage());
+          this.sendSessionInit();
+        }
+      }
 
       const topic = this.promptConfig?.topicTitle || 'the topic';
       const stageInst = this.stateMachine?.getNextInstruction() || '';
@@ -1138,12 +1184,12 @@ You must NEVER call this tool silently. Never go silent while it runs.`,
         type: 'response.create',
         response: {
           modalities: ['text', 'audio'],
-          instructions: `${stageInst}\nThe student has been quiet. Give a brief, helpful nudge in 1-2 sentences only — a hint or a simple check question — then STOP and wait. Stay in the current stage. Do not start a new topic or advance stages. Call board tools only if essential.`,
+          instructions: `${stageInst}\nThe student is listening. Proactively continue teaching ${topic}: explain the next key relationship, build on the intuition, or illustrate on the board. Call your board tools (draw_shape, draw_arrow, annotate, set_formula, or draw_sticky_note) as you speak!`,
           tools: this.buildToolDeclarations(),
           tool_choice: 'auto',
         },
       });
-    }, 30000);
+    }, 5000);
   }
 
   private clearProactiveTimer(): void {

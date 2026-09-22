@@ -44,12 +44,12 @@ export class PedagogicalStateMachine {
   /** Minimum turns the AI should stay in each stage before a soft advance is allowed */
   private minTurnsBeforeAdvance: Record<string, number> = {
     GREETING: 1,
-    STAGE_1_INTUITION: 3,
-    STAGE_2_VISUAL: 3,
-    STAGE_3_EXPLANATION: 4,
-    STAGE_4_FORMULA: 3,
-    STAGE_5_SOCRATIC: 4,
-    MASTERY_CHECK: 3,
+    STAGE_1_INTUITION: 1,
+    STAGE_2_VISUAL: 1,
+    STAGE_3_EXPLANATION: 2,
+    STAGE_4_FORMULA: 1,
+    STAGE_5_SOCRATIC: 1,
+    MASTERY_CHECK: 1,
     SUMMARY: 1,
     COMPLETE: 999,
   };
