@@ -32,6 +32,8 @@ export interface QwenTeacherCallbacks {
   onStateChange?: (state: TeacherState) => void;
   /** Rolling transcript of teacher speech */
   onTranscript?: (text: string, isFinal?: boolean) => void;
+  /** Realtime transcript stream delta */
+  onTranscriptDelta?: (delta: string) => void;
   /** Mic input RMS level 0–1 for UI visualisation */
   onAudioLevel?: (level: number) => void;
   onError?: (error: Error) => void;
@@ -571,6 +573,7 @@ export class QwenRealtimeTeacherService {
       case 'response.audio_transcript.delta':
         if (event.delta) {
           this.fullTranscript += event.delta;
+          this.callbacks.onTranscriptDelta?.(event.delta);
           this.callbacks.onTranscript?.(this.fullTranscript, false);
         }
         break;

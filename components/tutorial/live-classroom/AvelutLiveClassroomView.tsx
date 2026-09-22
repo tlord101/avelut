@@ -27,6 +27,8 @@ import {
   Send,
   AlertCircle,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { ExcalidrawLiveBoard } from './ExcalidrawLiveBoard';
 import {
@@ -34,6 +36,10 @@ import {
   type TeacherState,
 } from '../../../services/live-classroom/QwenRealtimeTeacherService';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
+import {
+  visualIllustrationEngine,
+  type IllustrationSpec,
+} from '../../../services/live-classroom/visual-engine';
 import type { UserProfile } from '../../../types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -127,6 +133,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [textInput, setTextInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
+  const [visualSvg, setVisualSvg] = useState<string | null>(null);
+  const [visualSpec, setVisualSpec] = useState<IllustrationSpec | null>(null);
+  const [isVisualMinimized, setIsVisualMinimized] = useState(false);
 
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
@@ -180,6 +189,25 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       appSettings: aSettings,
     } = paramsRef.current;
 
+    // ── Initialize Async AI Visual Engine (qwen3.8-flash) ───────────────────
+    visualIllustrationEngine.initialize(
+      tTitle,
+      aSettings,
+      userProfile,
+      lPath
+    );
+    visualIllustrationEngine.setCallbacks({
+      onIllustrationReady: (svg, spec) => {
+        setVisualSvg(svg);
+        setVisualSpec(spec);
+        setIsVisualMinimized(false);
+      },
+      onVisualCleared: () => {
+        setVisualSvg(null);
+        setVisualSpec(null);
+      },
+    });
+
     svc.setCallbacks({
       onStateChange: (s) => {
         setTeacherState(s);
@@ -187,6 +215,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       },
       onTranscript: (text, _isFinal) => {
         setTranscript(text);
+      },
+      onTranscriptDelta: (delta) => {
+        visualIllustrationEngine.ingestTranscriptDelta(delta);
       },
       onAudioLevel: (level) => setAudioLevel(level),
       onError: (err) => setErrorMsg(err.message || 'Live Teacher connection error'),
@@ -215,6 +246,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         serviceRef.current.endSession();
         serviceRef.current = null;
       }
+      visualIllustrationEngine.clear();
     };
   }, [startSession]);
 
@@ -265,7 +297,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     startSession();
   };
 
-  const handleClearBoard = () => avelutBoardController.clearBoard(true);
+  const handleClearBoard = () => {
+    avelutBoardController.clearBoard(true);
+    visualIllustrationEngine.clear();
+    setVisualSvg(null);
+    setVisualSpec(null);
+  };
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -362,6 +399,77 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       <main className="absolute inset-0 w-full h-full">
         <ExcalidrawLiveBoard topicTitle={topicTitle} onBoardReady={handleBoardReady} className="w-full h-full" />
       </main>
+
+      {/* ── ASYNC AI VISUAL ILLUSTRATION OVERLAY ───────────────────────────── */}
+      {visualSvg && (
+        <aside
+          aria-label="AI Visual Illustration"
+          className={`absolute z-30 transition-all duration-300 pointer-events-auto ${
+            isVisualMinimized
+              ? 'top-14 right-3 sm:right-6 w-auto'
+              : 'top-14 right-2 sm:right-6 left-2 sm:left-auto w-auto sm:w-[460px] md:w-[500px]'
+          }`}
+        >
+          {isVisualMinimized ? (
+            <button
+              onClick={() => setIsVisualMinimized(false)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#141416]/90 border border-cyan-500/40 text-cyan-300 shadow-xl backdrop-blur-md hover:bg-[#1f1f23] transition-all text-xs font-semibold"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span>{visualSpec?.title || 'Visual Diagram'}</span>
+              <Maximize2 className="w-3.5 h-3.5 ml-1 text-white/60" />
+            </button>
+          ) : (
+            <div className="flex flex-col rounded-2xl bg-[#121214]/95 border border-white/15 shadow-2xl backdrop-blur-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+              {/* Header Bar */}
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-white/10 bg-white/[0.03]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-md bg-cyan-500/20 text-cyan-400">
+                    <Sparkles className="w-3 h-3" />
+                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-white tracking-wide truncate">
+                      {visualSpec?.title || 'Scientific Illustration'}
+                    </span>
+                    {visualSpec?.purpose && (
+                      <span className="text-[10px] text-white/50 truncate max-w-[280px]">
+                        {visualSpec.purpose}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0 ml-2">
+                  <button
+                    onClick={() => setIsVisualMinimized(true)}
+                    className="p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                    title="Minimize illustration"
+                  >
+                    <Minimize2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      visualIllustrationEngine.clear();
+                      setVisualSvg(null);
+                      setVisualSpec(null);
+                    }}
+                    className="p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                    title="Dismiss illustration"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Rendered SVG Canvas */}
+              <div
+                className="w-full p-2 bg-[#0c0d0e] flex items-center justify-center overflow-hidden"
+                dangerouslySetInnerHTML={{ __html: visualSvg }}
+              />
+            </div>
+          )}
+        </aside>
+      )}
 
       {/* ── SUBTITLE PILL (Hidden as requested) ─────────────────────────── */}
 
