@@ -209,47 +209,7 @@ export const PlaygroundHome: React.FC<PlaygroundHomeProps> = ({ userProfile, onN
                   </p>
                 </div>
 
-                {courses.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#A3A3A3] mb-3">
-                      Enrolled Department Courses ({courses.length})
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {courses.map(c => (
-                        <div key={c.course_id} className="bg-[#141414] border border-[#2A2A2A] rounded-2xl p-5 hover:border-[#3A3A3A] transition flex flex-col justify-between group shadow-sm">
-                          <div>
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#1C1C1C] border border-[#2A2A2A] text-blue-400">
-                                {c.course_code || 'COURSE'}
-                              </span>
-                              <span className="text-xs text-[#A3A3A3] font-medium">{c.level}</span>
-                            </div>
-                            <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition leading-snug">
-                              {c.course_name}
-                            </h3>
-                            <p className="text-xs text-[#A3A3A3] mt-2 line-clamp-2">
-                              {c.description || `${c.topics?.length || 0} syllabus topics`}
-                            </p>
-                          </div>
-                          <div className="mt-5 pt-3 border-t border-[#1C1C1C] flex items-center gap-2">
-                            <button
-                              onClick={() => onNavigateView({ type: 'cbt_new', initialCourse: c.course_name })}
-                              className="flex-1 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-600 active:scale-95 text-white text-xs font-bold transition text-center shadow"
-                            >
-                              Practice CBT
-                            </button>
-                            <button
-                              onClick={() => onNavigateView({ type: 'flashcards_new', initialCourse: c.course_name })}
-                              className="flex-1 py-2.5 rounded-xl bg-[#1C1C1C] hover:bg-[#252525] border border-[#2A2A2A] active:scale-95 text-white text-xs font-bold transition text-center"
-                            >
-                              Flashcards
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
               </div>
             )}
           </div>
