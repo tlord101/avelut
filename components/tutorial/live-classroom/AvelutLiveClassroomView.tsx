@@ -22,6 +22,7 @@ import {
   Volume2,
   Ear,
   Pencil,
+  Sparkles,
   MessageSquare,
   Send,
   AlertCircle,
