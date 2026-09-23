@@ -26,7 +26,7 @@
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 
-const PORT = parseInt(process.env.PORT_WS || '3001', 10);
+const PORT = parseInt(process.env.PORT || process.env.PORT_WS || '3001', 10);
 const API_KEY = process.env.ALIBABA_API_KEY || process.env.VITE_ALIBABA_API_KEY || '';
 const WORKSPACE_ID = process.env.ALIBABA_WORKSPACE_ID || 'ws-o3v6mh0i8y9tqdfx';
 // Keep in sync with QWEN_REALTIME_MODEL in QwenRealtimeTeacherService.ts and api/qwen-realtime.ts
