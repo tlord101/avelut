@@ -81,7 +81,7 @@ export class QwenRealtimeTeacherService {
   private hasReceivedAudioInCurrentResponse = false;
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly STUDENT_WAIT_MAX_MS = 5000;
+  private readonly STUDENT_WAIT_MAX_MS = 3000;
   private isStudentSpeaking = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
@@ -452,7 +452,7 @@ export class QwenRealtimeTeacherService {
         return;
       }
 
-      liveLogger.log('[QwenRealtime] ⏱️ 5s student silence elapsed — prompting teacher to step in and continue');
+      liveLogger.log('[QwenRealtime] ⏱️ 3s student silence elapsed — prompting teacher to step in and continue');
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -462,7 +462,7 @@ export class QwenRealtimeTeacherService {
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student was quiet for 5 seconds. As an encouraging, expert human tutor, call "board_action" FIRST to draw or write on the board, and warmly step in to provide the explanation and smoothly continue teaching!]',
+            text: '[The student was quiet for 3 seconds. As an encouraging, expert human tutor, call "board_action" FIRST to draw or write on the board, and warmly step in to provide the explanation and smoothly continue teaching!]',
           }],
         },
       });
@@ -494,10 +494,10 @@ export class QwenRealtimeTeacherService {
     const instructions = buildTeacherSystemPrompt(this.promptConfig);
     liveLogger.log('[QwenRealtime] Sending session.update...');
 
-    // Voice selection — Tina is the primary supported English voice
-    let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'Tina';
+    // Voice selection
+    let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'aiden';
     if (selectedVoice === 'Cherry' || selectedVoice === 'Catherine' || !selectedVoice) {
-      selectedVoice = 'Tina';
+      selectedVoice = 'aiden';
     }
     liveLogger.log('[QwenRealtime] Session voice:', selectedVoice);
 
@@ -785,7 +785,12 @@ export class QwenRealtimeTeacherService {
         const pending = key ? this.pendingToolCalls.get(key) : null;
         const toolName = event.name || event.function?.name || pending?.name;
         const callId = event.call_id || pending?.call_id || key;
-        const argsStr = event.arguments || event.function?.arguments || pending?.arguments || '{}';
+        
+        let argsStr = event.arguments || event.function?.arguments || '';
+        if (pending && pending.arguments && pending.arguments.length > argsStr.length) {
+          argsStr = pending.arguments;
+        }
+        if (!argsStr) argsStr = '{}';
 
         liveLogger.log(
           `[QwenRealtime] TOOL CALL RECEIVED\n` +
@@ -806,7 +811,14 @@ export class QwenRealtimeTeacherService {
           const item = event.item;
           const callId = item.call_id || item.id;
           const toolName = item.name || item.function?.name;
-          const argsStr = item.arguments || item.function?.arguments || '{}';
+          const pending = callId ? this.pendingToolCalls.get(callId) : null;
+          
+          let argsStr = item.arguments || item.function?.arguments || '';
+          if (pending && pending.arguments && pending.arguments.length > argsStr.length) {
+            argsStr = pending.arguments;
+          }
+          if (!argsStr) argsStr = '{}';
+          
           if (toolName && callId && !this.executedCallIds.has(callId)) {
             liveLogger.log(
               `[QwenRealtime] TOOL CALL RECEIVED\n` +
@@ -841,8 +853,8 @@ export class QwenRealtimeTeacherService {
         liveLogger.error('[QwenRealtime] Server error:', event.error);
         if (event.error?.message?.includes('Voice') && !this.retriedWithDefaultVoice) {
           this.retriedWithDefaultVoice = true;
-          liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "Tina"');
-          this.sendSessionInit('Tina');
+          liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "aiden"');
+          this.sendSessionInit('aiden');
           return;
         }
         const isModelRejectedInEvent =
