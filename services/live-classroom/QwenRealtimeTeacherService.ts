@@ -165,7 +165,11 @@ export class QwenRealtimeTeacherService {
     this.sendJson({
       event_id: `resp_${Date.now()}`,
       type: 'response.create',
-      response: { modalities: ['text', 'audio'] },
+      response: {
+        modalities: ['text', 'audio'],
+        tools: [this.buildBoardActionTool()],
+        tool_choice: 'auto',
+      },
     });
   }
 
@@ -354,6 +358,8 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        tools: [this.buildBoardActionTool()],
+        tool_choice: 'auto',
       },
     });
   }
@@ -405,6 +411,8 @@ export class QwenRealtimeTeacherService {
         type: 'response.create',
         response: {
           modalities: ['text', 'audio'],
+          tools: [this.buildBoardActionTool()],
+          tool_choice: 'auto',
         },
       });
     }, this.STUDENT_WAIT_MAX_MS);
@@ -457,42 +465,50 @@ export class QwenRealtimeTeacherService {
    * Uses Alibaba's documented function calling schema.
    */
   private buildBoardActionTool() {
+    const parameters = {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['draw', 'write', 'clear', 'highlight', 'erase'],
+          description:
+            'draw=create shapes/diagrams, write=add text/formula, ' +
+            'clear=clear current area, highlight=emphasize existing concept, erase=remove element',
+        },
+        elements: {
+          type: 'array',
+          description:
+            'Elements for "draw" action. Each element: ' +
+            '{kind:"box"|"circle"|"diamond"|"arrow"|"text", id?, text?, x?, y?, from?, to?, label?}',
+          items: { type: 'object' },
+        },
+        text: {
+          type: 'string',
+          description: 'Text or formula to write on the board (for "write" action)',
+        },
+        target: {
+          type: 'string',
+          description: 'Target element label or ID (for "highlight" or "erase" actions)',
+        },
+      },
+      required: ['action'],
+    };
+
+    const description =
+      'Control the educational whiteboard while teaching. Drawing an element or writing on the board is MANDATORY in each stage. ' +
+      'Call this tool whenever explaining a concept, introducing a formula, connecting ideas with arrows, or working an example. ' +
+      'Call it naturally as part of teaching — do not narrate that you are calling a function.';
+
     return {
       type: 'function',
+      name: 'board_action',
+      description,
+      parameters,
+      // Also provide function field for backwards compatibility with any parser that expects it
       function: {
         name: 'board_action',
-        description:
-          'Control the educational whiteboard while teaching. Drawing an element or writing on the board is MANDATORY in each stage. ' +
-          'Call this tool whenever explaining a concept, introducing a formula, connecting ideas with arrows, or working an example. ' +
-          'Call it naturally as part of teaching — do not narrate that you are calling a function.',
-        parameters: {
-          type: 'object',
-          properties: {
-            action: {
-              type: 'string',
-              enum: ['draw', 'write', 'clear', 'highlight', 'erase'],
-              description:
-                'draw=create shapes/diagrams, write=add text/formula, ' +
-                'clear=clear current area, highlight=emphasize existing concept, erase=remove element',
-            },
-            elements: {
-              type: 'array',
-              description:
-                'Elements for "draw" action. Each element: ' +
-                '{kind:"box"|"circle"|"diamond"|"arrow"|"text", id?, text?, x?, y?, from?, to?, label?}',
-              items: { type: 'object' },
-            },
-            text: {
-              type: 'string',
-              description: 'Text or formula to write on the board (for "write" action)',
-            },
-            target: {
-              type: 'string',
-              description: 'Target element label or ID (for "highlight" or "erase" actions)',
-            },
-          },
-          required: ['action'],
-        },
+        description,
+        parameters,
       },
     };
   }
@@ -784,6 +800,8 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        tools: [this.buildBoardActionTool()],
+        tool_choice: 'auto',
       },
     });
 
