@@ -136,7 +136,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Center Slot: Centered Title or Empty for AI Chat */}
-      <div className="flex-1 flex items-center justify-center min-w-0 px-2 pointer-events-none [&>*]:pointer-events-auto">
+      <div className="flex-1 flex flex-col items-center justify-center min-w-0 px-2 pointer-events-none [&>*]:pointer-events-auto">
+        <AppUpdateBadge className="mb-0.5" />
         {isAiPage ? null : title ? (
           title
         ) : hideTitle ? null : React.isValidElement(currentPageLabel) ? (
@@ -150,8 +151,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Slot: Combined Pill Control + Optional Update Badge */}
       <div className="flex items-center gap-2 min-w-[40px] justify-end shrink-0">
-        {!hideDefaultRightActions && !isAiPage && <AppUpdateBadge />}
-
         {rightActions ? (
           rightActions
         ) : (
