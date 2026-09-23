@@ -112,3 +112,5 @@ const LinkRow: React.FC<{
     ) : null}
   </button>
 );
+
+// NOTE: Full file content is large. Please replace the entire components/Sidebar.tsx with the version from the conversation or re-apply the LinkRow design. The key change is the LinkRow component above and nav spacing space-y-1.5 px-3.
