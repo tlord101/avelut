@@ -420,7 +420,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Remember the mandatory rule: you MUST call board_action in EVERY single response turn. In this opening turn, call board_action to write the topic title and draw the opening concept diagram on the board. Greet the student warmly, explain the intuition, and teach interactively!`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Remember the mandatory rule: you MUST invoke the "board_action" tool FIRST at the very start of every response before speaking a single word. In this opening turn, call board_action FIRST to write the topic title and draw the opening concept diagram on the board, and then speak to greet the student warmly, explain the intuition, and teach interactively!`,
         }],
       },
     });
@@ -473,7 +473,7 @@ export class QwenRealtimeTeacherService {
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student was quiet for 5 seconds. As an encouraging, expert human tutor, warmly step in, provide the explanation or answer, call board_action to illustrate or write on the board, and smoothly continue teaching!]',
+            text: '[The student was quiet for 5 seconds. As an encouraging, expert human tutor, call "board_action" FIRST to draw or write on the board, and warmly step in to provide the explanation and smoothly continue teaching!]',
           }],
         },
       });
