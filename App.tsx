@@ -1961,11 +1961,7 @@ const App: React.FC = () => {
                 }
               }}
               onCenterActionClick={() => {
-                  if (activeItem === 'visual_solver') {
-                      triggerScanRef.current?.();
-                  } else {
-                      setActiveItem('visual_solver');
-                  }
+                  setActiveItem('live_tutorial_setup');
               }}
               isVisible={activeItem !== 'chat' && activeItem !== 'voice_tutorial' && !customHeaderConfig?.hideBottomNav}
               userProfile={userProfile}

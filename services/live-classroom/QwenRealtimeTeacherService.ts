@@ -495,9 +495,9 @@ export class QwenRealtimeTeacherService {
     liveLogger.log('[QwenRealtime] Sending session.update...');
 
     // Voice selection
-    let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'aiden';
+    let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'Katerina';
     if (selectedVoice === 'Cherry' || selectedVoice === 'Catherine' || !selectedVoice) {
-      selectedVoice = 'aiden';
+      selectedVoice = 'Katerina';
     }
     liveLogger.log('[QwenRealtime] Session voice:', selectedVoice);
 
@@ -853,8 +853,8 @@ export class QwenRealtimeTeacherService {
         liveLogger.error('[QwenRealtime] Server error:', event.error);
         if (event.error?.message?.includes('Voice') && !this.retriedWithDefaultVoice) {
           this.retriedWithDefaultVoice = true;
-          liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "aiden"');
-          this.sendSessionInit('aiden');
+          liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "Katerina"');
+          this.sendSessionInit('Katerina');
           return;
         }
         const isModelRejectedInEvent =
