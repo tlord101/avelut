@@ -130,10 +130,37 @@ function isGenericLabel(s: string | undefined | null): boolean {
   return GENERIC_LABEL_RE.test(String(s).trim());
 }
 
+function wordWrap(text: string, maxLineLength: number): string {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if ((currentLine + word).length > maxLineLength) {
+      if (currentLine) {
+        lines.push(currentLine.trim());
+        currentLine = '';
+      }
+      if (word.length > maxLineLength) {
+        lines.push(word.slice(0, maxLineLength - 1) + '-');
+        currentLine = word.slice(maxLineLength - 1) + ' ';
+      } else {
+        currentLine = word + ' ';
+      }
+    } else {
+      currentLine += word + ' ';
+    }
+  }
+  if (currentLine.trim()) {
+    lines.push(currentLine.trim());
+  }
+  return lines.join('\n');
+}
+
 function sanitizeLabel(s: string, fallback = ''): string {
   const t = String(s || '').trim();
   if (!t || isGenericLabel(t)) return fallback;
-  return t.length > 28 ? t.slice(0, 26) + '…' : t;
+  return wordWrap(t, 26);
 }
 
 class BoardActionQueue {
@@ -174,9 +201,31 @@ export class AvelutBoardController {
   private cursorY = 90;
   private lessonTitle = '';
   private onFormulaChangeCallback: ((formula: string | null) => void) | null = null;
+  private onSvgIllustrationChangeCallback: ((svgString: string | null) => void) | null = null;
 
   public setOnFormulaChange(cb: ((formula: string | null) => void) | null): void {
     this.onFormulaChangeCallback = cb;
+  }
+
+  public setOnSvgIllustrationChange(cb: ((svgString: string | null) => void) | null): void {
+    this.onSvgIllustrationChangeCallback = cb;
+  }
+
+  public setSvgIllustration(svgString: string | null): void {
+    this.actionQueue.push(() => {
+      this.onSvgIllustrationChangeCallback?.(svgString);
+      if (svgString) {
+        // Reserve some space to simulate the illustration taking room on the board state
+        this.cursorY += 300;
+        this.clearStageIfFull();
+      }
+    });
+  }
+
+  public clearSvgIllustration(): void {
+    this.actionQueue.push(() => {
+      this.onSvgIllustrationChangeCallback?.(null);
+    });
   }
 
   private pendingSkeletons: any[] = [];
@@ -439,6 +488,7 @@ export class AvelutBoardController {
     this.nextFreeY = 100;
     this.lastAnnotationY = 100;
     this.onFormulaChangeCallback?.(null);
+    this.onSvgIllustrationChangeCallback?.(null);
     this.syncScene();
   }
 
@@ -561,7 +611,7 @@ export class AvelutBoardController {
     const clampedX = this.clampX(x, width);
     const clampedY = Math.max(this.STAGE_TOP, y);
     const cardWidth = Math.min(width, this.MOBILE_CARD_WIDTH);
-    const cardHeight = Math.min(height, 120);
+    let cardHeight = height || this.MOBILE_CARD_HEIGHT;
 
     this.lastActivePoint = { x: clampedX + cardWidth / 2, y: clampedY + cardHeight / 2 };
 
@@ -590,10 +640,16 @@ export class AvelutBoardController {
         fontSize: 16,
         strokeColor: '#FFFFFF', // High-contrast white label inside dark card
       };
+      
+      const lineCount = text.split('\n').length;
+      if (lineCount > 1) {
+        cardHeight = Math.max(cardHeight, lineCount * 24 + 32);
+        el.height = cardHeight;
+      }
     }
 
     this.appendElements([el], 'stage');
-    this.cursorY = Math.max(this.cursorY, clampedY + height + 24);
+    this.cursorY = Math.max(this.cursorY, clampedY + cardHeight + 24);
   }
 
   public drawArrow(args: {

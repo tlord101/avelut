@@ -13,6 +13,9 @@ import { liveLogger } from './logger';
 import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
 import type { AppSettings } from '../../types';
+import { MermaidBoardService } from './visual-engine/MermaidBoardService';
+import { LlmSvgObjectCache } from './visual-engine/LlmSvgObjectCache';
+import { createAvelutAI, getResponseText } from '../../utils/inference';
 
 export const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
 export const QWEN_FALLBACK_MODEL = 'qwen-omni-turbo-realtime';
@@ -175,7 +178,7 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        tools: [this.buildBoardActionTool()],
+        tools: this.getTools(),
         tool_choice: 'auto',
       },
     });
@@ -274,7 +277,7 @@ export class QwenRealtimeTeacherService {
 
     // Strict default: use persistent Render-hosted WebSocket proxy to bypass 5-min serverless limits
     const DEFAULT_RENDER_PROXY = 'wss://avelut-realtime-proxy.onrender.com/qwen-realtime';
-    const proxyBase = (import.meta.env.VITE_QWEN_PROXY_URL || DEFAULT_RENDER_PROXY).trim();
+    const proxyBase = ((import.meta as any).env?.VITE_QWEN_PROXY_URL || DEFAULT_RENDER_PROXY).trim();
     wsUrl = proxyBase.includes('?') ? `${proxyBase}&${modelParam}` : `${proxyBase}?${modelParam}`;
 
     liveLogger.log('[QwenRealtime] Connecting strictly via Render proxy:', wsUrl, `(model: ${modelToUse})`);
@@ -512,7 +515,7 @@ export class QwenRealtimeTeacherService {
           threshold: 0.5,
           silence_duration_ms: 800,
         },
-        tools: [this.buildBoardActionTool()],
+        tools: this.getTools(),
         tool_choice: 'auto',
       },
     });
@@ -567,6 +570,72 @@ export class QwenRealtimeTeacherService {
         description,
         parameters,
       },
+    };
+  }
+
+  private getTools() {
+    return [
+      this.buildBoardActionTool(),
+      this.buildDrawMermaidTool(),
+      this.buildIllustrateObjectTool(),
+    ];
+  }
+
+  private buildDrawMermaidTool() {
+    return {
+      type: 'function',
+      name: 'draw_mermaid',
+      description: 'Render a Mermaid.js diagram to the visual board for explaining complex flows, architecture, or state machines.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mermaid_code: {
+            type: 'string',
+            description: 'Valid Mermaid.js syntax (e.g. graph TD; A-->B;). Do NOT include markdown codeblocks (```).',
+          },
+        },
+        required: ['mermaid_code'],
+      },
+      function: {
+        name: 'draw_mermaid',
+        description: 'Render a Mermaid.js diagram to the visual board for explaining complex flows, architecture, or state machines.',
+        parameters: {
+          type: 'object',
+          properties: {
+            mermaid_code: { type: 'string' }
+          },
+          required: ['mermaid_code'],
+        }
+      }
+    };
+  }
+
+  private buildIllustrateObjectTool() {
+    return {
+      type: 'function',
+      name: 'illustrate_object',
+      description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process on the visual board.',
+      parameters: {
+        type: 'object',
+        properties: {
+          object_description: {
+            type: 'string',
+            description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
+          },
+        },
+        required: ['object_description'],
+      },
+      function: {
+        name: 'illustrate_object',
+        description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process on the visual board.',
+        parameters: {
+          type: 'object',
+          properties: {
+            object_description: { type: 'string' }
+          },
+          required: ['object_description'],
+        }
+      }
     };
   }
 
@@ -831,6 +900,29 @@ export class QwenRealtimeTeacherService {
 
     if (name === 'board_action') {
       toolResult = this.boardController.executeBoardAction(args);
+    } else if (name === 'draw_mermaid') {
+      const code = args.mermaid_code || '';
+      MermaidBoardService.renderToSvg(code).then(svg => {
+        if (svg) this.boardController.setSvgIllustration(svg);
+      }).catch(err => {
+        liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
+      });
+      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Generating in background' };
+    } else if (name === 'illustrate_object') {
+      const desc = args.object_description || '';
+      LlmSvgObjectCache.getOrGenerate(desc, async () => {
+        if (!this.appSettings) return null;
+        const ai = createAvelutAI(this.appSettings);
+        const res = await ai.models.generateContent({
+          contents: "You are an expert SVG illustrator. Generate ONLY raw valid dark-themed SVG code (no markdown, no explanations) for: " + desc
+        });
+        return getResponseText(res);
+      }).then(svg => {
+        if (svg) this.boardController.setSvgIllustration(svg);
+      }).catch(err => {
+        liveLogger.error('[QwenRealtime] illustrate_object background error:', err);
+      });
+      toolResult = { status: 'ok', action: 'illustrate_object', message: 'Generating in background' };
     } else {
       liveLogger.warn('[QwenRealtime] Unknown tool:', name);
       toolResult = { status: 'error', message: `Unknown tool: ${name}` };
@@ -857,7 +949,7 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        tools: [this.buildBoardActionTool()],
+        tools: this.getTools(),
         tool_choice: 'auto',
       },
     });
