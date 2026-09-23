@@ -114,6 +114,127 @@ const timeAgo = (timestamp: number): string => {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+// --- CAMERA CAPTURE VIEW ---
+const CameraCaptureView: React.FC<{
+  onClose: () => void;
+  onConfirm: (base64Image: string) => void;
+}> = ({ onClose, onConfirm }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false,
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error('Camera access error:', err);
+        alert('Could not access the camera. Please check permissions.');
+        onClose();
+      }
+    };
+    startCamera();
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [onClose]);
+
+  const handleSnap = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setCapturedImage(dataUrl);
+      }
+    }
+  };
+
+  const handleRetake = () => {
+    setCapturedImage(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] bg-black flex flex-col justify-between">
+      {/* Viewport */}
+      <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+        {!capturedImage ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
+        )}
+        <canvas ref={canvasRef} className="hidden" />
+
+        {/* Top close button (always visible) */}
+        <button
+          onClick={onClose}
+          className="absolute top-6 left-4 w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center backdrop-blur-sm z-10"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Bottom Controls */}
+      <div className="h-32 bg-black flex items-center justify-center px-6 shrink-0 relative pb-safe">
+        {!capturedImage ? (
+          <button
+            onClick={handleSnap}
+            className="w-16 h-16 rounded-full border-[4px] border-white/50 flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <div className="w-12 h-12 bg-white rounded-full" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-12 w-full justify-center">
+            <button
+              onClick={handleRetake}
+              className="w-14 h-14 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <button
+              className="w-16 h-16 rounded-full border-[4px] border-white/20 flex items-center justify-center pointer-events-none opacity-50"
+            >
+              <div className="w-12 h-12 bg-white/20 rounded-full" />
+            </button>
+            <button
+              onClick={() => onConfirm(capturedImage)}
+              className="w-14 h-14 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- REDESIGNED INPUT COMPOSER ---
 const GrokChatComposer: React.FC<{
   input: string;
@@ -123,7 +244,10 @@ const GrokChatComposer: React.FC<{
   onSelectMode: (mode: ChatMode) => void;
   voiceStatus: 'idle' | 'listening' | 'processing';
   onToggleVoice: () => void;
-  onAttach: () => void;
+  attachedImage: string | null;
+  onRemoveImage: () => void;
+  onOpenGallery: () => void;
+  onOpenCamera: () => void;
   onSend: () => void;
   autoFocus?: boolean;
 }> = ({
@@ -132,12 +256,29 @@ const GrokChatComposer: React.FC<{
   isLoading,
   voiceStatus,
   onToggleVoice,
-  onAttach,
+  attachedImage,
+  onRemoveImage,
+  onOpenGallery,
+  onOpenCamera,
   onSend,
   autoFocus,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close attach menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+        setShowAttachMenu(false);
+      }
+    };
+    if (showAttachMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAttachMenu]);
 
   useEffect(() => {
     if (autoFocus && textareaRef.current) {
@@ -164,33 +305,38 @@ const GrokChatComposer: React.FC<{
   };
 
   const handleAttachClick = () => {
-    fileInputRef.current?.click();
-    onAttach?.();
+    setShowAttachMenu((prev) => !prev);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setInput(input ? `${input} [Attached: ${file.name}]` : `[Attached: ${file.name}]\n`);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const hasText = Boolean(input.trim());
+  const hasText = Boolean(input.trim()) || Boolean(attachedImage);
 
   return (
     <div className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-3 sm:pb-5 pt-2 relative">
       <div className="relative flex flex-col bg-[#f4f4f5] dark:bg-[#212124] rounded-[28px] border border-neutral-200/70 dark:border-white/5 transition-all focus-within:ring-1 focus-within:ring-black/10 dark:focus-within:ring-white/10 shadow-sm">
-        {/* Hidden File Input for Attach */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+        
+        {/* Attached Image Preview Pill */}
+        {attachedImage && (
+          <div className="px-4 pt-4 pb-0 flex">
+            <div className="relative group">
+              <img 
+                src={attachedImage} 
+                alt="Attached" 
+                className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-[14px] border border-black/10 dark:border-white/10 shadow-sm"
+              />
+              <button
+                onClick={onRemoveImage}
+                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-neutral-800 text-white flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-md"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Top: Text input / textarea */}
-        <div className="px-4 pt-3.5 pb-1">
+        <div className={`px-4 ${attachedImage ? 'pt-2' : 'pt-3.5'} pb-1`}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -204,18 +350,58 @@ const GrokChatComposer: React.FC<{
 
         {/* Bottom Row */}
         <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-          {/* Left: + (plus) button */}
-          <button
-            type="button"
-            onClick={handleAttachClick}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10 transition-colors"
-            title="Attach file"
-            aria-label="Attach file"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
+          {/* Left: + (plus) button with Popup Menu */}
+          <div className="relative" ref={attachMenuRef}>
+            <button
+              type="button"
+              onClick={handleAttachClick}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                showAttachMenu
+                  ? 'bg-neutral-200 dark:bg-white/20 text-neutral-900 dark:text-white'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10'
+              }`}
+              title="Attach file"
+              aria-label="Attach file"
+            >
+              <svg className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+
+            {/* Popup Menu */}
+            {showAttachMenu && (
+              <div className="absolute bottom-full left-0 mb-2 w-36 bg-white dark:bg-[#2a2a2a] rounded-2xl shadow-xl border border-black/5 dark:border-white/10 overflow-hidden animate-in slide-in-from-bottom-2 fade-in z-50">
+                <button
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    onOpenGallery();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  Gallery
+                </button>
+                <div className="h-[1px] bg-neutral-200 dark:bg-white/10" />
+                <button
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    onOpenCamera();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2-2h6l2 2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  Camera
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Right: Mic + Action button */}
           <div className="flex items-center gap-2">
@@ -297,6 +483,9 @@ export const Chat: React.FC<ChatProps> = ({
   const [showLimitBanner, setShowLimitBanner] = useState(false);
   const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { addToast } = useToast();
@@ -539,7 +728,7 @@ export const Chat: React.FC<ChatProps> = ({
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || input;
-    if (!textToSend.trim() || isLoading) return;
+    if ((!textToSend.trim() && !attachedImage) || isLoading) return;
 
     const cost = getFeatureCost('chat_interaction', appSettings);
     const creditCheck = checkAICredits(userProfile, cost, appSettings);
@@ -548,8 +737,14 @@ export const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const currentInput = textToSend;
+    const currentImage = attachedImage;
+    let currentInput = textToSend;
+    if (currentImage && !currentInput.includes('[Attached Image]')) {
+      currentInput = currentInput ? `${currentInput}\n\n[Attached Image]` : '[Attached Image]';
+    }
+
     setInput('');
+    setAttachedImage(null);
     setIsLoading(true);
 
     try {
@@ -972,6 +1167,23 @@ export const Chat: React.FC<ChatProps> = ({
       )}
 
       {/* INPUT BAR */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              setAttachedImage(ev.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+          }
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+      />
       <GrokChatComposer
         input={input}
         setInput={setInput}
@@ -980,10 +1192,23 @@ export const Chat: React.FC<ChatProps> = ({
         onSelectMode={setSelectedMode}
         voiceStatus={voiceStatus}
         onToggleVoice={toggleVoice}
-        onAttach={() => {}}
+        attachedImage={attachedImage}
+        onRemoveImage={() => setAttachedImage(null)}
+        onOpenGallery={() => fileInputRef.current?.click()}
+        onOpenCamera={() => setIsCameraOpen(true)}
         onSend={() => handleSendMessage()}
         autoFocus={true}
       />
+
+      {isCameraOpen && (
+        <CameraCaptureView
+          onClose={() => setIsCameraOpen(false)}
+          onConfirm={(base64Img) => {
+            setAttachedImage(base64Img);
+            setIsCameraOpen(false);
+          }}
+        />
+      )}
 
       <LimitExceededModal
         isOpen={showLimitModal}
