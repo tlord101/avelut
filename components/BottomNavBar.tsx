@@ -187,11 +187,11 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
         <button
           onClick={() => (onCenterActionClick ? onCenterActionClick() : onItemClick(navItems[2].id))}
-          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-[#E53935] dark:bg-[#E53935] border-[4px] border-white dark:border-[#0A0A0A] flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${
+          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white dark:bg-[#0A0A0A] border-[4px] border-[#E53935] flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${
             activeItem === 'live_tutorial_setup' ? 'ring-4 ring-[#E53935]/30' : ''
           }`}
         >
-          <Play className="w-8 h-8 text-white fill-current ml-1" />
+          <Play className="w-8 h-8 text-[#E53935] fill-current ml-1" />
         </button>
 
         <div className="grid grid-cols-5 w-full relative z-20 px-2" style={{ height: '76px' }}>

@@ -343,35 +343,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         </div>
       )}
 
-      {/* ── ERROR OVERLAY ─────────────────────────────────────────────────── */}
-      {errorMsg && (
-        <div className="absolute top-16 left-3 right-3 sm:left-auto sm:right-4 sm:w-96 z-30
-                         p-4 rounded-2xl bg-[#1C1917]/95 border border-rose-500/30
-                         shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-rose-300">Connection Problem</p>
-              <p className="text-xs text-white/60 mt-1 leading-relaxed">{errorMsg}</p>
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={handleRetry}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600
-                             hover:bg-rose-500 active:scale-95 text-xs font-semibold text-white transition-all"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Retry
-                </button>
-                <button
-                  onClick={() => setErrorMsg(null)}
-                  className="px-2.5 py-1.5 rounded-lg text-xs text-white/50 hover:text-white transition-colors"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── ERROR OVERLAY REMOVED ─────────────────────────────────────────── */}
 
       {/* ── EXCALIDRAW BOARD (full-screen) ────────────────────────────────── */}
       <main className="absolute inset-0 w-full h-full">

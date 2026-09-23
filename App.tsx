@@ -1816,7 +1816,7 @@ const App: React.FC = () => {
 
     return (
         <div
-            className="flex h-screen w-full bg-off-white dark:bg-black font-sans text-charcoal dark:text-white selection:bg-brand-200 selection:text-brand-900 overflow-hidden"
+            className="flex fixed inset-0 w-full bg-off-white dark:bg-black font-sans text-charcoal dark:text-white selection:bg-brand-200 selection:text-brand-900 overflow-hidden"
             onTouchStart={handleGlobalTouchStart}
             onTouchEnd={handleGlobalTouchEnd}
         >

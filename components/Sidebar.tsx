@@ -83,10 +83,10 @@ const LinkRow: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left transition-all duration-150 cursor-pointer select-none group relative border ${
+    className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors cursor-pointer select-none group relative ${
       active
-        ? 'bg-neutral-100 dark:bg-[#1C1C1C] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white font-medium shadow-sm'
-        : 'bg-white dark:bg-[#111111] border-neutral-200/80 dark:border-white/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-[#1a1a1a] hover:border-neutral-300 dark:hover:border-white/15'
+        ? 'bg-neutral-100 dark:bg-[#1C1C1C] text-neutral-900 dark:text-white font-medium'
+        : 'bg-transparent text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-[#1a1a1a]'
     }`}
   >
     <span
@@ -386,7 +386,7 @@ const SidebarPanel: React.FC<{
   const togglePinChat = useCallback(
     (convoId: string) => {
       setPinnedIds((prev) => {
-        const next = new Set(prev);
+        const next = new Set<string>(prev);
         const willPin = !next.has(convoId);
         if (willPin) {
           next.add(convoId);
@@ -407,7 +407,7 @@ const SidebarPanel: React.FC<{
     async (convo: ChatConversation) => {
       try {
         const uid = userProfile?.uid || 'anon';
-        const messages = await getLocalMessages(convo.id, uid);
+        const messages = await getLocalMessages(convo.id);
         const transcript = messages
           .filter((m) => m.sender !== 'system')
           .map((m) => `${m.sender === 'user' ? '👤 Student' : '🤖 Avelut'}:\n${m.text}`)
@@ -456,7 +456,7 @@ const SidebarPanel: React.FC<{
     async (convo: ChatConversation) => {
       try {
         const uid = userProfile?.uid || 'anon';
-        const messages = await getLocalMessages(convo.id, uid);
+        const messages = await getLocalMessages(convo.id);
         const excerpt = messages
           .slice(-3)
           .map((m) => `${m.sender === 'user' ? 'Me' : 'Avelut'}: ${m.text.slice(0, 100)}`)
@@ -494,7 +494,7 @@ const SidebarPanel: React.FC<{
         }
         setPinnedIds((prev) => {
           if (!prev.has(convoId)) return prev;
-          const next = new Set(prev);
+          const next = new Set<string>(prev);
           next.delete(convoId);
           saveStoredPinnedIds(next, uid);
           return next;
@@ -629,18 +629,24 @@ const SidebarPanel: React.FC<{
         </div>
       </div>
 
-      {/* Main Navigation — Grok-style quick-access cards */}
-      <nav className="px-3 flex-shrink-0 space-y-1.5">
-        {links.map((item) => (
-          <LinkRow
-            key={item.id}
-            icon={item.icon}
-            label={item.label}
-            active={activeItem === item.id}
-            onClick={() => onItemClick(item.id)}
-            badge={item.id === 'messenger' ? unreadMessagesCount : undefined}
-          />
-        ))}
+      {/* Main Navigation — Quick-access cards */}
+      <nav className="px-2 flex-shrink-0">
+        <div className="bg-white dark:bg-[#111111] border border-neutral-200/80 dark:border-white/10 rounded-2xl overflow-hidden flex flex-col">
+          {links.map((item, index) => (
+            <React.Fragment key={item.id}>
+              <LinkRow
+                icon={item.icon}
+                label={item.label}
+                active={activeItem === item.id}
+                onClick={() => onItemClick(item.id)}
+                badge={item.id === 'messenger' ? unreadMessagesCount : undefined}
+              />
+              {index < links.length - 1 && (
+                <div className="h-[1px] bg-neutral-200/50 dark:bg-white/5 mx-3" />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
       </nav>
 
       {/* History & Conversations: Pinned + Recents */}

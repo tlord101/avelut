@@ -28,9 +28,7 @@ export class MermaidBoardService {
       }
 
       // Convert to base64 for mermaid.ink
-      const encoded = typeof btoa !== 'undefined'
-        ? btoa(codeWithTheme)
-        : Buffer.from(codeWithTheme).toString('base64');
+      const encoded = btoa(unescape(encodeURIComponent(codeWithTheme)));
 
       const url = `https://mermaid.ink/svg/${encoded}?bgColor=0A0A0A`;
       

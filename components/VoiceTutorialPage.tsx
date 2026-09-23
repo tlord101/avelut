@@ -15,7 +15,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile, Course, Topic } from '../types';
-import { LessonDurationModal, type LessonDurationMode } from './tutorial/LessonDurationModal';
 import { InsufficientCreditsModal } from './tutorial/InsufficientCreditsModal';
 import { AvelutLiveClassroomView } from './tutorial/live-classroom/AvelutLiveClassroomView';
 import {
@@ -116,8 +115,6 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     effectiveSessionData?.topic?.topic_context;
 
   // ── UI State ─────────────────────────────────────────────────────────────
-  const [selectedDuration, setSelectedDuration] = useState<LessonDurationMode | null>(null);
-  const [isDurationModalOpen, setIsDurationModalOpen] = useState(true);
   const [isPlayerActive, setIsPlayerActive] = useState(false);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditCheckData, setCreditCheckData] = useState<any>(null);
@@ -160,8 +157,6 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   ]);
 
   useEffect(() => {
-    setSelectedDuration(null);
-    setIsDurationModalOpen(true);
     setIsPlayerActive(false);
     setResumeProgress(null);
   }, [sessionId]);
@@ -178,15 +173,15 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
   }, [userProfile?.uid, topicTitle, courseName]);
 
-  // ── Blank-screen guard ───────────────────────────────────────────────────
+  // ── Auto-start check ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isDurationModalOpen && !selectedDuration && !isPlayerActive) {
-      onBack ? onBack() : setIsDurationModalOpen(true);
+    if (!isPlayerActive && !showCreditsModal && effectiveSessionData) {
+      void handleStartLesson(30);
     }
-  }, [isDurationModalOpen, selectedDuration, isPlayerActive, onBack]);
+  }, [isPlayerActive, showCreditsModal, effectiveSessionData]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleStartLesson = async (mode: LessonDurationMode) => {
+  const handleStartLesson = async (mode: 15 | 30 | 60) => {
     const decision = evaluateLiveTutorialStart(
       userProfile,
       mode as LiveDurationMinutes,
@@ -204,45 +199,23 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       return;
     }
 
-    // Instant start — no background prep job
-    setSelectedDuration(mode);
-    setIsDurationModalOpen(false);
+    // Instant start
     setIsPlayerActive(true);
   };
 
-  const handleResume = () => {
-    if (!resumeProgress) return;
-    setSelectedDuration(resumeProgress.durationMode);
-    setIsDurationModalOpen(false);
-    setIsPlayerActive(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsDurationModalOpen(false);
-    if (!selectedDuration && !isPlayerActive) onBack?.();
+  const handleClose = () => {
+    setIsPlayerActive(false);
+    if (onBack) {
+      onBack();
+    } else {
+      onNavigate?.('study_guide');
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-full h-full min-h-screen bg-[#0A0A0A] text-[#FAFAFA]">
-      {/* Duration / entry modal */}
-      <LessonDurationModal
-        isOpen={isDurationModalOpen}
-        topicTitle={topicTitle}
-        courseName={courseName}
-        syllabusContext={syllabusContext}
-        onClose={handleCloseModal}
-        onConfirm={handleStartLesson}
-        onContinue={handleStartLesson}
-        onOpen={handleStartLesson}
-        initialMode={selectedDuration || 30}
-        resumeAvailable={Boolean(resumeProgress)}
-        resumeLabel={resumeProgress ? formatResumeLabel(resumeProgress) : undefined}
-        onResume={handleResume}
-        userProfile={userProfile}
-        appSettings={resolvedAppSettings}
-      />
 
       {/* Insufficient credits */}
       <InsufficientCreditsModal
@@ -267,18 +240,18 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
         )}
       />
 
-      {/* ── LIVE CLASSROOM (Phase 3) ─────────────────────────────────── */}
-      {!isDurationModalOpen && isPlayerActive && (
+      {/* ── LIVE CLASSROOM ─────────────────────────────────────────────── */}
+      {isPlayerActive && (
         <AvelutLiveClassroomView
-          key={`${topicTitle}::${courseName}::${selectedDuration}`}
+          key={`${topicTitle}::${courseName}::30`}
           topicTitle={topicTitle}
           courseName={courseName}
           syllabusContext={syllabusContext}
-          durationMinutes={selectedDuration || 30}
+          durationMinutes={30}
           learningPath={learningPath}
           userProfile={userProfile}
           appSettings={resolvedAppSettings}
-          onClose={onBack}
+          onClose={handleClose}
           setCustomHeaderConfig={setCustomHeaderConfig}
         />
       )}
