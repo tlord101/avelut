@@ -11,7 +11,90 @@
 
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
-import { visualIllustrationEngine } from './visual-engine/VisualIllustrationEngine';
+
+/**
+ * Converts raw LaTeX or math expressions into clean Unicode for Excalidraw canvas.
+ * Canvas elements cannot render raw LaTeX or $$ delimiters, so we translate:
+ * e.g. "$$ Wave Speed: v = f \lambda $$" -> "Wave Speed: v = f · λ"
+ * e.g. "$$ E = mc^2 $$" -> "E = mc²"
+ */
+export function formatMathForCanvas(raw: string): string {
+  if (!raw) return '';
+  let s = String(raw).trim();
+
+  // Strip LaTeX math delimiters
+  s = s.replace(/^\$\$\s*/, '').replace(/\s*\$\$$/, '');
+  s = s.replace(/^\$\s*/, '').replace(/\s*\$$/, '');
+  s = s.replace(/^\\\[\s*/, '').replace(/\s*\\\]$/, '');
+  s = s.replace(/^\\\(\s*/, '').replace(/\s*\\\)$/, '');
+
+  // Strip \text{...}, \mathrm{...}, \mathbf{...}, \mathit{...}
+  s = s.replace(/\\(text|mathrm|mathbf|mathit|textbf|textit)\{([^}]+)\}/g, '$2');
+
+  // Fractions: \frac{a}{b} -> a / b
+  s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1 / $2');
+
+  // Square roots: \sqrt{x} -> √(x), \sqrt -> √
+  s = s.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+  s = s.replace(/\\sqrt/g, '√');
+
+  // Greek letters
+  const greekMap: Record<string, string> = {
+    '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\Gamma': 'Γ',
+    '\\delta': 'δ', '\\Delta': 'Δ', '\\epsilon': 'ε', '\\varepsilon': 'ε',
+    '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ', '\\Theta': 'Θ',
+    '\\iota': 'ι', '\\kappa': 'κ', '\\lambda': 'λ', '\\Lambda': 'Λ',
+    '\\mu': 'μ', '\\nu': 'ν', '\\xi': 'ξ', '\\Xi': 'Ξ',
+    '\\pi': 'π', '\\Pi': 'Π', '\\rho': 'ρ', '\\sigma': 'σ',
+    '\\Sigma': 'Σ', '\\tau': 'τ', '\\upsilon': 'υ', '\\phi': 'φ',
+    '\\Phi': 'Φ', '\\chi': 'χ', '\\psi': 'ψ', '\\Psi': 'Ψ',
+    '\\omega': 'ω', '\\Omega': 'Ω',
+  };
+  for (const [tex, uni] of Object.entries(greekMap)) {
+    s = s.split(tex).join(uni);
+  }
+
+  // Common math symbols & operators
+  const symbolMap: Record<string, string> = {
+    '\\times': '×', '\\cdot': '·', '\\pm': '±', '\\mp': '∓',
+    '\\div': '÷', '\\approx': '≈', '\\neq': '≠', '\\ne': '≠',
+    '\\le': '≤', '\\leq': '≤', '\\ge': '≥', '\\geq': '≥',
+    '\\infty': '∞', '\\propto': '∝', '\\partial': '∂', '\\nabla': '∇',
+    '\\sum': '∑', '\\prod': '∏', '\\int': '∫', '\\in': '∈',
+    '\\to': '→', '\\rightarrow': '→', '\\leftarrow': '←',
+    '\\Rightarrow': '⇒', '\\Leftarrow': '⇐', '\\leftrightarrow': '↔',
+    '\\degree': '°', '^{\\circ}': '°', '\\circ': '°',
+  };
+  for (const [tex, uni] of Object.entries(symbolMap)) {
+    s = s.split(tex).join(uni);
+  }
+
+  // Superscripts (common in physics & math formulas like ^2, ^3, ^n, ^-1)
+  const superMap: Record<string, string> = {
+    '^0': '⁰', '^1': '¹', '^2': '²', '^3': '³', '^4': '⁴',
+    '^5': '⁵', '^6': '⁶', '^7': '⁷', '^8': '⁸', '^9': '⁹',
+    '^+': '⁺', '^-': '⁻', '^n': 'ⁿ', '^x': 'ˣ', '^t': 'ᵗ',
+  };
+  for (const [tex, uni] of Object.entries(superMap)) {
+    s = s.split(tex).join(uni);
+  }
+
+  // Subscripts (common in physics like _0, _1, _2, _x, _y, _i, _n)
+  const subMap: Record<string, string> = {
+    '_0': '₀', '_1': '₁', '_2': '₂', '_3': '₃', '_4': '₄',
+    '_5': '₅', '_6': '₆', '_7': '₇', '_8': '₈', '_9': '₉',
+    '_a': 'ₐ', '_e': 'ₑ', '_i': 'ᵢ', '_o': 'ₒ', '_r': 'ᵣ',
+    '_u': 'ᵤ', '_v': 'ᵥ', '_x': 'ₓ',
+  };
+  for (const [tex, uni] of Object.entries(subMap)) {
+    s = s.split(tex).join(uni);
+  }
+
+  // Clean up any double spaces or orphan braces
+  s = s.replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
+
+  return s;
+}
 
 export type FontSize = 'small' | 'medium' | 'large' | 'title' | number;
 
@@ -392,7 +475,10 @@ export class AvelutBoardController {
     const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
     const color = args?.color ?? '#F8FAFC';
 
-    const lines = text.split('\n');
+    const isMathLike = args?.isFormula || /[$^·×±√\\]/.test(text) || (text.includes('=') && !text.includes('\n'));
+    const displayText = isMathLike ? formatMathForCanvas(text) : text.trim();
+
+    const lines = displayText.split('\n');
     const longestLine = Math.max(...lines.map(l => l.length));
     const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), 320);
     const approxH = Math.max(lines.length * fontSize * 1.4, 30);
@@ -401,7 +487,7 @@ export class AvelutBoardController {
     this.appendElements([{
       type: 'text',
       x, y,
-      text: text.trim(),
+      text: displayText,
       fontSize,
       fontFamily: 1,
       textAlign: 'left',
@@ -421,7 +507,7 @@ export class AvelutBoardController {
     if (!formulaText?.trim()) return;
     this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
 
-    // Ensure KaTeX / LaTeX clean display formatting delimiters
+    // Ensure KaTeX / LaTeX clean display formatting delimiters for sticky note
     let cleanFormula = formulaText.trim();
     if (!cleanFormula.startsWith('$') && !cleanFormula.startsWith('\\[')) {
       cleanFormula = `$$ ${cleanFormula} $$`;
@@ -429,7 +515,9 @@ export class AvelutBoardController {
 
     this.onFormulaChangeCallback?.(cleanFormula);
 
-    const cardWidth = Math.min(Math.max(cleanFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
+    // Canvas cannot render raw LaTeX ($$ ... $$ or \lambda), so format with Unicode symbols
+    const canvasFormula = formatMathForCanvas(cleanFormula);
+    const cardWidth = Math.min(Math.max(canvasFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
     this.lastActivePoint = { x: 30 + cardWidth / 2, y: this.cursorY + 34 };
 
     const els = convertToExcalidrawElements([{
@@ -442,7 +530,7 @@ export class AvelutBoardController {
       backgroundColor: '#1E1B4B',
       fillStyle: 'solid',
       roundness: { type: 3 },
-      label: { text: cleanFormula, fontSize: 18, strokeColor: '#FDE047' },
+      label: { text: canvasFormula, fontSize: 18, strokeColor: '#FDE047' },
       customData: { zone: 'notes', slot: 'formula' },
     }]);
 
@@ -495,7 +583,8 @@ export class AvelutBoardController {
     };
 
     if (label) {
-      const text = typeof label === 'string' ? label.trim() : label.text.trim();
+      const rawText = typeof label === 'string' ? label.trim() : label.text.trim();
+      const text = /[$^·×±√\\]/.test(rawText) ? formatMathForCanvas(rawText) : rawText;
       el.label = {
         text,
         fontSize: 16,
@@ -542,6 +631,15 @@ export class AvelutBoardController {
         startY = fromEl.y + fromEl.height;
         endX = toEl.x + toEl.width / 2;
         endY = toEl.y;
+
+        // Prevent piercing across intermediate cards:
+        // If distance between elements is excessive (> 150px) or inverted,
+        // clamp to a clean short downward connector (36px) right below fromEl
+        const vDist = endY - startY;
+        if (vDist > 150 || vDist < 0) {
+          endY = startY + 36;
+          endX = startX;
+        }
       } else {
         startX = this.clampX(args.startX ?? (this.MOBILE_BOARD_WIDTH / 2), 20);
         startY = args.startY ?? Math.max(this.STAGE_TOP, this.cursorY - 24);
@@ -724,28 +822,87 @@ export class AvelutBoardController {
     return found;
   }
 
-  public removeComponent(targetTextOrLabel: string): boolean {
-    this.actionQueue.push(() => { this._removeComponent(targetTextOrLabel); });
-    return true;
-  }
-  private _removeComponent(targetTextOrLabel: string): boolean {
-    if (!targetTextOrLabel) return false;
-    const initialLen = this.elements.length;
-    const lower = targetTextOrLabel.toLowerCase();
+  public eraseElement(target?: string): { success: boolean; freedY?: number; ids: string[] } {
+    const trimmed = target?.trim();
+    const isTargetLast = !trimmed || trimmed.toLowerCase() === 'last' || trimmed.toLowerCase() === 'recent';
+    const lower = (trimmed || '').toLowerCase();
 
-    this.elements = this.elements.filter(el => {
-      const match =
-        (el.type === 'text' && el.text?.toLowerCase().includes(lower)) ||
-        (el.label?.text?.toLowerCase().includes(lower));
-      return !match;
-    });
+    // Candidates exclude header/title elements
+    const candidates = this.elements.filter(
+      el => el.customData?.zone !== 'header' && !(el.type === 'text' && el.y < 60)
+    );
 
-    if (this.elements.length !== initialLen) {
-      this.syncScene();
-      console.log(`[BoardController] Removed component matching "${targetTextOrLabel}"`);
-      return true;
+    if (candidates.length === 0) return { success: false, ids: [] };
+
+    let targetEls: any[] = [];
+    if (isTargetLast) {
+      // Target the most recently added candidate element
+      targetEls = [candidates[candidates.length - 1]];
+    } else {
+      targetEls = candidates.filter(el => {
+        const idMatch = el.id === trimmed || el.id?.toLowerCase() === lower;
+        const textMatch = el.type === 'text' && el.text?.toLowerCase().includes(lower);
+        const labelMatch = el.label?.text?.toLowerCase().includes(lower);
+        return idMatch || textMatch || labelMatch;
+      });
     }
-    return false;
+
+    if (targetEls.length === 0) {
+      console.warn(`[BoardController] eraseElement: No matching elements for "${target}"`);
+      return { success: false, ids: [] };
+    }
+
+    const removedIds = new Set(targetEls.map(e => e.id));
+
+    // Also remove any arrows connected to these elements
+    const arrowsToRemove = this.elements.filter(el =>
+      el.type === 'arrow' &&
+      ((el.start?.id && removedIds.has(el.start.id)) || (el.end?.id && removedIds.has(el.end.id)))
+    );
+    arrowsToRemove.forEach(a => removedIds.add(a.id));
+
+    // Find the minimum y among removed elements
+    const minY = Math.min(...targetEls.map(e => typeof e.y === 'number' ? e.y : this.cursorY));
+
+    // Filter out removed elements
+    this.elements = this.elements.filter(el => !removedIds.has(el.id));
+
+    // If a formula element was removed, also clear the active formula banner
+    if (targetEls.some(e => e.customData?.slot === 'formula')) {
+      this.onFormulaChangeCallback?.(null);
+    }
+
+    // Reclaim vertical space so next draw/write directly occupies this freed space!
+    const remainingBelow = this.elements.filter(el =>
+      el.customData?.zone !== 'header' && typeof el.y === 'number' && el.y >= minY
+    );
+    if (remainingBelow.length === 0) {
+      this.cursorY = Math.max(this.STAGE_TOP, minY);
+      this.nextFreeY = Math.max(100, minY);
+    }
+
+    // Update lastActivePoint to the latest remaining element
+    const remaining = this.elements.filter(el => el.customData?.zone !== 'header');
+    if (remaining.length > 0) {
+      const last = remaining[remaining.length - 1];
+      this.lastActivePoint = {
+        x: (last.x || 30) + (last.width || 200) / 2,
+        y: (last.y || 100) + (last.height || 40) / 2,
+      };
+    } else {
+      this.lastActivePoint = null;
+    }
+
+    this.syncScene();
+    console.log(`[BoardController] Erased ${removedIds.size} elements matching "${target}". Space reclaimed at y: ${this.cursorY}`);
+    return { success: true, freedY: minY, ids: Array.from(removedIds) };
+  }
+
+  public removeComponent(targetTextOrLabel?: string): boolean {
+    this.actionQueue.push(() => {
+      this.eraseElement(targetTextOrLabel);
+    });
+    return true;
   }
 
   public writeKeywords(keywords: string[], startX = 50, startY = 475): void {
@@ -1688,7 +1845,7 @@ export class AvelutBoardController {
    * Returns a small result object — never a full board dump.
    */
   public executeBoardAction(args: {
-    action: 'draw' | 'write' | 'clear' | 'highlight' | 'erase' | 'illustrate';
+    action: 'draw' | 'write' | 'clear' | 'highlight' | 'erase';
     elements?: Array<{
       kind: 'box' | 'circle' | 'diamond' | 'arrow' | 'text';
       id?: string;
@@ -1708,12 +1865,6 @@ export class AvelutBoardController {
       const ids: string[] = [];
 
       switch (args.action) {
-        case 'illustrate': {
-          const concept = args.concept || args.text || args.target || 'Core Concept';
-          void visualIllustrationEngine.illustrateConcept(concept, args.details, true);
-          return { status: 'ok', action: 'illustrate', ids: [] };
-        }
-
         case 'draw': {
           if (!args.elements || args.elements.length === 0) {
             return { status: 'error', action: 'draw', message: 'No elements provided.' };
@@ -1770,9 +1921,6 @@ export class AvelutBoardController {
             });
           }
 
-          // Also trigger async visual illustration engine for drawn elements
-          void visualIllustrationEngine.triggerFromBoardAction(args);
-
           return { status: 'ok', action: 'draw', ids };
         }
 
@@ -1787,9 +1935,6 @@ export class AvelutBoardController {
           } else {
             this.writeText(text, { fontSize: 'medium' });
           }
-
-          // Trigger async visual illustration engine for formula or key written concept
-          void visualIllustrationEngine.triggerFromBoardAction(args);
 
           return { status: 'ok', action: 'write', ids: [] };
         }
@@ -1812,10 +1957,14 @@ export class AvelutBoardController {
         }
 
         case 'erase': {
-          const target = args.target?.trim();
-          if (!target) return { status: 'error', action: 'erase', message: 'No target provided.' };
-          this.removeComponent(target);
-          return { status: 'ok', action: 'erase', ids: [] };
+          const target = args.target?.trim() || 'last';
+          const res = this.eraseElement(target);
+          return {
+            status: res.success ? 'ok' : 'error',
+            action: 'erase',
+            ids: res.ids,
+            message: res.success ? undefined : `No element found matching "${target}"`,
+          };
         }
 
         default:

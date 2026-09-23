@@ -80,6 +80,23 @@ wss.on('connection', (clientSocket, req) => {
   let upstreamClosed = false;
   const clientQueue = [];
 
+  // ── Keepalive Heartbeat ────────────────────────────────────────────────
+  const pingInterval = setInterval(() => {
+    if (clientSocket.readyState === WebSocket.OPEN) {
+      try { clientSocket.ping(); } catch {}
+    }
+    if (upstreamSocket.readyState === WebSocket.OPEN) {
+      try { upstreamSocket.ping(); } catch {}
+    }
+  }, 20000);
+
+  const cleanup = () => {
+    clearInterval(pingInterval);
+  };
+
+  clientSocket.on('pong', () => {});
+  upstreamSocket.on('pong', () => {});
+
   // ── Upstream → Client pipe ──────────────────────────────────────────────
   upstreamSocket.on('open', () => {
     console.log('[qwen-ws-proxy] ✅ Upstream DashScope connected');
@@ -99,6 +116,7 @@ wss.on('connection', (clientSocket, req) => {
 
   upstreamSocket.on('error', (err) => {
     console.error('[qwen-ws-proxy] ⛔ Upstream error:', err.message);
+    cleanup();
     if (clientSocket.readyState === WebSocket.OPEN) {
       clientSocket.close(1011, 'Upstream error');
     }
@@ -107,6 +125,7 @@ wss.on('connection', (clientSocket, req) => {
   upstreamSocket.on('close', (code, reason) => {
     console.log(`[qwen-ws-proxy] 🔌 Upstream closed (${code})`);
     upstreamClosed = true;
+    cleanup();
     if (!clientClosed && clientSocket.readyState === WebSocket.OPEN) {
       clientSocket.close(code, reason);
     }
@@ -114,6 +133,18 @@ wss.on('connection', (clientSocket, req) => {
 
   // ── Client → Upstream pipe ──────────────────────────────────────────────
   clientSocket.on('message', (data, isBinary) => {
+    if (!isBinary) {
+      try {
+        const str = typeof data === 'string' ? data : data.toString();
+        if (str.includes('"type":"ping"') || str.trim() === 'ping') {
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'pong' }));
+          }
+          return;
+        }
+      } catch {}
+    }
+
     if (upstreamSocket.readyState === WebSocket.OPEN) {
       upstreamSocket.send(data, { binary: isBinary });
     } else if (upstreamSocket.readyState === WebSocket.CONNECTING) {
@@ -123,6 +154,7 @@ wss.on('connection', (clientSocket, req) => {
 
   clientSocket.on('error', (err) => {
     console.error('[qwen-ws-proxy] ⛔ Client error:', err.message);
+    cleanup();
     if (!upstreamClosed && upstreamSocket.readyState === WebSocket.OPEN) {
       upstreamSocket.close(1011, 'Client error');
     }
@@ -131,6 +163,7 @@ wss.on('connection', (clientSocket, req) => {
   clientSocket.on('close', (code, reason) => {
     console.log(`[qwen-ws-proxy] 👋 Client disconnected (${code})`);
     clientClosed = true;
+    cleanup();
     if (!upstreamClosed && upstreamSocket.readyState === WebSocket.OPEN) {
       upstreamSocket.close(code, reason);
     }

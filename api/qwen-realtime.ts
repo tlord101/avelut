@@ -101,6 +101,25 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
     let upstreamDone = false;
     const clientQueue: Array<{ data: any; isBinary: boolean }> = [];
 
+    // ── Keepalive Heartbeat ────────────────────────────────────────────────
+    // Send active WebSocket pings every 20s to prevent reverse proxy, Vercel,
+    // or DashScope idle disconnects
+    const pingInterval = setInterval(() => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        try { clientWs.ping(); } catch {}
+      }
+      if (upstream.readyState === WebSocket.OPEN) {
+        try { upstream.ping(); } catch {}
+      }
+    }, 20000);
+
+    const cleanup = () => {
+      clearInterval(pingInterval);
+    };
+
+    clientWs.on('pong', () => {});
+    upstream.on('pong', () => {});
+
     // ── Upstream → Client ──────────────────────────────────────────────────
     upstream.on('open', () => {
       while (clientQueue.length > 0) {
@@ -119,6 +138,7 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     upstream.on('error', (err) => {
       console.error('[qwen-realtime] Upstream error:', err.message);
+      cleanup();
       if (!clientDone && clientWs.readyState === WebSocket.OPEN) {
         clientWs.close(1011, 'Upstream error');
       }
@@ -126,6 +146,7 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     upstream.on('close', (code, reason) => {
       upstreamDone = true;
+      cleanup();
       if (!clientDone && clientWs.readyState === WebSocket.OPEN) {
         clientWs.close(code, reason);
       }
@@ -133,6 +154,18 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     // ── Client → Upstream ──────────────────────────────────────────────────
     clientWs.on('message', (data, isBinary) => {
+      if (!isBinary) {
+        try {
+          const str = typeof data === 'string' ? data : data.toString();
+          if (str.includes('"type":"ping"') || str.trim() === 'ping') {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(JSON.stringify({ type: 'pong' }));
+            }
+            return;
+          }
+        } catch {}
+      }
+
       if (upstream.readyState === WebSocket.OPEN) {
         upstream.send(data, { binary: isBinary });
       } else if (upstream.readyState === WebSocket.CONNECTING) {
@@ -142,6 +175,7 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     clientWs.on('error', (err) => {
       console.error('[qwen-realtime] Client error:', err.message);
+      cleanup();
       if (!upstreamDone && upstream.readyState === WebSocket.OPEN) {
         upstream.close(1011, 'Client error');
       }
@@ -149,6 +183,7 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
 
     clientWs.on('close', (code, reason) => {
       clientDone = true;
+      cleanup();
       if (!upstreamDone && upstream.readyState === WebSocket.OPEN) {
         upstream.close(code, reason);
       }

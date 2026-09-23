@@ -12,7 +12,6 @@
 import { liveLogger } from './logger';
 import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
-import { visualIllustrationEngine } from './visual-engine/VisualIllustrationEngine';
 import type { AppSettings } from '../../types';
 
 export const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
@@ -47,6 +46,11 @@ export class QwenRealtimeTeacherService {
   private ws: WebSocket | null = null;
   private state: TeacherState = 'connecting';
   private callbacks: QwenTeacherCallbacks = {};
+  private isExplicitlyClosed = false;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private isReconnecting = false;
+  private reconnectAttempts = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
 
   // ── Audio — input (mic → WS) ────────────────────────────────────────────
   private inputAudioCtx: AudioContext | null = null;
@@ -108,6 +112,9 @@ export class QwenRealtimeTeacherService {
     }
 
     this.endSession();
+    this.isExplicitlyClosed = false;
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
     this.hasGreeted = false;
     this.isStarting = true;
 
@@ -176,8 +183,11 @@ export class QwenRealtimeTeacherService {
 
   /** Stop all audio and close the WebSocket cleanly */
   public endSession(): void {
+    this.isExplicitlyClosed = true;
+    this.clearHeartbeat();
     this.clearStudentWaitTimer();
     this.isStudentSpeaking = false;
+    this.isReconnecting = false;
     this.stopPlayback();
 
     this.processorNode?.disconnect();
@@ -205,7 +215,57 @@ export class QwenRealtimeTeacherService {
     this.setState('closed');
   }
 
-  // ── WebSocket ─────────────────────────────────────────────────────────────
+  // ── WebSocket & Keepalive ──────────────────────────────────────────────────
+
+  private startHeartbeat(): void {
+    this.clearHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({ type: 'ping' }));
+        } catch (e) {
+          liveLogger.warn('[QwenRealtime] Heartbeat send error:', e);
+        }
+      }
+    }, 15000);
+  }
+
+  private clearHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (this.isReconnecting || this.isExplicitlyClosed) return;
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+    this.setState('connecting');
+
+    const delayMs = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts - 1), 5000);
+    liveLogger.log(`[QwenRealtime] Reconnection attempt #${this.reconnectAttempts} in ${delayMs}ms...`);
+
+    await new Promise(r => setTimeout(r, delayMs));
+    if (this.isExplicitlyClosed) return;
+
+    try {
+      await this.connectWebSocket();
+      liveLogger.log('[QwenRealtime] Auto-reconnected successfully! 🔄');
+      if (this.inputAudioCtx && this.inputAudioCtx.state === 'suspended') {
+        void this.inputAudioCtx.resume();
+      }
+    } catch (err) {
+      liveLogger.error('[QwenRealtime] Reconnection attempt failed:', err);
+      this.isReconnecting = false;
+      if (this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS && !this.isExplicitlyClosed) {
+        void this.attemptReconnect();
+      } else if (!this.isExplicitlyClosed) {
+        this.setState('error');
+        this.callbacks.onError?.(new Error('Live connection lost. Tap retry to reconnect.'));
+      }
+    }
+  }
 
   private async connectWebSocket(modelToUse: string = this.currentModel): Promise<void> {
     this.currentModel = modelToUse;
@@ -239,7 +299,10 @@ export class QwenRealtimeTeacherService {
 
       ws.onopen = () => {
         liveLogger.log('[QwenRealtime] Proxy connected ✅');
+        this.reconnectAttempts = 0;
+        this.isReconnecting = false;
         this.setState('connected');
+        this.startHeartbeat();
         this.sendSessionInit();
         resolve();
       };
@@ -271,8 +334,16 @@ export class QwenRealtimeTeacherService {
         ));
       };
 
-      ws.onclose = () => {
-        if (this.state !== 'error') this.setState('closed');
+      ws.onclose = (evt) => {
+        liveLogger.warn('[QwenRealtime] WebSocket onclose. Code:', evt.code, 'Reason:', evt.reason, 'Explicit:', this.isExplicitlyClosed);
+        this.clearHeartbeat();
+
+        if (!this.isExplicitlyClosed && this.hasGreeted && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+          liveLogger.log('[QwenRealtime] Connection dropped unexpectedly — attempting auto-reconnect...');
+          void this.attemptReconnect();
+        } else if (!this.isExplicitlyClosed && this.state !== 'error') {
+          this.setState('closed');
+        }
       };
     });
   }
@@ -339,9 +410,6 @@ export class QwenRealtimeTeacherService {
     const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min)`);
-
-    // Proactively generate the opening educational vector illustration for this topic
-    void visualIllustrationEngine.illustrateConcept(topic, `Opening conceptual overview and diagram for ${topic}`);
 
     // Give the model its starting instruction as a user message
     this.sendJson({
@@ -474,11 +542,10 @@ export class QwenRealtimeTeacherService {
       properties: {
         action: {
           type: 'string',
-          enum: ['draw', 'write', 'clear', 'highlight', 'erase', 'illustrate'],
+          enum: ['draw', 'write', 'clear', 'highlight', 'erase'],
           description:
-            'draw=create shapes/diagrams, write=add text/formula/keyword, ' +
-            'illustrate=command AI visual engine to generate a rich scientific vector illustration, ' +
-            'clear=clear current area, highlight=emphasize existing concept, erase=remove element',
+            'draw=create step-by-step boxes with arrows, write=add text/formula/keyword, ' +
+            'clear=clear current area, highlight=emphasize existing concept, erase=remove element to draw in that space',
         },
         elements: {
           type: 'array',
@@ -491,17 +558,9 @@ export class QwenRealtimeTeacherService {
           type: 'string',
           description: 'Text, formula ($$ ... $$), or key takeaway keyword to write on the board (for "write" action)',
         },
-        concept: {
-          type: 'string',
-          description: 'Educational concept or topic to illustrate with high-clarity scientific SVG (for "illustrate" action)',
-        },
-        details: {
-          type: 'string',
-          description: 'Specific visual details, components, or scenario to depict (for "illustrate" action)',
-        },
         target: {
           type: 'string',
-          description: 'Target element label or ID (for "highlight" or "erase" actions)',
+          description: 'Target element label, ID, or "last" (for "highlight" or "erase" actions)',
         },
       },
       required: ['action'],
@@ -509,7 +568,7 @@ export class QwenRealtimeTeacherService {
 
     const description =
       'Control the educational whiteboard while teaching. Calling board_action is MANDATORY in every single response turn! ' +
-      'Use "write" to put a keyword/formula/question on the board, "draw" to draw a connected diagram, or "illustrate" to generate a rich vector illustration.';
+      'Use "write" to put a keyword/formula/question on the board, "draw" to draw step-by-step boxes with small downward arrows, or "erase" to remove an element to draw in that space.';
 
     return {
       type: 'function',
