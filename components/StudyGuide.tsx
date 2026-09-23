@@ -229,9 +229,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const [topicPickerCourse, setTopicPickerCourse] = useState<Course | null>(null);
     const [topicToOpen, setTopicToOpen] = useState<Topic | null>(null);
     const [isVoiceTutorialActive, setIsVoiceTutorialActive] = useState(false);
-    const [activeExternalSession, setActiveExternalSession] = useState<VoiceTutorialSessionData | null>(() => (
-        readCachedJson<VoiceTutorialSessionData | null>('avelut_active_voice_tutorial', null)
-    ));
+    const [activeExternalSession, setActiveExternalSession] = useState<VoiceTutorialSessionData | null>(null);
     const [pinnedTopics, setPinnedTopics] = useState<Array<any>>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'courses' | 'notebooks'>('notebooks');
@@ -261,13 +259,6 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         setSelectedCourse(course);
         setTopicToOpen(topic);
         setTopicPickerCourse(null);
-
-        // Cache active session for live voice tutorial
-        writeCachedJson('avelut_active_voice_tutorial', {
-            course,
-            topic,
-            syllabusContext: topic.topic_context || `Course: ${course.course_name}`,
-        });
     }, [topicVisits, userProfile, appSettings]);
 
     const touchStartX = useRef<number | null>(null);
@@ -377,8 +368,13 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     // Check for incoming voice tutorial session (e.g. from Visual Scanner Detailed Tutorial)
     useEffect(() => {
         const cachedSession = readCachedJson<VoiceTutorialSessionData | null>('avelut_active_voice_tutorial', null);
-        if (cachedSession) {
+        if (cachedSession && (cachedSession as any).source === 'visual_solver') {
             setActiveExternalSession(cachedSession);
+            // Immediately clear so refreshing doesn't keep opening it
+            writeCachedJson('avelut_active_voice_tutorial', null);
+        } else if (cachedSession) {
+            // Clean up any stale session from localStorage so it doesn't linger across refreshes
+            writeCachedJson('avelut_active_voice_tutorial', null);
         }
     }, []);
 
@@ -790,16 +786,11 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 appSettings={appSettings}
                 initialSessionData={memoizedVoiceSessionData}
                 onBack={() => {
-                    if (isVoiceTutorialActive) {
-                        setIsVoiceTutorialActive(false);
-                    } else {
-                        setSelectedCourse(null);
-                        setTopicToOpen(null);
-                        setActiveExternalSession(null);
-                        writeCachedJson('avelut_active_voice_tutorial', null);
-                        if (setCustomHeaderConfig) {
-                            setCustomHeaderConfig(null);
-                        }
+                    setIsVoiceTutorialActive(false);
+                    setActiveExternalSession(null);
+                    writeCachedJson('avelut_active_voice_tutorial', null);
+                    if (setCustomHeaderConfig) {
+                        setCustomHeaderConfig(null);
                     }
                 }}
                 onNavigate={onNavigate}
