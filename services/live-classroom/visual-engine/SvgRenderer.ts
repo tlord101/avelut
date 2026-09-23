@@ -7,6 +7,7 @@
 
 import type { IllustrationSpec, VisualElement } from './types';
 import { renderPrimitive, renderRelationship } from './visualPrimitives';
+import katex from 'katex';
 
 export class SvgRenderer {
   private static readonly VIEW_WIDTH = 480;
@@ -87,20 +88,29 @@ export class SvgRenderer {
         })
         .join('\n');
 
-      // 6. Render Equations (Formatted with scientific/KaTeX LaTeX notation)
+      // 6. Render Equations (Formatted with real KaTeX LaTeX notation)
       const renderedEquations = (spec.equations || [])
         .map((eq, i) => {
           const x = eq.x ?? (240);
-          const y = eq.y ?? (290 - i * 32);
+          const y = eq.y ?? (285 - i * 42);
           const rawLatex = eq.latex.replace(/^\$\$|\$\$$/g, '').trim();
+
+          let katexHtml = '';
+          try {
+            katexHtml = katex.renderToString(rawLatex, { displayMode: false, throwOnError: false });
+          } catch {
+            katexHtml = `<span style="color:#FDE047; font-family:'KaTeX_Main', serif;">${escapeXml(rawLatex)}</span>`;
+          }
 
           return `
             <g class="visual-equation" transform="translate(${x}, ${y})">
-              <rect x="-140" y="-18" width="280" height="36" rx="8" fill="#1E1B4B" stroke="#FDE047" stroke-width="1.5" />
-              <text x="0" y="5" text-anchor="middle" fill="#FDE047" font-size="14" font-weight="700" font-family="'KaTeX_Main', 'Times New Roman', serif">
-                ${escapeXml(rawLatex)}
-              </text>
-              ${eq.label ? `<text x="0" y="-22" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="system-ui, sans-serif">${escapeXml(eq.label)}</text>` : ''}
+              <rect x="-145" y="-19" width="290" height="38" rx="8" fill="#1E1B4B" stroke="#FDE047" stroke-width="1.5" />
+              <foreignObject x="-140" y="-17" width="280" height="34">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; color:#FDE047; font-size:14px; overflow:hidden; text-align:center;">
+                  ${katexHtml}
+                </div>
+              </foreignObject>
+              ${eq.label ? `<text x="0" y="-23" text-anchor="middle" fill="#94A3B8" font-size="10" font-family="system-ui, sans-serif">${escapeXml(eq.label)}</text>` : ''}
             </g>
           `;
         })

@@ -11,6 +11,7 @@
 
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import { visualIllustrationEngine } from './visual-engine/VisualIllustrationEngine';
 
 export type FontSize = 'small' | 'medium' | 'large' | 'title' | number;
 
@@ -89,6 +90,11 @@ export class AvelutBoardController {
   private elements: any[] = [];
   private cursorY = 90;
   private lessonTitle = '';
+  private onFormulaChangeCallback: ((formula: string | null) => void) | null = null;
+
+  public setOnFormulaChange(cb: ((formula: string | null) => void) | null): void {
+    this.onFormulaChangeCallback = cb;
+  }
 
   private pendingSkeletons: any[] = [];
   private flushScheduled = false;
@@ -349,6 +355,7 @@ export class AvelutBoardController {
     this.cursorY = 90;
     this.nextFreeY = 100;
     this.lastAnnotationY = 100;
+    this.onFormulaChangeCallback?.(null);
     this.syncScene();
   }
 
@@ -357,6 +364,7 @@ export class AvelutBoardController {
   }
   private _clearNotes(): void {
     this.elements = this.elements.filter(el => el.customData?.zone !== 'notes');
+    this.onFormulaChangeCallback?.(null);
     this.syncScene();
   }
 
@@ -418,6 +426,8 @@ export class AvelutBoardController {
     if (!cleanFormula.startsWith('$') && !cleanFormula.startsWith('\\[')) {
       cleanFormula = `$$ ${cleanFormula} $$`;
     }
+
+    this.onFormulaChangeCallback?.(cleanFormula);
 
     const cardWidth = Math.min(Math.max(cleanFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
     this.lastActivePoint = { x: 30 + cardWidth / 2, y: this.cursorY + 34 };
@@ -1678,7 +1688,7 @@ export class AvelutBoardController {
    * Returns a small result object — never a full board dump.
    */
   public executeBoardAction(args: {
-    action: 'draw' | 'write' | 'clear' | 'highlight' | 'erase';
+    action: 'draw' | 'write' | 'clear' | 'highlight' | 'erase' | 'illustrate';
     elements?: Array<{
       kind: 'box' | 'circle' | 'diamond' | 'arrow' | 'text';
       id?: string;
@@ -1691,11 +1701,19 @@ export class AvelutBoardController {
     }>;
     text?: string;
     target?: string;
+    concept?: string;
+    details?: string;
   }): { status: 'ok' | 'error'; action: string; ids?: string[]; message?: string } {
     try {
       const ids: string[] = [];
 
       switch (args.action) {
+        case 'illustrate': {
+          const concept = args.concept || args.text || args.target || 'Core Concept';
+          void visualIllustrationEngine.illustrateConcept(concept, args.details, true);
+          return { status: 'ok', action: 'illustrate', ids: [] };
+        }
+
         case 'draw': {
           if (!args.elements || args.elements.length === 0) {
             return { status: 'error', action: 'draw', message: 'No elements provided.' };
@@ -1752,6 +1770,9 @@ export class AvelutBoardController {
             });
           }
 
+          // Also trigger async visual illustration engine for drawn elements
+          void visualIllustrationEngine.triggerFromBoardAction(args);
+
           return { status: 'ok', action: 'draw', ids };
         }
 
@@ -1766,6 +1787,10 @@ export class AvelutBoardController {
           } else {
             this.writeText(text, { fontSize: 'medium' });
           }
+
+          // Trigger async visual illustration engine for formula or key written concept
+          void visualIllustrationEngine.triggerFromBoardAction(args);
+
           return { status: 'ok', action: 'write', ids: [] };
         }
 

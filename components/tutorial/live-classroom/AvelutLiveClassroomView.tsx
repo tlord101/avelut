@@ -41,6 +41,8 @@ import {
   type IllustrationSpec,
 } from '../../../services/live-classroom/visual-engine';
 import type { UserProfile } from '../../../types';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -136,6 +138,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [visualSvg, setVisualSvg] = useState<string | null>(null);
   const [visualSpec, setVisualSpec] = useState<IllustrationSpec | null>(null);
   const [isVisualMinimized, setIsVisualMinimized] = useState(false);
+  const [activeFormula, setActiveFormula] = useState<string | null>(null);
 
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
@@ -237,11 +240,16 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   useEffect(() => {
+    avelutBoardController.setOnFormulaChange((formula) => {
+      setActiveFormula(formula);
+    });
+
     if (!startedSessionRef.current) {
       startedSessionRef.current = true;
       startSession();
     }
     return () => {
+      avelutBoardController.setOnFormulaChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
@@ -468,6 +476,38 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               />
             </div>
           )}
+        </aside>
+      )}
+
+      {/* ── ACTIVE KATEX FORMULA BADGE ──────────────────────────────────── */}
+      {activeFormula && (
+        <aside
+          aria-label="Active Formula"
+          className="absolute top-14 left-3 sm:left-6 z-30 flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-[#121024]/95 border border-[#FDE047]/40 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 pointer-events-auto max-w-[90vw] sm:max-w-md overflow-hidden"
+        >
+          <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-[#FDE047]/20 text-[#FDE047] font-serif font-bold text-xs select-none shrink-0">
+            ∑
+          </div>
+          <div
+            className="text-[#FDE047] font-semibold text-sm sm:text-base select-text overflow-x-auto py-0.5"
+            dangerouslySetInnerHTML={{
+              __html: (() => {
+                try {
+                  const cleaned = activeFormula.replace(/^\$\$|\$\$$/g, '').trim();
+                  return katex.renderToString(cleaned, { displayMode: false, throwOnError: false });
+                } catch {
+                  return activeFormula;
+                }
+              })(),
+            }}
+          />
+          <button
+            onClick={() => setActiveFormula(null)}
+            className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors ml-1 shrink-0"
+            title="Dismiss formula"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </aside>
       )}
 

@@ -42,19 +42,59 @@ export interface VisualEngineCallbacks {
   onStatusChange?: (status: 'idle' | 'analyzing' | 'generating' | 'ready') => void;
 }
 
+const DIRECT_ILLUSTRATION_SYSTEM_PROMPT = `
+You are the AI Visual Director for Avelut's Live Classroom.
+Your job is to generate a structured JSON IllustrationSpec to visually explain educational concepts with maximum visual clarity.
+
+MANDATORY RULES:
+1. ALWAYS set "shouldIllustrate": true.
+2. ELIMINATE GENERIC BOX-AND-ARROW DIAGRAMS:
+   Use REAL SCIENTIFIC & TECHNICAL PRIMITIVES:
+   - Physics: "person", "car", "ball", "box", "ground", "inclined_plane", "pulley", "spring", "pendulum", "trajectory"
+   - Chemistry: "atom", "molecule" (H2O, CO2, etc.), "beaker", "test_tube"
+   - Biology: "cell", "nucleus", "dna"
+   - Mathematics: "coordinate_plane", "graph", "triangle", "circle"
+   - Computer Science: "client", "server", "database"
+3. Connect them with labeled directional vectors (type: "vector" or "arrow", vectorType: "force" | "velocity" | "acceleration" | "gravity").
+4. Equations: Always include the governing LaTeX formulas wrapped in KaTeX: [ { "latex": "$$ ... $$", "label": "Law/Equation name" } ].
+5. Canvas coordinates: 480 wide by 320 high (viewBox="0 0 480 320"). Keep x between 40 and 440, y between 40 and 270.
+6. Output PURE JSON only. No markdown formatting, no conversational text.
+
+Schema:
+{
+  "shouldIllustrate": true,
+  "action": "create",
+  "visualType": "physics_scene", // or "chemical_structure" | "biological_diagram" | "math_geometry" | "computer_system" | "process_illustration"
+  "title": "Short Descriptive Title",
+  "purpose": "One clear sentence explaining the physical/academic phenomenon",
+  "elements": [
+    { "id": "p1", "primitive": "person", "x": 100, "y": 180, "properties": { "action": "push" }, "label": "Student" },
+    { "id": "b1", "primitive": "box", "x": 220, "y": 210, "width": 80, "height": 60, "label": "Mass m" },
+    { "id": "g1", "primitive": "ground", "x": 240, "y": 240, "width": 420, "label": "Frictionless Surface" }
+  ],
+  "relationships": [
+    { "from": "p1", "to": "b1", "type": "vector", "vectorType": "force", "label": "F_applied" }
+  ],
+  "labels": [
+    { "text": "Newton's Second Law", "x": 160, "y": 50, "style": "header" }
+  ],
+  "equations": [
+    { "latex": "$$ F = m \\cdot a $$", "label": "Force Equation", "x": 240, "y": 285 }
+  ]
+}
+`.trim();
+
 const VISUAL_DIRECTOR_SYSTEM_PROMPT = `
 You are the AI Visual Director for Avelut's Live Classroom.
 Your job is NOT to teach. The realtime voice teacher is already speaking with the student.
 Your ONLY role is:
-Given a small rolling context of what the teacher is saying, decide whether an educational vector illustration would materially improve student comprehension, and if so, output a structured JSON IllustrationSpec.
+Given the current stage or context of what the teacher is saying, generate a structured JSON IllustrationSpec to visually demonstrate the concept being taught.
 
 DECISION CRITERIA:
-- Only generate an illustration when a concept genuinely benefits from visual depiction (physical systems, scientific structures, molecular arrangements, cellular anatomy, mathematical geometry, or multi-component architectures).
-- If the teacher is simply greeting, asking a conversational question, giving an administrative instruction, or explaining a simple definition that needs no drawing, return:
-  {"shouldIllustrate": false}
+- Proactively generate an illustration for concepts, physical systems, formulas, chemical reactions, cellular processes, or geometric shapes.
+- Only return {"shouldIllustrate": false} if the teacher is purely silent or trading a 1-word greeting with no academic substance.
 
 CRITICAL RULE — ELIMINATE GENERIC BOX-AND-ARROW DIAGRAMS:
-Do NOT create generic [Concept A] -> [Concept B] flowchart boxes.
 Use REAL SCIENTIFIC & TECHNICAL PRIMITIVES:
 - Physics: "person", "car", "ball", "box", "ground", "inclined_plane", "pulley", "spring", "pendulum", "trajectory"
 - Chemistry: "atom", "molecule" (H2O, CO2, etc.), "beaker", "test_tube"
@@ -72,8 +112,8 @@ Return PURE JSON only (no markdown code blocks, no conversational preamble).
 Schema:
 {
   "shouldIllustrate": true,
-  "action": "create", // or "update" | "highlight" | "clear"
-  "visualType": "physics_scene", // or "chemical_structure" | "biological_diagram" | "math_geometry" | "computer_system" | "process_illustration"
+  "action": "create",
+  "visualType": "physics_scene",
   "title": "Short Descriptive Title",
   "purpose": "One sentence explaining what this illustrates",
   "elements": [
@@ -88,12 +128,9 @@ Schema:
     { "text": "Action-Reaction Pair", "x": 160, "y": 50, "style": "header" }
   ],
   "equations": [
-    { "latex": "$$ F = m \\cdot a $$", "x": 240, "y": 290 }
+    { "latex": "$$ F = m \\cdot a $$", "x": 240, "y": 285 }
   ]
 }
-
-If no illustration is needed:
-{ "shouldIllustrate": false }
 `.trim();
 
 export class VisualIllustrationEngine {
@@ -325,6 +362,154 @@ export class VisualIllustrationEngine {
     } finally {
       this.isAnalyzing = false;
       this.activeAbortController = null;
+    }
+  }
+
+  /**
+   * Directly command the text model (qwen3.8-flash) to generate a structured educational illustration
+   * for a specific concept, stage, or formula, rather than passively guessing phrases.
+   */
+  public async illustrateConcept(
+    conceptName: string,
+    contextDetails?: string,
+    force = true
+  ): Promise<void> {
+    if (!conceptName || !conceptName.trim()) return;
+
+    const trimmedConcept = conceptName.trim();
+    const conceptHash = trimmedConcept.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const now = Date.now();
+    if (!force && now - this.lastGenerationTime < 8000) {
+      console.log('[VisualEngine] Skipping illustration: cooldown active');
+      return;
+    }
+
+    if (!force && conceptHash === this.lastAnalyzedConcept) {
+      console.log('[VisualEngine] Concept already illustrated:', trimmedConcept);
+      return;
+    }
+
+    console.log(`[VisualEngine] 🎨 Direct illustration requested for: "${trimmedConcept}"`);
+
+    this.isAnalyzing = true;
+    this.callbacks.onStatusChange?.('analyzing');
+
+    try {
+      if (this.activeAbortController) {
+        this.activeAbortController.abort();
+      }
+      this.activeAbortController = new AbortController();
+
+      this.callbacks.onStatusChange?.('generating');
+
+      const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile, {
+        feature: 'live_classroom_visual',
+      });
+
+      const response = await ai.models.generateContent({
+        model: 'qwen3.8-flash',
+        contents: [
+          {
+            role: 'system',
+            parts: [{ text: DIRECT_ILLUSTRATION_SYSTEM_PROMPT }],
+          },
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `LESSON TOPIC: "${this.topic}"\nCONCEPT TO ILLUSTRATE: "${trimmedConcept}"\nDETAILS/CONTEXT: "${contextDetails || 'Visual breakdown of the core concept and its mechanics.'}"\n\nGenerate the complete JSON IllustrationSpec now.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          temperature: 0.2,
+          maxOutputTokens: 1400,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const rawText = getResponseText(response) || (typeof response?.text === 'function' ? response.text() : response?.text || (typeof response === 'string' ? response : ''));
+      const parsedSpec = this.safeParseJson(rawText);
+
+      if (!parsedSpec || typeof parsedSpec !== 'object') {
+        console.warn('[VisualEngine] Failed to parse JSON or invalid response:', rawText?.slice(0, 100));
+        return;
+      }
+
+      parsedSpec.shouldIllustrate = true;
+      if (!parsedSpec.title) parsedSpec.title = trimmedConcept;
+
+      console.log(`[VisualEngine] Rendering direct illustration for "${parsedSpec.title}"...`);
+      const svgString = SvgRenderer.render(parsedSpec, this.boardState.currentIllustration?.elements);
+
+      if (!svgString) {
+        console.warn('[VisualEngine] SvgRenderer returned empty string');
+        return;
+      }
+
+      this.boardState = {
+        currentIllustration: parsedSpec,
+        svgString,
+        elementIds: (parsedSpec.elements || []).map(e => e.id),
+        currentConcept: parsedSpec.title || trimmedConcept,
+        currentVisualType: parsedSpec.visualType,
+        lastGeneratedAt: Date.now(),
+      };
+
+      this.lastGenerationTime = Date.now();
+      this.lastAnalyzedConcept = conceptHash;
+
+      this.callbacks.onIllustrationReady?.(svgString, parsedSpec);
+      this.callbacks.onStatusChange?.('ready');
+      console.log('[VisualEngine] Illustration rendered and board updated ✅');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('[VisualEngine] Illustration aborted for newer request');
+      } else {
+        console.error('[VisualEngine] Error in illustrateConcept:', err);
+      }
+    } finally {
+      this.isAnalyzing = false;
+      this.activeAbortController = null;
+    }
+  }
+
+  /**
+   * Proactively trigger illustration from whiteboard action events.
+   */
+  public triggerFromBoardAction(args: {
+    action: string;
+    text?: string;
+    concept?: string;
+    details?: string;
+    elements?: any[];
+  }): void {
+    if (args.action === 'illustrate') {
+      const target = args.concept || args.text || this.topic;
+      void this.illustrateConcept(target, args.details, true);
+      return;
+    }
+
+    if (args.action === 'write' && args.text) {
+      const text = args.text.trim();
+      const hasFormula = text.includes('$$') || text.includes('=');
+      if (hasFormula || text.length > 12) {
+        // Trigger non-forced illustration for this written concept or formula
+        void this.illustrateConcept(text, `Whiteboard formula / key concept: ${text}`, false);
+      }
+      return;
+    }
+
+    if (args.action === 'draw' && args.elements && args.elements.length > 0) {
+      const labels = args.elements
+        .map((e: any) => e.text || e.label?.text || e.label)
+        .filter(Boolean)
+        .join(' → ');
+      if (labels) {
+        void this.illustrateConcept(labels, `Diagram drawn on whiteboard: ${labels}`, false);
+      }
     }
   }
 

@@ -12,6 +12,7 @@
 import { liveLogger } from './logger';
 import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
+import { visualIllustrationEngine } from './visual-engine/VisualIllustrationEngine';
 import type { AppSettings } from '../../types';
 
 export const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
@@ -339,6 +340,9 @@ export class QwenRealtimeTeacherService {
     const duration = this.promptConfig?.durationMinutes || 30;
     liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min)`);
 
+    // Proactively generate the opening educational vector illustration for this topic
+    void visualIllustrationEngine.illustrateConcept(topic, `Opening conceptual overview and diagram for ${topic}`);
+
     // Give the model its starting instruction as a user message
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
@@ -348,7 +352,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. In this opening stage, call board_action to write the lesson topic title at the top of the whiteboard and draw the first concept element. Greet the student warmly, explain the intuition, and teach interactively!`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Remember the mandatory rule: you MUST call board_action in EVERY single response turn. In this opening turn, call board_action to write the topic title and draw the opening concept diagram on the board. Greet the student warmly, explain the intuition, and teach interactively!`,
         }],
       },
     });
@@ -470,9 +474,10 @@ export class QwenRealtimeTeacherService {
       properties: {
         action: {
           type: 'string',
-          enum: ['draw', 'write', 'clear', 'highlight', 'erase'],
+          enum: ['draw', 'write', 'clear', 'highlight', 'erase', 'illustrate'],
           description:
-            'draw=create shapes/diagrams, write=add text/formula, ' +
+            'draw=create shapes/diagrams, write=add text/formula/keyword, ' +
+            'illustrate=command AI visual engine to generate a rich scientific vector illustration, ' +
             'clear=clear current area, highlight=emphasize existing concept, erase=remove element',
         },
         elements: {
@@ -484,7 +489,15 @@ export class QwenRealtimeTeacherService {
         },
         text: {
           type: 'string',
-          description: 'Text or formula to write on the board (for "write" action)',
+          description: 'Text, formula ($$ ... $$), or key takeaway keyword to write on the board (for "write" action)',
+        },
+        concept: {
+          type: 'string',
+          description: 'Educational concept or topic to illustrate with high-clarity scientific SVG (for "illustrate" action)',
+        },
+        details: {
+          type: 'string',
+          description: 'Specific visual details, components, or scenario to depict (for "illustrate" action)',
         },
         target: {
           type: 'string',
@@ -495,9 +508,8 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational whiteboard while teaching. Drawing an element or writing on the board is MANDATORY in each stage. ' +
-      'Call this tool whenever explaining a concept, introducing a formula, connecting ideas with arrows, or working an example. ' +
-      'Call it naturally as part of teaching — do not narrate that you are calling a function.';
+      'Control the educational whiteboard while teaching. Calling board_action is MANDATORY in every single response turn! ' +
+      'Use "write" to put a keyword/formula/question on the board, "draw" to draw a connected diagram, or "illustrate" to generate a rich vector illustration.';
 
     return {
       type: 'function',
