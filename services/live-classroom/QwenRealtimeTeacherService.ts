@@ -272,26 +272,12 @@ export class QwenRealtimeTeacherService {
     let wsUrl: string;
     const modelParam = `model=${encodeURIComponent(modelToUse)}`;
 
-    if (import.meta.env.VITE_QWEN_PROXY_URL) {
-      const base = import.meta.env.VITE_QWEN_PROXY_URL;
-      wsUrl = base.includes('?') ? `${base}&${modelParam}` : `${base}?${modelParam}`;
-    } else {
-      const isCapacitorNative =
-        typeof window !== 'undefined' &&
-        (window.location.protocol === 'capacitor:' ||
-          window.location.protocol === 'ionic:' ||
-          (window.location.hostname === 'localhost' && window.location.port === ''));
+    // Strict default: use persistent Render-hosted WebSocket proxy to bypass 5-min serverless limits
+    const DEFAULT_RENDER_PROXY = 'wss://avelut-realtime-proxy.onrender.com/qwen-realtime';
+    const proxyBase = (import.meta.env.VITE_QWEN_PROXY_URL || DEFAULT_RENDER_PROXY).trim();
+    wsUrl = proxyBase.includes('?') ? `${proxyBase}&${modelParam}` : `${proxyBase}?${modelParam}`;
 
-      if (isCapacitorNative) {
-        const productionHost = import.meta.env.VITE_APP_HOST || 'www.avelut.xyz';
-        wsUrl = `wss://${productionHost}/api/qwen-realtime?${modelParam}`;
-      } else {
-        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        wsUrl = `${proto}://${window.location.host}/api/qwen-realtime?${modelParam}`;
-      }
-    }
-
-    liveLogger.log('[QwenRealtime] Connecting via proxy:', wsUrl, `(model: ${modelToUse})`);
+    liveLogger.log('[QwenRealtime] Connecting strictly via Render proxy:', wsUrl, `(model: ${modelToUse})`);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
