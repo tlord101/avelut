@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Play } from 'lucide-react';
 import { CameraIcon } from './icons/CameraIcon';
 import { ShutterIcon } from './icons/ShutterIcon';
 import { StudyGuideIcon } from './icons/StudyGuideIcon';
@@ -29,7 +30,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   const baseNavItems = [
     { id: 'playground', icon: <PlaygroundIcon className="w-[26px] h-[26px]" />, label: 'Play' },
     { id: 'study_guide', icon: <StudyGuideIcon />, label: 'Guide' },
-    { id: 'visual_solver', icon: <CameraIcon />, label: 'Solver' },
+    { id: 'live_tutorial_setup', icon: <Play className="w-6 h-6" />, label: 'Tutorial' },
     { id: 'chat', icon: <AIIcon />, label: 'AI' },
     { id: 'messenger', icon: <ChatsIcon />, label: 'Chats' },
   ];
@@ -186,15 +187,11 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
         <button
           onClick={() => (onCenterActionClick ? onCenterActionClick() : onItemClick(navItems[2].id))}
-          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-white dark:bg-[#0A0A0A] border-[4px] border-[#002D62] dark:border-white/15 flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${
-            activeItem === 'visual_solver' ? 'ring-4 ring-[#0066FF]/30 dark:ring-white/20' : ''
+          className={`absolute -top-[25px] left-1/2 -translate-x-1/2 w-[64px] h-[64px] rounded-full bg-[#E53935] dark:bg-[#E53935] border-[4px] border-white dark:border-[#0A0A0A] flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all z-30 cursor-pointer ${
+            activeItem === 'live_tutorial_setup' ? 'ring-4 ring-[#E53935]/30' : ''
           }`}
         >
-          {activeItem === 'visual_solver' ? (
-            <ShutterIcon className="w-8 h-8 text-[#0066FF] dark:text-white" />
-          ) : (
-            <CameraIcon className="w-8 h-8 text-[#002D62] dark:text-white" />
-          )}
+          <Play className="w-8 h-8 text-white fill-current ml-1" />
         </button>
 
         <div className="grid grid-cols-5 w-full relative z-20 px-2" style={{ height: '76px' }}>

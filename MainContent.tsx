@@ -18,7 +18,7 @@ import {
 const StudyGuide = lazy(() => import('./components/StudyGuide').then(module => ({ default: module.StudyGuide })));
 const MyNotebooks = lazy(() => import('./components/MyNotebooks').then(module => ({ default: module.MyNotebooks })));
 const Playground = lazy(() => import('./components/Playground').then(module => ({ default: module.Playground })));
-const VisualSolver = lazy(() => import('./components/VisualSolver').then(module => ({ default: module.VisualSolver })));
+const LiveTutorialSetup = lazy(() => import('./components/LiveTutorialSetup').then(module => ({ default: module.LiveTutorialSetup })));
 const Leaderboard = lazy(() => import('./components/Leaderboard').then(module => ({ default: module.Leaderboard })));
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.SettingsScreen })));
 const UserProfilePage = lazy(() => import('./components/UserProfile').then(module => ({ default: module.UserProfileScreen })));
@@ -166,17 +166,12 @@ export const MainContent: React.FC<MainContentProps> = ({
                     }
                     case 'leaderboard':
                         return <Leaderboard userProfile={userProfile} />;
-                    case 'visual_solver':
+                    case 'live_tutorial_setup':
                         return (
-                            <VisualSolver
+                            <LiveTutorialSetup
                                 userProfile={userProfile}
-                                onStartChat={(payload) => {
-                                    if (typeof payload === 'object' && payload !== null) {
-                                        writeCachedJson('avelut_active_voice_tutorial', payload);
-                                    }
-                                    onNavigate?.('study_guide');
-                                }}
-                                triggerScanRef={triggerScanRef}
+                                appSettings={appSettings}
+                                onNavigate={onNavigate}
                             />
                         );
                     case 'history':
