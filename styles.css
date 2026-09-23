@@ -95,6 +95,24 @@
   html, body, input, select, textarea, button {
     font-family: 'Nunito', ui-sans-serif, system-ui, sans-serif;
   }
+
+  /* Global Button Animations */
+  button, 
+  [role="button"],
+  .clickable-card {
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+  }
+  
+  button:not(:disabled):active, 
+  [role="button"]:not(:disabled):active,
+  .clickable-card:active {
+    transform: scale(0.96);
+  }
+  
+  /* Prevent interaction on disabled */
+  button:disabled {
+    transform: none !important;
+  }
 }
 
 @layer utilities {
