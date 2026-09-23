@@ -275,9 +275,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   const handleClearBoard = () => {
     avelutBoardController.clearBoard(true);
-    visualIllustrationEngine.clear();
-    setVisualSvg(null);
-    setVisualSpec(null);
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
