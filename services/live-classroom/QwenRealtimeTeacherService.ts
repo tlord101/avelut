@@ -88,6 +88,8 @@ export class QwenRealtimeTeacherService {
   private consecutiveSilenceNudges = 0;
   private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
   private isStudentSpeaking = false;
+  /** True only when the last teacher response ended with a question to the student */
+  private lastResponseAskedQuestion = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -101,7 +103,11 @@ export class QwenRealtimeTeacherService {
     this.callbacks.onStateChange?.(s);
 
     if (s === 'listening') {
-      this.startStudentWaitTimer();
+      // Only start the silence watchdog when teacher asked the student a question.
+      // Pure teaching monologue turns, board draws, and tool calls never block for response.
+      if (this.lastResponseAskedQuestion) {
+        this.startStudentWaitTimer();
+      }
     } else {
       this.clearStudentWaitTimer();
     }
@@ -760,13 +766,23 @@ export class QwenRealtimeTeacherService {
         }
         break;
 
-      case 'response.audio_transcript.done':
+      case 'response.audio_transcript.done': {
         this.callbacks.onTranscript?.(this.fullTranscript, true);
+        // Detect if the teacher just asked the student a question.
+        // Only then should we start the silence watchdog after audio finishes.
+        const t = this.fullTranscript.trimEnd();
+        this.lastResponseAskedQuestion = (
+          t.endsWith('?') ||
+          /\b(what do you think|does that make sense|can you tell me|do you understand|try it|your turn|what is|what's|how about|right\?|yes\?|ok\?|okay\?|got it\?|make sense\?)$/i.test(t)
+        );
+        liveLogger.log(`[QwenRealtime] Transcript done — askedQuestion: ${this.lastResponseAskedQuestion}`);
         break;
+      }
 
       case 'response.created':
-        // New response turn — reset transcript accumulator
+        // New response turn — reset transcript accumulator and question flag
         this.fullTranscript = '';
+        this.lastResponseAskedQuestion = false;
         this.hasReceivedAudioInCurrentResponse = false;
         this.clearStudentWaitTimer();
         liveLogger.log('[QwenRealtime] response.created');
