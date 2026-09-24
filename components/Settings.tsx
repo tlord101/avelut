@@ -99,34 +99,16 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
 
   const handleNotificationToggle = async (enabled: boolean) => {
     setIsNotificationSaving(true);
-    if (isNative()) {
-      try {
-        const { PushNotifications } = await import('@capacitor/push-notifications');
-        if (enabled) {
-          const permResult = await PushNotifications.requestPermissions();
-          if (permResult.receive === 'granted') {
-            await PushNotifications.register();
-            await onProfileUpdate({ notifications_enabled: true });
-            setIsNotificationSwitchOn(true);
-            addToast('Push notifications enabled!', 'success');
-          } else {
-            addToast('Permission denied for push notifications.', 'error');
-          }
-        } else {
-          await onProfileUpdate({ notifications_enabled: false });
-          setIsNotificationSwitchOn(false);
-          addToast('Push notifications disabled from AVELUT.', 'info');
-        }
-      } catch (err) {
-        console.error(err);
-        addToast('Failed to update notification settings.', 'error');
-      } finally {
-        setIsNotificationSaving(false);
-      }
-      return;
+    try {
+      await onProfileUpdate({ notifications_enabled: enabled });
+      setIsNotificationSwitchOn(enabled);
+      addToast(enabled ? 'Notifications enabled!' : 'Notifications disabled.', 'info');
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to update notification settings.', 'error');
+    } finally {
+      setIsNotificationSaving(false);
     }
-    addToast('Push notifications are only supported in the native mobile app.', 'info');
-    setIsNotificationSaving(false);
   };
 
   const handlePasswordReset = async () => {

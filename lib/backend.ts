@@ -114,9 +114,10 @@ const signInAnonymously = async () => {
   return { user: { uid: res.user.id, email: res.user.email } };
 };
 
-export type FirebaseStorage = { app: { name: string } };
+export type StorageService = { app: { name: string } };
+export type FirebaseStorage = StorageService;
 
-const storage: FirebaseStorage = { app: { name: 'supabase-storage' } };
+const storage: StorageService = { app: { name: 'supabase-storage' } };
 
 function storageRef(_storageOrPath?: any, path?: string) {
   const safePath = typeof _storageOrPath === 'string' ? _storageOrPath : (typeof path === 'string' ? path : '');
@@ -263,4 +264,5 @@ export {
   storageRef,
   httpsCallable,
   type DbRef,
+  type StorageService,
 };

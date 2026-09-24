@@ -43,7 +43,7 @@ function getUserId(passedUserId?: string): string {
     return passedUserId;
   }
   try {
-    const keys = ['avelut_user_profile', 'user_profile', 'avelut_user', 'sb-auth-token', 'firebase:authUser'];
+    const keys = ['avelut_user_profile', 'user_profile', 'avelut_user', 'sb-auth-token'];
     for (const k of keys) {
       const raw = localStorage.getItem(k);
       if (raw) {

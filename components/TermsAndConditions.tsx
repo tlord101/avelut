@@ -116,7 +116,7 @@ export default function TermsAndConditions() {
               <section id="eligibility" className="scroll-mt-28">
                 <h3 className="text-xl font-bold text-white mb-4">3. Eligibility & User Accounts</h3>
                 <p className="text-slate-300 leading-relaxed mb-4">
-                  To access AVELUT, you must create a secure user account utilizing our Firebase Authentication portal. You represent and warrant that:
+                  To access AVELUT, you must create a secure user account utilizing our authentication portal. You represent and warrant that:
                 </p>
                 <ul className="list-disc pl-5 space-y-2 text-slate-300 mb-4">
                   <li>You will provide accurate, current, and complete registration information (including university department and academic level).</li>

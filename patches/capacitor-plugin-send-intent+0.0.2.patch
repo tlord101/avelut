@@ -10,3 +10,13 @@ index 35ab45d..cca4f98 100644
      compileSdkVersion project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 29
      defaultConfig {
          minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 21
+diff --git a/node_modules/capacitor-plugin-send-intent/android/src/main/AndroidManifest.xml b/node_modules/capacitor-plugin-send-intent/android/src/main/AndroidManifest.xml
+index d378292..320499e 100644
+--- a/node_modules/capacitor-plugin-send-intent/android/src/main/AndroidManifest.xml
++++ b/node_modules/capacitor-plugin-send-intent/android/src/main/AndroidManifest.xml
+@@ -1,4 +1,3 @@
+ 
+-  <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+-      package="com.gustavosanjose.capacitorpluginsendintent">
++  <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+   </manifest>

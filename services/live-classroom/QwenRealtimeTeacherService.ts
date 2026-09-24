@@ -82,7 +82,9 @@ export class QwenRealtimeTeacherService {
   private hasReceivedAudioInCurrentResponse = false;
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly STUDENT_WAIT_MAX_MS = 3000;
+  private readonly STUDENT_WAIT_MAX_MS = 8000;
+  private consecutiveSilenceNudges = 0;
+  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
   private isStudentSpeaking = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ export class QwenRealtimeTeacherService {
     this.reconnectAttempts = 0;
     this.isReconnecting = false;
     this.hasGreeted = false;
+    this.consecutiveSilenceNudges = 0;
     this.isStarting = true;
 
     this.promptConfig = config;
@@ -164,6 +167,7 @@ export class QwenRealtimeTeacherService {
   /** Send a typed message into the realtime conversation */
   public sendTextMessage(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !text.trim()) return;
+    this.consecutiveSilenceNudges = 0;
     this.clearStudentWaitTimer();
     this.sendJson({
       event_id: `user_txt_${Date.now()}`,
@@ -190,6 +194,7 @@ export class QwenRealtimeTeacherService {
     this.isExplicitlyClosed = true;
     this.clearHeartbeat();
     this.clearStudentWaitTimer();
+    this.consecutiveSilenceNudges = 0;
     this.isStudentSpeaking = false;
     this.isReconnecting = false;
     this.stopPlayback();
@@ -410,7 +415,10 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with a clear plan in simple words (like explaining to a 10-year-old). On EVERY turn you MUST call board_action write to put short keywords on the board. Opening turn: write the topic title as keywords, optionally add a simple concept diagram with draw_mermaid if relationships matter, then greet the student warmly and begin Stage 1 of the teaching plan.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with a clear plan in simple words (like explaining to a 10-year-old).
+SILENT TOOL CALL: Immediately call board_action write to put "${topic}" and 1–3 opening keywords on the board.
+DO NOT SAY in voice "I will write on the board" or announce writing. Call the tool silently.
+In your speech: Greet the student warmly and begin Stage 1 of the teaching plan with simple intuition!`,
         }],
       },
     });
@@ -420,8 +428,6 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        tools: this.getTools(),
-        tool_choice: 'auto',
       },
     });
   }
@@ -453,7 +459,13 @@ export class QwenRealtimeTeacherService {
         return;
       }
 
-      liveLogger.log('[QwenRealtime] ⏱️ 3s student silence elapsed — prompting teacher to step in and continue');
+      if (this.consecutiveSilenceNudges >= this.MAX_CONSECUTIVE_SILENCE_NUDGES) {
+        liveLogger.log('[QwenRealtime] Max consecutive silence nudges reached — pausing auto-nudge until student speaks or types');
+        return;
+      }
+
+      this.consecutiveSilenceNudges++;
+      liveLogger.log(`[QwenRealtime] ⏱️ 8s student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue`);
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -463,7 +475,7 @@ export class QwenRealtimeTeacherService {
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student was quiet for 3 seconds. Continue the teaching plan kindly in simple words. You MUST call board_action write to put short keywords for this idea on the board, then keep teaching.]',
+            text: '[The student is listening quietly. Continue your teaching plan kindly in simple words. Silently call board_action write to put 1–3 short keywords on the board. Do NOT say "I will write on the board" in your voice — call the tool silently and speak your explanation directly to the student.]',
           }],
         },
       });
@@ -473,8 +485,6 @@ export class QwenRealtimeTeacherService {
         type: 'response.create',
         response: {
           modalities: ['text', 'audio'],
-          tools: this.getTools(),
-          tool_choice: 'auto',
         },
       });
     }, this.STUDENT_WAIT_MAX_MS);
@@ -565,10 +575,6 @@ export class QwenRealtimeTeacherService {
 
     return {
       type: 'function',
-      name: 'board_action',
-      description,
-      parameters,
-      // Also provide function field for backwards compatibility with any parser that expects it
       function: {
         name: 'board_action',
         description,
@@ -588,72 +594,48 @@ export class QwenRealtimeTeacherService {
   private buildDrawMermaidTool() {
     return {
       type: 'function',
-      name: 'draw_mermaid',
-      description:
-        'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
-        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-        'state transitions, and component interactions. Choose LR/TB or another ' +
-        'supported Mermaid layout according to the relationship. Do not force every ' +
-        'diagram into a vertical stack of boxes.',
-      parameters: {
-        type: 'object',
-        properties: {
-          mermaid_code: {
-            type: 'string',
-            description:
-              'Raw valid Mermaid source code. Do not include markdown fences. ' +
-              'Keep labels concise and educational.',
-          },
-        },
-        required: ['mermaid_code'],
-      },
       function: {
         name: 'draw_mermaid',
         description:
-        'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
-        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-        'state transitions, and component interactions. Choose LR/TB or another ' +
-        'supported Mermaid layout according to the relationship. Do not force every ' +
-        'diagram into a vertical stack of boxes.',
+          'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
+          'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
+          'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
+          'state transitions, and component interactions. Choose LR/TB or another ' +
+          'supported Mermaid layout according to the relationship. Do not force every ' +
+          'diagram into a vertical stack of boxes.',
         parameters: {
           type: 'object',
           properties: {
-            mermaid_code: { type: 'string' }
+            mermaid_code: {
+              type: 'string',
+              description:
+                'Raw valid Mermaid source code. Do not include markdown fences. ' +
+                'Keep labels concise and educational.',
+            },
           },
           required: ['mermaid_code'],
-        }
-      }
+        },
+      },
     };
   }
 
   private buildIllustrateObjectTool() {
     return {
       type: 'function',
-      name: 'illustrate_object',
-      description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process on the visual board.',
-      parameters: {
-        type: 'object',
-        properties: {
-          object_description: {
-            type: 'string',
-            description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
-          },
-        },
-        required: ['object_description'],
-      },
       function: {
         name: 'illustrate_object',
         description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process on the visual board.',
         parameters: {
           type: 'object',
           properties: {
-            object_description: { type: 'string' }
+            object_description: {
+              type: 'string',
+              description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
+            },
           },
           required: ['object_description'],
-        }
-      }
+        },
+      },
     };
   }
 
@@ -755,6 +737,7 @@ export class QwenRealtimeTeacherService {
         // Qwen's VAD says the student is speaking — stop teacher audio cleanly.
         liveLogger.log('[QwenRealtime] 🎙️ Student speech started — stopping teacher audio');
         this.isStudentSpeaking = true;
+        this.consecutiveSilenceNudges = 0;
         this.clearStudentWaitTimer();
         this.stopPlayback();
         this.setState('listening');
@@ -852,6 +835,13 @@ export class QwenRealtimeTeacherService {
 
       case 'response.done': {
         liveLogger.log('[QwenRealtime] response.done');
+
+        // Fallback: If opening turn completes and no tool call was executed, guarantee topic keyword is on board
+        if (this.executedCallIds.size === 0 && this.promptConfig?.topicTitle) {
+          liveLogger.log('[QwenRealtime] Initial turn completed without tool call — writing topic title as fallback');
+          this.boardController.writeText(this.promptConfig.topicTitle, { fontSize: 'medium' });
+        }
+
         // If we are currently awaiting tool continuation, do NOT reset to listening
         if (this.isAwaitingContinuation) {
           liveLogger.log('[QwenRealtime] Tool response done — awaiting continuation audio');
@@ -979,8 +969,6 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        tools: this.getTools(),
-        tool_choice: 'auto',
       },
     });
 
@@ -1024,8 +1012,9 @@ export class QwenRealtimeTeacherService {
       const rms = Math.sqrt(sum / samples.length);
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
 
-      // If student is speaking (rms > 0.04) while in listening state, defer/reset the 5s silence watchdog
+      // If student is speaking (rms > 0.04) while in listening state, defer/reset the silence watchdog
       if (rms > 0.04 && this.state === 'listening' && this.studentWaitTimer) {
+        this.consecutiveSilenceNudges = 0;
         this.startStudentWaitTimer();
       }
 

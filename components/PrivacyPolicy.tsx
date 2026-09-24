@@ -91,7 +91,7 @@ export default function PrivacyPolicy() {
                   To provide our custom study roadmaps, AI chat response streaming, and document search grounding, AVELUT collects the following types of information:
                 </p>
                 <ul className="list-disc pl-5 space-y-2 text-slate-300">
-                  <li><strong>Account Metadata:</strong> When signing up using our Firebase portal, we store your email address, name, university department, level, and registration timestamp.</li>
+                  <li><strong>Account Metadata:</strong> When signing up using our authentication portal, we store your email address, name, university department, level, and registration timestamp.</li>
                   <li><strong>Academic Context Data:</strong> Your selected courses, streaks, activity logs, and specific study guide settings that you configure to tailor your learning workspace.</li>
                   <li><strong>Uploaded Course Materials:</strong> Textbook files, lecture slides, syllabus documents (PDFs, DOCX, TXT), and visual solver images that you upload to ground the AI's retrieved knowledge (RAG).</li>
                   <li><strong>Conversational Logs:</strong> The queries you type, mic audio captures, and files you attach to Avelut AI chat, along with the generated responses.</li>
@@ -118,7 +118,7 @@ export default function PrivacyPolicy() {
                   Our platform runs on premium cloud infrastructures. Data is processed securely through:
                 </p>
                 <ul className="list-disc pl-5 space-y-3 text-slate-300">
-                  <li><strong>Firebase Services:</strong> User account registration is verified via Google Firebase Auth. All text prompts, notes, active profiles, and database logs are stored in Google Firebase Realtime Database. Uploaded files are hosted in Google Firebase Storage.</li>
+                  <li><strong>Supabase Services:</strong> User account registration is verified via Supabase Auth. Text prompts, notes, active profiles, and database logs are stored in Supabase Realtime Database. Uploaded files are hosted securely in Supabase Storage.</li>
                   <li><strong>Large Language Model & Vector Processing:</strong> When you send a prompt or file, it is processed via Alibaba Cloud DashScope (Qwen reasoning models and CosyVoice synthesis) and indexed via Pinecone Vector Database. The contents of these prompts and files are transmitted securely via SSL/TLS and are used solely to generate immediate responses and semantic course retrieval.</li>
                 </ul>
               </section>
@@ -126,10 +126,10 @@ export default function PrivacyPolicy() {
               <section id="security-retention" className="scroll-mt-28">
                 <h3 className="text-xl font-bold text-white mb-4">4. Data Security & Retention</h3>
                 <p className="text-slate-305 leading-relaxed mb-4">
-                  We adopt industrial-grade security controls provided by Google Cloud Platform to protect your data. All database connections and storage uploads run over HTTPS with end-to-end transport layer security (TLS).
+                  We adopt industrial-grade security controls to protect your data. All database connections and storage uploads run over HTTPS with end-to-end transport layer security (TLS).
                 </p>
                 <p className="text-slate-300 leading-relaxed">
-                  Your chat logs and files remain associated with your user account in Firebase. We retain this data as long as your account is active to support your persistent study history.
+                  Your chat logs and files remain associated with your user account. We retain this data as long as your account is active to support your persistent study history.
                 </p>
               </section>
 
@@ -138,7 +138,7 @@ export default function PrivacyPolicy() {
                 <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 p-5 mb-4">
                   <p className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">Absolute Data Ownership</p>
                   <p className="text-slate-300 leading-relaxed text-sm">
-                    You have complete control over your records. You can **clear specific chat threads**, **remove individual textbooks** from the Upload Center, or **delete your entire user account** from the Settings panel. Deleting your account will immediately wipe all of your files from Firebase Storage and completely erase your database profile.
+                    You have complete control over your records. You can **clear specific chat threads**, **remove individual textbooks** from the Upload Center, or **delete your entire user account** from the Settings panel. Deleting your account will immediately wipe all of your files from Cloud Storage and completely erase your database profile.
                   </p>
                 </div>
                 <p className="text-slate-300 leading-relaxed">

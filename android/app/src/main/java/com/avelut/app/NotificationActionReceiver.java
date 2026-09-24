@@ -29,7 +29,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
             uriBuilder.appendQueryParameter("chatId", chatId);
         }
 
-        // Always pass inline reply to JS to handle via Supabase instead of direct native Firebase DB insertion
+        // Always pass inline reply to JS to handle via Supabase instead of direct native DB insertion
         if ("reply_action".equals(actionId) && !replyText.isEmpty()) {
             uriBuilder.appendQueryParameter("replyText", replyText);
 

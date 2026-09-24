@@ -1,4 +1,4 @@
-import { FirebaseStorage, deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from '@/lib/backend';
+import { StorageService, deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from '@/lib/backend';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 
@@ -139,7 +139,7 @@ export interface SourceBlob {
 
 /**
  * Converts anything that can represent an image/file into a real Blob that is safe
- * to hand to Firebase Storage. Throws when the source cannot be read at all —
+ * to hand to Storage. Throws when the source cannot be read at all —
  * callers should surface that as an error instead of uploading garbage.
  */
 export const sourceToBlob = async (source: unknown): Promise<SourceBlob> => {
@@ -299,7 +299,7 @@ export const uploadBlobWithRetry = async (
 
 /** Upload to a user-scoped temporary path and return a permanent https URL. */
 export const uploadToTempStorage = async (
-  storage: FirebaseStorage,
+  storage: StorageService,
   blob: Blob,
   userId: string,
   options: UploadWithRetryOptions = {}
@@ -312,12 +312,12 @@ export const uploadToTempStorage = async (
 
 /** Move (copy + delete) a temp object into a permanent chat path. */
 export const promoteTempToPermanent = async (
-  storage: FirebaseStorage,
+  storage: StorageService,
   tempPath: string,
   permanentPath: string,
   options: UploadWithRetryOptions = {}
 ): Promise<string> => {
-  // Direct fetch via download URL to avoid Firebase Storage SDK XMLHttpRequest CORS restriction
+  // Direct fetch via download URL to avoid Storage CORS restriction
   const downloadUrl = await getDownloadURL(storageRef(storage, tempPath));
   const res = await fetch(downloadUrl);
   const blob = await res.blob();

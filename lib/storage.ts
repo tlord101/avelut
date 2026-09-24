@@ -9,5 +9,6 @@ export {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
+  type StorageService,
   type FirebaseStorage,
 } from './backend';

@@ -20,9 +20,6 @@
       "backgroundColor": "#000000",
       "overlaysWebView": false
     },
-    "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
-    },
     "Keyboard": {
       "resize": "body",
       "style": "DARK",

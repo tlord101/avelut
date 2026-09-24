@@ -295,21 +295,21 @@ export async function updateSyncQueueError(id: string, error: string): Promise<v
 }
 
 /**
- * Mark a local conversation as synced with Firebase.
+ * Mark a local conversation as synced with remote DB.
  */
 export async function markConversationSynced(id: string): Promise<void> {
   await runStatement(`UPDATE conversations SET sync_status = 'synced' WHERE id = ?`, [id]);
 }
 
 /**
- * Mark a local message as synced with Firebase.
+ * Mark a local message as synced with remote DB.
  */
 export async function markMessageSynced(id: string): Promise<void> {
   await runStatement(`UPDATE messages SET sync_status = 'synced' WHERE id = ?`, [id]);
 }
 
 /**
- * Bulk upsert remote conversations fetched from Firebase down into local SQLite.
+ * Bulk upsert remote conversations fetched from remote DB down into local SQLite.
  */
 export async function bulkUpsertRemoteConversations(conversations: LocalConversation[]): Promise<void> {
   for (const convo of conversations) {
@@ -333,7 +333,7 @@ export async function bulkUpsertRemoteConversations(conversations: LocalConversa
 }
 
 /**
- * Bulk upsert remote messages fetched from Firebase down into local SQLite.
+ * Bulk upsert remote messages fetched from remote DB down into local SQLite.
  */
 export async function bulkUpsertRemoteMessages(messages: LocalMessage[]): Promise<void> {
   for (const msg of messages) {

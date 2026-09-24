@@ -113,7 +113,7 @@ export async function deleteLocalMaterial(id: string, userId: string): Promise<v
 }
 
 /**
- * Bulk upsert remote history materials pulled from Firebase down to local SQLite.
+ * Bulk upsert remote history materials pulled from remote DB down to local SQLite.
  */
 export async function bulkUpsertRemoteMaterials(userId: string, materials: SavedItem[]): Promise<void> {
   if (!userId || !materials.length) return;

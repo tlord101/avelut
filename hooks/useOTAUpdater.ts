@@ -122,7 +122,7 @@ function initOTAEngine() {
 
         const otaRef = dbRef(db, 'app_updates/ota_latest');
 
-        // Listen for real-time Firebase DB changes
+        // Listen for real-time DB changes
         onValue(otaRef, (snapshot) => checkAndUpdate(snapshot.val()));
 
         // Also check whenever app enters foreground

@@ -24,7 +24,7 @@ interface SharedChatData {
 
 interface SharedChatViewProps {
     shareId: string;
-    user: any; // Firebase User or null
+    user: any; // AuthUser or null
 }
 
 export const SharedChatView: React.FC<SharedChatViewProps> = ({ shareId, user }) => {

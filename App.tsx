@@ -1,4 +1,4 @@
-import { auth as firebaseAuth, db, firebaseSignOut, get, off, onAuthStateChanged, onDisconnect, onValue, push, ref as dbRef, serverTimestamp, set, type FirebaseUser, update, updateProfile, supabase } from '@/lib/backend';
+import { auth, db, signOut, get, off, onAuthStateChanged, onDisconnect, onValue, push, ref as dbRef, serverTimestamp, set, type AuthUser, update, updateProfile, supabase } from '@/lib/backend';
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import { readCachedJson, writeCachedJson, clearCachedKey, initCacheFromSqlite } from './utils/cache';
 import { DEFAULT_USAGE_SETTINGS } from './utils/appSettings';
@@ -12,7 +12,6 @@ import { Onboarding } from './components/Onboarding';
 
 import { createAvelutAI } from './utils/inference';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { PushNotifications } from '@capacitor/push-notifications';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -431,11 +430,11 @@ const App: React.FC = () => {
     useOTAUpdater();
     useGlobalRefresh();
     const [currentPath, setCurrentPath] = useState(getWindowPathname());
-    const [user, setUser] = useState<FirebaseUser | null>(() => {
-        if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
+    const [user, setUser] = useState<AuthUser | null>(() => {
+        if (auth.currentUser) return auth.currentUser;
         if (typeof window !== 'undefined') {
             const lastUid = window.localStorage?.getItem('avelut_last_uid');
-            if (lastUid) return { uid: lastUid } as FirebaseUser;
+            if (lastUid) return { uid: lastUid } as AuthUser;
             try {
 
                 let sbToken = null;
@@ -449,7 +448,7 @@ const App: React.FC = () => {
                 if (sbToken) {
                     const parsed = JSON.parse(sbToken);
                     if (parsed && parsed.user && parsed.user.id) {
-                        return { uid: parsed.user.id } as FirebaseUser;
+                        return { uid: parsed.user.id } as AuthUser;
                     }
                 }
             } catch (e) {}
@@ -458,7 +457,7 @@ const App: React.FC = () => {
     });
     const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
         if (typeof window !== 'undefined') {
-            const lastUid = window.localStorage?.getItem('avelut_last_uid') || firebaseAuth.currentUser?.uid;
+            const lastUid = window.localStorage?.getItem('avelut_last_uid') || auth.currentUser?.uid;
             if (lastUid) {
                 return readCachedJson<UserProfile | null>(`avelut_profile_${lastUid}`, null);
             }
@@ -877,9 +876,6 @@ const App: React.FC = () => {
         if (!chatId) return;
         setActiveItem('messenger');
         setPendingMessengerChatId(chatId);
-        if (Capacitor.isNativePlatform()) {
-            PushNotifications.removeAllDeliveredNotifications().catch(console.error);
-        }
     }, [setActiveItem]);
 
     useEffect(() => {
@@ -914,7 +910,7 @@ const App: React.FC = () => {
 
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
           setUser(currentUser);
           if (!currentUser) {
             setUserProfile(null);
@@ -1018,9 +1014,7 @@ const App: React.FC = () => {
         });
 
         const appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-            if (isActive) {
-                PushNotifications.removeAllDeliveredNotifications().catch(console.error);
-            }
+            // handle app state changes
         });
 
         return () => {
@@ -1065,25 +1059,15 @@ const App: React.FC = () => {
         if (!userProfile) return;
         const requestPermissions = async () => {
             try {
-                if (Capacitor.isNativePlatform()) {
-                    let permStatus = await PushNotifications.checkPermissions();
-                    if (permStatus.receive === 'prompt') {
-                        permStatus = await PushNotifications.requestPermissions();
-                    }
-                    if (permStatus.receive === 'granted' && !userProfile.notifications_enabled) {
-                        handleProfileUpdate({ notifications_enabled: true });
-                    }
-                } else {
-                    if ('Notification' in window) {
-                        const currentPerm = Notification.permission;
-                        if (currentPerm === 'default') {
-                            const newPerm = await Notification.requestPermission();
-                            if (newPerm === 'granted' && !userProfile.notifications_enabled) {
-                                handleProfileUpdate({ notifications_enabled: true });
-                            }
-                        } else if (currentPerm === 'granted' && !userProfile.notifications_enabled) {
+                if (!Capacitor.isNativePlatform() && 'Notification' in window) {
+                    const currentPerm = Notification.permission;
+                    if (currentPerm === 'default') {
+                        const newPerm = await Notification.requestPermission();
+                        if (newPerm === 'granted' && !userProfile.notifications_enabled) {
                             handleProfileUpdate({ notifications_enabled: true });
                         }
+                    } else if (currentPerm === 'granted' && !userProfile.notifications_enabled) {
+                        handleProfileUpdate({ notifications_enabled: true });
                     }
                 }
             } catch (err) {
@@ -1116,7 +1100,7 @@ const App: React.FC = () => {
             const data = snapshot.val();
             if (data) {
                 if (data.status === 'suspended' || data.status === 'deleted') {
-                    firebaseSignOut(firebaseAuth);
+                    signOut(auth);
                     addToast(`Your account has been ${data.status}.`, "error");
                     return;
                 }
@@ -1460,7 +1444,7 @@ const App: React.FC = () => {
 
     const handleLogout = async () => {
         try {
-            await firebaseSignOut(firebaseAuth);
+            await signOut(auth);
         } catch (error: any) {
             console.error("Logout failed:", error.message || error);
             addToast(error.message || "Failed to log out.", "error");

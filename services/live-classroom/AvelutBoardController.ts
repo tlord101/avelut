@@ -506,10 +506,6 @@ export class AvelutBoardController {
   }
   private _writeText(text: string, args?: WriteTextArgs): void {
     if (!text?.trim()) return;
-    if (isGenericLabel(text)) {
-      console.warn('[BoardController] Skipping generic write_text:', text);
-      return;
-    }
 
     console.log('[BoardController] writeText called:', text, args);
 
@@ -1981,12 +1977,22 @@ export class AvelutBoardController {
         }
 
         case 'write': {
-          const text = args.text?.trim();
+          const text = (
+            args.text ||
+            args.concept ||
+            args.details ||
+            (args as any).keyword ||
+            (args as any).content ||
+            (args as any).message ||
+            ''
+          ).trim();
           if (!text) return { status: 'error', action: 'write', message: 'No text provided.' };
 
-          // Detect formulas heuristically (contains mathematical operators or LaTeX $, =, ^, ·, ×, ±, √, \)
-          const isFormula = /[$=^·×±√\\]/.test(text) && !/[a-zA-Z\s]{25,}/.test(text);
-          if (isFormula && text.length < 80) {
+          // Explicit LaTeX or complex math formula
+          const isFormula =
+            (text.startsWith('$') || text.startsWith('\\[') || text.includes('\\frac') || text.includes('\\sqrt')) &&
+            text.length < 100;
+          if (isFormula) {
             this.setFormula(text);
           } else {
             this.writeText(text, { fontSize: 'medium' });

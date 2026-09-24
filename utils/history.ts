@@ -17,7 +17,7 @@ export interface SavedItem {
 }
 
 /**
- * Saves a generated material to SQLite per user instantly for offline usage and syncs with Firebase.
+ * Saves a generated material to SQLite per user instantly for offline usage and syncs with remote DB.
  */
 export const saveToHistory = async (
   userId: string,
@@ -33,7 +33,7 @@ export const saveToHistory = async (
       createdAt: now,
     }, true);
 
-    // 2. Try to sync to Firebase if online
+    // 2. Try to sync to remote DB if online
     if (typeof window !== 'undefined' && window.navigator && window.navigator.onLine === false) {
       return localId;
     }
@@ -48,8 +48,8 @@ export const saveToHistory = async (
       };
       await set(newRef, dataToSave);
       return newRef.key || localId;
-    } catch (firebaseErr) {
-      console.warn("Firebase history sync failed, preserved in local SQLite:", firebaseErr);
+    } catch (syncErr) {
+      console.warn("Remote history sync failed, preserved in local SQLite:", syncErr);
       return localId;
     }
   } catch (error) {
@@ -59,7 +59,7 @@ export const saveToHistory = async (
 };
 
 /**
- * Fetches user's history from SQLite immediately (offline support) and reconciles with Firebase when online.
+ * Fetches user's history from SQLite immediately (offline support) and reconciles with remote DB when online.
  */
 export const fetchHistory = async (userId: string): Promise<SavedItem[]> => {
   if (!userId) return [];
@@ -77,7 +77,7 @@ export const fetchHistory = async (userId: string): Promise<SavedItem[]> => {
     return localItems;
   }
 
-  // 3. If online, fetch latest from Firebase and upsert downstream into SQLite
+  // 3. If online, fetch latest from remote DB and upsert downstream into SQLite
   try {
     const historyRef = ref(db, `users/${userId}/history`);
     const q = query(historyRef);
@@ -111,14 +111,14 @@ export const fetchHistory = async (userId: string): Promise<SavedItem[]> => {
       });
     }
   } catch (error) {
-    console.warn("Firebase fetch history error, using local SQLite items:", error);
+    console.warn("Remote fetch history error, using local SQLite items:", error);
   }
 
   return localItems;
 };
 
 /**
- * Deletes a material from local SQLite and Firebase.
+ * Deletes a material from local SQLite and remote DB.
  */
 export const deleteFromHistory = async (userId: string, itemId: string): Promise<void> => {
   if (!userId || !itemId) return;

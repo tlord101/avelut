@@ -1,4 +1,4 @@
-import { FirebaseUser } from '@/lib/backend';
+import { AuthUser } from '@/lib/backend';
 import React, { Suspense, lazy } from 'react';
 import { readCachedJson, writeCachedJson } from './utils/cache';
 import type { UserProfile, UserProgress, DashboardData, AppSettings, ChatConversation } from './types';
@@ -57,7 +57,7 @@ const getSkeletonFallback = (activeItem: string): React.ReactNode => {
 
 interface MainContentProps {
     activeItem: string;
-    user: FirebaseUser | null;
+    user: AuthUser | null;
     userProfile: UserProfile;
     appSettings: AppSettings;
     userProgress: UserProgress;

@@ -9,7 +9,6 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.0'
-        classpath 'com.google.gms:google-services:4.4.4'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -27,6 +26,20 @@ allprojects {
     configurations.all {
         resolutionStrategy {
             force 'com.google.android.gms:play-services-auth:21.0.0'
+        }
+    }
+}
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            if (project.android.namespace == null) {
+                if (project.name == "capacitor-plugin-send-intent") {
+                    project.android.namespace = "com.gustavosanjose.capacitorpluginsendintent"
+                } else {
+                    project.android.namespace = "com.avelut.plugin.${project.name.replaceAll('[^a-zA-Z0-9_]', '_')}"
+                }
+            }
         }
     }
 }

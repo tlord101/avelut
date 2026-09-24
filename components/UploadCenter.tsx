@@ -899,7 +899,7 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
     if (!window.confirm(`Are you sure you want to delete ${courseName}? This action cannot be undone.`)) return;
     
     try {
-      // 1. Delete from Firebase Storage
+      // 1. Delete from Storage
       const urlsToDelete = normalizeTextbookUrls(course);
       if (urlsToDelete.length > 0) {
         for (const url of urlsToDelete) {
@@ -922,7 +922,7 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
         }
       }
 
-      // 3. Delete from Firebase Database
+      // 3. Delete from Database
       await remove(dbRef(db, `schools_data/${deptPath}/levels/${selectedLevel}/courses/${courseId}`));
       
       // Also remove any shared textbook contexts
