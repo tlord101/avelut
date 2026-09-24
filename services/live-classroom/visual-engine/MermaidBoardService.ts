@@ -170,6 +170,14 @@ export class MermaidBoardService {
       positions.set(node.id, { cx: x + boxW / 2, cy: y + boxH / 2, x, y });
     });
 
+    const escapeXml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+
     let edgesSvg = '';
     for (const edge of edges) {
       const p1 = positions.get(edge.from);
@@ -191,7 +199,7 @@ export class MermaidBoardService {
 
       edgesSvg += `
         <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="#38BDF8" stroke-width="2.5" marker-end="url(#arrowhead)" />
-        ${edge.label ? `<text x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 8}" fill="#94A3B8" font-size="12" text-anchor="middle" font-family="sans-serif">${edge.label}</text>` : ''}
+        ${edge.label ? `<text x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 8}" fill="#94A3B8" font-size="12" text-anchor="middle" font-family="sans-serif">${escapeXml(edge.label)}</text>` : ''}
       `;
     }
 
@@ -203,7 +211,7 @@ export class MermaidBoardService {
       nodesSvg += `
         <g>
           <rect x="${pos.x}" y="${pos.y}" width="${boxW}" height="${boxH}" rx="12" fill="#1E293B" stroke="${color}" stroke-width="2" />
-          <text x="${pos.cx}" y="${pos.cy + 5}" fill="#F8FAFC" font-size="14" font-weight="600" text-anchor="middle" font-family="sans-serif">${node.label.slice(0, 24)}</text>
+          <text x="${pos.cx}" y="${pos.cy + 5}" fill="#F8FAFC" font-size="14" font-weight="600" text-anchor="middle" font-family="sans-serif">${escapeXml(node.label.slice(0, 24))}</text>
         </g>
       `;
     });

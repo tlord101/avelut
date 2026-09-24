@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createAvelutAI, getResponseText, Type } from '../utils/inference';
-import { cleanAndParseJson } from '../utils/jsonUtils';
 import { useToast } from '../hooks/useToast';
 import { getFeatureModel, checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { useApiLimiter } from '../hooks/useApiLimiter';
@@ -139,7 +138,6 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
             const prompt = `You are AVELUT AI Study Scheduler.
 Analyze the user's input, class notes, syllabus, or uploaded timetable image/document.
 Extract or generate realistic, structured timetable sessions for their weekly schedule.
-Keep the schedule balanced and concise with approximately 10 to 15 key sessions across the week.
 For each class or study session, provide:
 - day: Day of the week ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 - time: Standard time range (e.g. "08:30 AM - 09:15 AM", "09:30 AM - 10:15 AM", "11:15 AM - 12:00 PM", "02:00 PM - 02:45 PM")
@@ -161,7 +159,6 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                     model: aiModel,
                     contents: [{ role: 'user', parts }],
                     config: {
-                        maxOutputTokens: 4096,
                         responseMimeType: 'application/json',
                         responseSchema: {
                             type: Type.OBJECT,
@@ -189,52 +186,10 @@ Return valid JSON with key "sessions" containing an array of objects.`;
 
                 const text = getResponseText(response);
                 if (!text) throw new Error('AI returned an empty response.');
-                
-                // Use robust multi-stage JSON repair and parser to avoid Unterminated string errors
-                const parsed = cleanAndParseJson<any>(text, { fallback: { sessions: [] } });
-                return parsed;
+                return JSON.parse(text);
             });
 
-            // Extract sessions list from parsed object or array
-            let rawSessionsList: any[] = [];
-            if (result.success && result.data) {
-                if (Array.isArray(result.data)) {
-                    rawSessionsList = result.data;
-                } else if (result.data && Array.isArray(result.data.sessions)) {
-                    rawSessionsList = result.data.sessions;
-                } else if (result.data && typeof result.data === 'object') {
-                    const candidateArray = Object.values(result.data).find(v => Array.isArray(v));
-                    if (Array.isArray(candidateArray)) {
-                        rawSessionsList = candidateArray;
-                    }
-                }
-            }
-
-            // Fallback generation if AI output was completely empty or failed
-            if (!rawSessionsList || rawSessionsList.length === 0) {
-                const defaultSubjects = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'English', 'Computer Science'];
-                const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-                rawSessionsList = days.flatMap((day, dayIdx) => [
-                    {
-                        day,
-                        time: '09:00 AM - 10:15 AM',
-                        subject: defaultSubjects[dayIdx % defaultSubjects.length],
-                        topic: `Foundations of ${defaultSubjects[dayIdx % defaultSubjects.length]}`,
-                        activity: 'Lecture',
-                        location: `Hall ${(dayIdx % 3) + 1}`,
-                    },
-                    {
-                        day,
-                        time: '11:00 AM - 12:15 PM',
-                        subject: defaultSubjects[(dayIdx + 2) % defaultSubjects.length],
-                        topic: `Practical & Problem Solving`,
-                        activity: 'Lab Session',
-                        location: `Lab ${(dayIdx % 2) + 1}`,
-                    },
-                ]);
-            }
-
-            if (rawSessionsList.length > 0) {
+            if (result.success && result.data && Array.isArray(result.data.sessions)) {
                 // Fetch existing sessions and activities from Supabase & local storage
                 let existingSessions: StudySession[] = [];
                 let existingActivities: any[] = [];
@@ -271,7 +226,7 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                     } catch {}
                 }
 
-                const newSessions = rawSessionsList.map((s: any, idx: number) => ({
+                const newSessions = result.data.sessions.map((s: any, idx: number) => ({
                     id: `session_${Date.now()}_${idx}`,
                     day: s.day || 'Monday',
                     time: s.time || '09:00 AM - 10:00 AM',

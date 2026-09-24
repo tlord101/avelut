@@ -225,7 +225,10 @@ export class AvelutBoardController {
     }
 
     try {
-      const trimmed = svgString.trim();
+      let trimmed = svgString.trim();
+      // Ensure XML well-formedness: escape any raw '&' that is not already an XML entity
+      trimmed = trimmed.replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
+
       const fileId = `svg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const base64Svg = btoa(unescape(encodeURIComponent(trimmed)));
       const dataURL = `data:image/svg+xml;base64,${base64Svg}`;
@@ -241,7 +244,11 @@ export class AvelutBoardController {
       this.boardFiles[fileId] = fileData;
 
       if (this.api && (this.api as any).addFiles) {
-        (this.api as any).addFiles([fileData]);
+        try {
+          (this.api as any).addFiles([fileData]);
+        } catch (addErr) {
+          console.warn('[BoardController] Excalidraw addFiles non-fatal warning:', addErr);
+        }
       }
 
       // Parse viewBox or width/height to get aspect ratio

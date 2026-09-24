@@ -58,40 +58,14 @@ export async function POST(req: Request) {
     );
 
     let rawModel = (body.model ? String(body.model).trim() : '');
+    rawModel = rawModel.replace(/^qwen\//i, '').replace(/^alibaba\//i, '');
 
-    // Normalize model for DashScope (Model Studio compatible names)
-    let dashscopeModel = rawModel.replace(/^qwen\//i, '').replace(/^alibaba\//i, '');
-    const validDashScopeModels = ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-vl-plus', 'qwen-vl-max', 'qwen-long'];
-    if (!validDashScopeModels.includes(dashscopeModel)) {
-      dashscopeModel = hasImage ? 'qwen-vl-plus' : 'qwen-plus';
-    } else if (hasImage && !dashscopeModel.includes('vl')) {
-      dashscopeModel = 'qwen-vl-plus';
-    }
-
-    // Normalize model for OpenRouter (OpenRouter catalog format)
-    let openrouterModel = rawModel;
-    if (
-      !openrouterModel ||
-      openrouterModel.includes('3.7') ||
-      openrouterModel.includes('3.8') ||
-      openrouterModel.includes('flash') ||
-      openrouterModel === 'qwen-plus' ||
-      openrouterModel === 'qwen/qwen-plus'
-    ) {
-      openrouterModel = hasImage ? 'qwen/qwen-vl-plus' : 'qwen/qwen-2.5-72b-instruct';
-    } else if (!openrouterModel.includes('/')) {
-      openrouterModel = `qwen/${openrouterModel}`;
-    }
-
-    // Ensure prompt contains 'json' if json_object response_format is requested (OpenAI compatibility requirement)
-    const formattedMessages = messages.map((m: any, i: number) => {
-      if (body.response_format?.type === 'json_object' && i === messages.length - 1 && typeof m.content === 'string') {
-        if (!/json/i.test(m.content)) {
-          return { ...m, content: m.content + '\n\nPlease return your response in valid JSON.' };
-        }
-      }
-      return m;
-    });
+    const dashscopeModel = hasImage
+      ? (rawModel || 'qwen-vl-plus')
+      : (rawModel || 'qwen3.8-flash');
+    const openrouterModel = hasImage
+      ? 'qwen/qwen-vl-plus'
+      : (rawModel ? `qwen/${rawModel}` : 'qwen/qwen3.8-flash');
 
     // 1. If Alibaba DashScope API key exists, attempt Model Studio MaaS / DashScope endpoints
     if (alibabaApiKey) {
@@ -110,9 +84,9 @@ export async function POST(req: Request) {
 
           const payload: any = {
             model: dashscopeModel,
-            messages: formattedMessages,
+            messages,
             temperature: body.temperature ?? 0.35,
-            max_tokens: Math.min(Math.max(body.max_tokens ?? 3500, 3000), 4096),
+            max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
           };
           if (body.response_format && body.response_format.type === 'json_object') {
             payload.response_format = { type: 'json_object' };
@@ -185,9 +159,9 @@ export async function POST(req: Request) {
       try {
         const openRouterPayload: any = {
           model: openrouterModel,
-          messages: formattedMessages,
+          messages,
           temperature: body.temperature ?? 0.35,
-          max_tokens: Math.min(Math.max(body.max_tokens ?? 3500, 3000), 4096),
+          max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
           include_reasoning: false,
         };
         if (body.response_format && body.response_format.type === 'json_object') {

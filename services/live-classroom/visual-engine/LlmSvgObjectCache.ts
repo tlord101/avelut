@@ -48,6 +48,14 @@ export class LlmSvgObjectCache {
    * if the LLM generation is slow, times out, or fails.
    */
   public static generateFallbackSvg(description: string): string {
+    const escapeXml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+
     const desc = description.trim();
     const lower = desc.toLowerCase();
     const isWave = lower.includes('wave') || lower.includes('vibrat') || lower.includes('string') || lower.includes('sound') || lower.includes('node') || lower.includes('frequenc');
@@ -137,7 +145,7 @@ export class LlmSvgObjectCache {
         </defs>
         <!-- Header title -->
         <rect x="20" y="16" width="${Math.min(totalW - 40, desc.length * 9 + 28)}" height="28" rx="6" fill="#1E293B" stroke="#38BDF8" stroke-width="1.2" />
-        <text x="32" y="35" fill="#38BDF8" font-size="12" font-weight="700" font-family="sans-serif">🔬 ${desc.slice(0, 50)}</text>
+        <text x="32" y="35" fill="#38BDF8" font-size="12" font-weight="700" font-family="sans-serif">🔬 ${escapeXml(desc.slice(0, 50))}</text>
         ${centerIllustration}
       </svg>
     `.trim();
