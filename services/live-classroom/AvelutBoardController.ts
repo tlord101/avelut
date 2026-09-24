@@ -198,6 +198,7 @@ export class AvelutBoardController {
 
   private api: ExcalidrawImperativeAPI | null = null;
   private elements: any[] = [];
+  private boardFiles: Record<string, any> = {};
   private cursorY = 90;
   private lessonTitle = '';
   private onFormulaChangeCallback: ((formula: string | null) => void) | null = null;
@@ -213,13 +214,96 @@ export class AvelutBoardController {
 
   public setSvgIllustration(svgString: string | null): void {
     this.actionQueue.push(() => {
-      this.onSvgIllustrationChangeCallback?.(svgString);
-      if (svgString) {
-        // Reserve some space to simulate the illustration taking room on the board state
-        this.cursorY += 300;
-        this.clearStageIfFull();
-      }
+      this._setSvgIllustration(svgString);
     });
+  }
+
+  private _setSvgIllustration(svgString: string | null): void {
+    this.onSvgIllustrationChangeCallback?.(svgString);
+    if (!svgString || !svgString.trim()) {
+      return;
+    }
+
+    try {
+      const trimmed = svgString.trim();
+      const fileId = `svg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const base64Svg = btoa(unescape(encodeURIComponent(trimmed)));
+      const dataURL = `data:image/svg+xml;base64,${base64Svg}`;
+
+      const fileData = {
+        id: fileId,
+        dataURL,
+        mimeType: 'image/svg+xml',
+        created: Date.now(),
+        lastRetrieved: Date.now(),
+      };
+
+      this.boardFiles[fileId] = fileData;
+
+      if (this.api && (this.api as any).addFiles) {
+        (this.api as any).addFiles([fileData]);
+      }
+
+      // Parse viewBox or width/height to get aspect ratio
+      let origW = 500;
+      let origH = 300;
+      const vbMatch = trimmed.match(/viewBox=["']\s*([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s*["']/i);
+      if (vbMatch) {
+        const w = parseFloat(vbMatch[3]);
+        const h = parseFloat(vbMatch[4]);
+        if (w > 0 && h > 0) {
+          origW = w;
+          origH = h;
+        }
+      } else {
+        const wMatch = trimmed.match(/width=["']([\d.]+)p?t?x?["']/i);
+        const hMatch = trimmed.match(/height=["']([\d.]+)p?t?x?["']/i);
+        if (wMatch && hMatch) {
+          const w = parseFloat(wMatch[1]);
+          const h = parseFloat(hMatch[1]);
+          if (w > 0 && h > 0) {
+            origW = w;
+            origH = h;
+          }
+        }
+      }
+
+      const isMobile = this.isMobileView();
+      const maxW = isMobile ? Math.min(this.MOBILE_CARD_WIDTH + 20, 320) : 560;
+      const renderW = Math.min(maxW, Math.max(260, origW));
+      const aspect = origH / (origW || 1);
+      const renderH = Math.min(Math.max(Math.round(renderW * aspect), 140), isMobile ? 380 : 500);
+
+      this.clearStageIfFull();
+
+      const x = this.clampX(isMobile ? 20 : 30, renderW);
+      const y = Math.max(this.STAGE_TOP, this.cursorY + 12);
+
+      const elementId = `svg_el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const skeleton: any = {
+        id: elementId,
+        type: 'image',
+        fileId,
+        status: 'saved',
+        x,
+        y,
+        width: renderW,
+        height: renderH,
+        scale: [1, 1],
+        strokeColor: 'transparent',
+        backgroundColor: 'transparent',
+        roundness: { type: 3 },
+        customData: { zone: 'stage', kind: 'illustration' },
+      };
+
+      const converted = convertToExcalidrawElements([skeleton], { regenerateIds: false });
+      this.elements = [...this.elements, ...converted];
+      this.cursorY = y + renderH + 32;
+      this.lastActivePoint = { x: x + renderW / 2, y: y + renderH / 2 };
+      this.syncScene();
+    } catch (err) {
+      console.error('[BoardController] setSvgIllustration error:', err);
+    }
   }
 
   public clearSvgIllustration(): void {
@@ -361,6 +445,14 @@ export class AvelutBoardController {
   public setApi(api: ExcalidrawImperativeAPI | null): void {
     if (api) {
       this.api = api;
+      const filesList = Object.values(this.boardFiles);
+      if (filesList.length > 0 && (api as any).addFiles) {
+        try {
+          (api as any).addFiles(filesList);
+        } catch (e) {
+          console.warn('[BoardController] addFiles error in setApi:', e);
+        }
+      }
       setTimeout(() => {
         if (this.elements.length > 0) {
           this.syncScene();
@@ -383,6 +475,7 @@ export class AvelutBoardController {
     this.nextFreeY = 100;
     this.lastAnnotationY = 100;
     this.elements = [];
+    this.boardFiles = {};
     if (this.api) {
       this.syncScene();
     }

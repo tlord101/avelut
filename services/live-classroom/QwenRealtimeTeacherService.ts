@@ -417,10 +417,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with your structured roadmap in simple words (like explaining to a 10-year-old).
-SILENT TOOL CALL: Immediately call board_action write to put "${topic}" and 1–3 opening keywords on the board.
-DO NOT SAY in voice "I will write on the board" or announce writing. Call the tool silently.
-In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with simple, intuitive everyday examples!`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in simple words (Phase 1: ${phase1Name}), and begin with an intuitive everyday example.`,
         }],
       },
     });
@@ -479,7 +476,7 @@ In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student is listening quietly. Continue your teaching plan kindly in simple words. Silently call board_action write to put 1–3 short keywords on the board. Do NOT say "I will write on the board" in your voice — call the tool silently and speak your explanation directly to the student.]',
+            text: '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use your visual tools silently as needed.]',
           }],
         },
       });
@@ -581,11 +578,9 @@ In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with
 
     return {
       type: 'function',
-      function: {
-        name: 'board_action',
-        description,
-        parameters,
-      },
+      name: 'board_action',
+      description,
+      parameters,
     };
   }
 
@@ -600,27 +595,24 @@ In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with
   private buildDrawMermaidTool() {
     return {
       type: 'function',
-      function: {
-        name: 'draw_mermaid',
-        description:
-          'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
-          'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-          'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-          'state transitions, and component interactions. Choose LR/TB or another ' +
-          'supported Mermaid layout according to the relationship. Do not force every ' +
-          'diagram into a vertical stack of boxes.',
-        parameters: {
-          type: 'object',
-          properties: {
-            mermaid_code: {
-              type: 'string',
-              description:
-                'Raw valid Mermaid source code. Do not include markdown fences. ' +
-                'Keep labels concise and educational.',
-            },
+      name: 'draw_mermaid',
+      description:
+        'Render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Prefer this for concept ' +
+        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
+        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
+        'state transitions, and component interactions. Choose LR/TB or another ' +
+        'supported Mermaid layout according to the relationship. Keep labels concise and educational.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mermaid_code: {
+            type: 'string',
+            description:
+              'Raw valid Mermaid source code. Do not include markdown fences. ' +
+              'Keep labels concise and educational.',
           },
-          required: ['mermaid_code'],
         },
+        required: ['mermaid_code'],
       },
     };
   }
@@ -628,19 +620,17 @@ In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with
   private buildIllustrateObjectTool() {
     return {
       type: 'function',
-      function: {
-        name: 'illustrate_object',
-        description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process on the visual board.',
-        parameters: {
-          type: 'object',
-          properties: {
-            object_description: {
-              type: 'string',
-              description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
-            },
+      name: 'illustrate_object',
+      description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process inboard directly onto the visual whiteboard canvas.',
+      parameters: {
+        type: 'object',
+        properties: {
+          object_description: {
+            type: 'string',
+            description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
           },
-          required: ['object_description'],
         },
+        required: ['object_description'],
       },
     };
   }
@@ -859,6 +849,8 @@ In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with
           if (this.activeAudioSources.length === 0) {
             this.setState('listening');
           }
+        } else if (this.state === 'drawing') {
+          this.setState('listening');
         }
         break;
       }

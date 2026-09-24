@@ -141,7 +141,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [activeFormula, setActiveFormula] = useState<string | null>(null);
-  const [activeSvgIllustration, setActiveSvgIllustration] = useState<string | null>(null);
 
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
@@ -255,9 +254,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     avelutBoardController.setOnFormulaChange((formula) => {
       setActiveFormula(formula);
     });
-    avelutBoardController.setOnSvgIllustrationChange((svg) => {
-      setActiveSvgIllustration(svg);
-    });
 
     if (!startedSessionRef.current) {
       startedSessionRef.current = true;
@@ -265,7 +261,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     }
     return () => {
       avelutBoardController.setOnFormulaChange(null);
-      avelutBoardController.setOnSvgIllustrationChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
@@ -452,28 +447,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             title="Dismiss formula"
           >
             <X className="w-3.5 h-3.5" />
-          </button>
-        </aside>
-      )}
-
-      {/* ── ACTIVE SVG ILLUSTRATION ───────────────────────────────────────── */}
-      {activeSvgIllustration && (
-        <aside
-          aria-label="Active Illustration"
-          className="absolute top-28 left-3 sm:left-6 z-30 flex flex-col p-3 rounded-2xl bg-[#0A0A0A]/95 border border-white/10 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in pointer-events-auto w-[90vw] max-w-[500px]"
-        >
-          <div className="relative w-full aspect-[3/2] flex items-center justify-center overflow-hidden rounded-xl bg-black/50">
-            <div
-              className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
-              dangerouslySetInnerHTML={{ __html: activeSvgIllustration }}
-            />
-          </div>
-          <button
-            onClick={() => setActiveSvgIllustration(null)}
-            className="absolute top-4 right-4 p-1.5 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/90 transition-all backdrop-blur-md"
-            title="Dismiss illustration"
-          >
-            <X className="w-4 h-4" />
           </button>
         </aside>
       )}
