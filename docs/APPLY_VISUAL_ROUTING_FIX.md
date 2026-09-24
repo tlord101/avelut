@@ -1,33 +1,33 @@
-# Avelut Realtime Visual Tool Fix
+# Apply visual routing fix
 
-## Status on branch `fix/visual-tool-routing`
+## On branch `fix/visual-tool-routing`
 
-- `services/live-classroom/teacherPrompt.ts` — **already updated** (multi-tool visual routing).
-- `services/live-classroom/QwenRealtimeTeacherService.ts` — apply the patch below (file was too large for a single API write in this session).
-
-## Apply the service patch
+1. `teacherPrompt.ts` is already updated on the branch.
+2. Restore the service file from main, then apply the unified patch:
 
 ```bash
+git fetch origin
 git checkout fix/visual-tool-routing
 git checkout main -- services/live-classroom/QwenRealtimeTeacherService.ts
 git apply docs/QwenRealtimeTeacherService.visual-routing.patch
-# Also update silence tools array to this.getTools() if the patch only hits one occurrence:
-# Replace remaining tools: [this.buildBoardActionTool()] with tools: this.getTools()
+# verify
+grep -n "NOT mandatory\|Choose the\|Continue naturally\|tools: this.getTools()" services/live-classroom/QwenRealtimeTeacherService.ts
 git add services/live-classroom/QwenRealtimeTeacherService.ts
 git commit -m "fix(live-classroom): apply visual tool routing to QwenRealtimeTeacherService"
+git push origin fix/visual-tool-routing
 ```
 
-## Visual selection rules
+If `git push` fails with auth errors, use a Personal Access Token:
 
-- Formula/equation → `board_action`
-- Calculation/derivation → `board_action`
-- Sequential procedure → `board_action`
-- Concept relationships / maps / flows / hierarchy → `draw_mermaid`
-- Physical/scientific object → `illustrate_object`
-- Comparison → compact Excalidraw table-like grid via `board_action`
+```bash
+gh auth login
+# or
+git remote set-url origin https://<YOUR_PAT>@github.com/tlord101/avelut.git
+git push origin fix/visual-tool-routing
+```
 
 ## Test
 
-"Explain how Optics, Vibration and Waves relate in General Physics IV."
+Explain how Optics, Vibration and Waves relate in General Physics IV.
 
-Expected: relationship diagram (e.g. Mermaid hierarchy), not a forced vertical stack of cards.
+Expected: relationship diagram (draw_mermaid), not a forced vertical stack of cards.

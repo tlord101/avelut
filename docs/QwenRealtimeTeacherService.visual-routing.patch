@@ -1,38 +1,22 @@
-diff --git a/services/live-classroom/QwenRealtimeTeacherService.ts b/services/live-classroom/QwenRealtimeTeacherService.ts
 --- a/services/live-classroom/QwenRealtimeTeacherService.ts
 +++ b/services/live-classroom/QwenRealtimeTeacherService.ts
-@@
+@@ -4,9 +4,10 @@
+  * Full-duplex WebSocket client for Alibaba Cloud Model Studio.
+  *
+  * Architecture:
 - *   Student mic → Qwen Omni Realtime → audio + board_action → AvelutBoardController → Excalidraw
 + *   Student mic → Qwen Omni Realtime → audio + visual tool → classroom board
-@@
+  *
 - * One model. One board tool. No secondary AI. No state machine.
 + * One realtime model with multiple visual tools. The model chooses the
 + * visual language that matches the teaching task.
-@@
--    const description =
--      'Control the educational whiteboard while teaching. Calling board_action is MANDATORY in every single response turn! ' +
--      'Use "write" to put a keyword/formula/question on the board, "draw" to draw step-by-step boxes with small downward arrows, or "erase" to remove an element to draw in that space.';
-+    const description =
-+      'Control the educational Excalidraw board. Use this for formulas, equations, ' +
-+      'worked calculations, derivations, annotations, highlighting, and genuinely ' +
-+      'sequential procedures. Do NOT use it for ordinary concept maps or relationship ' +
-+      'diagrams when draw_mermaid is more appropriate. For comparisons, it may be used ' +
-+      'to create a compact table-like grid. Calling board_action is NOT mandatory on every turn.';
-@@
--      description: 'Render a Mermaid.js diagram to the visual board for explaining complex flows, architecture, or state machines.',
-+      description:
-+        'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
-+        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-+        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-+        'state transitions, and component interactions. Choose LR/TB or another ' +
-+        'supported Mermaid layout according to the relationship. Do not force every ' +
-+        'diagram into a vertical stack of boxes.',
-@@
--            description: 'Valid Mermaid diagram source code.',
-+            description:
-+              'Raw valid Mermaid source code. Do not include markdown fences. ' +
-+              'Keep labels concise and educational.',
-@@
+  */
+ 
+ import { liveLogger } from './logger';
+@@ -409,7 +410,14 @@
+         role: 'user',
+         content: [{
+           type: 'input_text',
 -          text: `Start the lesson on "${topic}". We have ${duration} minutes. Remember the mandatory rule: you MUST invoke the "board_action" tool FIRST at the very start of every response before speaking a single word. In this opening turn, call board_action FIRST to write the topic title and draw the opening concept diagram on the board, and then speak to greet the student warmly, explain the intuition, and teach interactively!`,
 +          text: `Start the lesson on "${topic}". We have ${duration} minutes. Choose the
 +most appropriate visual tool for the opening explanation. Use draw_mermaid for a
@@ -42,13 +26,95 @@ diff --git a/services/live-classroom/QwenRealtimeTeacherService.ts b/services/li
 +scientific object is needed. Do not call board_action merely because every turn
 +requires a board action. Then speak to greet the student warmly, explain the
 +intuition, and teach interactively!`,
-@@
+         }],
+       },
+     });
+@@ -419,7 +427,7 @@
+       type: 'response.create',
+       response: {
+         modalities: ['text', 'audio'],
 -        tools: [this.buildBoardActionTool()],
 +        tools: this.getTools(),
-@@
--          text: '[The student was quiet for 3 seconds. As an encouraging, expert human tutor, call "board_action" FIRST to draw or write on the board, and warmly step in to provide the explanation and smoothly continue teaching!]',
-+          text: '[The student was quiet for 3 seconds. Continue naturally. Choose the
+         tool_choice: 'auto',
+       },
+     });
+@@ -462,7 +470,11 @@
+           role: 'user',
+           content: [{
+             type: 'input_text',
+-            text: '[The student was quiet for 3 seconds. As an encouraging, expert human tutor, call "board_action" FIRST to draw or write on the board, and warmly step in to provide the explanation and smoothly continue teaching!]',
++            text: '[The student was quiet for 3 seconds. Continue naturally. Choose the
 +visual tool that best matches the idea: board_action for formulas/calculations/
 +sequential steps, draw_mermaid for relationships/flows/concept maps, and
 +illustrate_object for detailed objects. Do not force a board_action call if no
 +visual is useful.]',
+           }],
+         },
+       });
+@@ -472,7 +484,7 @@
+         type: 'response.create',
+         response: {
+           modalities: ['text', 'audio'],
+-          tools: [this.buildBoardActionTool()],
++          tools: this.getTools(),
+           tool_choice: 'auto',
+         },
+       });
+@@ -556,8 +568,11 @@
+     };
+ 
+     const description =
+-      'Control the educational whiteboard while teaching. Calling board_action is MANDATORY in every single response turn! ' +
+-      'Use "write" to put a keyword/formula/question on the board, "draw" to draw step-by-step boxes with small downward arrows, or "erase" to remove an element to draw in that space.';
++      'Control the educational Excalidraw board. Use this for formulas, equations, ' +
++      'worked calculations, derivations, annotations, highlighting, and genuinely ' +
++      'sequential procedures. Do NOT use it for ordinary concept maps or relationship ' +
++      'diagrams when draw_mermaid is more appropriate. For comparisons, it may be used ' +
++      'to create a compact table-like grid. Calling board_action is NOT mandatory on every turn.';
+ 
+     return {
+       type: 'function',
+@@ -585,20 +600,34 @@
+     return {
+       type: 'function',
+       name: 'draw_mermaid',
+-      description: 'Render a Mermaid.js diagram to the visual board for explaining complex flows, architecture, or state machines.',
++      description:
++        'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
++        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
++        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
++        'state transitions, and component interactions. Choose LR/TB or another ' +
++        'supported Mermaid layout according to the relationship. Do not force every ' +
++        'diagram into a vertical stack of boxes.',
+       parameters: {
+         type: 'object',
+         properties: {
+           mermaid_code: {
+             type: 'string',
+-            description: 'Valid Mermaid.js syntax (e.g. graph TD; A-->B;). Do NOT include markdown codeblocks (```).',
++            description:
++              'Raw valid Mermaid source code. Do not include markdown fences. ' +
++              'Keep labels concise and educational.',
+           },
+         },
+         required: ['mermaid_code'],
+       },
+       function: {
+         name: 'draw_mermaid',
+-        description: 'Render a Mermaid.js diagram to the visual board for explaining complex flows, architecture, or state machines.',
++        description:
++        'Render a Mermaid.js diagram to the visual board. Prefer this for concept ' +
++        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
++        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
++        'state transitions, and component interactions. Choose LR/TB or another ' +
++        'supported Mermaid layout according to the relationship. Do not force every ' +
++        'diagram into a vertical stack of boxes.',
+         parameters: {
+           type: 'object',
+           properties: {
+             mermaid_code: { type: 'string' }
+           },
+           required: ['mermaid_code'],
+         }
+       }
+     };
