@@ -75,7 +75,7 @@ function initOTAEngine() {
 
     void syncInstalledBundleVersion();
 
-    if (!Capacitor.isNativePlatform()) return;
+    // Initialize OTA listener for both Native and Web (Supabase OTA releases)
 
     import('@capacitor/app').then(({ App }) => {
         // Notify Capgo that the app successfully booted

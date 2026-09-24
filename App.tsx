@@ -279,6 +279,7 @@ const normalizeRouteSegment = (segment: string): string => {
     if (s === 'studyguide') return 'study_guide';
     if (s === 'notebooks') return 'study_guide';
     if (s === 'visual_solver' || s === 'visualsolver') return 'chat';
+    if (s === 'timetable' || s === 'calendar' || s === 'schedule') return 'timetable';
     return s;
 };
 
@@ -297,7 +298,8 @@ const ALLOWED_ROUTE_ITEMS = new Set([
     'study_partners',
     'voice_tutorial',
     'notifications',
-    'playground'
+    'playground',
+    'timetable'
 ]);
 
 const resolveActiveItemFromPath = (pathname: string): string => {
@@ -621,29 +623,6 @@ const App: React.FC = () => {
         return () => { mounted = false; window.removeEventListener('focus', onFocus); };
     }, [resolveAndAttachImageToChat]);
 
-    const globalTouchStartRef = useRef<{ x: number; y: number } | null>(null);
-
-    const handleGlobalTouchStart = (e: React.TouchEvent) => {
-        const touch = e.touches[0];
-        if (touch && touch.clientX < Math.max(60, window.innerWidth * 0.18)) {
-            globalTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
-        }
-    };
-
-    const handleGlobalTouchEnd = (e: React.TouchEvent) => {
-        if (!globalTouchStartRef.current) return;
-        const touch = e.changedTouches[0];
-        if (touch) {
-            const deltaX = touch.clientX - globalTouchStartRef.current.x;
-            const deltaY = touch.clientY - globalTouchStartRef.current.y;
-            if (deltaX > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-                if (activeItem !== 'study_guide') {
-                    setIsMobileSidebarOpen(true);
-                }
-            }
-        }
-        globalTouchStartRef.current = null;
-    };
 
     useEffect(() => {
         const handleGoBack = () => {
@@ -718,11 +697,17 @@ const App: React.FC = () => {
         return window.localStorage.getItem('avelut_admin_authenticated') === 'true';
     });
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const { mainRef, overlayRef, sidebarRef } = useSidebarGesture({
+    const isSidebarSwipeDisabled =
+        activeItem === 'voice_tutorial' ||
+        activeItem === 'live_tutorial_setup' ||
+        activeItem === 'messenger' ||
+        activeItem === 'study_guide';
+
+    const { mainRef, overlayRef, sidebarRef, containerRef } = useSidebarGesture({
         isOpen: isMobileSidebarOpen,
         onOpen: () => setIsMobileSidebarOpen(true),
         onClose: () => setIsMobileSidebarOpen(false),
-        enabled: activeItem !== 'study_guide',
+        enabled: !isSidebarSwipeDisabled,
     });
     const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
@@ -768,6 +753,13 @@ const App: React.FC = () => {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isTourOpen, setIsTourOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+    useEffect(() => {
+        const handleOpenCalendar = () => setIsCalendarOpen(true);
+        window.addEventListener('avelut_open_calendar_modal', handleOpenCalendar);
+        return () => window.removeEventListener('avelut_open_calendar_modal', handleOpenCalendar);
+    }, []);
+
     const triggerScanRef = useRef<(() => void) | null>(null);
     const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
     const ai = useMemo(() => (
@@ -904,7 +896,9 @@ const App: React.FC = () => {
                 } else if (actionId === 'open_chat' && chatId) {
                      setActiveItem('messenger');
                      setPendingMessengerChatId(chatId);
-                } else if (actionId === 'study_guide' || actionId === 'timetable') {
+                } else if (actionId === 'timetable') {
+                     setActiveItem('timetable');
+                } else if (actionId === 'study_guide') {
                      setActiveItem('study_guide');
                 } else if (actionId === 'study_partners') {
                      setActiveItem('study_partners');
@@ -1710,8 +1704,6 @@ const App: React.FC = () => {
     return (
         <div
             className="flex fixed inset-0 w-full bg-off-white dark:bg-black font-sans text-charcoal dark:text-white selection:bg-brand-200 selection:text-brand-900 overflow-hidden"
-            onTouchStart={handleGlobalTouchStart}
-            onTouchEnd={handleGlobalTouchEnd}
         >
             <NativePullToRefresh />
 
@@ -1763,6 +1755,7 @@ const App: React.FC = () => {
                 }}
                 overlayRef={overlayRef}
                 sidebarRef={sidebarRef}
+                containerRef={containerRef}
             />
             <main ref={mainRef as any} className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <Header

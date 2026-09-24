@@ -68,6 +68,9 @@ export class QwenRealtimeTeacherService {
   private activeAudioSources: AudioBufferSourceNode[] = [];
   private nextPlayTime = 0;
   private pcmRemainder: Uint8Array = new Uint8Array(0);
+  private pendingOutputDeltas: string[] = [];
+  private isFlushingDeltas = false;
+  private lastMicRms = 0;
 
   // ── Session ────────────────────────────────────────────────────────────────
   private promptConfig: TeacherPromptConfig | null = null;
@@ -389,6 +392,9 @@ export class QwenRealtimeTeacherService {
         'output =',
         this.outputAudioCtx?.state
       );
+      if (this.outputAudioCtx?.state === 'running' && this.pendingOutputDeltas.length > 0) {
+        void this.flushPendingDeltas();
+      }
       return this.isAudioUnlocked();
     } catch (e) {
       liveLogger.warn('[QwenRealtime] resumeAudio warning:', e);
@@ -795,7 +801,11 @@ export class QwenRealtimeTeacherService {
 
       // ── Student interruption / speech events ─────────────────────────────
       case 'input_audio_buffer.speech_started':
-        // Qwen's VAD says the student is speaking — stop teacher audio cleanly.
+        // If teacher is actively speaking, verify it is not speaker acoustic echo
+        if (this.activeAudioSources.length > 0 && this.lastMicRms < 0.08) {
+          liveLogger.log('[QwenRealtime] Ignored false speech_started from speaker acoustic echo (rms:', this.lastMicRms.toFixed(3), ')');
+          break;
+        }
         liveLogger.log('[QwenRealtime] 🎙️ Student speech started — stopping teacher audio');
         this.isStudentSpeaking = true;
         this.consecutiveSilenceNudges = 0;
@@ -1071,11 +1081,18 @@ export class QwenRealtimeTeacherService {
       if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
       if (!samples || samples.length === 0) return;
 
-      // Compute RMS for UI visualisation
+      // Compute RMS for UI visualisation and echo tracking
       let sum = 0;
       for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
       const rms = Math.sqrt(sum / samples.length);
+      this.lastMicRms = rms;
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
+
+      // Suppress mic streaming if teacher is actively outputting audio and RMS is below loud interruption threshold
+      // Prevents web browser speaker-to-mic acoustic echo loopback from cutting teacher off
+      if (this.activeAudioSources.length > 0 && rms < 0.08) {
+        return;
+      }
 
       // If student is speaking (rms > 0.04) while in listening state, defer/reset the silence watchdog
       if (rms > 0.04 && this.state === 'listening' && this.studentWaitTimer) {
@@ -1178,8 +1195,8 @@ export class QwenRealtimeTeacherService {
 
   // ── Audio output (WebSocket → speaker) ───────────────────────────────────
 
-  private async ensureOutputRunning(): Promise<void> {
-    if (!this.outputAudioCtx) return;
+  private async ensureOutputRunning(): Promise<boolean> {
+    if (!this.outputAudioCtx) return false;
     if (this.outputAudioCtx.state === 'suspended') {
       try {
         await this.outputAudioCtx.resume();
@@ -1187,18 +1204,51 @@ export class QwenRealtimeTeacherService {
         liveLogger.warn('[QwenRealtime] ensureOutputRunning failed to resume:', err);
       }
     }
+    return this.outputAudioCtx.state === 'running';
+  }
+
+  private async flushPendingDeltas(): Promise<void> {
+    if (this.isFlushingDeltas || !this.outputAudioCtx || this.outputAudioCtx.state !== 'running') return;
+    this.isFlushingDeltas = true;
+    try {
+      while (this.pendingOutputDeltas.length > 0 && this.outputAudioCtx.state === 'running') {
+        const delta = this.pendingOutputDeltas.shift();
+        if (delta) {
+          await this.renderPcmDelta(delta);
+        }
+      }
+    } finally {
+      this.isFlushingDeltas = false;
+    }
   }
 
   private async playDelta(base64: string): Promise<void> {
     if (!this.outputAudioCtx || !base64) return;
     try {
-      await this.ensureOutputRunning();
+      const isRunning = await this.ensureOutputRunning();
 
-      if (this.outputAudioCtx.state === 'suspended') {
-        liveLogger.warn('[QwenRealtime] AudioContext still suspended — cannot play');
+      if (!isRunning || this.outputAudioCtx.state === 'suspended') {
+        // Queue delta instead of discarding so no words are dropped when opening on web
+        this.pendingOutputDeltas.push(base64);
         return;
       }
 
+      // If deltas are queued, flush first to preserve chronological order
+      if (this.pendingOutputDeltas.length > 0) {
+        this.pendingOutputDeltas.push(base64);
+        await this.flushPendingDeltas();
+        return;
+      }
+
+      await this.renderPcmDelta(base64);
+    } catch (err) {
+      liveLogger.warn('[QwenRealtime] playDelta error:', err);
+    }
+  }
+
+  private async renderPcmDelta(base64: string): Promise<void> {
+    if (!this.outputAudioCtx) return;
+    try {
       const binary = atob(base64);
       const incomingBytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -1225,10 +1275,19 @@ export class QwenRealtimeTeacherService {
       const sampleCount = combinedBytes.length / 2;
       if (sampleCount <= 0) return;
 
-      const int16 = new Int16Array(combinedBytes.buffer, combinedBytes.byteOffset, sampleCount);
+      // Safe Little-Endian 16-bit PCM decoding via DataView (avoids unaligned byteOffset RangeErrors)
+      const view = new DataView(combinedBytes.buffer, combinedBytes.byteOffset, combinedBytes.byteLength);
       const float32 = new Float32Array(sampleCount);
       for (let i = 0; i < sampleCount; i++) {
-        float32[i] = int16[i] / 32768;
+        float32[i] = view.getInt16(i * 2, true) / 32768.0;
+      }
+
+      // Micro edge smoothing: softens chunk boundary steps during Web Audio 24kHz -> 48kHz resampling
+      if (sampleCount > 8) {
+        float32[0] *= 0.5;
+        float32[1] *= 0.8;
+        float32[sampleCount - 2] *= 0.8;
+        float32[sampleCount - 1] *= 0.5;
       }
 
       // DashScope/Qwen Realtime PCM audio is 24,000 Hz
@@ -1246,9 +1305,10 @@ export class QwenRealtimeTeacherService {
       src.connect(this.outputGainNode);
 
       const now = this.outputAudioCtx.currentTime;
-      const LEAD_TIME = 0.05; // 50ms smooth jitter buffer prevents buffer underrun clicks on Android
+      // 120ms jitter buffer ensures smooth continuous audio without buffer underruns/stuttering
+      const JITTER_BUFFER_SEC = 0.12;
       if (this.nextPlayTime < now) {
-        this.nextPlayTime = now + LEAD_TIME;
+        this.nextPlayTime = now + JITTER_BUFFER_SEC;
       }
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
@@ -1266,7 +1326,7 @@ export class QwenRealtimeTeacherService {
         }
       };
     } catch (err) {
-      liveLogger.warn('[QwenRealtime] playDelta error:', err);
+      liveLogger.warn('[QwenRealtime] renderPcmDelta error:', err);
     }
   }
 
@@ -1274,6 +1334,7 @@ export class QwenRealtimeTeacherService {
   public stopPlayback(): void {
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
+    this.pendingOutputDeltas = [];
     this.pcmRemainder = new Uint8Array(0);
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
   }

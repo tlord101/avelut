@@ -34,6 +34,7 @@ const PublicProfile = lazy(() => import('./components/PublicProfile').then(modul
 const Notifications = lazy(() => import('./components/Notifications').then(module => ({ default: module.Notifications })));
 const Feedback = lazy(() => import('./components/Feedback').then(module => ({ default: module.Feedback })));
 const VoiceTutorialPage = lazy(() => import('./components/VoiceTutorialPage').then(module => ({ default: module.default || module.VoiceTutorialPage })));
+const TimetablePage = lazy(() => import('./components/TimetablePage').then(module => ({ default: module.TimetablePage })));
 
 const skeletonMap: Record<string, React.ReactNode> = {
     dashboard:      <DashboardSkeleton />,
@@ -48,6 +49,7 @@ const skeletonMap: Record<string, React.ReactNode> = {
     voice_tutorial: <PageSkeleton />,
     playground:     <PageSkeleton />,
     notebooks:      <PageSkeleton />,
+    timetable:      <PageSkeleton />,
 };
 
 const getSkeletonFallback = (activeItem: string): React.ReactNode => {
@@ -226,6 +228,14 @@ export const MainContent: React.FC<MainContentProps> = ({
                         );
                     case 'study_partners':
                         return <StudyPartners userProfile={userProfile} onNavigate={onNavigate!} />;
+                    case 'timetable':
+                        return (
+                            <TimetablePage
+                                userProfile={userProfile}
+                                onNavigate={onNavigate}
+                                setCustomHeaderConfig={setCustomHeaderConfig}
+                            />
+                        );
                     default:
                         if (activeItem.startsWith('public_profile_')) {
                             const targetUid = activeItem.replace('public_profile_', '');

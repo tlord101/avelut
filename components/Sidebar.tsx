@@ -30,6 +30,7 @@ export interface SidebarProps {
   onToggleCollapse?: () => void;
   overlayRef?: React.RefObject<HTMLDivElement | null>;
   sidebarRef?: React.RefObject<HTMLElement | null>;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const PINNED_STORAGE_PREFIX = 'avelut_pinned_chats_';
@@ -543,6 +544,23 @@ const SidebarPanel: React.FC<{
 
   const extraNavLinks: NavItem[] = [
     {
+      id: 'timetable',
+      label: 'Calendar',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <rect x="3" y="4" width="18" height="18" rx="3.5" stroke="currentColor" strokeWidth={1.75} />
+          <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+          <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <circle cx="8" cy="14" r="1" fill="currentColor" />
+          <circle cx="12" cy="14" r="1" fill="currentColor" />
+          <circle cx="16" cy="14" r="1" fill="currentColor" />
+          <circle cx="8" cy="18" r="1" fill="currentColor" />
+          <circle cx="12" cy="18" r="1" fill="currentColor" />
+        </svg>
+      ),
+    },
+    {
       id: 'leaderboard',
       label: 'Leaderboard',
       icon: (
@@ -836,6 +854,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   brandTitle = 'Avelut',
   overlayRef,
   sidebarRef,
+  containerRef,
 }) => {
   const handleMobileItemClick = (id: string) => {
     onItemClick(id);
@@ -852,19 +871,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Mobile Drawer */}
       <div
-        className={`fixed inset-0 z-[130] md:hidden ${
-          isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        ref={containerRef as any}
+        className={`fixed inset-0 z-[130] md:hidden transition-opacity duration-200 ${
+          isMobileSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
         <div
           ref={overlayRef as any}
-          className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+          className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
           onClick={onCloseMobileSidebar}
           aria-hidden="true"
         />
         <aside
           ref={sidebarRef as any}
-          className={`absolute top-0 left-0 h-full w-full bg-white dark:bg-black transition-transform duration-300 ease-out ${
+          className={`absolute top-0 left-0 h-full w-[86%] max-w-[340px] bg-white dark:bg-black shadow-2xl border-r border-neutral-200/80 dark:border-white/10 z-10 will-change-transform transition-transform duration-300 ease-out ${
             isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >

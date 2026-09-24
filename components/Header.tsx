@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppUpdateBadge } from './AppUpdateBadge';
+import { useOTAUpdater } from '../hooks/useOTAUpdater';
 import { NotificationDropdown } from './NotificationDropdown';
 import type { UserProfile, Notification as NotificationType } from '../types';
 import { isNative } from '../utils/capacitorUtils';
@@ -60,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   hasActiveChat = false,
   hasMessages = false,
 }) => {
+  const { updateStatus } = useOTAUpdater();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -135,10 +137,11 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* Center Slot: Centered Title or Empty for AI Chat */}
-      <div className="flex-1 flex flex-col items-center justify-center min-w-0 px-2 pointer-events-none [&>*]:pointer-events-auto">
-        <AppUpdateBadge className="mb-0.5" />
-        {isAiPage ? null : title ? (
+      {/* Center Slot: Pill-shaped Update Indicator from Supabase at the middle, or Page Title */}
+      <div className="flex-1 flex items-center justify-center min-w-0 px-2 pointer-events-none [&>*]:pointer-events-auto">
+        {updateStatus !== 'idle' ? (
+          <AppUpdateBadge />
+        ) : isAiPage ? null : title ? (
           title
         ) : hideTitle ? null : React.isValidElement(currentPageLabel) ? (
           currentPageLabel
@@ -157,6 +160,30 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative pointer-events-auto" ref={dropdownRef}>
             {/* Combined Pill Container */}
             <div className="h-10 sm:h-11 rounded-full bg-white dark:bg-[#212124] shadow-md hover:shadow-lg border border-black/5 dark:border-white/10 px-1.5 flex items-center gap-1 shrink-0">
+              {/* Colored Calendar Icon Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  onNavigate?.('timetable');
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-white/10 transition active:scale-95 cursor-pointer text-[#0066FF] dark:text-blue-400"
+                aria-label="Study Timetable"
+                title="Study Timetable"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="4" width="18" height="18" rx="3.5" className="fill-blue-500/15 dark:fill-blue-400/20 stroke-[#0066FF] dark:stroke-blue-400" strokeWidth="2" />
+                  <path d="M3 9.5H21" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" className="dark:stroke-blue-400" />
+                  <line x1="8" y1="2" x2="8" y2="5" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" className="dark:stroke-blue-400" />
+                  <line x1="16" y1="2" x2="16" y2="5" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" className="dark:stroke-blue-400" />
+                  <circle cx="8" cy="14" r="1" className="fill-[#0066FF] dark:fill-blue-400" />
+                  <circle cx="12" cy="14" r="1" className="fill-[#0066FF] dark:fill-blue-400" />
+                  <circle cx="16" cy="14" r="1" className="fill-[#0066FF] dark:fill-blue-400" />
+                  <circle cx="8" cy="18" r="1" className="fill-[#0066FF] dark:fill-blue-400" />
+                  <circle cx="12" cy="18" r="1" className="fill-[#0066FF] dark:fill-blue-400" />
+                </svg>
+              </button>
+
               {/* Primary Action Button: Pencil for AI Chat, Bell for Other Pages */}
               {isAiPage ? (
                 <button

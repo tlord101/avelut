@@ -1,4 +1,4 @@
-import { db, get, ref as dbRef, set } from '@/lib/backend';
+import { supabase } from '../lib/supabaseClient';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createAvelutAI, getResponseText, Type } from '../utils/inference';
 import { useToast } from '../hooks/useToast';
@@ -7,67 +7,49 @@ import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile } from '../types';
 
-interface CalendarModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    userProfile: UserProfile;
-}
-
-interface StudySession {
+export interface StudySession {
     id: string;
     day: string;
     time: string;
     subject: string;
     topic: string;
     activity: string;
+    location?: string;
     complete: boolean;
 }
 
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+interface CalendarModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    userProfile: UserProfile;
+    onSuccess?: () => void;
+}
 
-export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, userProfile }) => {
+export const CalendarModal: React.FC<CalendarModalProps> = ({
+    isOpen,
+    onClose,
+    userProfile,
+    onSuccess,
+}) => {
     const { addToast } = useToast();
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
     const aiModel = getFeatureModel('chat_interaction', appSettings);
     const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
 
-    const [timetable, setTimetable] = useState<StudySession[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [textInput, setTextInput] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
-    
-    // Upload options menu popover
     const [showUploadMenu, setShowUploadMenu] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
     const [uploadedFileBase64, setUploadedFileBase64] = useState('');
-    
+    const [uploadedFilePreview, setUploadedFilePreview] = useState<string | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const uploadMenuRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    useEffect(() => {
-        if (!isOpen) return;
-        const fetchTimetable = async () => {
-            setIsLoading(true);
-            try {
-                const timetableRef = dbRef(db, `users/${userProfile.uid}/timetable`);
-                const snap = await get(timetableRef);
-                if (snap.exists()) {
-                    setTimetable(snap.val() || []);
-                } else {
-                    setTimetable([]);
-                }
-            } catch (err) {
-                console.error("Failed to fetch study timetable:", err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        void fetchTimetable();
-    }, [isOpen, userProfile.uid]);
-
-    // Handle clicks outside upload popup to dismiss
+    // Dismiss upload popup on click outside
     useEffect(() => {
         if (!showUploadMenu) return;
         const handleClickOutside = (e: MouseEvent) => {
@@ -79,15 +61,31 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, u
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showUploadMenu]);
 
-    const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = typeof reader.result === 'string' ? reader.result : '';
-            resolve(result.includes(',') ? result.split(',')[1] : result);
-        };
-        reader.onerror = () => reject(new Error(`Failed to read file: ${reader.error?.message || 'Unknown error'}`));
-        reader.readAsDataURL(file);
-    });
+    // Auto-focus textarea on open
+    useEffect(() => {
+        if (isOpen) {
+            setTimeout(() => {
+                textareaRef.current?.focus();
+            }, 150);
+        } else {
+            setTextInput('');
+            setUploadedFile(null);
+            setUploadedFileBase64('');
+            setUploadedFilePreview(null);
+            setShowUploadMenu(false);
+        }
+    }, [isOpen]);
+
+    const fileToBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = typeof reader.result === 'string' ? reader.result : '';
+                resolve(result.includes(',') ? result.split(',')[1] : result);
+            };
+            reader.onerror = () => reject(new Error(`Failed to read file: ${reader.error?.message || 'Unknown error'}`));
+            reader.readAsDataURL(file);
+        });
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -97,54 +95,61 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ isOpen, onClose, u
             setUploadedFile(file);
             const b64 = await fileToBase64(file);
             setUploadedFileBase64(b64);
-            addToast(`File "${file.name}" attached.`, 'success');
+            if (file.type.startsWith('image/')) {
+                setUploadedFilePreview(URL.createObjectURL(file));
+            } else {
+                setUploadedFilePreview(null);
+            }
+            addToast(`Attached: "${file.name}"`, 'success');
         } catch (err: any) {
-            addToast('Failed to load file: ' + err.message, 'error');
+            addToast('Failed to attach file: ' + err.message, 'error');
         }
         setShowUploadMenu(false);
     };
 
     const handleGenerateTimetable = async () => {
-        if (!textInput.trim() && !uploadedFile) {
-            addToast('Please enter some study goals or upload a syllabus first.', 'info');
+        const trimmed = textInput.trim();
+        if (!trimmed && !uploadedFile) {
+            addToast('Please enter your classes/schedule or attach a timetable photo.', 'info');
             return;
         }
 
         const cost = getFeatureCost('chat_interaction', appSettings);
         const creditCheck = checkAICredits(userProfile, cost, appSettings);
         if (!creditCheck.allowed) {
-            addToast('Insufficient credits. Top up your balance to generate a study timetable.', 'error');
+            addToast('Insufficient credits. Top up your balance to generate your timetable.', 'error');
             return;
         }
 
         setIsGenerating(true);
         try {
             if (!ai) throw new Error('AI client is not configured.');
-            
+
             let fileDataPart: any = null;
             if (uploadedFile && uploadedFileBase64) {
                 fileDataPart = {
                     inlineData: {
-                        mimeType: uploadedFile.type,
-                        data: uploadedFileBase64
-                    }
+                        mimeType: uploadedFile.type || 'image/jpeg',
+                        data: uploadedFileBase64,
+                    },
                 };
             }
 
             const prompt = `You are AVELUT AI Study Scheduler.
-Analyze the user's study goals, text context, and/or uploaded syllabus/timetable file to generate a highly efficient, balanced weekly study timetable.
-Generate exactly 5 to 10 study sessions distributed across the week.
-For each session, provide:
-- day: The day of the week (e.g. "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-- time: A specific time range (e.g. "09:00 AM - 11:00 AM" or "04:00 PM - 06:00 PM")
-- subject: The course or subject name (e.g. "PHILOSOPHY LOGIC")
-- topic: The specific topic to study (e.g. "Deductive Logic and Class Relations")
-- activity: The specific learning activity (e.g. "Read study guide, solve 10 quiz questions, and write a summary")
+Analyze the user's input, class notes, syllabus, or uploaded timetable image/document.
+Extract or generate realistic, structured timetable sessions for their weekly schedule.
+For each class or study session, provide:
+- day: Day of the week ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+- time: Standard time range (e.g. "08:30 AM - 09:15 AM", "09:30 AM - 10:15 AM", "11:15 AM - 12:00 PM", "02:00 PM - 02:45 PM")
+- subject: Course or subject name (e.g. "Physics", "Chemistry Quiz", "Maths Worksheet", "English Literature")
+- topic: Brief class description or specific topic (e.g. "Class 9C - Physics", "Class 10A - Physics", "Lab Session", "Worksheet Discussion")
+- activity: Type of activity (e.g. "Lecture", "Lab", "Quiz", "Discussion", "Practical")
+- location: Classroom or room number (e.g. "Room 204", "Room 205", "Lab 1", "Room 206", "Virtual")
 
-User's study goals:
-${textInput}
+User input:
+${trimmed || 'Generate a standard weekly timetable based on the attached document or image.'}
 
-Return valid JSON as an object with key "sessions" which is an array of objects. Do not write any markdown or text explanations.`;
+Return valid JSON with key "sessions" containing an array of objects.`;
 
             const parts: any[] = [{ text: prompt }];
             if (fileDataPart) parts.push(fileDataPart);
@@ -167,276 +172,290 @@ Return valid JSON as an object with key "sessions" which is an array of objects.
                                             time: { type: Type.STRING },
                                             subject: { type: Type.STRING },
                                             topic: { type: Type.STRING },
-                                            activity: { type: Type.STRING }
+                                            activity: { type: Type.STRING },
+                                            location: { type: Type.STRING },
                                         },
-                                        required: ['day', 'time', 'subject', 'topic', 'activity']
-                                    }
-                                }
+                                        required: ['day', 'time', 'subject', 'topic'],
+                                    },
+                                },
                             },
-                            required: ['sessions']
-                        }
-                    }
+                            required: ['sessions'],
+                        },
+                    },
                 });
 
                 const text = getResponseText(response);
-                if (!text) throw new Error('AI returned an empty timetable.');
+                if (!text) throw new Error('AI returned an empty response.');
                 return JSON.parse(text);
             });
 
             if (result.success && result.data && Array.isArray(result.data.sessions)) {
-                const sessionsWithMeta = result.data.sessions.map((s: any, idx: number) => ({
+                // Fetch existing sessions from Supabase & local storage
+                let existingSessions: StudySession[] = [];
+                try {
+                    const { data } = await supabase
+                        .from('app_kv')
+                        .select('value')
+                        .eq('key', `timetable:${userProfile.uid}`)
+                        .maybeSingle();
+                    if (data && Array.isArray(data.value)) {
+                        existingSessions = data.value;
+                    }
+                } catch (e) {
+                    console.warn('[Supabase] Could not fetch existing sessions:', e);
+                }
+
+                if (existingSessions.length === 0) {
+                    try {
+                        const localRaw = localStorage.getItem(`avelut_timetable_${userProfile.uid}`);
+                        if (localRaw) {
+                            const parsed = JSON.parse(localRaw);
+                            if (Array.isArray(parsed)) existingSessions = parsed;
+                        }
+                    } catch {}
+                }
+
+                const newSessions = result.data.sessions.map((s: any, idx: number) => ({
                     id: `session_${Date.now()}_${idx}`,
-                    ...s,
-                    complete: false
+                    day: s.day || 'Monday',
+                    time: s.time || '09:00 AM - 10:00 AM',
+                    subject: s.subject || 'Course Session',
+                    topic: s.topic || s.subject || 'Lecture',
+                    activity: s.activity || 'Class',
+                    location: s.location || 'Room 101',
+                    complete: false,
                 }));
 
-                await set(dbRef(db, `users/${userProfile.uid}/timetable`), sessionsWithMeta);
+                const mergedSessions = [...newSessions, ...existingSessions.slice(0, 30)];
+
+                // Persist to Supabase app_kv
+                try {
+                    await supabase
+                        .from('app_kv')
+                        .upsert({
+                            key: `timetable:${userProfile.uid}`,
+                            value: mergedSessions,
+                            updated_at: new Date().toISOString(),
+                        }, { onConflict: 'key' });
+                } catch (supaErr) {
+                    console.warn('[Supabase] Failed to save timetable:', supaErr);
+                }
+
+                try {
+                    localStorage.setItem(`avelut_timetable_${userProfile.uid}`, JSON.stringify(mergedSessions));
+                } catch {}
+
                 void deductAICredits(userProfile.uid, cost, 'AI Study Timetable Generation', appSettings);
-                setTimetable(sessionsWithMeta);
-                setTextInput('');
-                setUploadedFile(null);
-                setUploadedFileBase64('');
-                addToast('Study timetable generated successfully!', 'success');
+
+                // Notify any listening timetable views
+                window.dispatchEvent(new CustomEvent('avelut_timetable_updated', { detail: { sessions: mergedSessions } }));
+
+                addToast('Timetable updated successfully!', 'success');
+                onClose();
+                onSuccess?.();
             } else {
-                throw new Error(result.message || 'Generation failed');
+                throw new Error(result.message || 'Could not parse timetable');
             }
         } catch (err: any) {
-            console.error('Failed to generate study schedule:', err);
-            addToast('Timetable generation failed: ' + err.message, 'error');
+            console.error('Failed to generate timetable:', err);
+            addToast('Timetable generation error: ' + (err.message || 'Please try again.'), 'error');
         } finally {
             setIsGenerating(false);
         }
     };
 
-    const toggleSessionComplete = async (sessionId: string) => {
-        const updated = timetable.map(s => {
-            if (s.id === sessionId) {
-                const nextStatus = !s.complete;
-                if (nextStatus) {
-                    addToast('Great job! Keep up the studying!', 'success');
-                }
-                return { ...s, complete: nextStatus };
-            }
-            return s;
-        });
-        setTimetable(updated);
-        try {
-            await set(dbRef(db, `users/${userProfile.uid}/timetable`), updated);
-        } catch (err) {
-            console.error("Failed to update session complete status:", err);
-        }
-    };
-
-    const handleDeleteTimetable = async () => {
-        const confirmed = window.confirm("Are you sure you want to delete your current study timetable?");
-        if (!confirmed) return;
-        try {
-            await set(dbRef(db, `users/${userProfile.uid}/timetable`), null);
-            setTimetable([]);
-            addToast('Study timetable deleted.', 'info');
-        } catch (err) {
-            console.error("Failed to delete timetable:", err);
-        }
-    };
-
     if (!isOpen) return null;
 
-    const groupedSessions = DAYS_OF_WEEK.map(day => ({
-        day,
-        sessions: timetable.filter(s => s.day.toLowerCase() === day.toLowerCase())
-    })).filter(group => group.sessions.length > 0);
-
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-            {/* Hidden Inputs */}
-            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.doc,.docx,.txt" />
-            <input type="file" ref={imageInputRef} onChange={handleFileSelect} className="hidden" accept="image/*" />
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+            {/* Hidden native file inputs */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt"
+            />
+            <input
+                type="file"
+                ref={imageInputRef}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*"
+            />
 
-            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] animate-scale-in">
+            {/* Sleek rounded modal card */}
+            <div className="w-full max-w-lg rounded-[28px] sm:rounded-[32px] bg-white dark:bg-[#18181b] border border-neutral-200/80 dark:border-white/10 shadow-2xl p-5 sm:p-7 relative overflow-visible transition-all animate-scale-in">
                 {/* Header */}
-                <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+                <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <i className="bi bi-calendar3 text-amber-500"></i>
-                            <span>Study Timetable</span>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 dark:bg-blue-400/10 text-[#0066FF] dark:text-blue-400 text-[11px] font-black uppercase tracking-wider mb-1.5">
+                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                            </svg>
+                            <span>Timetable Assistant</span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">
+                            Plan Your Timetable
                         </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">Organize your syllabus and build an interactive AI-powered study schedule.</p>
+                        <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
+                            Describe your classes, or upload a photo or document of your schedule to generate it instantly.
+                        </p>
                     </div>
+
+                    {/* Close button */}
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold transition cursor-pointer"
+                        className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 dark:bg-white/10 dark:hover:bg-white/15 flex items-center justify-center text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition active:scale-95 cursor-pointer shrink-0"
+                        aria-label="Close"
                     >
-                        <i className="bi bi-x-lg text-sm"></i>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
-                {/* Body Content */}
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col lg:flex-row gap-6 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {/* Left: AI Generator Panel */}
-                    <div className="w-full lg:w-[350px] shrink-0 space-y-4">
-                        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2.5">Generate Study Timetable</h3>
-                            
-                            {/* Input Text Area with Attachment button inside */}
-                            <div className="relative border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl shadow-xs focus-within:ring-2 focus-within:ring-amber-400 focus-within:border-amber-400 transition-all">
-                                <textarea
-                                    value={textInput}
-                                    onChange={(e) => setTextInput(e.target.value)}
-                                    placeholder="Describe your learning goals, target exam dates, or describe your schedule..."
-                                    className="w-full min-h-[120px] bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 p-4 outline-none border-none resize-none focus:ring-0"
-                                />
-
-                                {/* Selected File Indicator */}
-                                {uploadedFile && (
-                                    <div className="mx-4 mb-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-800 dark:text-slate-200 font-medium animate-fade-in">
-                                        <span className="truncate max-w-[200px] flex items-center gap-1.5">
-                                            <i className="bi bi-file-earmark-text text-amber-500"></i>
-                                            {uploadedFile.name}
-                                        </span>
-                                        <button onClick={() => { setUploadedFile(null); setUploadedFileBase64(''); }} className="text-rose-500 font-bold hover:text-rose-600 ml-2 cursor-pointer">
-                                            <i className="bi bi-x-lg text-xs"></i>
-                                        </button>
-                                    </div>
+                {/* Input Bar Container */}
+                <div className="relative flex flex-col bg-[#f4f4f5] dark:bg-[#212124] rounded-[24px] border border-neutral-200/70 dark:border-white/5 transition-all focus-within:ring-2 focus-within:ring-[#0066FF]/20 dark:focus-within:ring-[#0066FF]/30 shadow-xs">
+                    {/* Attached file preview chip */}
+                    {uploadedFile && (
+                        <div className="px-3.5 pt-3 pb-1 flex items-center gap-2">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-white/10 shadow-xs text-xs font-medium text-neutral-800 dark:text-neutral-200">
+                                {uploadedFilePreview ? (
+                                    <img
+                                        src={uploadedFilePreview}
+                                        alt="Preview"
+                                        className="w-4 h-4 rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <svg className="w-3.5 h-3.5 text-[#0066FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
                                 )}
-
-                                {/* Attachments button inside the textbox container */}
-                                <div className="flex justify-between items-center p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 rounded-b-2xl">
-                                    <div className="relative" ref={uploadMenuRef}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowUploadMenu(!showUploadMenu)}
-                                            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 shadow-2xs transition cursor-pointer"
-                                            title="Attach Course File or Syllabus"
-                                        >
-                                            <i className="bi bi-paperclip text-base"></i>
-                                        </button>
-
-                                        {/* Upload Options Menu */}
-                                        {showUploadMenu && (
-                                            <div className="absolute left-0 bottom-11 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-50 animate-scale-in">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { imageInputRef.current?.click(); }}
-                                                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-amber-500 hover:text-slate-950 dark:text-slate-200 dark:hover:bg-amber-500 dark:hover:text-slate-950 rounded-xl transition flex items-center gap-2 cursor-pointer"
-                                                >
-                                                    <i className="bi bi-image"></i>
-                                                    <span>Upload Image</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { fileInputRef.current?.click(); }}
-                                                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-amber-500 hover:text-slate-950 dark:text-slate-200 dark:hover:bg-amber-500 dark:hover:text-slate-950 rounded-xl transition flex items-center gap-2 cursor-pointer"
-                                                >
-                                                    <i className="bi bi-file-earmark-pdf"></i>
-                                                    <span>Upload Document</span>
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <button
-                                        onClick={handleGenerateTimetable}
-                                        disabled={isGenerating}
-                                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-xs disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 cursor-pointer"
-                                    >
-                                        {isGenerating ? (
-                                            <>
-                                                <i className="bi bi-arrow-repeat animate-spin text-sm"></i>
-                                                <span>Scheduling...</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <i className="bi bi-magic text-sm"></i>
-                                                <span>Generate</span>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                                <span className="truncate max-w-[190px]">{uploadedFile.name}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setUploadedFile(null);
+                                        setUploadedFileBase64('');
+                                        setUploadedFilePreview(null);
+                                    }}
+                                    className="w-4 h-4 rounded-full bg-neutral-200 dark:bg-white/10 hover:bg-neutral-300 dark:hover:bg-white/20 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition"
+                                >
+                                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
+                    )}
 
-                        {timetable.length > 0 && (
-                            <button
-                                onClick={handleDeleteTimetable}
-                                className="w-full border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider py-3.5 rounded-2xl transition shadow-2xs text-center cursor-pointer"
-                            >
-                                Clear Current Schedule
-                            </button>
-                        )}
+                    {/* Textarea */}
+                    <div className="px-3.5 pt-3 pb-1">
+                        <textarea
+                            ref={textareaRef}
+                            value={textInput}
+                            onChange={(e) => setTextInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    void handleGenerateTimetable();
+                                }
+                            }}
+                            placeholder="Type classes (e.g. Physics Mon/Wed 9AM, Chem Quiz Fri 10:30AM) or upload file..."
+                            rows={3}
+                            className="w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 text-sm sm:text-[15px] resize-none py-0 leading-relaxed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                        />
                     </div>
 
-                    {/* Right: Timetable Schedule Grid Viewer */}
-                    <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-950 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 flex flex-col max-h-full">
-                        <div className="flex items-center justify-between mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Weekly Study Calendar</h3>
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2.5 py-1 rounded-full shadow-2xs">
-                                {timetable.length} Sessions scheduled
-                            </span>
+                    {/* Bottom Controls Row: Plus button & Pill Send button */}
+                    <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+                        {/* Plus button with popup menu */}
+                        <div className="relative" ref={uploadMenuRef}>
+                            <button
+                                type="button"
+                                onClick={() => setShowUploadMenu((prev) => !prev)}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                                    showUploadMenu
+                                        ? 'bg-neutral-200 dark:bg-white/20 text-neutral-900 dark:text-white'
+                                        : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10'
+                                }`}
+                                title="Attach photo or file"
+                                aria-label="Attach photo or file"
+                            >
+                                <svg
+                                    className={`w-5 h-5 transition-transform duration-200 ${showUploadMenu ? 'rotate-45' : ''}`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <path d="M12 5v14M5 12h14" />
+                                </svg>
+                            </button>
+
+                            {/* Small Popup Menu */}
+                            {showUploadMenu && (
+                                <div className="absolute bottom-full left-0 mb-2 w-44 bg-white dark:bg-[#26262a] rounded-2xl shadow-xl border border-neutral-200 dark:border-white/10 overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowUploadMenu(false);
+                                            imageInputRef.current?.click();
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors text-left cursor-pointer"
+                                    >
+                                        <svg className="w-4 h-4 text-[#0066FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                            <circle cx="8.5" cy="8.5" r="1.5" />
+                                            <polyline points="21 15 16 10 5 21" />
+                                        </svg>
+                                        <span>Gallery</span>
+                                    </button>
+                                    <div className="h-px bg-neutral-100 dark:bg-white/5 my-0.5" />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowUploadMenu(false);
+                                            fileInputRef.current?.click();
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors text-left cursor-pointer"
+                                    >
+                                        <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <span>File Uploading</span>
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
-                        {isLoading ? (
-                            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-                                <i className="bi bi-arrow-repeat animate-spin text-3xl text-amber-500 mb-3"></i>
-                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest animate-pulse">Loading Weekly timetable...</p>
-                            </div>
-                        ) : timetable.length === 0 ? (
-                            <div className="flex-1 flex flex-col items-center justify-center py-16 px-6 text-center">
-                                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-2xl text-amber-500 mb-3 shadow-2xs">
-                                    <i className="bi bi-calendar-x"></i>
-                                </div>
-                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">No Study Timetable Found</h4>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                                    Describe your target topics or upload a course syllabus outline inside the scheduler to create a neat weekly schedule.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="flex-1 overflow-y-auto space-y-5 pr-1 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                {groupedSessions.map(group => (
-                                    <div key={group.day} className="space-y-2">
-                                        <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">{group.day}</h4>
-                                        <div className="grid gap-2.5">
-                                            {group.sessions.map(session => (
-                                                <div
-                                                    key={session.id}
-                                                    onClick={() => void toggleSessionComplete(session.id)}
-                                                    className={`flex items-start justify-between p-4 bg-white dark:bg-slate-900 border rounded-2xl shadow-2xs transition cursor-pointer select-none ${
-                                                        session.complete ? 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 opacity-70' : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-400/50'
-                                                    }`}
-                                                >
-                                                    <div className="min-w-0 flex-1 pr-3">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tabular-nums flex items-center gap-1">
-                                                                <i className="bi bi-clock text-[10px]"></i>
-                                                                {session.time}
-                                                            </span>
-                                                            <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 px-2 py-0.5 rounded-lg">
-                                                                {session.subject}
-                                                            </span>
-                                                        </div>
-                                                        <h5 className={`font-bold text-xs text-slate-900 dark:text-white ${session.complete ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
-                                                            {session.topic}
-                                                        </h5>
-                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed mt-1">
-                                                            {session.activity}
-                                                        </p>
-                                                    </div>
-
-                                                    <div className="shrink-0 flex items-center justify-center mt-1">
-                                                        <div className={`w-5 h-5 rounded-full border-2 transition flex items-center justify-center ${
-                                                            session.complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 dark:border-slate-700'
-                                                        }`}>
-                                                            {session.complete && (
-                                                                <i className="bi bi-check text-xs font-bold"></i>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        {/* Pill Shape Send Button */}
+                        <button
+                            type="button"
+                            onClick={handleGenerateTimetable}
+                            disabled={isGenerating || (!textInput.trim() && !uploadedFile)}
+                            className="h-9 px-4 rounded-full bg-[#0066FF] hover:bg-[#0052cc] active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white flex items-center justify-center gap-1.5 font-semibold text-xs sm:text-sm shadow-sm transition-all cursor-pointer"
+                            title="Schedule Timetable"
+                            aria-label="Schedule Timetable"
+                        >
+                            {isGenerating ? (
+                                <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>Scheduling...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Send</span>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5M5 12l7-7 7 7" />
+                                    </svg>
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>

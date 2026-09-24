@@ -7,6 +7,7 @@ import { AIIcon } from './components/icons/AIIcon';
 import { MessengerIcon } from './components/icons/MessengerIcon';
 import { StackIcon } from './components/icons/StackIcon';
 import { GraduationCapIcon } from './components/icons/GraduationCapIcon';
+import { CalendarIcon } from './components/icons/CalendarIcon';
 
 /** Outlined stroke icons for B&W sidebar */
 const NotebooksIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
@@ -69,6 +70,7 @@ const UserOutlineIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-
 export const navigationItems: NavItem[] = [
   { id: 'chat', label: 'New Chat', icon: React.createElement(AIIcon, { className: 'w-5 h-5' }) },
   { id: 'study_guide', label: 'Study Guide', icon: React.createElement(StudyGuideIcon, { className: 'w-5 h-5' }) },
+  { id: 'timetable', label: 'Calendar', icon: React.createElement(CalendarIcon, { className: 'w-5 h-5' }) },
   { id: 'messenger', label: 'Messages', icon: React.createElement(MessengerIcon, { className: 'w-5 h-5' }) },
   { id: 'playground', label: 'Playground', icon: React.createElement(PlaygroundIcon) },
 ];
