@@ -219,68 +219,6 @@ const PWAInstallBannerOverlay: React.FC = () => {
     );
 };
 
-const SharedImagePromptModal: React.FC<{
-    visible: boolean;
-    imagePreview: string | null;
-    onScan: () => void;
-    onCancel: () => void;
-}> = ({ visible, imagePreview, onScan, onCancel }) => {
-    if (!visible) return null;
-
-    return (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-md animate-fade-in">
-            <div className="w-full max-w-md rounded-[32px] border border-white/20 bg-white/95 dark:bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl dark:border-slate-800 transition-all">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-lg">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-sky-600 dark:text-sky-400">Visual Solver</p>
-                            <h3 className="mt-0.5 text-xl font-extrabold text-slate-900 dark:text-white">Image Detected</h3>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-100/70 dark:border-slate-700/80 dark:bg-slate-800/80 shadow-inner">
-                    {imagePreview ? (
-                        <img src={imagePreview} alt="Detected problem" className="h-56 w-full object-contain p-2" />
-                    ) : (
-                        <div className="flex h-56 items-center justify-center text-sm font-semibold text-slate-500">Preview loading...</div>
-                    )}
-                </div>
-
-                <p className="mt-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    A problem image was found in your clipboard or shared to Avelut. Scan it now to get a full step-by-step mathematical solution.
-                </p>
-
-                <div className="mt-6 flex flex-col-reverse sm:flex-row gap-3">
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        className="flex-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-3.5 text-sm font-bold text-slate-600 dark:text-slate-300 transition-all hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95"
-                    >
-                        Dismiss
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onScan}
-                        className="flex-[1.5] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 px-5 py-3.5 text-sm font-black uppercase tracking-wider text-white shadow-lg transition-all hover:from-sky-500 hover:to-indigo-500 active:scale-95"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        <span>Scan Image</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const AppUpdateDropModal: React.FC<{
     visible: boolean;
     title: string;
@@ -340,13 +278,13 @@ const normalizeRouteSegment = (segment: string): string => {
     if (s === 'dashboard') return 'chat';
     if (s === 'studyguide') return 'study_guide';
     if (s === 'notebooks') return 'study_guide';
+    if (s === 'visual_solver' || s === 'visualsolver') return 'chat';
     return s;
 };
 
 const ALLOWED_ROUTE_ITEMS = new Set([
     'leaderboard',
     'study_guide',
-    'visual_solver',
     'chat',
     'messenger',
     'history',
@@ -363,7 +301,7 @@ const ALLOWED_ROUTE_ITEMS = new Set([
 ]);
 
 const resolveActiveItemFromPath = (pathname: string): string => {
-    if (pathname === '/' || pathname === '/chat' || pathname === '/avelut-ai' || pathname === '/dashboard') return 'chat';
+    if (pathname === '/' || pathname === '/chat' || pathname === '/avelut-ai' || pathname === '/dashboard' || pathname === '/visual-solver' || pathname === '/visual_solver') return 'chat';
     const rawSegment = pathname.substring(1).split('/')[0];
     if (!rawSegment) return 'chat';
     let decodedSegment = rawSegment;
@@ -550,9 +488,6 @@ const App: React.FC = () => {
 
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [showOnlineRestored, setShowOnlineRestored] = useState(false);
-    const [showSharedImagePrompt, setShowSharedImagePrompt] = useState(false);
-    const [sharedImagePreview, setSharedImagePreview] = useState<string | null>(null);
-    const [pendingSharedImage, setPendingSharedImage] = useState<string | null>(null);
 
     useEffect(() => {
         const handleOnline = () => {
@@ -604,74 +539,45 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleSharedImageScan = useCallback(() => {
-        const imageToScan = pendingSharedImage;
-        setShowSharedImagePrompt(false);
-        setPendingSharedImage(null);
-        setSharedImagePreview(null);
-
-        if (imageToScan) {
-            localStorage.setItem('shared_image_intent', imageToScan);
-            localStorage.setItem('auto_scan_shared_image', 'true');
-        }
-
-        setActiveItem('visual_solver');
-        window.dispatchEvent(new CustomEvent('visual_solver_trigger_scan', { detail: { image: imageToScan } }));
-    }, [pendingSharedImage, setActiveItem]);
-
     const dismissedClipboardSigsRef = useRef<Set<string>>(new Set());
     const currentClipboardSigRef = useRef<string | null>(null);
 
-    const handleSharedImageCancel = useCallback(() => {
-        if (currentClipboardSigRef.current) {
-            dismissedClipboardSigsRef.current.add(currentClipboardSigRef.current);
-            try {
-                sessionStorage.setItem(`dismissed_clipboard_${currentClipboardSigRef.current}`, 'true');
-            } catch {}
-        }
-        setShowSharedImagePrompt(false);
-        setPendingSharedImage(null);
-        setSharedImagePreview(null);
-    }, []);
-
-    const loadSharedImagePreview = useCallback(async (imageUri: string) => {
+    const resolveAndAttachImageToChat = useCallback(async (imageUri: string) => {
         if (!imageUri) return;
         try {
+            let dataUrl = imageUri;
             if (imageUri.startsWith('content://') || imageUri.startsWith('file://')) {
                 if (Capacitor.isNativePlatform()) {
-                    setSharedImagePreview(Capacitor.convertFileSrc(imageUri));
+                    dataUrl = Capacitor.convertFileSrc(imageUri);
                 } else {
                     const normalized = imageUri.replace(/^file:\/\//, '').replace(/^content:\/\//, '');
                     const fileData = await Filesystem.readFile({ path: normalized });
-                    setSharedImagePreview(`data:image/jpeg;base64,${fileData.data}`);
+                    dataUrl = `data:image/jpeg;base64,${fileData.data}`;
                 }
-            } else if (imageUri.startsWith('data:image') || imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
-                setSharedImagePreview(imageUri);
-            } else {
-                setSharedImagePreview(null);
+            }
+            if (dataUrl) {
+                localStorage.setItem('shared_chat_pending_image', dataUrl);
+                setActiveItem('chat');
+                window.dispatchEvent(new CustomEvent('avelut_attach_chat_image', { detail: { image: dataUrl } }));
             }
         } catch (error) {
-            console.warn('Unable to create shared image preview:', error);
-            setSharedImagePreview(null);
+            console.warn('Unable to resolve shared image for chat:', error);
         }
-    }, []);
+    }, [setActiveItem]);
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {
             const intentListener = SendIntent.addListener('appSendActionIntent', async (data: any) => {
                 if (data && data.extras && data.extras['android.intent.extra.STREAM']) {
                     const streamUri = data.extras['android.intent.extra.STREAM'];
-                    localStorage.setItem('shared_image_intent', streamUri);
-                    setPendingSharedImage(streamUri);
-                    await loadSharedImagePreview(streamUri);
-                    setShowSharedImagePrompt(true);
+                    await resolveAndAttachImageToChat(streamUri);
                 }
             });
             return () => {
                 intentListener.then((handle: any) => handle.remove()).catch(() => {});
             };
         }
-    }, [loadSharedImagePreview]);
+    }, [resolveAndAttachImageToChat]);
 
     useEffect(() => {
         let mounted = true;
@@ -691,12 +597,16 @@ const App: React.FC = () => {
                             return;
                         }
                         currentClipboardSigRef.current = sig;
+                        dismissedClipboardSigsRef.current.add(sig);
+                        try {
+                            sessionStorage.setItem(`dismissed_clipboard_${sig}`, 'true');
+                        } catch {}
                         const reader = new FileReader();
                         reader.onload = () => {
                             const dataUrl = reader.result as string;
-                            setPendingSharedImage(dataUrl);
-                            setSharedImagePreview(dataUrl);
-                            setShowSharedImagePrompt(true);
+                            if (dataUrl) {
+                                void resolveAndAttachImageToChat(dataUrl);
+                            }
                         };
                         reader.readAsDataURL(blob);
                         return;
@@ -709,7 +619,7 @@ const App: React.FC = () => {
         const onFocus = () => { void tryReadClipboardImage(); };
         window.addEventListener('focus', onFocus);
         return () => { mounted = false; window.removeEventListener('focus', onFocus); };
-    }, []);
+    }, [resolveAndAttachImageToChat]);
 
     const globalTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -1589,7 +1499,6 @@ const App: React.FC = () => {
       { target: 'body', title: '👋 Welcome to AVELUT!', content: "Let's take a quick tour of your new learning dashboard.", placement: 'center' },
       { target: '[data-tour-id="dashboard-content"]', title: '📊 Your Dashboard', content: 'View your progress, streaks, and personalized lessons.', placement: 'bottom' },
       { target: isMobile ? '[data-tour-id="bottomnav-study_guide"]' : '[data-tour-id="sidebar-study_guide"]', title: '📚 Notebooks', content: 'Access your personal notebooks and study materials anytime.', placement: isMobile ? 'top' : 'right' },
-      { target: isMobile ? '[data-tour-id="bottomnav-visual_solver"]' : '[data-tour-id="sidebar-visual_solver"]', title: '📸 Visual Solver', content: 'Scan any problem and get instant or detailed tutorials.', placement: isMobile ? 'top' : 'right' },
       { target: isMobile ? '[data-tour-id="bottomnav-messenger"]' : '[data-tour-id="header-messenger"]', title: '🤝 Messenger', content: 'Connect with other learners and chat privately.', placement: isMobile ? 'top' : 'bottom' },
       ...(isMobile ? [{ target: '[data-tour-id="mobile-menu-button"]', title: '⚙️ Main Menu', content: 'Access your settings, help, and logout options from here.', placement: 'bottom' as const }] : [{ target: '[data-tour-id="sidebar-settings"]', title: '⚙️ Settings', content: 'Update your info and view your achievements.', placement: 'top' as const }]),
       { target: 'body', title: "🎉 You're all set!", content: 'Enjoy exploring your learning journey. Tap "Finish" to start!', placement: 'center' },
@@ -1819,12 +1728,6 @@ const App: React.FC = () => {
             />
 
             <PWAInstallBannerOverlay />
-            <SharedImagePromptModal
-                visible={showSharedImagePrompt}
-                imagePreview={sharedImagePreview}
-                onScan={handleSharedImageScan}
-                onCancel={handleSharedImageCancel}
-            />
 
             <FloatingMenuButton
                 onClick={handleToggleMenu}

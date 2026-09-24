@@ -35,7 +35,6 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
         { value: 'messenger', label: 'Messenger' },
         { value: 'study_partners', label: 'Study Partners' },
         { value: 'leaderboard', label: 'Leaderboard' },
-        { value: 'visual_solver', label: 'Visual Solver' },
         { value: 'settings', label: 'Settings' },
     ];
 

@@ -22,10 +22,12 @@ export const timeAgo = (timestamp: number): string => {
 const normalizeRouteTarget = (route: string): string => {
   const trimmed = route.trim();
   if (!trimmed) return '';
-  return trimmed
+  const cleaned = trimmed
     .replace(/^\//, '')
     .replace(/\?.*$/, '')
     .replace(/-/g, '_');
+  if (cleaned === 'visual_solver') return 'chat';
+  return cleaned;
 };
 
 const isKnownRouteTarget = (route: string): boolean => {
@@ -35,7 +37,6 @@ const isKnownRouteTarget = (route: string): boolean => {
     'messenger',
     'study_partners',
     'leaderboard',
-    'visual_solver',
     'settings',
     'notifications',
   ]).has(route);

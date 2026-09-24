@@ -41,7 +41,7 @@ const CHAT_MODES: ChatModeOption[] = [
   { id: 'exam', label: 'Exam Mode', description: 'Practice exam question style' },
 ];
 
-const CollapsibleUserMessage: React.FC<{ text: string }> = ({ text }) => {
+const CollapsibleUserMessage: React.FC<{ text?: string }> = ({ text = '' }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -403,47 +403,52 @@ const GrokChatComposer: React.FC<{
             )}
           </div>
 
-          {/* Right: Mic + Action button */}
-          <div className="flex items-center gap-2">
+          {/* Right: Pill-shaped Action Button for Speaker and Send states */}
+          <div className="flex items-center">
             <button
               type="button"
-              onClick={onToggleVoice}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                voiceStatus !== 'idle'
-                  ? 'text-red-500 bg-red-500/10 dark:bg-red-500/20 animate-pulse'
-                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10'
-              }`}
-              title="Voice input"
-              aria-label="Voice input"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={hasText ? onSend : onToggleVoice}
+              onClick={isLoading ? undefined : (voiceStatus === 'listening' ? onToggleVoice : (hasText ? onSend : onToggleVoice))}
               disabled={isLoading}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 text-white flex items-center justify-center shrink-0 shadow-sm transition-all"
-              title={hasText ? 'Send message' : 'Voice mode'}
-              aria-label={hasText ? 'Send message' : 'Voice mode'}
+              className={`h-9 sm:h-10 px-4 rounded-full flex items-center justify-center gap-1.5 shrink-0 shadow-sm transition-all duration-200 active:scale-95 font-medium text-xs sm:text-sm select-none ${
+                isLoading
+                  ? 'bg-[#2563EB]/70 text-white cursor-not-allowed'
+                  : voiceStatus === 'listening'
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                  : hasText
+                  ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white'
+                  : 'bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900'
+              }`}
+              title={isLoading ? 'Thinking...' : voiceStatus === 'listening' ? 'Stop listening' : hasText ? 'Send message' : 'Speak to dictate'}
+              aria-label={isLoading ? 'Thinking...' : voiceStatus === 'listening' ? 'Stop listening' : hasText ? 'Send message' : 'Speak to dictate'}
             >
               {isLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="hidden sm:inline">Thinking</span>
+                </>
+              ) : voiceStatus === 'listening' ? (
+                <>
+                  <span className="flex items-center gap-0.5 h-3.5">
+                    <span className="w-1 h-3 bg-white rounded-full animate-pulse" />
+                    <span className="w-1 h-4 bg-white rounded-full animate-pulse" />
+                    <span className="w-1 h-2 bg-white rounded-full animate-pulse" />
+                  </span>
+                  <span>Listening...</span>
+                </>
               ) : hasText ? (
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5M5 12l7-7 7 7" />
-                </svg>
+                <>
+                  <span>Send</span>
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                </>
               ) : (
-                <svg className={`w-5 h-5 fill-current ${voiceStatus === 'listening' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24">
-                  <rect x="5.5" y="9" width="2" height="6" rx="1" />
-                  <rect x="9.5" y="6" width="2" height="12" rx="1" />
-                  <rect x="13.5" y="4" width="2" height="16" rx="1" />
-                  <rect x="17.5" y="8" width="2" height="8" rx="1" />
-                </svg>
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.757 3.63 8.25 4.51 8.25H6.75z" />
+                  </svg>
+                  <span>Voice</span>
+                </>
               )}
             </button>
           </div>
@@ -506,6 +511,25 @@ export const Chat: React.FC<ChatProps> = ({
       setActiveConversationId(propActiveConversationId);
     }
   }, [propActiveConversationId]);
+
+  useEffect(() => {
+    const pendingImg = localStorage.getItem('shared_chat_pending_image');
+    if (pendingImg) {
+      setAttachedImage(pendingImg);
+      localStorage.removeItem('shared_chat_pending_image');
+    }
+
+    const handleAttach = (e: any) => {
+      if (e.detail?.image) {
+        setAttachedImage(e.detail.image);
+        localStorage.removeItem('shared_chat_pending_image');
+      }
+    };
+    window.addEventListener('avelut_attach_chat_image', handleAttach);
+    return () => {
+      window.removeEventListener('avelut_attach_chat_image', handleAttach);
+    };
+  }, []);
 
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null);
@@ -726,7 +750,97 @@ export const Chat: React.FC<ChatProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  const recognitionRef = useRef<any>(null);
+
+  const stopVoiceRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    setVoiceStatus('idle');
+  }, []);
+
+  const startVoiceRecognition = useCallback(() => {
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      addToast('Voice recognition is not supported on this browser.', 'warning');
+      return;
+    }
+
+    try {
+      stopVoiceRecognition();
+
+      const rec = new SpeechRecognitionClass();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+
+      const initialText = input.trim();
+      let accumulatedFinal = '';
+
+      rec.onstart = () => {
+        setVoiceStatus('listening');
+      };
+
+      rec.onresult = (event: any) => {
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const piece = event.results[i][0]?.transcript || '';
+          if (event.results[i].isFinal) {
+            accumulatedFinal = `${accumulatedFinal} ${piece}`.trim();
+          } else {
+            interimText = `${interimText} ${piece}`.trim();
+          }
+        }
+        const spoken = `${accumulatedFinal} ${interimText}`.trim();
+        if (spoken) {
+          const newContent = initialText ? `${initialText} ${spoken}` : spoken;
+          setInput(newContent);
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        if (event.error !== 'no-speech') {
+          addToast(event.error === 'not-allowed' ? 'Microphone permission denied.' : 'Voice recognition ended.', 'info');
+        }
+        setVoiceStatus('idle');
+      };
+
+      rec.onend = () => {
+        setVoiceStatus('idle');
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+    } catch (e: any) {
+      console.warn('SpeechRecognition start failed:', e);
+      addToast('Could not start microphone.', 'error');
+      setVoiceStatus('idle');
+    }
+  }, [input, addToast, stopVoiceRecognition]);
+
+  const toggleVoice = useCallback(() => {
+    if (voiceStatus === 'listening') {
+      stopVoiceRecognition();
+    } else {
+      startVoiceRecognition();
+    }
+  }, [voiceStatus, startVoiceRecognition, stopVoiceRecognition]);
+
+  useEffect(() => {
+    return () => {
+      stopVoiceRecognition();
+    };
+  }, [stopVoiceRecognition]);
+
   const handleSendMessage = async (customText?: string) => {
+    stopVoiceRecognition();
     const textToSend = customText || input;
     if ((!textToSend.trim() && !attachedImage) || isLoading) return;
 
@@ -738,10 +852,9 @@ export const Chat: React.FC<ChatProps> = ({
     }
 
     const currentImage = attachedImage;
-    let currentInput = textToSend;
-    if (currentImage && !currentInput.includes('[Attached Image]')) {
-      currentInput = currentInput ? `${currentInput}\n\n[Attached Image]` : '[Attached Image]';
-    }
+    const cleanUserText = textToSend.replace(/\[Attached Image\]/g, '').trim();
+    const promptText = cleanUserText || (currentImage ? 'Please analyze this image, solve any problems shown, and explain it step by step in detail.' : '');
+    const displayInput = cleanUserText;
 
     setInput('');
     setAttachedImage(null);
@@ -754,7 +867,7 @@ export const Chat: React.FC<ChatProps> = ({
       const isNewConvo = !currentConvoId;
       if (!currentConvoId) {
         currentConvoId = generateLocalId('conv');
-        const initialTitle = currentInput.slice(0, 30);
+        const initialTitle = (cleanUserText || (currentImage ? 'Image Analysis' : 'New Chat')).slice(0, 30);
         void saveLocalConversation({
           id: currentConvoId,
           user_id: userProfile.uid,
@@ -782,14 +895,14 @@ export const Chat: React.FC<ChatProps> = ({
               contents: [{
                 role: 'user',
                 parts: [{
-                  text: `Summarize the following user prompt into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser prompt: "${currentInput.slice(0, 300)}"`
+                  text: `Summarize the following user prompt into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser prompt: "${promptText.slice(0, 300)}"`
                 }]
               }],
               config: { temperature: 0.3 }
             });
             const generatedTitle = getResponseText(titleResult).trim().replace(/^["']|["']$/g, '');
             if (generatedTitle && generatedTitle.length > 0) {
-              void renameLocalConversation(convoIdForTitle, generatedTitle);
+              void renameLocalConversation(convoIdForTitle, generatedTitle, userProfile.uid);
               void update(dbRef(db, `chat_conversations/${userProfile.uid}/${convoIdForTitle}`), { title: generatedTitle });
             }
           } catch (e) {
@@ -804,7 +917,8 @@ export const Chat: React.FC<ChatProps> = ({
         conversation_id: currentConvoId,
         user_id: userProfile.uid,
         sender: 'user',
-        text: currentInput,
+        text: displayInput,
+        image_url: currentImage || undefined,
         timestamp: now,
       });
 
@@ -812,7 +926,7 @@ export const Chat: React.FC<ChatProps> = ({
 
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== aiMsgId),
-        { id: userMsgId, text: currentInput, sender: 'user', timestamp: now },
+        { id: userMsgId, text: displayInput, image_url: currentImage || undefined, sender: 'user', timestamp: now },
       ]);
 
       const updateOrAppendAiMessage = (text: string, reasoningText?: string) => {
@@ -829,8 +943,9 @@ export const Chat: React.FC<ChatProps> = ({
       const messagesRef = dbRef(db, `chat_messages/${currentConvoId}`);
       try {
         push(messagesRef, {
-          text: currentInput,
+          text: displayInput,
           sender: 'user',
+          image_url: currentImage || null,
           timestamp: serverTimestamp(),
         });
       } catch (e) {
@@ -852,6 +967,7 @@ export const Chat: React.FC<ChatProps> = ({
         '  * Highlight critical terms with ==this== or <mark>this</mark>',
         '  * Use bullet lists and numbered steps for readability',
         '  * Use code fences with syntax highlighting for code/examples',
+        '- When given an image, thoroughly inspect and solve any mathematical problems, diagrams, text, or questions shown.',
       ].join('\n');
 
       let modeInstruction = '';
@@ -865,17 +981,58 @@ export const Chat: React.FC<ChatProps> = ({
 
       const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}`;
 
+      // Build multimodal parts for the current user turn
+      const userParts: any[] = [];
+      if (currentImage) {
+        let mimeType = 'image/jpeg';
+        let base64Data = currentImage;
+        const dataUrlMatch = currentImage.match(/^data:([^;]+);base64,(.+)$/);
+        if (dataUrlMatch) {
+          mimeType = dataUrlMatch[1];
+          base64Data = dataUrlMatch[2];
+        } else if (currentImage.startsWith('data:')) {
+          const parts = currentImage.split(',');
+          base64Data = parts[1] || '';
+          const mimeMatch = parts[0].match(/:(.*?);/);
+          if (mimeMatch) mimeType = mimeMatch[1];
+        }
+        userParts.push({
+          inlineData: {
+            mimeType,
+            data: base64Data,
+          },
+        });
+      }
+      userParts.push({ text: promptText });
+
       const historyContents = messages
-        .filter((m) => m.text && m.text.trim())
+        .filter((m) => (m.text && m.text.trim()) || m.image_url)
         .slice(-10)
-        .map((m) => ({
-          role: m.sender === 'user' ? 'user' : 'assistant',
-          parts: [{ text: m.text }],
-        }));
+        .map((m) => {
+          const parts: any[] = [];
+          if (m.image_url) {
+            const dataUrlMatch = m.image_url.match(/^data:([^;]+);base64,(.+)$/);
+            if (dataUrlMatch) {
+              parts.push({
+                inlineData: {
+                  mimeType: dataUrlMatch[1],
+                  data: dataUrlMatch[2],
+                },
+              });
+            }
+          }
+          if (m.text && m.text.trim()) {
+            parts.push({ text: m.text });
+          }
+          return {
+            role: m.sender === 'user' ? 'user' : 'assistant',
+            parts,
+          };
+        });
 
       historyContents.push({
         role: 'user',
-        parts: [{ text: currentInput }],
+        parts: userParts,
       });
 
       const aiParams = {
@@ -887,7 +1044,7 @@ export const Chat: React.FC<ChatProps> = ({
         },
       };
 
-      const cachedReply = await getCachedAIResponse(currentInput, aiModel, selectedMode);
+      const cachedReply = currentImage ? null : await getCachedAIResponse(promptText, aiModel, selectedMode);
       let responseText = cachedReply || '';
       let reasoningText = '';
 
@@ -936,8 +1093,8 @@ export const Chat: React.FC<ChatProps> = ({
           updateOrAppendAiMessage(responseText, reasoningText);
         }
 
-        if (responseText) {
-          void setCachedAIResponse(currentInput, aiModel, selectedMode, responseText);
+        if (responseText && !currentImage) {
+          void setCachedAIResponse(promptText, aiModel, selectedMode, responseText);
         }
       }
 
@@ -972,15 +1129,6 @@ export const Chat: React.FC<ChatProps> = ({
       setMessages((prev) => prev.filter((m) => m.text !== ''));
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const toggleVoice = () => {
-    if (voiceStatus === 'idle') {
-      setVoiceStatus('listening');
-      setTimeout(() => setVoiceStatus('idle'), 4000);
-    } else {
-      setVoiceStatus('idle');
     }
   };
 
@@ -1043,7 +1191,16 @@ export const Chat: React.FC<ChatProps> = ({
               >
                 {msg.sender === 'user' ? (
                   <div className="max-w-[85%] sm:max-w-[75%] flex flex-col items-end">
-                    <CollapsibleUserMessage text={msg.text} />
+                    {msg.image_url && (
+                      <div className="mb-2 overflow-hidden rounded-[20px] border border-neutral-200/80 dark:border-white/10 shadow-sm max-w-sm">
+                        <img
+                          src={msg.image_url}
+                          alt="Uploaded attachment"
+                          className="w-full max-h-72 object-contain bg-neutral-100 dark:bg-neutral-900 rounded-[20px]"
+                        />
+                      </div>
+                    )}
+                    {msg.text ? <CollapsibleUserMessage text={msg.text} /> : null}
                   </div>
                 ) : (
                   <div className="w-full bg-transparent border-0 shadow-none p-0 min-w-0">

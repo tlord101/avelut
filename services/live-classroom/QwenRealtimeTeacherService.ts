@@ -580,14 +580,13 @@ export class QwenRealtimeTeacherService {
           silence_duration_ms: 800,
         },
         tools: this.getTools(),
-        tool_choice: 'auto',
       },
     });
   }
 
   /**
    * The single board tool exposed to the model.
-   * Uses Alibaba's documented function calling schema.
+   * Uses Alibaba's documented function calling schema (nested function object).
    */
   private buildBoardActionTool() {
     const parameters = {
@@ -628,9 +627,11 @@ export class QwenRealtimeTeacherService {
 
     return {
       type: 'function',
-      name: 'board_action',
-      description,
-      parameters,
+      function: {
+        name: 'board_action',
+        description,
+        parameters,
+      },
     };
   }
 
@@ -645,24 +646,26 @@ export class QwenRealtimeTeacherService {
   private buildDrawMermaidTool() {
     return {
       type: 'function',
-      name: 'draw_mermaid',
-      description:
-        'Render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Prefer this for concept ' +
-        'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-        'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-        'state transitions, and component interactions. Choose LR/TB or another ' +
-        'supported Mermaid layout according to the relationship. Keep labels concise and educational.',
-      parameters: {
-        type: 'object',
-        properties: {
-          mermaid_code: {
-            type: 'string',
-            description:
-              'Raw valid Mermaid source code. Do not include markdown fences. ' +
-              'Keep labels concise and educational.',
+      function: {
+        name: 'draw_mermaid',
+        description:
+          'Render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Prefer this for concept ' +
+          'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
+          'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
+          'state transitions, and component interactions. Choose LR/TB or another ' +
+          'supported Mermaid layout according to the relationship. Keep labels concise and educational.',
+        parameters: {
+          type: 'object',
+          properties: {
+            mermaid_code: {
+              type: 'string',
+              description:
+                'Raw valid Mermaid source code. Do not include markdown fences. ' +
+                'Keep labels concise and educational.',
+            },
           },
+          required: ['mermaid_code'],
         },
-        required: ['mermaid_code'],
       },
     };
   }
@@ -670,17 +673,19 @@ export class QwenRealtimeTeacherService {
   private buildIllustrateObjectTool() {
     return {
       type: 'function',
-      name: 'illustrate_object',
-      description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process inboard directly onto the visual whiteboard canvas.',
-      parameters: {
-        type: 'object',
-        properties: {
-          object_description: {
-            type: 'string',
-            description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
+      function: {
+        name: 'illustrate_object',
+        description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process inboard directly onto the visual whiteboard canvas.',
+        parameters: {
+          type: 'object',
+          properties: {
+            object_description: {
+              type: 'string',
+              description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
+            },
           },
+          required: ['object_description'],
         },
-        required: ['object_description'],
       },
     };
   }
