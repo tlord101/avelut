@@ -19,6 +19,7 @@ import {
     normalizeTopicId,
     sanitizeTopicMetadata,
     normalizeCourse,
+    mergeTopics,
 } from './studyguide/studyGuideUtils';
 
 async function fileToBase64(file: File): Promise<string> {
@@ -394,6 +395,35 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
     const [isSavingManual, setIsSavingManual] = useState(false);
     const [isManualMode, setIsManualMode] = useState(false);
 
+    // Add Course Modal State
+    const [showAddCourseModal, setShowAddCourseModal] = useState(false);
+    const [addCourseTab, setAddCourseTab] = useState<'pdf' | 'manual'>('manual');
+    const [manualCourseForm, setManualCourseForm] = useState({
+        code: '',
+        name: '',
+        level: userProfile?.level || '100lvl',
+        semester: 'first' as 'first' | 'second',
+        description: '',
+    });
+    const [isSavingCourseForm, setIsSavingCourseForm] = useState(false);
+
+    // Add Topic Modal State
+    const [showAddTopicModal, setShowAddTopicModal] = useState(false);
+    const [targetCourseForTopic, setTargetCourseForTopic] = useState<Course | null>(null);
+    const [addTopicTab, setAddTopicTab] = useState<'doc' | 'manual'>('doc');
+    const [docUploadFile, setDocUploadFile] = useState<File | null>(null);
+    const [isExtractingTopics, setIsExtractingTopics] = useState(false);
+    const [extractedTopics, setExtractedTopics] = useState<Array<Topic & { selected: boolean }>>([]);
+    const [isSavingExtractedTopics, setIsSavingExtractedTopics] = useState(false);
+    const [manualTopicForm, setManualTopicForm] = useState({
+        topic_name: '',
+        topic_context: '',
+        start_point: '',
+        end_point: '',
+    });
+    const [isGeneratingContext, setIsGeneratingContext] = useState(false);
+    const [isSavingManualTopic, setIsSavingManualTopic] = useState(false);
+
     // Load pinned topics
     useEffect(() => {
         if (!userProfile) return;
@@ -505,10 +535,16 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 department_id: userProfile.department_id,
                 school_id: userProfile.school_id,
             });
+            setCourses(prev => {
+                const next = [courseData as Course, ...prev.filter(c => c.course_id !== courseId)];
+                writeCachedJson(`avelut_courses_${userProfile.uid}`, next);
+                return next;
+            });
             void deductAICredits(userProfile.uid, cost, 'Study Guide Manual Course Generation', appSettings);
             addToast(`Added ${courseData.course_code} successfully!`, 'success');
             setManualCourseCode('');
             setIsManualMode(false);
+            setShowAddCourseModal(false);
         } catch (err: any) {
             console.error("Error saving manual course:", err);
             addToast(err.message || "Failed to save course", "error");
@@ -601,6 +637,33 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                         });
                     })
                 );
+
+                const newExtractedCourses: Course[] = data.courses.map((c: any) => {
+                    const courseId = c.course_code.trim().toLowerCase().replace(/\s+/g, '');
+                    return {
+                        course_id: courseId,
+                        course_name: c.course_name.trim(),
+                        course_code: c.course_code.trim().toUpperCase(),
+                        level: userProfile.level,
+                        semester: filter.semester === 'all' ? 'first' : filter.semester,
+                        topics: [],
+                    };
+                });
+                setCourses(prev => {
+                    const merged = [...prev];
+                    newExtractedCourses.forEach(nc => {
+                        const idx = merged.findIndex(x => x.course_id === nc.course_id);
+                        if (idx >= 0) {
+                            merged[idx] = { ...merged[idx], ...nc };
+                        } else {
+                            merged.unshift(nc);
+                        }
+                    });
+                    writeCachedJson(`avelut_courses_${userProfile.uid}`, merged);
+                    return merged;
+                });
+                setShowAddCourseModal(false);
+
                 void deductAICredits(userProfile.uid, cost, 'Study Guide PDF Extraction', appSettings);
                 addToast(`Successfully extracted and saved ${data.courses.length} courses!`, 'success');
             } else {
@@ -613,6 +676,421 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         } finally {
             setIsExtractingCourses(false);
             if (e.target) e.target.value = '';
+        }
+    };
+
+    const handleSaveManualCourseForm = async () => {
+        const code = manualCourseForm.code.trim().toUpperCase();
+        if (!code) {
+            addToast('Please enter a course code (e.g., MTH101)', 'error');
+            return;
+        }
+        if (!userProfile.school_id || !userProfile.college_id || !userProfile.department_id || !userProfile.level) {
+            addToast('Please complete your profile (School, College, Department, Level) first.', 'error');
+            return;
+        }
+
+        setIsSavingCourseForm(true);
+        try {
+            let courseName = manualCourseForm.name.trim();
+            let description = manualCourseForm.description.trim();
+
+            if (!courseName) {
+                try {
+                    const ai = createAvelutAI(appSettings, userProfile);
+                    if (ai) {
+                        const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+                        const prompt = `Based on this course code: "${code}", generate a standard course name and 1-line description. Return JSON with 'course_name' and 'description'.`;
+                        const res = await attemptApiCall(() => ai.models.generateContent({
+                            model: aiModel,
+                            contents: prompt,
+                            config: {
+                                responseMimeType: 'application/json',
+                                responseSchema: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        course_name: { type: Type.STRING },
+                                        description: { type: Type.STRING }
+                                    },
+                                    required: ['course_name', 'description']
+                                }
+                            }
+                        }));
+                        if (res.success && res.data) {
+                            const txt = getResponseText(res.data);
+                            if (txt) {
+                                const parsed = JSON.parse(txt);
+                                if (parsed.course_name) courseName = parsed.course_name.trim();
+                                if (parsed.description) description = parsed.description.trim();
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('AI course name generation skipped:', e);
+                }
+            }
+
+            if (!courseName) courseName = code;
+            if (!description) description = `${code} course syllabus for ${userProfile.department_id}`;
+
+            const courseId = code.toLowerCase().replace(/\s+/g, '');
+            const courseLevel = manualCourseForm.level || userProfile.level || '100lvl';
+            const courseSemester = manualCourseForm.semester;
+
+            const courseData = {
+                course_id: courseId,
+                course_name: courseName,
+                course_code: code,
+                description,
+                level: courseLevel,
+                semester: courseSemester,
+                course_status: 'active',
+                topics: [],
+            };
+
+            const updates: any = {};
+            const deptPath = `${userProfile.school_id}/colleges/${userProfile.college_id}/departments/${userProfile.department_id}`;
+            updates[`schools_data/${deptPath}/levels/${courseLevel}/courses/${courseId}`] = courseData;
+            updates[`departments_data/${userProfile.department_id}/course_list/${courseId}`] = courseData;
+            await update(dbRef(db), updates);
+
+            await supabaseDataService.upsertCourse({
+                course_id: courseId,
+                course_code: code,
+                course_name: courseName,
+                title: courseName,
+                code: code,
+                level: courseLevel,
+                semester: courseSemester === 'second' ? 2 : 1,
+                description,
+                department_id: userProfile.department_id,
+                school_id: userProfile.school_id,
+            });
+
+            setCourses(prev => {
+                const next = [courseData as Course, ...prev.filter(c => c.course_id !== courseId)];
+                writeCachedJson(`avelut_courses_${userProfile.uid}`, next);
+                return next;
+            });
+
+            addToast(`Course ${code} added successfully!`, 'success');
+            setShowAddCourseModal(false);
+            setManualCourseForm({
+                code: '',
+                name: '',
+                level: userProfile?.level || '100lvl',
+                semester: 'first',
+                description: '',
+            });
+        } catch (err: any) {
+            console.error('Error saving course form:', err);
+            addToast(err.message || 'Failed to save course', 'error');
+        } finally {
+            setIsSavingCourseForm(false);
+        }
+    };
+
+    const handleExtractTopicsFromDoc = async () => {
+        if (!docUploadFile) {
+            addToast('Please select a document or textbook file first.', 'error');
+            return;
+        }
+        const target = targetCourseForTopic || topicPickerCourse;
+        if (!target) {
+            addToast('No course selected.', 'error');
+            return;
+        }
+
+        const cost = getFeatureCost('study_guide_extraction', appSettings) || 0;
+        const creditCheck = checkAICredits(userProfile, cost, appSettings);
+        if (!creditCheck.allowed) {
+            setLimitModalData({ balance: creditCheck.balance, cost: creditCheck.cost });
+            setShowLimitModal(true);
+            return;
+        }
+
+        setIsExtractingTopics(true);
+        try {
+            const ai = createAvelutAI(appSettings, userProfile);
+            if (!ai) throw new Error('AI service is not configured in App Controls.');
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+
+            const fileName = docUploadFile.name.toLowerCase();
+            const isPdf = fileName.endsWith('.pdf') || docUploadFile.type === 'application/pdf';
+
+            const prompt = `You are an academic curriculum and syllabus specialist. 
+Analyze the provided document for the course "${target.course_name} (${target.course_code || target.course_id})".
+Extract all distinct curriculum syllabus topics, chapters, modules, or lecture topics.
+For each topic:
+- topic_name: clear, standardized, professional topic title
+- topic_context: 1 to 3 sentences summarizing the foundational principles, core equations/concepts, and examination scope
+- start_point: (optional) starting section, chapter, or page number
+- end_point: (optional) ending section, chapter, or page number
+
+Ensure topics are returned in logical sequential curriculum order.
+Return a JSON object containing a "topics" array.`;
+
+            let contents: any;
+            if (isPdf) {
+                const base64Data = await fileToBase64(docUploadFile);
+                contents = [
+                    {
+                        role: 'user',
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: 'application/pdf', data: base64Data } }
+                        ]
+                    }
+                ];
+            } else {
+                const fileText = await docUploadFile.text();
+                const truncated = fileText.slice(0, 50000);
+                contents = [
+                    {
+                        role: 'user',
+                        parts: [
+                            { text: `${prompt}\n\n=== DOCUMENT TEXT ===\n${truncated}` }
+                        ]
+                    }
+                ];
+            }
+
+            const callRes = await attemptApiCall(() => ai.models.generateContent({
+                model: aiModel,
+                contents,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            topics: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        topic_name: { type: Type.STRING },
+                                        topic_context: { type: Type.STRING },
+                                        start_point: { type: Type.STRING },
+                                        end_point: { type: Type.STRING },
+                                    },
+                                    required: ['topic_name']
+                                }
+                            }
+                        },
+                        required: ['topics']
+                    }
+                }
+            }));
+
+            if (!callRes.success || !callRes.data) {
+                throw new Error(callRes.message || 'Failed to extract topics from document.');
+            }
+
+            const responseText = getResponseText(callRes.data);
+            if (!responseText) throw new Error('Empty response received from AI.');
+            const parsed = JSON.parse(responseText);
+
+            if (!parsed.topics || !Array.isArray(parsed.topics) || parsed.topics.length === 0) {
+                throw new Error('No topics could be identified in the document.');
+            }
+
+            const mapped = parsed.topics.map((t: any, idx: number) => {
+                const name = (t.topic_name || '').trim();
+                const id = `${target.course_id}_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}_${idx}`;
+                return {
+                    topic_id: id,
+                    topic_name: name,
+                    topic_context: (t.topic_context || '').trim() || `Core concepts and curriculum for ${name}.`,
+                    start_point: (t.start_point || '').trim(),
+                    end_point: (t.end_point || '').trim(),
+                    is_complete: false,
+                    selected: true,
+                };
+            }).filter((t: any) => Boolean(t.topic_name));
+
+            setExtractedTopics(mapped);
+            addToast(`Found ${mapped.length} topics! Review and confirm below.`, 'success');
+        } catch (err: any) {
+            console.error('Error extracting topics:', err);
+            addToast(err.message || 'Failed to extract topics', 'error');
+        } finally {
+            setIsExtractingTopics(false);
+        }
+    };
+
+    const handleSaveExtractedTopics = async () => {
+        const selected = extractedTopics.filter(t => t.selected);
+        if (selected.length === 0) {
+            addToast('Please select at least one topic to add.', 'error');
+            return;
+        }
+        const target = targetCourseForTopic || topicPickerCourse;
+        if (!target) return;
+
+        setIsSavingExtractedTopics(true);
+        try {
+            const existingTopics = Array.isArray(target.topics) ? target.topics : [];
+            const cost = getFeatureCost('study_guide_extraction', appSettings) || 0;
+
+            await Promise.all(
+                selected.map((t, idx) => supabaseDataService.upsertTopic({
+                    topic_id: t.topic_id,
+                    course_id: target.course_id,
+                    topic_name: t.topic_name,
+                    topic_context: t.topic_context,
+                    start_point: t.start_point,
+                    end_point: t.end_point,
+                    topic_order: existingTopics.length + idx + 1,
+                }))
+            );
+
+            const cleanSelected = selected.map(({ selected: _, ...rest }) => rest);
+            const updatedTopics = mergeTopics(existingTopics, cleanSelected);
+
+            const deptId = userProfile.department_id;
+            const courseId = target.course_id;
+            const updates: any = {};
+            if (deptId && courseId) {
+                updates[`departments_data/${deptId}/course_list/${courseId}/topics`] = updatedTopics;
+            }
+            if (userProfile.school_id && userProfile.college_id && deptId && target.level) {
+                const deptPath = `${userProfile.school_id}/colleges/${userProfile.college_id}/departments/${deptId}`;
+                updates[`schools_data/${deptPath}/levels/${target.level}/courses/${courseId}/topics`] = updatedTopics;
+            }
+            if (target.textbook_shared_key) {
+                updates[`textbook_contexts/shared/${target.textbook_shared_key}/syllabus`] = updatedTopics;
+            }
+            await update(dbRef(db), updates);
+
+            const updatedCourse: Course = { ...target, topics: updatedTopics };
+            setCourses(prev => {
+                const next = prev.map(c => c.course_id === target.course_id ? updatedCourse : c);
+                writeCachedJson(`avelut_courses_${userProfile.uid}`, next);
+                return next;
+            });
+
+            if (topicPickerCourse && topicPickerCourse.course_id === target.course_id) {
+                setTopicPickerCourse(updatedCourse);
+            }
+
+            void deductAICredits(userProfile.uid, cost, 'Study Guide Topic Extraction', appSettings);
+            addToast(`Successfully added ${selected.length} topics to ${target.course_code || target.course_name}!`, 'success');
+
+            setShowAddTopicModal(false);
+            setExtractedTopics([]);
+            setDocUploadFile(null);
+        } catch (err: any) {
+            console.error('Error saving extracted topics:', err);
+            addToast(err.message || 'Failed to save topics', 'error');
+        } finally {
+            setIsSavingExtractedTopics(false);
+        }
+    };
+
+    const handleSaveManualTopic = async () => {
+        if (!manualTopicForm.topic_name.trim()) {
+            addToast('Please enter a topic title.', 'error');
+            return;
+        }
+        const target = targetCourseForTopic || topicPickerCourse;
+        if (!target) return;
+
+        setIsSavingManualTopic(true);
+        try {
+            const topicName = manualTopicForm.topic_name.trim();
+            const topicId = `${target.course_id}_${topicName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
+            const existingTopics = Array.isArray(target.topics) ? target.topics : [];
+
+            let context = manualTopicForm.topic_context.trim();
+            if (!context) {
+                context = `Core study module for ${topicName} in ${target.course_name || target.course_code}.`;
+            }
+
+            const newTopic: Topic = {
+                topic_id: topicId,
+                topic_name: topicName,
+                topic_context: context,
+                start_point: manualTopicForm.start_point.trim() || undefined,
+                end_point: manualTopicForm.end_point.trim() || undefined,
+                is_complete: false,
+            };
+
+            await supabaseDataService.upsertTopic({
+                topic_id: newTopic.topic_id,
+                course_id: target.course_id,
+                topic_name: newTopic.topic_name,
+                topic_context: newTopic.topic_context,
+                start_point: newTopic.start_point,
+                end_point: newTopic.end_point,
+                topic_order: existingTopics.length + 1,
+            });
+
+            const updatedTopics = [...existingTopics, newTopic];
+
+            const deptId = userProfile.department_id;
+            const courseId = target.course_id;
+            const updates: any = {};
+            if (deptId && courseId) {
+                updates[`departments_data/${deptId}/course_list/${courseId}/topics`] = updatedTopics;
+            }
+            if (userProfile.school_id && userProfile.college_id && deptId && target.level) {
+                const deptPath = `${userProfile.school_id}/colleges/${userProfile.college_id}/departments/${deptId}`;
+                updates[`schools_data/${deptPath}/levels/${target.level}/courses/${courseId}/topics`] = updatedTopics;
+            }
+            if (target.textbook_shared_key) {
+                updates[`textbook_contexts/shared/${target.textbook_shared_key}/syllabus`] = updatedTopics;
+            }
+            await update(dbRef(db), updates);
+
+            const updatedCourse: Course = { ...target, topics: updatedTopics };
+            setCourses(prev => {
+                const next = prev.map(c => c.course_id === target.course_id ? updatedCourse : c);
+                writeCachedJson(`avelut_courses_${userProfile.uid}`, next);
+                return next;
+            });
+
+            if (topicPickerCourse && topicPickerCourse.course_id === target.course_id) {
+                setTopicPickerCourse(updatedCourse);
+            }
+
+            addToast(`Topic "${newTopic.topic_name}" added successfully!`, 'success');
+            setManualTopicForm({ topic_name: '', topic_context: '', start_point: '', end_point: '' });
+            setShowAddTopicModal(false);
+        } catch (err: any) {
+            console.error('Error adding topic manually:', err);
+            addToast(err.message || 'Failed to add topic', 'error');
+        } finally {
+            setIsSavingManualTopic(false);
+        }
+    };
+
+    const handleAutoGenerateTopicContext = async () => {
+        if (!manualTopicForm.topic_name.trim()) {
+            addToast('Please enter a topic title first.', 'error');
+            return;
+        }
+        const target = targetCourseForTopic || topicPickerCourse;
+        setIsGeneratingContext(true);
+        try {
+            const ai = createAvelutAI(appSettings, userProfile);
+            if (!ai) throw new Error('AI service not available.');
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+            const prompt = `Write a concise 2-sentence academic overview/scope for the topic "${manualTopicForm.topic_name}" in the course "${target?.course_name || 'Academic Studies'}". Return only the text.`;
+            const res = await attemptApiCall(() => ai.models.generateContent({
+                model: aiModel,
+                contents: prompt
+            }));
+            if (res.success && res.data) {
+                const text = getResponseText(res.data);
+                if (text) {
+                    setManualTopicForm(prev => ({ ...prev, topic_context: text.trim() }));
+                    addToast('Topic overview generated!', 'info');
+                }
+            }
+        } catch (err: any) {
+            console.warn('AI context generation failed:', err);
+        } finally {
+            setIsGeneratingContext(false);
         }
     };
 
@@ -855,18 +1333,35 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                 Select a topic to start interactive tutorial
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setTopicPickerCourse(null);
-                            }}
-                            className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#1C1C1C] text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#2A2A2A] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                            aria-label="Close modal"
-                            title="Close"
-                        >
-                            <i className="bi bi-x-lg text-sm"></i>
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setTargetCourseForTopic(topicPickerCourse);
+                                    setShowAddTopicModal(true);
+                                    setExtractedTopics([]);
+                                    setDocUploadFile(null);
+                                    setManualTopicForm({ topic_name: '', topic_context: '', start_point: '', end_point: '' });
+                                }}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                                title="Add topics to this course"
+                            >
+                                <i className="bi bi-plus-lg font-black text-xs"></i>
+                                <span>Add Topics</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTopicPickerCourse(null);
+                                }}
+                                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#1C1C1C] text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#2A2A2A] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                                aria-label="Close modal"
+                                title="Close"
+                            >
+                                <i className="bi bi-x-lg text-sm"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div className="p-4 overflow-y-auto space-y-3 flex-1 [scrollbar-width:thin]">
@@ -955,13 +1450,58 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                     No syllabus extracted yet
                                 </p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
-                                    Upload a textbook/syllabus PDF or start the introductory lesson directly.
+                                    Add topics to start learning, or upload a textbook / syllabus document.
                                 </p>
+                                <div className="flex flex-col sm:flex-row items-center gap-2 mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTargetCourseForTopic(topicPickerCourse);
+                                            setAddTopicTab('doc');
+                                            setShowAddTopicModal(true);
+                                            setExtractedTopics([]);
+                                            setDocUploadFile(null);
+                                        }}
+                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                    >
+                                        <i className="bi bi-file-earmark-arrow-up"></i>
+                                        <span>Upload Document / PDF</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTargetCourseForTopic(topicPickerCourse);
+                                            setAddTopicTab('manual');
+                                            setShowAddTopicModal(true);
+                                            setManualTopicForm({ topic_name: '', topic_context: '', start_point: '', end_point: '' });
+                                        }}
+                                        className="px-4 py-2 bg-slate-100 dark:bg-[#1C1C1C] hover:bg-slate-200 dark:hover:bg-[#2A2A2A] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-[#2A2A2A] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                    >
+                                        <i className="bi bi-pencil-square"></i>
+                                        <span>Manually Add Topic</span>
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="space-y-2.5">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                    Course Syllabus ({topics.length} topics)
+                                <div className="flex items-center justify-between">
+                                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                        Course Syllabus ({topics.length} topics)
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTargetCourseForTopic(topicPickerCourse);
+                                            setShowAddTopicModal(true);
+                                            setExtractedTopics([]);
+                                            setDocUploadFile(null);
+                                            setManualTopicForm({ topic_name: '', topic_context: '', start_point: '', end_point: '' });
+                                        }}
+                                        className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <i className="bi bi-plus-circle text-xs"></i>
+                                        <span>Add Topic</span>
+                                    </button>
                                 </div>
                                 {topics.map((t: Topic, idx: number) => {
                                     const isPinned = pinnedTopics.some(p => p.key === `${topicPickerCourse.course_id}::${t.topic_id}`);
@@ -1056,6 +1596,558 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         );
     };
 
+    // ── ADD COURSE MODAL ──
+    const renderAddCourseModal = () => {
+        if (!showAddCourseModal) return null;
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div
+                    className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+                    onClick={() => setShowAddCourseModal(false)}
+                />
+                <div
+                    className="relative bg-white dark:bg-[#141414] w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-[#2A2A2A] z-50 flex flex-col max-h-[85vh] animate-scale-in"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="p-5 border-b border-slate-100 dark:border-[#2A2A2A] flex items-center justify-between bg-slate-50/70 dark:bg-[#1C1C1C]">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                                <i className="bi bi-journal-plus text-lg"></i>
+                            </div>
+                            <div>
+                                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                                    Add New Course
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Add a course to your curriculum
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAddCourseModal(false)}
+                            className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#1C1C1C] text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#2A2A2A] flex items-center justify-center transition-colors cursor-pointer"
+                            title="Close"
+                        >
+                            <i className="bi bi-x-lg text-sm"></i>
+                        </button>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="p-4 border-b border-slate-100 dark:border-[#2A2A2A] bg-slate-50/40 dark:bg-[#181818]">
+                        <div className="grid grid-cols-2 p-1 bg-slate-200/60 dark:bg-[#141414] rounded-2xl border border-slate-200/80 dark:border-[#2A2A2A]">
+                            <button
+                                type="button"
+                                onClick={() => setAddCourseTab('manual')}
+                                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                    addCourseTab === 'manual'
+                                        ? 'bg-white dark:bg-[#222] text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <i className="bi bi-pencil-square"></i>
+                                <span>Manual Entry</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAddCourseTab('pdf')}
+                                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                    addCourseTab === 'pdf'
+                                        ? 'bg-white dark:bg-[#222] text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <i className="bi bi-cloud-arrow-up"></i>
+                                <span>Upload Course PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-5 overflow-y-auto flex-1 space-y-4 [scrollbar-width:thin]">
+                        {addCourseTab === 'manual' ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        Course Code <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={manualCourseForm.code}
+                                        onChange={(e) => setManualCourseForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                                        placeholder="e.g. MTH101, CSC201, PHY102"
+                                        className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-4 py-3 text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        Course Title (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={manualCourseForm.name}
+                                        onChange={(e) => setManualCourseForm(f => ({ ...f, name: e.target.value }))}
+                                        placeholder="e.g. Elementary Mathematics I"
+                                        className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                    />
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                                        Leave blank to let AI automatically generate the title from the course code.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                            Level
+                                        </label>
+                                        <select
+                                            value={manualCourseForm.level}
+                                            onChange={(e) => setManualCourseForm(f => ({ ...f, level: e.target.value }))}
+                                            className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-3 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                        >
+                                            <option value="100lvl">100 Level</option>
+                                            <option value="200lvl">200 Level</option>
+                                            <option value="300lvl">300 Level</option>
+                                            <option value="400lvl">400 Level</option>
+                                            <option value="500lvl">500 Level</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                            Semester
+                                        </label>
+                                        <select
+                                            value={manualCourseForm.semester}
+                                            onChange={(e) => setManualCourseForm(f => ({ ...f, semester: e.target.value as 'first' | 'second' }))}
+                                            className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-3 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                        >
+                                            <option value="first">1st Semester</option>
+                                            <option value="second">2nd Semester</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        Description (Optional)
+                                    </label>
+                                    <textarea
+                                        rows={2}
+                                        value={manualCourseForm.description}
+                                        onChange={(e) => setManualCourseForm(f => ({ ...f, description: e.target.value }))}
+                                        placeholder="Brief course overview..."
+                                        className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all resize-none"
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="p-6 border-2 border-dashed border-slate-300 dark:border-[#333] rounded-3xl bg-slate-50/50 dark:bg-[#181818]/50 flex flex-col items-center justify-center text-center">
+                                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3">
+                                        <i className="bi bi-file-earmark-pdf text-3xl"></i>
+                                    </div>
+                                    <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
+                                        Upload Course Registration Form
+                                    </h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mb-4">
+                                        Upload your course form PDF or curriculum document. AI will detect and register all courses automatically.
+                                    </p>
+                                    <label className={`px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${isExtractingCourses ? 'opacity-60 pointer-events-none' : ''}`}>
+                                        <i className="bi bi-cloud-arrow-up text-sm font-black"></i>
+                                        <span>{isExtractingCourses ? 'Extracting Courses...' : 'Select PDF Document'}</span>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,application/pdf"
+                                            className="hidden"
+                                            onChange={handleExtractCourses}
+                                            disabled={isExtractingCourses}
+                                        />
+                                    </label>
+                                </div>
+                                {isExtractingCourses && (
+                                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
+                                        <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                            Analyzing document and importing courses...
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    {addCourseTab === 'manual' && (
+                        <div className="p-4 border-t border-slate-100 dark:border-[#2A2A2A] bg-slate-50 dark:bg-[#141414] flex gap-3">
+                            <button
+                                type="button"
+                                onClick={handleSaveManualCourseForm}
+                                disabled={isSavingCourseForm || !manualCourseForm.code.trim()}
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 rounded-2xl py-3 text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                                {isSavingCourseForm ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Saving Course...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-check-lg text-base font-bold"></i>
+                                        <span>Save Course</span>
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowAddCourseModal(false)}
+                                className="px-5 bg-white dark:bg-[#1C1C1C] hover:bg-slate-100 dark:hover:bg-[#2A2A2A] border border-slate-200 dark:border-[#2A2A2A] text-slate-700 dark:text-slate-200 rounded-2xl py-3 text-sm font-bold transition-colors cursor-pointer"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // ── ADD TOPIC MODAL (UPLOAD DOCUMENT / TEXTBOOK / TOPIC LIST OR MANUAL) ──
+    const renderAddTopicModal = () => {
+        if (!showAddTopicModal) return null;
+        const targetCourse = targetCourseForTopic || topicPickerCourse;
+        if (!targetCourse) return null;
+
+        const courseLabel = targetCourse.course_code || targetCourse.course_name;
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div
+                    className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+                    onClick={() => setShowAddTopicModal(false)}
+                />
+                <div
+                    className="relative bg-white dark:bg-[#141414] w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-[#2A2A2A] z-50 flex flex-col max-h-[85vh] animate-scale-in"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="p-5 border-b border-slate-100 dark:border-[#2A2A2A] flex items-center justify-between bg-slate-50/70 dark:bg-[#1C1C1C]">
+                        <div className="pr-3 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[11px] font-extrabold border border-amber-500/20 shrink-0">
+                                    {courseLabel}
+                                </span>
+                                <h3 className="text-base font-extrabold text-slate-900 dark:text-white truncate">
+                                    Add Topics
+                                </h3>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Upload a document/textbook or enter topics manually
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAddTopicModal(false)}
+                            className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#1C1C1C] text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#2A2A2A] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                            title="Close"
+                        >
+                            <i className="bi bi-x-lg text-sm"></i>
+                        </button>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="p-4 border-b border-slate-100 dark:border-[#2A2A2A] bg-slate-50/40 dark:bg-[#181818]">
+                        <div className="grid grid-cols-2 p-1 bg-slate-200/60 dark:bg-[#141414] rounded-2xl border border-slate-200/80 dark:border-[#2A2A2A]">
+                            <button
+                                type="button"
+                                onClick={() => setAddTopicTab('doc')}
+                                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                    addTopicTab === 'doc'
+                                        ? 'bg-white dark:bg-[#222] text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <i className="bi bi-file-earmark-arrow-up"></i>
+                                <span>Upload Document / PDF</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAddTopicTab('manual')}
+                                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                                    addTopicTab === 'manual'
+                                        ? 'bg-white dark:bg-[#222] text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <i className="bi bi-pencil-square"></i>
+                                <span>Manual Topic Entry</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-5 overflow-y-auto flex-1 space-y-4 [scrollbar-width:thin]">
+                        {addTopicTab === 'doc' ? (
+                            <div className="space-y-4">
+                                {extractedTopics.length === 0 ? (
+                                    <>
+                                        <div className="p-6 border-2 border-dashed border-slate-300 dark:border-[#333] rounded-3xl bg-slate-50/50 dark:bg-[#181818]/50 flex flex-col items-center justify-center text-center">
+                                            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3">
+                                                <i className="bi bi-journal-text text-3xl"></i>
+                                            </div>
+                                            <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
+                                                Upload Textbook or Topic Lists
+                                            </h4>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mb-4">
+                                                Accepts PDF textbooks, syllabus documents, TXT topic outlines, or Markdown files.
+                                            </p>
+                                            <label className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-[#1C1C1C] dark:hover:bg-[#2A2A2A] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95 border border-slate-800 dark:border-[#2A2A2A]">
+                                                <i className="bi bi-paperclip text-sm font-black"></i>
+                                                <span>{docUploadFile ? 'Change Document' : 'Choose Document (.pdf, .txt, .md, .doc)'}</span>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf,.txt,.md,.doc,.docx,application/pdf,text/plain,text/markdown"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        if (e.target.files && e.target.files.length > 0) {
+                                                            setDocUploadFile(e.target.files[0]);
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
+
+                                        {docUploadFile && (
+                                            <div className="p-3.5 rounded-2xl bg-slate-100/80 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <i className="bi bi-file-earmark-check-fill text-amber-500 text-lg shrink-0"></i>
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                                            {docUploadFile.name}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                            {(docUploadFile.size / 1024).toFixed(1)} KB
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleExtractTopicsFromDoc}
+                                                    disabled={isExtractingTopics}
+                                                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95 disabled:opacity-50"
+                                                >
+                                                    {isExtractingTopics ? (
+                                                        <>
+                                                            <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                                                            <span>Extracting...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <i className="bi bi-magic text-xs"></i>
+                                                            <span>Extract Topics</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {isExtractingTopics && (
+                                            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
+                                                <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                                                <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                                    AI is reading the document and extracting syllabus topics...
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-xs font-bold text-slate-900 dark:text-white">
+                                                Extracted {extractedTopics.length} Topics
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const allSelected = extractedTopics.every(t => t.selected);
+                                                        setExtractedTopics(prev => prev.map(t => ({ ...t, selected: !allSelected })));
+                                                    }}
+                                                    className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                                                >
+                                                    {extractedTopics.every(t => t.selected) ? 'Deselect All' : 'Select All'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExtractedTopics([])}
+                                                    className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                                                >
+                                                    Re-upload
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 [scrollbar-width:thin]">
+                                            {extractedTopics.map((topic, idx) => (
+                                                <div
+                                                    key={topic.topic_id || idx}
+                                                    onClick={() => {
+                                                        setExtractedTopics(prev => prev.map((t, i) => i === idx ? { ...t, selected: !t.selected } : t));
+                                                    }}
+                                                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                                                        topic.selected
+                                                            ? 'bg-amber-500/10 border-amber-500/40 dark:bg-amber-500/15 dark:border-amber-500/50'
+                                                            : 'bg-slate-50 dark:bg-[#1C1C1C] border-slate-200 dark:border-[#2A2A2A] opacity-60'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={topic.selected}
+                                                        onChange={() => {}}
+                                                        className="mt-1 rounded text-amber-500 focus:ring-amber-500 cursor-pointer"
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                                            {topic.topic_name}
+                                                        </p>
+                                                        {topic.topic_context && (
+                                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
+                                                                {topic.topic_context}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        Topic Title <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={manualTopicForm.topic_name}
+                                        onChange={(e) => setManualTopicForm(f => ({ ...f, topic_name: e.target.value }))}
+                                        placeholder="e.g. Eigenvalues and Eigenvectors"
+                                        className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                                            Topic Overview / Context
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={handleAutoGenerateTopicContext}
+                                            disabled={isGeneratingContext || !manualTopicForm.topic_name.trim()}
+                                            className="text-[11px] text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 disabled:opacity-40 cursor-pointer"
+                                        >
+                                            <i className="bi bi-sparkles text-xs"></i>
+                                            <span>{isGeneratingContext ? 'Generating...' : 'Auto-Generate Context'}</span>
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        rows={3}
+                                        value={manualTopicForm.topic_context}
+                                        onChange={(e) => setManualTopicForm(f => ({ ...f, topic_context: e.target.value }))}
+                                        placeholder="Brief description of key concepts, formulas, exam focus..."
+                                        className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all resize-none"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                            Start Point (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={manualTopicForm.start_point}
+                                            onChange={(e) => setManualTopicForm(f => ({ ...f, start_point: e.target.value }))}
+                                            placeholder="e.g. Chapter 1 or Intro"
+                                            className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-3 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                            End Point (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={manualTopicForm.end_point}
+                                            onChange={(e) => setManualTopicForm(f => ({ ...f, end_point: e.target.value }))}
+                                            placeholder="e.g. Chapter 2 or Exercises"
+                                            className="w-full bg-slate-50 dark:bg-[#1C1C1C] border border-slate-200 dark:border-[#2A2A2A] rounded-2xl px-3 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#3A3A3A] transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-4 border-t border-slate-100 dark:border-[#2A2A2A] bg-slate-50 dark:bg-[#141414] flex gap-3">
+                        {addTopicTab === 'doc' && extractedTopics.length > 0 ? (
+                            <button
+                                type="button"
+                                onClick={handleSaveExtractedTopics}
+                                disabled={isSavingExtractedTopics || !extractedTopics.some(t => t.selected)}
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 rounded-2xl py-3 text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                                {isSavingExtractedTopics ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Saving Topics...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-check-lg text-base font-bold"></i>
+                                        <span>Save {extractedTopics.filter(t => t.selected).length} Selected Topics</span>
+                                    </>
+                                )}
+                            </button>
+                        ) : addTopicTab === 'manual' ? (
+                            <button
+                                type="button"
+                                onClick={handleSaveManualTopic}
+                                disabled={isSavingManualTopic || !manualTopicForm.topic_name.trim()}
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 rounded-2xl py-3 text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                                {isSavingManualTopic ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Adding Topic...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-plus-lg text-base font-bold"></i>
+                                        <span>Add Topic</span>
+                                    </>
+                                )}
+                            </button>
+                        ) : null}
+
+                        <button
+                            type="button"
+                            onClick={() => setShowAddTopicModal(false)}
+                            className="px-5 bg-white dark:bg-[#1C1C1C] hover:bg-slate-100 dark:hover:bg-[#2A2A2A] border border-slate-200 dark:border-[#2A2A2A] text-slate-700 dark:text-slate-200 rounded-2xl py-3 text-sm font-bold transition-colors cursor-pointer"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="flex-1 flex flex-col w-full h-full min-h-0 bg-slate-50/50 dark:bg-[#000000] overflow-hidden text-slate-900 dark:text-slate-100">
             {/* Dual-Pane Tab Container with Smooth Horizontal Slide Transition */}
@@ -1125,6 +2217,25 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                                         All
                                     </button>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setManualCourseForm({
+                                            code: '',
+                                            name: '',
+                                            level: userProfile?.level || '100lvl',
+                                            semester: filter.semester === 'second' ? 'second' : 'first',
+                                            description: ''
+                                        });
+                                        setAddCourseTab('manual');
+                                        setShowAddCourseModal(true);
+                                    }}
+                                    className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs sm:text-sm rounded-2xl shadow-xs hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                                    title="Add a new course"
+                                >
+                                    <i className="bi bi-plus-circle-fill text-sm"></i>
+                                    <span>Add Course</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1250,6 +2361,8 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
             />
 
             {renderTopicPicker()}
+            {renderAddCourseModal()}
+            {renderAddTopicModal()}
         </div>
     );
 };

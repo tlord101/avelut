@@ -61,3 +61,15 @@ export const formatLastVisited = (timestamp?: number | null): string | null => {
   if (diffDays < 7) return `Visited ${diffDays}d ago`;
   return `Visited ${new Date(timestamp).toLocaleDateString()}`;
 };
+
+export const mergeTopics = (existingTopics: Array<Partial<Topic>>, newTopics: Topic[]): Topic[] => {
+  const topicMap = new Map<string, Topic>();
+  [...existingTopics, ...newTopics].forEach((topic, index) => {
+    const sanitized = sanitizeTopicMetadata(topic, index);
+    const topicId = sanitized.topic_id || normalizeTopicId(sanitized.topic_name);
+    if (!topicMap.has(topicId)) {
+      topicMap.set(topicId, { ...sanitized, topic_id: topicId });
+    }
+  });
+  return Array.from(topicMap.values());
+};
