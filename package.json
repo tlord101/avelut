@@ -13,6 +13,7 @@
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:add:android": "npx cap add android",
+    "ota:deploy": "node deploy_ota.mjs",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "postbuild": "node -e \"if(process.env.VERCEL || process.env.CI) { console.log('Skipping react-snap on CI/Vercel'); } else { try { require('child_process').execSync('react-snap', {stdio: 'inherit'}); } catch (e) { console.warn('react-snap skipped or failed (non-blocking):', e.message); } }\"",
     "postinstall": "patch-package"
