@@ -9,7 +9,8 @@
  */
 
 import { readCachedJson, writeCachedJson } from '../../utils/cache';
-import { createAvelutAI, getResponseText } from '../../utils/inference';
+import { createAvelutAI, getResponseText, OPENROUTER_MODEL } from '../../utils/inference';
+import { getFeatureModel } from '../../utils/usage';
 import { cleanAndParseJson } from '../../utils/jsonUtils';
 import type { AppSettings, UserProfile } from '../../types';
 
@@ -344,13 +345,26 @@ Rules:
 - Every phase MUST include actionable board visual plan.
 - At least 2 phases MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") rather than plain text only.`;
 
-  // Fire-and-forget background AI generation (60 s budget for thinking models)
+  // Fire-and-forget background AI generation (using default text model)
   const generateInBackground = async () => {
     try {
-      const ai = createAvelutAI(appSettings!);
-      const fetchPromise = ai.models.generateContent({ contents: buildPrompt() });
+      const textModel =
+        getFeatureModel('chat_interaction', appSettings) ||
+        appSettings?.openrouter_model ||
+        OPENROUTER_MODEL ||
+        'qwen/qwen3.7-flash';
+
+      const ai = createAvelutAI(appSettings!, userProfile, { feature: 'chat_interaction' });
+      const fetchPromise = ai.models.generateContent({
+        model: textModel,
+        contents: buildPrompt(),
+        config: {
+          temperature: 0.3,
+          maxOutputTokens: 2000,
+        },
+      });
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI generation timeout (60 s)')), 60_000)
+        setTimeout(() => reject(new Error('AI generation timeout (30 s)')), 30_000)
       );
 
       const response = await Promise.race([fetchPromise, timeoutPromise]);

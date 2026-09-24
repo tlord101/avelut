@@ -27,6 +27,8 @@ import {
   Send,
   AlertCircle,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { ExcalidrawLiveBoard } from './ExcalidrawLiveBoard';
 import {
@@ -141,6 +143,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [activeFormula, setActiveFormula] = useState<string | null>(null);
+  const [activeSvgIllustration, setActiveSvgIllustration] = useState<string | null>(null);
+  const [isIllustrationExpanded, setIsIllustrationExpanded] = useState(false);
 
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
@@ -167,6 +171,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       .catch((err) => {
         console.warn('[AvelutLiveClassroomView] Teaching plan generation error:', err);
       });
+
     return () => {
       isCancelled = true;
     };
@@ -188,6 +193,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     teachingPlan,
     studentName: userProfile?.display_name || undefined,
     appSettings,
+    userProfile,
   });
 
   useEffect(() => {
@@ -200,6 +206,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       teachingPlan,
       studentName: userProfile?.display_name || undefined,
       appSettings,
+      userProfile,
     };
   }, [topicTitle, courseName, syllabusContext, durationMinutes, learningPath, teachingPlan, userProfile, appSettings]);
 
@@ -222,6 +229,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       learningPath: lPath,
       teachingPlan: tPlan,
       appSettings: aSettings,
+      userProfile: uProfile,
     } = paramsRef.current;
 
     svc.setCallbacks({
@@ -247,6 +255,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         teachingPlan: tPlan,
       },
       aSettings,
+      uProfile,
     );
   }, []);
 
@@ -255,12 +264,17 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       setActiveFormula(formula);
     });
 
+    avelutBoardController.setOnSvgIllustrationChange((svg) => {
+      setActiveSvgIllustration(svg);
+    });
+
     if (!startedSessionRef.current) {
       startedSessionRef.current = true;
       startSession();
     }
     return () => {
       avelutBoardController.setOnFormulaChange(null);
+      avelutBoardController.setOnSvgIllustrationChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
@@ -448,6 +462,48 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           >
             <X className="w-3.5 h-3.5" />
           </button>
+        </aside>
+      )}
+
+      {/* ── ACTIVE SVG DIAGRAM / ILLUSTRATION BADGE & OVERLAY ───────────── */}
+      {activeSvgIllustration && (
+        <aside
+          aria-label="Active Board Diagram"
+          className={`absolute z-30 transition-all duration-300 pointer-events-auto shadow-2xl backdrop-blur-2xl bg-[#090D16]/95 border border-sky-500/40 rounded-2xl overflow-hidden flex flex-col ${
+            isIllustrationExpanded
+              ? 'inset-3 sm:inset-10 z-40'
+              : 'top-14 right-3 sm:right-6 w-[92vw] sm:w-[480px] max-h-[55vh]'
+          }`}
+        >
+          <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900/80 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+              <span className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Board Diagram</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsIllustrationExpanded((prev) => !prev)}
+                className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                title={isIllustrationExpanded ? 'Minimize' : 'Expand diagram'}
+              >
+                {isIllustrationExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={() => {
+                  setActiveSvgIllustration(null);
+                  avelutBoardController.clearSvgIllustration();
+                }}
+                className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                title="Dismiss diagram"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+          <div
+            className="w-full flex-1 overflow-auto p-2.5 flex items-center justify-center min-h-[160px]"
+            dangerouslySetInnerHTML={{ __html: activeSvgIllustration }}
+          />
         </aside>
       )}
 

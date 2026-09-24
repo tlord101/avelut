@@ -13,10 +13,11 @@
 import { liveLogger } from './logger';
 import { avelutBoardController } from './AvelutBoardController';
 import { buildTeacherSystemPrompt, type TeacherPromptConfig } from './teacherPrompt';
-import type { AppSettings } from '../../types';
+import type { AppSettings, UserProfile } from '../../types';
 import { MermaidBoardService } from './visual-engine/MermaidBoardService';
 import { LlmSvgObjectCache } from './visual-engine/LlmSvgObjectCache';
-import { createAvelutAI, getResponseText } from '../../utils/inference';
+import { createAvelutAI, getResponseText, OPENROUTER_MODEL } from '../../utils/inference';
+import { getFeatureModel } from '../../utils/usage';
 
 export const QWEN_REALTIME_MODEL = 'qwen3.8-omni-flash-realtime';
 export const QWEN_FALLBACK_MODEL = 'qwen-omni-turbo-realtime';
@@ -75,6 +76,7 @@ export class QwenRealtimeTeacherService {
   // ── Session ────────────────────────────────────────────────────────────────
   private promptConfig: TeacherPromptConfig | null = null;
   private appSettings: AppSettings | null = null;
+  private userProfile: UserProfile | null = null;
   private fullTranscript = '';
   private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
   private executedCallIds = new Set<string>();
@@ -87,9 +89,8 @@ export class QwenRealtimeTeacherService {
   private hasReceivedAudioInCurrentResponse = false;
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly STUDENT_WAIT_MAX_MS = 3000;
   private consecutiveSilenceNudges = 0;
-  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
+  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 50;
   private isStudentSpeaking = false;
   /** True only when the last teacher response ended with a question to the student */
   private lastResponseAskedQuestion = false;
@@ -106,11 +107,8 @@ export class QwenRealtimeTeacherService {
     this.callbacks.onStateChange?.(s);
 
     if (s === 'listening') {
-      // Only start the silence watchdog when teacher asked the student a question.
-      // Pure teaching monologue turns, board draws, and tool calls never block for response.
-      if (this.lastResponseAskedQuestion) {
-        this.startStudentWaitTimer();
-      }
+      // Whenever entering listening state, auto-continue if student is quiet
+      this.startStudentWaitTimer();
     } else {
       this.clearStudentWaitTimer();
     }
@@ -122,6 +120,7 @@ export class QwenRealtimeTeacherService {
   public async startSession(
     config: TeacherPromptConfig,
     appSettings?: AppSettings | null,
+    userProfile?: UserProfile | null,
   ): Promise<void> {
     if (this.isStarting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
       liveLogger.log('[QwenRealtime] startSession: already connected or starting, returning early');
@@ -138,6 +137,7 @@ export class QwenRealtimeTeacherService {
 
     this.promptConfig = config;
     if (appSettings) this.appSettings = appSettings;
+    if (userProfile) this.userProfile = userProfile;
     this.setState('connecting');
 
     try {
@@ -470,6 +470,10 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
+    // If teacher asked a question, wait 5s for student response.
+    // If teacher just explained a concept, wait 3.2s before seamlessly continuing the lesson.
+    const waitMs = this.lastResponseAskedQuestion ? 5000 : 3200;
+
     this.studentWaitTimer = setTimeout(() => {
       this.studentWaitTimer = null;
       if (
@@ -488,10 +492,14 @@ export class QwenRealtimeTeacherService {
       }
 
       this.consecutiveSilenceNudges++;
-      liveLogger.log(`[QwenRealtime] ⏱️ 3s student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue with board action`);
+      liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue with board action`);
 
-      // Force a mermaid board action so the board is always updated during silence
+      // Draw diagram on board immediately
       this._triggerSilenceBoardAction();
+
+      const promptText = this.lastResponseAskedQuestion
+        ? '[The student is quiet. Answer your question gently in simple words, and seamlessly proceed to the next teaching point. Proactively use draw_mermaid or board_action to show the idea visually on the board without narrating the action.]'
+        : '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use draw_mermaid or board_action to show the idea visually on the board without narrating the action.]';
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -501,7 +509,7 @@ export class QwenRealtimeTeacherService {
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use draw_mermaid_diagram or write_on_board to reinforce the key idea visually — silently, without narrating it.]',
+            text: promptText,
           }],
         },
       });
@@ -512,10 +520,10 @@ export class QwenRealtimeTeacherService {
         response: {
           modalities: ['text', 'audio'],
           tools: this.getTools(),
-          tool_choice: 'required',
+          tool_choice: 'auto',
         },
       });
-    }, this.STUDENT_WAIT_MAX_MS);
+    }, waitMs);
   }
 
   private clearStudentWaitTimer(): void {
@@ -545,7 +553,15 @@ export class QwenRealtimeTeacherService {
         `  B --> D["${keyword2}"]`,
       ].join('\n');
 
-      liveLogger.log('[QwenRealtime] _triggerSilenceBoardAction: rendering mermaid for', topic);
+      liveLogger.log('[QwenRealtime] _triggerSilenceBoardAction: rendering diagram for', topic);
+
+      // 1. Draw native Excalidraw boxes & arrows on board
+      const elements = MermaidBoardService.toExcalidrawElements(mermaidCode);
+      if (elements.length > 0) {
+        this.boardController.executeBoardAction({ action: 'draw', elements });
+      }
+
+      // 2. Set SVG illustration
       MermaidBoardService.renderToSvg(mermaidCode).then(svg => {
         if (svg) this.boardController.setSvgIllustration(svg);
       }).catch(err => {
@@ -994,19 +1010,36 @@ export class QwenRealtimeTeacherService {
       toolResult = this.boardController.executeBoardAction(args);
     } else if (name === 'draw_mermaid') {
       const code = args.mermaid_code || '';
+      // 1. Draw native Excalidraw boxes & arrows on canvas immediately
+      const elements = MermaidBoardService.toExcalidrawElements(code);
+      if (elements.length > 0) {
+        this.boardController.executeBoardAction({ action: 'draw', elements });
+      }
+      // 2. Render SVG illustration (uses local offline generator if remote fails)
       MermaidBoardService.renderToSvg(code).then(svg => {
         if (svg) this.boardController.setSvgIllustration(svg);
       }).catch(err => {
         liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
       });
-      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Generating in background' };
+      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram drawn on board' };
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || '';
       LlmSvgObjectCache.getOrGenerate(desc, async () => {
         if (!this.appSettings) return null;
-        const ai = createAvelutAI(this.appSettings);
+        const textModel =
+          getFeatureModel('chat_interaction', this.appSettings) ||
+          this.appSettings?.openrouter_model ||
+          OPENROUTER_MODEL ||
+          'qwen/qwen3.7-flash';
+
+        const ai = createAvelutAI(this.appSettings, this.userProfile, { feature: 'chat_interaction' });
         const res = await ai.models.generateContent({
-          contents: "You are an expert SVG illustrator. Generate ONLY raw valid dark-themed SVG code (no markdown, no explanations) for: " + desc
+          model: textModel,
+          contents: "You are an expert SVG illustrator. Generate ONLY raw valid dark-themed SVG code (no markdown, no explanations) for: " + desc,
+          config: {
+            temperature: 0.2,
+            maxOutputTokens: 1500,
+          },
         });
         return getResponseText(res);
       }).then(svg => {

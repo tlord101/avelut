@@ -33,7 +33,8 @@ import type {
   VisualElement,
 } from './types';
 import { SvgRenderer } from './SvgRenderer';
-import { createAvelutAI, getResponseText } from '../../../utils/inference';
+import { createAvelutAI, getResponseText, OPENROUTER_MODEL } from '../../../utils/inference';
+import { getFeatureModel } from '../../../utils/usage';
 import type { AppSettings, UserProfile } from '../../../types';
 
 export interface VisualEngineCallbacks {
@@ -272,7 +273,13 @@ export class VisualIllustrationEngine {
       }
       this.activeAbortController = new AbortController();
 
-      console.log('[VisualEngine] Requesting illustration decision from qwen3.8-flash...');
+      const defaultModel =
+        getFeatureModel('chat_interaction', this.appSettings) ||
+        this.appSettings?.openrouter_model ||
+        OPENROUTER_MODEL ||
+        'qwen/qwen3.7-flash';
+
+      console.log(`[VisualEngine] Requesting illustration decision from ${defaultModel}...`);
       this.callbacks.onStatusChange?.('generating');
 
       const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile, {
@@ -280,7 +287,7 @@ export class VisualIllustrationEngine {
       });
 
       const response = await ai.models.generateContent({
-        model: 'qwen3.8-flash',
+        model: defaultModel,
         contents: [
           {
             role: 'system',
@@ -403,12 +410,18 @@ export class VisualIllustrationEngine {
 
       this.callbacks.onStatusChange?.('generating');
 
+      const defaultModel =
+        getFeatureModel('chat_interaction', this.appSettings) ||
+        this.appSettings?.openrouter_model ||
+        OPENROUTER_MODEL ||
+        'qwen/qwen3.7-flash';
+
       const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile, {
         feature: 'live_classroom_visual',
       });
 
       const response = await ai.models.generateContent({
-        model: 'qwen3.8-flash',
+        model: defaultModel,
         contents: [
           {
             role: 'system',
