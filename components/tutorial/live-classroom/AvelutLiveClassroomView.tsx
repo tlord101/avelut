@@ -37,6 +37,17 @@ import { avelutBoardController } from '../../../services/live-classroom/AvelutBo
 import type { UserProfile } from '../../../types';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import {
+  evaluateLiveTutorialStart,
+  commitLiveTutorialStart,
+  type LiveDurationMinutes,
+} from '../../../utils/liveTutorialQuota';
+import { deductAICredits } from '../../../utils/usage';
+import { notifyUserCreditsUpdated } from '../../../lib/supabaseRealtimeDb';
+import {
+  getOrGenerateTeachingPlan,
+  type TeachingPlan,
+} from '../../../services/live-classroom/teachingPlanService';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -132,8 +143,35 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [activeFormula, setActiveFormula] = useState<string | null>(null);
   const [activeSvgIllustration, setActiveSvgIllustration] = useState<string | null>(null);
 
+  const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
+  const startCommittedRef = useRef(false);
+
+  // ── Pre-generate teaching plan on mount ──────────────────────────────────
+  useEffect(() => {
+    let isCancelled = false;
+    const dur = (durationMinutes as 15 | 30 | 60) || 30;
+    getOrGenerateTeachingPlan({
+      topicTitle,
+      courseName,
+      syllabusContext,
+      durationMinutes: dur,
+      userProfile,
+      appSettings,
+    })
+      .then((plan) => {
+        if (!isCancelled && plan) {
+          setTeachingPlan(plan);
+        }
+      })
+      .catch((err) => {
+        console.warn('[AvelutLiveClassroomView] Teaching plan generation error:', err);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [topicTitle, courseName, syllabusContext, durationMinutes, userProfile, appSettings]);
 
   // ── Hide global header/nav while in live classroom ──────────────────────
   useEffect(() => {
@@ -148,6 +186,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     syllabusContext,
     durationMinutes,
     learningPath,
+    teachingPlan,
     studentName: userProfile?.display_name || undefined,
     appSettings,
   });
@@ -159,10 +198,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       syllabusContext,
       durationMinutes,
       learningPath,
+      teachingPlan,
       studentName: userProfile?.display_name || undefined,
       appSettings,
     };
-  }, [topicTitle, courseName, syllabusContext, durationMinutes, learningPath, userProfile, appSettings]);
+  }, [topicTitle, courseName, syllabusContext, durationMinutes, learningPath, teachingPlan, userProfile, appSettings]);
 
   // ── Start realtime session once on mount ───────────────────────────────────
   const startSession = useCallback(() => {
@@ -181,6 +221,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       studentName: sName,
       durationMinutes: dMinutes,
       learningPath: lPath,
+      teachingPlan: tPlan,
       appSettings: aSettings,
     } = paramsRef.current;
 
@@ -204,6 +245,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         studentName: sName,
         durationMinutes: dMinutes,
         learningPath: lPath,
+        teachingPlan: tPlan,
       },
       aSettings,
     );
@@ -240,6 +282,31 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   const handleStartLesson = async () => {
     if (!serviceRef.current) return;
+
+    // ── Commit Lesson Cost (Pool minute or Credit debit) ───────────────────
+    if (!startCommittedRef.current && userProfile?.uid) {
+      startCommittedRef.current = true;
+      const durMode = (durationMinutes as LiveDurationMinutes) || 30;
+      const decision = evaluateLiveTutorialStart(userProfile, durMode, appSettings);
+
+      if (decision.allowed) {
+        if (decision.payment === 'included') {
+          commitLiveTutorialStart(userProfile, decision, appSettings).catch((err) => {
+            console.warn('[AvelutLiveClassroomView] commitLiveTutorialStart error:', err);
+          });
+        } else if (decision.payment === 'credits' && decision.creditCost > 0) {
+          deductAICredits(userProfile.uid, decision.creditCost, `live_tutorial_${durMode}`, appSettings)
+            .then((res) => {
+              if (res.success && typeof res.balance === 'number') {
+                notifyUserCreditsUpdated(userProfile.uid, res.balance);
+              }
+            })
+            .catch((err) => {
+              console.warn('[AvelutLiveClassroomView] deductAICredits error:', err);
+            });
+        }
+      }
+    }
 
     const unlocked = await serviceRef.current.resumeAudio();
     await new Promise((r) => setTimeout(r, 80));

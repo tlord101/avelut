@@ -16,6 +16,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { UserProfile, Course, Topic } from '../types';
 import { InsufficientCreditsModal } from './tutorial/InsufficientCreditsModal';
+import { LessonDurationModal, type LessonDurationMode } from './tutorial/LessonDurationModal';
 import { AvelutLiveClassroomView } from './tutorial/live-classroom/AvelutLiveClassroomView';
 import {
   evaluateLiveTutorialStart,
@@ -116,6 +117,8 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 
   // ── UI State ─────────────────────────────────────────────────────────────
   const [isPlayerActive, setIsPlayerActive] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<LiveDurationMinutes>(15);
+  const [showDurationModal, setShowDurationModal] = useState(true);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditCheckData, setCreditCheckData] = useState<any>(null);
   const [resumeProgress, setResumeProgress] = useState<LiveTeachingProgress | null>(null);
@@ -158,6 +161,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
 
   useEffect(() => {
     setIsPlayerActive(false);
+    setShowDurationModal(true);
     setResumeProgress(null);
   }, [sessionId]);
 
@@ -173,18 +177,13 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
   }, [userProfile?.uid, topicTitle, courseName]);
 
-  // ── Auto-start check ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isPlayerActive && !showCreditsModal && effectiveSessionData) {
-      void handleStartLesson(30);
-    }
-  }, [isPlayerActive, showCreditsModal, effectiveSessionData]);
-
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleStartLesson = async (mode: 15 | 30 | 60) => {
+    const dur = mode as LiveDurationMinutes;
+    setSelectedDuration(dur);
     const decision = evaluateLiveTutorialStart(
       userProfile,
-      mode as LiveDurationMinutes,
+      dur,
       resolvedAppSettings,
     );
 
@@ -192,7 +191,7 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       setCreditCheckData({
         currentBalance: userProfile?.ai_credits_balance ?? 0,
         requiredCost: decision.creditCost,
-        durationMinutes: mode,
+        durationMinutes: dur,
         poolRemaining: decision.poolRemaining,
       });
       setShowCreditsModal(true);
@@ -200,11 +199,13 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     }
 
     // Instant start
+    setShowDurationModal(false);
     setIsPlayerActive(true);
   };
 
   const handleClose = () => {
     setIsPlayerActive(false);
+    setShowDurationModal(false);
     if (onBack) {
       onBack();
     } else {
@@ -217,13 +218,31 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
   return (
     <div className="relative w-full h-full min-h-screen bg-[#0A0A0A] text-[#FAFAFA]">
 
-      {/* Insufficient credits */}
+      {/* ── CHOOSE DURATION MODAL (SHOWN FIRST) ───────────────────────── */}
+      <LessonDurationModal
+        isOpen={showDurationModal && !isPlayerActive}
+        topicTitle={topicTitle}
+        courseName={courseName}
+        initialMode={15}
+        userProfile={userProfile}
+        appSettings={resolvedAppSettings}
+        onClose={handleClose}
+        onConfirm={(mode) => {
+          void handleStartLesson(mode);
+        }}
+        onBuyCredits={() => {
+          setShowDurationModal(false);
+          onNavigate?.('billing');
+        }}
+      />
+
+      {/* Insufficient credits modal */}
       <InsufficientCreditsModal
         isOpen={showCreditsModal}
         onClose={() => setShowCreditsModal(false)}
         currentBalance={creditCheckData?.currentBalance ?? 0}
         requiredCost={creditCheckData?.requiredCost ?? 0}
-        durationMinutes={creditCheckData?.durationMinutes ?? 30}
+        durationMinutes={creditCheckData?.durationMinutes ?? 15}
         poolRemaining={creditCheckData?.poolRemaining ?? 0}
         onBuyCredits={() => {
           setShowCreditsModal(false);
@@ -243,11 +262,11 @@ export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
       {/* ── LIVE CLASSROOM ─────────────────────────────────────────────── */}
       {isPlayerActive && (
         <AvelutLiveClassroomView
-          key={`${topicTitle}::${courseName}::30`}
+          key={`${topicTitle}::${courseName}::${selectedDuration}`}
           topicTitle={topicTitle}
           courseName={courseName}
           syllabusContext={syllabusContext}
-          durationMinutes={30}
+          durationMinutes={selectedDuration}
           learningPath={learningPath}
           userProfile={userProfile}
           appSettings={resolvedAppSettings}

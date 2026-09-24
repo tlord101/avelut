@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Lock, CheckCircle2, Sparkles, Clock, X, ChevronRight, Zap } from 'lucide-react';
 import type { UserProfile, AppSettings } from '../../types';
 import {
   evaluateLiveTutorialStart,
@@ -9,39 +10,31 @@ import {
 
 export type LessonDurationMode = 15 | 30 | 60;
 
-export interface LessonDurationOption {
+export interface LessonDurationItem {
   minutes: LessonDurationMode;
-  title: string;
-  subtitle: string;
-  boardsCount: number;
+  name: string;
+  tagline: string;
   description: string;
-  icon: string;
 }
 
-export const LESSON_DURATION_OPTIONS: LessonDurationOption[] = [
+export const DURATION_OPTIONS: LessonDurationItem[] = [
   {
     minutes: 15,
-    title: 'Quick',
-    subtitle: '~15 minutes',
-    boardsCount: 8,
-    description: 'Fast overview — core idea, key visuals, short understanding check.',
-    icon: 'bi-lightning-charge',
+    name: 'Quick Overview',
+    tagline: '15 Minutes',
+    description: 'Fast, high-impact intuition with key visual takeaways.',
   },
   {
     minutes: 30,
-    title: 'Standard',
-    subtitle: '~30 minutes',
-    boardsCount: 15,
-    description: 'Full concept walkthrough with step-by-step illustrations and checks.',
-    icon: 'bi-book',
+    name: 'Standard Masterclass',
+    tagline: '30 Minutes',
+    description: 'Complete concept breakdown, diagrams, and practical examples.',
   },
   {
     minutes: 60,
-    title: 'Full lecture',
-    subtitle: '~60 minutes',
-    boardsCount: 30,
-    description: 'Real lecturer style — chapters, deep dives, pauses, resume anytime.',
-    icon: 'bi-mortarboard',
+    name: 'Deep Dive Lecture',
+    tagline: '60 Minutes',
+    description: 'Full academic mastery with derivations, drills, and deep Q&A.',
   },
 ];
 
@@ -56,231 +49,227 @@ export interface LessonDurationModalProps {
   onPrepare?: (mode: LessonDurationMode) => void;
   onOpen?: (mode: LessonDurationMode) => void;
   initialMode?: LessonDurationMode;
-  resumeAvailable?: boolean;
-  resumeLabel?: string;
-  onResume?: () => void;
   userProfile?: UserProfile | null;
   appSettings?: AppSettings | null;
+  onBuyCredits?: () => void;
 }
 
 export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
   isOpen,
-  topicTitle = 'Live Tutorial',
+  topicTitle = 'Live Interactive Tutorial',
   courseName,
-  syllabusContext,
   onClose,
   onConfirm,
   onContinue,
   onPrepare,
   onOpen,
   initialMode = 15,
-  resumeAvailable = false,
-  resumeLabel,
-  onResume,
   userProfile,
   appSettings,
+  onBuyCredits,
 }) => {
-  const [selected, setSelected] = useState<LessonDurationMode>(initialMode);
+  const [selectedMode, setSelectedMode] = useState<LessonDurationMode>(initialMode);
   const [serverPoolTrigger, setServerPoolTrigger] = useState(0);
 
-  const effectiveProfile = useMemo(() => {
-    if (userProfile && (userProfile.uid || (userProfile as any).id)) return userProfile;
-    if (typeof window !== 'undefined') {
-      const winProf = (window as any).__userProfile;
-      if (winProf && (winProf.uid || winProf.id)) return winProf;
-      try {
-        const cached = localStorage.getItem('avelut_user_profile') || localStorage.getItem('user_profile');
-        if (cached) return JSON.parse(cached);
-      } catch {}
+  // Sync server minute pool when modal opens
+  useEffect(() => {
+    if (isOpen && userProfile?.uid) {
+      const pool = getLiveMinutesRemaining(userProfile, appSettings);
+      if (pool.periodKey) {
+        fetchLiveMinutePoolFromServer(userProfile.uid, pool.periodKey)
+          .then(() => setServerPoolTrigger((prev) => prev + 1))
+          .catch(() => {});
+      }
     }
-    return userProfile;
-  }, [userProfile]);
+  }, [isOpen, userProfile, appSettings]);
 
-  const pool = useMemo(
-    () => getLiveMinutesRemaining(effectiveProfile, appSettings),
-    [effectiveProfile, appSettings, serverPoolTrigger]
-  );
-
-  React.useEffect(() => {
-    if (isOpen && effectiveProfile?.uid && pool.periodKey) {
-      fetchLiveMinutePoolFromServer(effectiveProfile.uid, pool.periodKey).then(() => {
-        setServerPoolTrigger((prev) => prev + 1);
-      }).catch(console.warn);
-    }
-  }, [isOpen, effectiveProfile?.uid, pool.periodKey]);
+  // Evaluate decisions for all 3 duration options
+  const decisions = useMemo(() => {
+    const map: Record<LessonDurationMode, ReturnType<typeof evaluateLiveTutorialStart>> = {
+      15: evaluateLiveTutorialStart(userProfile, 15, appSettings),
+      30: evaluateLiveTutorialStart(userProfile, 30, appSettings),
+      60: evaluateLiveTutorialStart(userProfile, 60, appSettings),
+    };
+    return map;
+  }, [userProfile, appSettings, serverPoolTrigger]);
 
   if (!isOpen) return null;
 
-  const periodLabel = pool.period === 'week' ? 'this week' : 'this month';
+  const activeDecision = decisions[selectedMode];
+  const isSelectedLocked = !activeDecision?.allowed;
 
-  const selectedDecision = evaluateLiveTutorialStart(
-    effectiveProfile,
-    selected as LiveDurationMinutes,
-    appSettings
-  );
+  const handleStart = () => {
+    if (isSelectedLocked) {
+      if (onBuyCredits) {
+        onBuyCredits();
+      } else {
+        // Fallback: close and notify
+        onClose();
+      }
+      return;
+    }
 
-  const handleContinueClick = () => {
-    if (onContinue) {
-      onContinue(selected);
-    } else if (onConfirm) {
-      onConfirm(selected);
+    if (onConfirm) {
+      onConfirm(selectedMode);
+    } else if (onContinue) {
+      onContinue(selectedMode);
     } else if (onOpen) {
-      onOpen(selected);
+      onOpen(selectedMode);
     } else if (onPrepare) {
-      onPrepare(selected);
+      onPrepare(selectedMode);
     }
   };
 
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#0A0A0A] border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-lg w-full max-h-[86vh] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col text-black dark:text-white"
+        className="relative w-full max-w-md bg-[#0F0F12] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col text-white"
       >
-        {/* Header */}
-        <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
-              <i className="bi bi-clock-history text-lg"></i>
+        {/* Top Header */}
+        <div className="flex items-start justify-between p-5 pb-3 border-b border-white/5">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/20">
+                <Sparkles className="w-3 h-3" /> Live Classroom
+              </span>
+              {courseName && (
+                <span className="text-xs text-white/40 truncate max-w-[160px]">
+                  {courseName}
+                </span>
+              )}
             </div>
-            <div>
-              <h2 className="text-base font-bold text-black dark:text-white">Choose Lesson Duration</h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Board-first live interactive lecture</p>
-            </div>
+            <h2 className="text-lg font-bold text-white tracking-tight line-clamp-1">
+              {topicTitle}
+            </h2>
+            <p className="text-xs text-white/50 mt-0.5">
+              Select session duration to begin
+            </p>
           </div>
+
           <button
             onClick={onClose}
-            type="button"
-            className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center text-neutral-500 dark:text-neutral-300 hover:text-black dark:hover:text-white hover:bg-neutral-50 transition-colors"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all shrink-0"
+            aria-label="Close"
           >
-            <i className="bi bi-x-lg text-sm"></i>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Topic & Minutes Balance Banner */}
-        <div className="px-5 py-2.5 bg-white dark:bg-[#0A0A0A] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block">Topic</span>
-            <span className="text-xs font-bold text-black dark:text-white truncate block max-w-full">{topicTitle}</span>
-          </div>
-          <div className="shrink-0 text-right rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-3 py-1.5">
-            <p className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Included {periodLabel}</p>
-            <p className="text-xs sm:text-sm font-black text-black dark:text-white">
-              {pool.remaining}
-              <span className="text-neutral-400 font-semibold text-xs"> / {pool.allowance} min</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Resume Previous Progress Option */}
-        {resumeAvailable && onResume && (
-          <div className="px-5 pt-3">
-            <button
-              type="button"
-              onClick={onResume}
-              className="w-full p-3 sm:p-4 rounded-2xl border-2 border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-left hover:border-black dark:hover:border-white transition-all shadow-sm cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
-                  <i className="bi bi-play-circle text-lg"></i>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-bold text-black dark:text-white">Continue where you left off</p>
-                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">{resumeLabel || 'Resume saved lecture progress'}</p>
-                </div>
-                <i className="bi bi-chevron-right text-neutral-400"></i>
-              </div>
-            </button>
-          </div>
-        )}
-
-        {/* Duration Options */}
-        <div className="p-4 sm:p-5 space-y-3 overflow-y-auto max-h-[50vh]">
-          {LESSON_DURATION_OPTIONS.map((opt) => {
-            const isSelected = selected === opt.minutes;
-            const optDecision = evaluateLiveTutorialStart(
-              effectiveProfile,
-              opt.minutes as LiveDurationMinutes,
-              appSettings
-            );
-            const canAfford = optDecision.allowed;
-
-            const priceBadge =
-              optDecision.payment === 'included'
-                ? `Included (${opt.minutes}m balance)`
-                : optDecision.payment === 'credits'
-                  ? `${optDecision.creditCost} credits`
-                  : optDecision.message;
+        {/* Duration Options List */}
+        <div className="p-5 space-y-3">
+          {DURATION_OPTIONS.map((item) => {
+            const decision = decisions[item.minutes];
+            const isAllowed = decision?.allowed;
+            const isSelected = selectedMode === item.minutes;
+            const isIncluded = decision?.payment === 'included';
 
             return (
-              <div
-                key={opt.minutes}
-                onClick={() => setSelected(opt.minutes)}
-                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+              <button
+                key={item.minutes}
+                type="button"
+                onClick={() => setSelectedMode(item.minutes)}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all duration-150 cursor-pointer ${
                   isSelected
-                    ? 'border-black dark:border-white bg-neutral-50 dark:bg-[#141414] shadow-sm'
-                    : 'border-neutral-200 dark:border-[#2A2A2A] bg-white dark:bg-[#0A0A0A] hover:border-neutral-300 dark:hover:border-[#3A3A3A]'
-                } ${!canAfford ? 'opacity-70' : ''}`}
+                    ? 'bg-[#18181D] border-[#38BDF8] shadow-[0_0_20px_rgba(56,189,248,0.15)] ring-1 ring-[#38BDF8]'
+                    : 'bg-[#141418]/60 border-white/5 hover:bg-[#18181D]/80 hover:border-white/10'
+                }`}
               >
-                <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                {/* Left info */}
+                <div className="flex items-center gap-3.5 min-w-0">
                   <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                    className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 transition-colors ${
                       isSelected
-                        ? 'bg-black text-white dark:bg-white dark:text-black'
-                        : 'bg-neutral-100 dark:bg-[#1C1C1C] text-black dark:text-white border border-neutral-200 dark:border-[#2A2A2A]'
+                        ? 'bg-[#38BDF8] text-black font-bold'
+                        : isAllowed
+                        ? 'bg-white/10 text-white'
+                        : 'bg-white/5 text-white/30'
                     }`}
                   >
-                    <i className={`bi ${opt.icon} text-base`}></i>
+                    <Clock className="w-5 h-5" />
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{opt.title}</span>
-                      <span className="text-[10px] font-semibold text-neutral-500 dark:text-[#A3A3A3] bg-neutral-100 dark:bg-[#1C1C1C] px-2 py-0.5 rounded-md">
-                        {opt.subtitle} ({opt.boardsCount} boards)
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className={`text-sm font-bold tracking-tight truncate ${
+                        isSelected ? 'text-white' : 'text-white/90'
+                      }`}
+                    >
+                      {item.name}
+                    </span>
+
+                    {/* Small label underneath */}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-semibold text-[#38BDF8]">
+                        {item.tagline}
                       </span>
+
+                      <span className="text-[11px] text-white/40">•</span>
+
+                      {isIncluded ? (
+                        <span className="text-[11px] font-medium text-emerald-400">
+                          Included with Plan
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-white/50">
+                          {decision?.creditCost} credits
+                        </span>
+                      )}
                     </div>
-                    <p className="text-[11px] sm:text-xs text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
-                      {opt.description}
-                    </p>
-                    <p className="text-[10px] font-bold mt-1 text-neutral-600 dark:text-neutral-300">
-                      {priceBadge}
-                    </p>
                   </div>
                 </div>
 
-                {/* Radio indicator */}
-                <div className="shrink-0">
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                      isSelected
-                        ? 'border-black dark:border-white bg-black dark:bg-white'
-                        : 'border-neutral-300 dark:border-neutral-700 bg-transparent'
-                    }`}
-                  >
-                    {isSelected && <div className="w-2 h-2 rounded-full bg-white dark:bg-black" />}
-                  </div>
+                {/* Right Status / Padlock icon */}
+                <div className="flex items-center shrink-0 pl-2">
+                  {!isAllowed ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Locked</span>
+                    </div>
+                  ) : isSelected ? (
+                    <CheckCircle2 className="w-5 h-5 text-[#38BDF8]" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border border-white/20" />
+                  )}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
 
-        {/* Footer: Single Primary Continue Button */}
-        <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-[#111111] border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-            {selectedDecision.allowed ? `Ready to start ~${selected}m live tutorial` : selectedDecision.message}
-          </p>
+        {/* Balance Status Footer */}
+        <div className="px-5 pb-2 text-xs text-white/40 flex items-center justify-between">
+          <span>Your Credit Balance:</span>
+          <span className="font-semibold text-white/70">
+            {userProfile?.ai_credits_balance ?? 0} credits
+          </span>
+        </div>
+
+        {/* Central Action Button */}
+        <div className="p-5 pt-2">
           <button
-            onClick={handleContinueClick}
             type="button"
-            className="px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 active:scale-95 transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+            onClick={handleStart}
+            className={`w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-lg active:scale-[0.98] ${
+              isSelectedLocked
+                ? 'bg-white/10 hover:bg-white/15 text-white border border-white/15 hover:border-white/25 shadow-white/5'
+                : 'bg-[#38BDF8] hover:bg-[#0284c7] text-black shadow-[0_0_25px_rgba(56,189,248,0.3)]'
+            }`}
           >
-            <span>Continue</span>
-            <i className="bi bi-arrow-right text-xs"></i>
+            {isSelectedLocked ? (
+              <>
+                <Lock className="w-4 h-4" />
+                <span>Get Credits to Unlock ({activeDecision?.creditCost} Credits)</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4 fill-current" />
+                <span>Start Lesson ({selectedMode} Minutes)</span>
+              </>
+            )}
           </button>
         </div>
       </div>

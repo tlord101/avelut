@@ -404,7 +404,9 @@ export class QwenRealtimeTeacherService {
 
     const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
-    liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min)`);
+    const plan = this.promptConfig?.teachingPlan;
+    const phase1Name = plan?.phases?.[0]?.phaseName || 'Stage 1';
+    liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min) [Phase 1: ${phase1Name}]`);
 
     // Give the model its starting instruction as a user message
     this.sendJson({
@@ -415,10 +417,10 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with a clear plan in simple words (like explaining to a 10-year-old).
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with your structured roadmap in simple words (like explaining to a 10-year-old).
 SILENT TOOL CALL: Immediately call board_action write to put "${topic}" and 1–3 opening keywords on the board.
 DO NOT SAY in voice "I will write on the board" or announce writing. Call the tool silently.
-In your speech: Greet the student warmly and begin Stage 1 of the teaching plan with simple intuition!`,
+In your speech: Greet the student warmly and begin Phase 1: "${phase1Name}" with simple, intuitive everyday examples!`,
         }],
       },
     });
@@ -428,6 +430,8 @@ In your speech: Greet the student warmly and begin Stage 1 of the teaching plan 
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        tools: this.getTools(),
+        tool_choice: 'auto',
       },
     });
   }
@@ -485,6 +489,8 @@ In your speech: Greet the student warmly and begin Stage 1 of the teaching plan 
         type: 'response.create',
         response: {
           modalities: ['text', 'audio'],
+          tools: this.getTools(),
+          tool_choice: 'auto',
         },
       });
     }, this.STUDENT_WAIT_MAX_MS);
@@ -969,6 +975,8 @@ In your speech: Greet the student warmly and begin Stage 1 of the teaching plan 
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        tools: this.getTools(),
+        tool_choice: 'auto',
       },
     });
 

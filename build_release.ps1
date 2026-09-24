@@ -21,14 +21,14 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Building signed release APK..." -ForegroundColor Cyan
+Write-Host "Building signed release Android App Bundle (AAB)..." -ForegroundColor Cyan
 cd android
-.\gradlew.bat assembleRelease
+.\gradlew.bat bundleRelease
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "APK build failed. Exiting." -ForegroundColor Red
+    Write-Host "AAB build failed. Exiting." -ForegroundColor Red
     exit $LASTEXITCODE
 }
 
-Write-Host "Build complete! The signed release APK is located at: android\app\build\outputs\apk\release\app-release.apk" -ForegroundColor Green
+Write-Host "Build complete! The signed release AAB is located at: android\app\build\outputs\bundle\release\app-release.aab" -ForegroundColor Green
 cd ..
