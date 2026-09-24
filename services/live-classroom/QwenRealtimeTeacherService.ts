@@ -84,7 +84,7 @@ export class QwenRealtimeTeacherService {
   private hasReceivedAudioInCurrentResponse = false;
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly STUDENT_WAIT_MAX_MS = 8000;
+  private readonly STUDENT_WAIT_MAX_MS = 3000;
   private consecutiveSilenceNudges = 0;
   private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
   private isStudentSpeaking = false;
@@ -476,7 +476,10 @@ export class QwenRealtimeTeacherService {
       }
 
       this.consecutiveSilenceNudges++;
-      liveLogger.log(`[QwenRealtime] ⏱️ 8s student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue`);
+      liveLogger.log(`[QwenRealtime] ⏱️ 3s student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue with board action`);
+
+      // Force a mermaid board action so the board is always updated during silence
+      this._triggerSilenceBoardAction();
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -486,7 +489,7 @@ export class QwenRealtimeTeacherService {
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use your visual tools silently as needed.]',
+            text: '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use draw_mermaid_diagram or write_on_board to reinforce the key idea visually — silently, without narrating it.]',
           }],
         },
       });
@@ -497,7 +500,7 @@ export class QwenRealtimeTeacherService {
         response: {
           modalities: ['text', 'audio'],
           tools: this.getTools(),
-          tool_choice: 'auto',
+          tool_choice: 'required',
         },
       });
     }, this.STUDENT_WAIT_MAX_MS);
@@ -510,7 +513,38 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  // ── Session initialisation ────────────────────────────────────────────────
+  /**
+   * Directly renders a Mermaid concept-map onto the board during student silence.
+   * Bypasses the LLM entirely — always fires instantly and is guaranteed to draw.
+   */
+  private _triggerSilenceBoardAction(): void {
+    try {
+      const topic = this.promptConfig?.topicTitle || 'the topic';
+      const phase = this.promptConfig?.teachingPlan?.phases?.[this.consecutiveSilenceNudges % 3];
+      const phaseLabel = phase?.phaseName || 'Key Concepts';
+      const keyword1 = phase?.boardVisualPlan?.content?.split(/[\s,|]+/)?.[0] || topic;
+      const keyword2 = phase?.boardVisualPlan?.content?.split(/[\s,|]+/)?.[1] || 'Definition';
+
+      // Build a minimal concept-map Mermaid diagram for the current topic/phase
+      const mermaidCode = [
+        'graph LR',
+        `  A["${topic}"] --> B["${phaseLabel}"]`,
+        `  B --> C["${keyword1}"]`,
+        `  B --> D["${keyword2}"]`,
+      ].join('\n');
+
+      liveLogger.log('[QwenRealtime] _triggerSilenceBoardAction: rendering mermaid for', topic);
+      MermaidBoardService.renderToSvg(mermaidCode).then(svg => {
+        if (svg) this.boardController.setSvgIllustration(svg);
+      }).catch(err => {
+        liveLogger.warn('[QwenRealtime] Silence board action mermaid render failed:', err);
+      });
+    } catch (err) {
+      liveLogger.warn('[QwenRealtime] _triggerSilenceBoardAction error (non-fatal):', err);
+    }
+  }
+
+
 
   private sendSessionInit(overrideVoice?: string): void {
     if (!this.promptConfig) return;
