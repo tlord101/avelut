@@ -133,23 +133,6 @@ export function robustParseJson<T = any>(raw: string): T {
     return cleanAndParseJson<T>(raw, { fallback: fallbackStructure as T });
 }
 
-    return {
-        topicName: 'Academic Tutorial',
-        overview: 'Interactive Multi-Disciplinary Lesson',
-        boards: [
-            {
-                boardId: 'b_0',
-                conceptIdx: 0,
-                conceptName: 'Core Overview',
-                phaseTitle: 'Intuition & Key Concepts',
-                boardLines: ['**Academic Topic Overview**', 'Interactive Voice Lesson'],
-                spokenExplanation: 'Welcome to this interactive tutorial. Let us explore the core concepts step by step.',
-            }
-        ],
-        overallSummary: 'Topic completed.',
-    } as any as T;
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 export const VoiceTutorialPage: React.FC<VoiceTutorialPageProps> = ({
     userProfile,
