@@ -1,3 +1,10 @@
+if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
+    if (Test-Path "C:\Users\ADMIN\jdk-21\bin\java.exe") {
+        $env:JAVA_HOME = "C:\Users\ADMIN\jdk-21"
+        $env:PATH = "C:\Users\ADMIN\jdk-21\bin;$env:PATH"
+    }
+}
+
 Write-Host "Building web bundle..." -ForegroundColor Cyan
 npm run build:mobile
 
