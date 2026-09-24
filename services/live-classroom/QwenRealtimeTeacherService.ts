@@ -439,7 +439,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in simple words (Phase 1: ${phase1Name}), and begin with an intuitive everyday example.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in one simple sentence, and immediately call draw_mermaid to draw a concept map or mind map of the topic on the board. The board MUST have a Mermaid diagram from the very first turn — this is non-negotiable.`,
         }],
       },
     });
@@ -450,7 +450,7 @@ export class QwenRealtimeTeacherService {
       response: {
         modalities: ['text', 'audio'],
         tools: this.getTools(),
-        tool_choice: 'auto',
+        tool_choice: 'required',
       },
     });
   }
@@ -495,8 +495,8 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue naturally`);
 
       const promptText = this.lastResponseAskedQuestion
-        ? '[The student is quiet. Answer your question gently in simple words, and seamlessly proceed to the next teaching point. Proactively use draw_mermaid or board_action to show the idea visually on the board without narrating the action.]'
-        : '[The student is listening attentively. Continue teaching the next concept naturally in simple, encouraging words. Use draw_mermaid or board_action to show the idea visually on the board without narrating the action.]';
+        ? '[The student is quiet. Answer your own question gently in simple words, then call draw_mermaid to show the concept as a diagram on the board. A Mermaid diagram is required this turn.]'
+        : '[Continue the lesson. Call draw_mermaid FIRST with a Mermaid diagram that visualises the next concept you are about to explain. Then speak your explanation. Drawing on the board is mandatory every turn.]';
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -517,7 +517,7 @@ export class QwenRealtimeTeacherService {
         response: {
           modalities: ['text', 'audio'],
           tools: this.getTools(),
-          tool_choice: 'auto',
+          tool_choice: 'required',
         },
       });
     }, waitMs);
