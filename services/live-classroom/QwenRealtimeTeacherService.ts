@@ -1021,9 +1021,11 @@ export class QwenRealtimeTeacherService {
       }).catch(err => {
         liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
       });
-      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram drawn on board' };
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || '';
+      if (desc) {
+        this.boardController.writeText(`🔬 ${desc}`, { fontSize: 'medium' });
+      }
       LlmSvgObjectCache.getOrGenerate(desc, async () => {
         if (!this.appSettings) return null;
         const textModel =
