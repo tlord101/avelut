@@ -341,7 +341,8 @@ Output ONLY a valid JSON object matching this schema without markdown fences:
 Rules:
 - Total sum of timeBudgetMins across all phases must equal approximately ${durationMinutes}.
 - Exactly ${targetPhaseCount} phases.
-- Every phase MUST include actionable board visual plan.`;
+- Every phase MUST include actionable board visual plan.
+- At least 2 phases MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") rather than plain text only.`;
 
   // Fire-and-forget background AI generation (60 s budget for thinking models)
   const generateInBackground = async () => {

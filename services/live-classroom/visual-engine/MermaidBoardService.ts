@@ -21,10 +21,10 @@ export class MermaidBoardService {
     }
 
     try {
-      // Force dark theme if not already present
+      // Force dark theme with clear, readable typography
       let codeWithTheme = trimmed;
       if (!codeWithTheme.includes('%%{init')) {
-        codeWithTheme = `%%{init: {'theme': 'dark', 'themeVariables': { 'darkMode': true, 'background': '#0A0A0A' }}}%%\n${codeWithTheme}`;
+        codeWithTheme = `%%{init: {'theme': 'dark', 'themeVariables': { 'darkMode': true, 'background': '#0A0A0A', 'fontSize': '22px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif' }}}%%\n${codeWithTheme}`;
       }
 
       // Convert to base64 for mermaid.ink

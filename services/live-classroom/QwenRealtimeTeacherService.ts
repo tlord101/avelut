@@ -625,11 +625,9 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational Excalidraw board. On EVERY turn you MUST call board_action ' +
-      'with action "write" to put 1–5 short keywords or a tiny takeaway on the board while teaching. ' +
-      'Also use write/draw for formulas, calculations, derivations, and sequential steps. ' +
-      'Do NOT use draw boxes for ordinary concept maps — use draw_mermaid for those. ' +
-      'For comparisons, a compact table-like grid is OK.';
+      'Control the educational Excalidraw board. Use "draw" to create visual step-by-step boxes with arrows for algorithms, ' +
+      'derivations, and procedures. Use "write" to put key formulas ($$ ... $$) and summary terms on the board while teaching. ' +
+      'Whenever explaining conceptual relationships or processes, use draw_mermaid or illustrate_object proactively.';
 
     return {
       type: 'function',
@@ -655,11 +653,10 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'draw_mermaid',
         description:
-          'Render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Prefer this for concept ' +
-          'relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-          'cause/effect, hierarchies, classifications, system architecture, cycles, ' +
-          'state transitions, and component interactions. Choose LR/TB or another ' +
-          'supported Mermaid layout according to the relationship. Keep labels concise and educational.',
+          'PROACTIVELY render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Call this proactively ' +
+          'whenever explaining concept relationships, concept maps, mind maps, flowcharts, branching processes, ' +
+          'cause/effect, hierarchies, classifications, cycles, and component interactions. Do NOT wait for the student to ask ' +
+          'for a diagram — draw proactively to anchor their understanding! Choose LR or TD layout according to the idea.',
         parameters: {
           type: 'object',
           properties: {
@@ -667,7 +664,7 @@ export class QwenRealtimeTeacherService {
               type: 'string',
               description:
                 'Raw valid Mermaid source code. Do not include markdown fences. ' +
-                'Keep labels concise and educational.',
+                'Keep labels concise, clear, and educational.',
             },
           },
           required: ['mermaid_code'],
@@ -681,13 +678,15 @@ export class QwenRealtimeTeacherService {
       type: 'function',
       function: {
         name: 'illustrate_object',
-        description: 'Generate and render a detailed SVG illustration of a complex object, entity, or process inboard directly onto the visual whiteboard canvas.',
+        description:
+          'PROACTIVELY generate and render a detailed SVG illustration of a complex object, entity, or structure directly onto the whiteboard canvas. ' +
+          'Call this proactively whenever teaching physical, biological, anatomical, astronomical, chemical, or mechanical entities without waiting to be asked.',
         parameters: {
           type: 'object',
           properties: {
             object_description: {
               type: 'string',
-              description: 'A clear, short description of the object to illustrate (e.g. "a eukaryotic cell", "a red sports car", "DNA double helix").',
+              description: 'A clear, descriptive label of the object to illustrate (e.g. "plant cell with chloroplasts", "DNA double helix", "water molecule with covalent bonds").',
             },
           },
           required: ['object_description'],
@@ -1282,14 +1281,6 @@ export class QwenRealtimeTeacherService {
         float32[i] = view.getInt16(i * 2, true) / 32768.0;
       }
 
-      // Micro edge smoothing: softens chunk boundary steps during Web Audio 24kHz -> 48kHz resampling
-      if (sampleCount > 8) {
-        float32[0] *= 0.5;
-        float32[1] *= 0.8;
-        float32[sampleCount - 2] *= 0.8;
-        float32[sampleCount - 1] *= 0.5;
-      }
-
       // DashScope/Qwen Realtime PCM audio is 24,000 Hz
       const buf = this.outputAudioCtx.createBuffer(1, sampleCount, 24000);
       buf.copyToChannel(float32, 0);
@@ -1305,10 +1296,17 @@ export class QwenRealtimeTeacherService {
       src.connect(this.outputGainNode);
 
       const now = this.outputAudioCtx.currentTime;
-      // 120ms jitter buffer ensures smooth continuous audio without buffer underruns/stuttering
-      const JITTER_BUFFER_SEC = 0.12;
+      // Fluid streaming schedule:
+      // If nextPlayTime has fallen slightly behind (< 60ms), continue seamlessly at `now`
+      // without injecting an audible silent gap. Only add a small cushion (35ms) if the
+      // channel was truly idle for > 150ms.
       if (this.nextPlayTime < now) {
-        this.nextPlayTime = now + JITTER_BUFFER_SEC;
+        const gap = now - this.nextPlayTime;
+        if (gap > 0.15) {
+          this.nextPlayTime = now + 0.035;
+        } else {
+          this.nextPlayTime = now;
+        }
       }
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;

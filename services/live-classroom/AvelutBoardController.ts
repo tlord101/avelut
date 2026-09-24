@@ -269,14 +269,22 @@ export class AvelutBoardController {
       }
 
       const isMobile = this.isMobileView();
-      const maxW = isMobile ? Math.min(this.MOBILE_CARD_WIDTH + 20, 320) : 560;
-      const renderW = Math.min(maxW, Math.max(260, origW));
-      const aspect = origH / (origW || 1);
-      const renderH = Math.min(Math.max(Math.round(renderW * aspect), 140), isMobile ? 380 : 500);
+      // Generous, legible diagram dimensions:
+      // On mobile: span the board width cleanly (340-360px).
+      // On desktop: allow rich, high-resolution rendering up to 880px wide.
+      const maxW = isMobile ? 350 : 880;
+      const minW = isMobile ? 320 : 640;
+      const renderW = isMobile
+        ? Math.min(maxW, Math.max(minW, origW > 0 ? Math.min(origW, maxW) : 340))
+        : Math.min(maxW, Math.max(minW, origW));
+
+      const aspect = (origH && origW) ? origH / origW : 0.6;
+      // Do not artificially clamp height to a tiny 380px or 500px, which squishes and shrinks the diagram!
+      const renderH = Math.max(160, Math.round(renderW * aspect));
 
       this.clearStageIfFull();
 
-      const x = this.clampX(isMobile ? 20 : 30, renderW);
+      const x = this.clampX(isMobile ? 10 : 40, renderW);
       const y = Math.max(this.STAGE_TOP, this.cursorY + 12);
 
       const elementId = `svg_el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -341,10 +349,10 @@ export class AvelutBoardController {
 
   private clampX(x: number, w = 300) {
     if (this.isMobileView()) {
-      const maxX = Math.max(20, this.MOBILE_BOARD_WIDTH - w - 10);
-      return Math.max(20, Math.min(x, maxX));
+      const maxX = Math.max(10, this.MOBILE_BOARD_WIDTH - w);
+      return Math.max(10, Math.min(x, maxX));
     }
-    const maxDesktopX = Math.max(40, 1100 - w - 20);
+    const maxDesktopX = Math.max(40, 1200 - w - 20);
     return Math.max(30, Math.min(x, maxDesktopX));
   }
 
