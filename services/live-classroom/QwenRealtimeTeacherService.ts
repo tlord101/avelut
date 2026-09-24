@@ -64,8 +64,10 @@ export class QwenRealtimeTeacherService {
 
   // ── Audio — output (WS → speaker) ──────────────────────────────────────
   private outputAudioCtx: AudioContext | null = null;
+  private outputGainNode: GainNode | null = null;
   private activeAudioSources: AudioBufferSourceNode[] = [];
   private nextPlayTime = 0;
+  private pcmRemainder: Uint8Array = new Uint8Array(0);
 
   // ── Session ────────────────────────────────────────────────────────────────
   private promptConfig: TeacherPromptConfig | null = null;
@@ -133,7 +135,11 @@ export class QwenRealtimeTeacherService {
       const AudioCtxClass =
         window.AudioContext || (window as any).webkitAudioContext;
       this.inputAudioCtx  = new AudioCtxClass({ sampleRate: 16000 });
-      this.outputAudioCtx = new AudioCtxClass({ sampleRate: 24000 });
+      // Use native device hardware sample rate for output to prevent Android audio driver cracking
+      this.outputAudioCtx = new AudioCtxClass();
+      this.outputGainNode = this.outputAudioCtx.createGain();
+      this.outputGainNode.gain.value = 1.0;
+      this.outputGainNode.connect(this.outputAudioCtx.destination);
 
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -207,6 +213,10 @@ export class QwenRealtimeTeacherService {
 
     void this.inputAudioCtx?.close();
     this.inputAudioCtx = null;
+
+    this.outputGainNode?.disconnect();
+    this.outputGainNode = null;
+    this.pcmRemainder = new Uint8Array(0);
 
     void this.outputAudioCtx?.close();
     this.outputAudioCtx = null;
@@ -1135,36 +1145,55 @@ export class QwenRealtimeTeacherService {
       }
 
       const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
+      const incomingBytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+        incomingBytes[i] = binary.charCodeAt(i);
       }
 
-      const sampleCount = Math.floor(bytes.byteLength / 2);
+      // Prepend any leftover odd byte from previous chunk to maintain strict 16-bit PCM alignment
+      let combinedBytes: Uint8Array;
+      if (this.pcmRemainder.length > 0) {
+        combinedBytes = new Uint8Array(this.pcmRemainder.length + incomingBytes.length);
+        combinedBytes.set(this.pcmRemainder, 0);
+        combinedBytes.set(incomingBytes, this.pcmRemainder.length);
+        this.pcmRemainder = new Uint8Array(0);
+      } else {
+        combinedBytes = incomingBytes;
+      }
+
+      // If odd number of bytes, stash the last byte for the next packet
+      if (combinedBytes.length % 2 !== 0) {
+        this.pcmRemainder = combinedBytes.slice(combinedBytes.length - 1);
+        combinedBytes = combinedBytes.slice(0, combinedBytes.length - 1);
+      }
+
+      const sampleCount = combinedBytes.length / 2;
       if (sampleCount <= 0) return;
 
-      const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
+      const int16 = new Int16Array(combinedBytes.buffer, combinedBytes.byteOffset, sampleCount);
       const float32 = new Float32Array(sampleCount);
       for (let i = 0; i < sampleCount; i++) {
         float32[i] = int16[i] / 32768;
       }
 
+      // DashScope/Qwen Realtime PCM audio is 24,000 Hz
       const buf = this.outputAudioCtx.createBuffer(1, sampleCount, 24000);
       buf.copyToChannel(float32, 0);
 
       const src = this.outputAudioCtx.createBufferSource();
       src.buffer = buf;
 
-      const gain = this.outputAudioCtx.createGain();
-      gain.gain.value = 1.0;
-      src.connect(gain);
-      gain.connect(this.outputAudioCtx.destination);
+      if (!this.outputGainNode) {
+        this.outputGainNode = this.outputAudioCtx.createGain();
+        this.outputGainNode.gain.value = 1.0;
+        this.outputGainNode.connect(this.outputAudioCtx.destination);
+      }
+      src.connect(this.outputGainNode);
 
       const now = this.outputAudioCtx.currentTime;
-      if (this.activeAudioSources.length === 0) {
-        this.nextPlayTime = now + 0.08;
-      } else if (this.nextPlayTime < now - 0.25) {
-        this.nextPlayTime = now;
+      const LEAD_TIME = 0.05; // 50ms smooth jitter buffer prevents buffer underrun clicks on Android
+      if (this.nextPlayTime < now) {
+        this.nextPlayTime = now + LEAD_TIME;
       }
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
@@ -1190,6 +1219,7 @@ export class QwenRealtimeTeacherService {
   public stopPlayback(): void {
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
+    this.pcmRemainder = new Uint8Array(0);
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
   }
 }
