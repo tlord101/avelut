@@ -201,8 +201,78 @@ export class AvelutBoardController {
   private boardFiles: Record<string, any> = {};
   private cursorY = 90;
   private lessonTitle = '';
+  private currentTheme: 'light' | 'dark' = 'dark';
   private onFormulaChangeCallback: ((formula: string | null) => void) | null = null;
   private onSvgIllustrationChangeCallback: ((svgString: string | null) => void) | null = null;
+
+  public getTheme(): 'light' | 'dark' {
+    return this.currentTheme;
+  }
+
+  public getCanvasBg(): string {
+    return this.currentTheme === 'dark' ? '#0A0A0A' : '#F8FAFC';
+  }
+
+  public getThemePalette() {
+    const isDark = this.currentTheme === 'dark';
+    return {
+      isDark,
+      bg: isDark ? '#0A0A0A' : '#F8FAFC',
+      text: isDark ? '#F8FAFC' : '#0F172A',
+      textMuted: isDark ? '#94A3B8' : '#475569',
+      cardBg: isDark ? '#1E293B' : '#FFFFFF',
+      cardBorder: isDark ? '#38BDF8' : '#0284C7',
+      labelColor: isDark ? '#FFFFFF' : '#0F172A',
+      arrowColor: isDark ? '#38BDF8' : '#0284C7',
+      arrowLabelColor: isDark ? '#E2E8F0' : '#1E293B',
+      formulaBg: isDark ? '#1E1B4B' : '#FEF3C7',
+      formulaBorder: isDark ? '#FDE047' : '#D97706',
+      formulaText: isDark ? '#FDE047' : '#92400E',
+      palette: isDark
+        ? ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#60A5FA']
+        : ['#0284C7', '#059669', '#D97706', '#7C3AED', '#DB2777', '#2563EB'],
+    };
+  }
+
+  public setTheme(theme: 'light' | 'dark'): void {
+    if (this.currentTheme === theme) return;
+    this.currentTheme = theme;
+    const p = this.getThemePalette();
+
+    // Re-theme existing elements so they contrast against the new background
+    if (this.elements.length > 0) {
+      this.elements = this.elements.map(el => {
+        const copy = { ...el };
+        if (copy.type === 'text') {
+          if (copy.strokeColor === '#F8FAFC' || copy.strokeColor === '#0F172A' || copy.strokeColor === '#FFFFFF') {
+            copy.strokeColor = p.text;
+          }
+        } else if (copy.type === 'rectangle' || copy.type === 'ellipse' || copy.type === 'diamond') {
+          if (copy.customData?.slot === 'formula') {
+            copy.strokeColor = p.formulaBorder;
+            copy.backgroundColor = p.formulaBg;
+            if (copy.label) copy.label = { ...copy.label, strokeColor: p.formulaText };
+          } else {
+            if (copy.backgroundColor === '#1E293B' || copy.backgroundColor === '#FFFFFF' || copy.backgroundColor === '#0F172A') {
+              copy.backgroundColor = p.cardBg;
+            }
+            if (copy.label) {
+              copy.label = { ...copy.label, strokeColor: p.labelColor };
+            }
+          }
+        } else if (copy.type === 'arrow') {
+          if (copy.label) {
+            copy.label = { ...copy.label, strokeColor: p.arrowLabelColor };
+          }
+        }
+        return copy;
+      });
+    }
+
+    if (this.api) {
+      this.syncScene();
+    }
+  }
 
   public setOnFormulaChange(cb: ((formula: string | null) => void) | null): void {
     this.onFormulaChangeCallback = cb;
@@ -479,6 +549,12 @@ export class AvelutBoardController {
   public setApi(api: ExcalidrawImperativeAPI | null): void {
     if (api) {
       this.api = api;
+      api.updateScene({
+        appState: {
+          theme: this.currentTheme,
+          viewBackgroundColor: this.getCanvasBg(),
+        }
+      });
       const filesList = Object.values(this.boardFiles);
       if (filesList.length > 0 && (api as any).addFiles) {
         try {
@@ -552,6 +628,8 @@ export class AvelutBoardController {
       this.api.updateScene({
         elements: [...this.elements],
         appState: {
+          theme: this.currentTheme,
+          viewBackgroundColor: this.getCanvasBg(),
           zoom: { value: 1.0 as any },
           scrollX: targetScrollX,
           scrollY: targetScrollY,
@@ -643,10 +721,11 @@ export class AvelutBoardController {
 
     this.clearStageIfFull();
 
+    const p = this.getThemePalette();
     const fontSize = this.fontSizeToNumber(args?.fontSize);
     const x = this.clampX(args?.x ?? 30, 20);
     const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
-    const color = args?.color ?? '#F8FAFC';
+    const color = args?.color ?? p.text;
 
     const isMathLike = args?.isFormula || /[$^·×±√\\]/.test(text) || (text.includes('=') && !text.includes('\n'));
     const displayText = isMathLike ? formatMathForCanvas(text) : text.trim();
@@ -688,6 +767,7 @@ export class AvelutBoardController {
 
     this.onFormulaChangeCallback?.(cleanFormula);
 
+    const p = this.getThemePalette();
     // Canvas cannot render raw LaTeX ($$ ... $$ or \lambda), so format with Unicode symbols
     const canvasFormula = formatMathForCanvas(cleanFormula);
     const cardWidth = Math.min(Math.max(canvasFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
@@ -699,11 +779,11 @@ export class AvelutBoardController {
       y: this.cursorY + 10,
       width: cardWidth,
       height: 48,
-      strokeColor: '#FDE047',
-      backgroundColor: '#1E1B4B',
+      strokeColor: p.formulaBorder,
+      backgroundColor: p.formulaBg,
       fillStyle: 'solid',
       roundness: { type: 3 },
-      label: { text: canvasFormula, fontSize: 18, strokeColor: '#FDE047' },
+      label: { text: canvasFormula, fontSize: 18, strokeColor: p.formulaText },
       customData: { zone: 'notes', slot: 'formula' },
     }]);
 
@@ -716,6 +796,7 @@ export class AvelutBoardController {
     this.actionQueue.push(() => { this._drawShape(args); });
   }
   private _drawShape(args: DrawShapeArgs): void {
+    const p = this.getThemePalette();
     const {
       id = `shape_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
@@ -725,8 +806,8 @@ export class AvelutBoardController {
       height = this.MOBILE_CARD_HEIGHT,
       label,
       color,
-      strokeColor = color || '#38BDF8',
-      backgroundColor = args.backgroundColor || '#1E293B',
+      strokeColor = color || args.strokeColor || p.cardBorder,
+      backgroundColor = args.backgroundColor || p.cardBg,
       strokeStyle = 'solid',
       fillStyle = 'solid',
     } = args;
@@ -761,7 +842,7 @@ export class AvelutBoardController {
       el.label = {
         text,
         fontSize: 16,
-        strokeColor: '#FFFFFF', // High-contrast white label inside dark card
+        strokeColor: p.labelColor,
       };
       
       const lineCount = text.split('\n').length;
@@ -826,7 +907,8 @@ export class AvelutBoardController {
         endY = args.endY ?? startY + 36;
       }
 
-      const strokeColor = args.color || args.strokeColor || '#38BDF8';
+      const p = this.getThemePalette();
+      const strokeColor = args.color || args.strokeColor || p.arrowColor;
 
       const skeleton: any = {
         type: 'arrow',
@@ -849,7 +931,7 @@ export class AvelutBoardController {
         skeleton.label = {
           text: args.label.trim(),
           fontSize: 13,
-          strokeColor: '#E2E8F0', // High contrast readable text
+          strokeColor: p.arrowLabelColor,
         };
       }
 
@@ -2049,7 +2131,8 @@ export class AvelutBoardController {
             return { status: 'error', action: 'draw', message: 'No elements provided.' };
           }
 
-          const NEON_PALETTE = ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#38BDF8'];
+          const p = this.getThemePalette();
+          const PALETTE = p.palette;
           let colorIdx = 0;
           const isMobile = this.isMobileView();
 
@@ -2064,6 +2147,7 @@ export class AvelutBoardController {
                 x: isMobile ? 30 : el.x,
                 y: el.y,
                 fontSize: 'medium',
+                color: p.text,
               });
             } else {
               const shapeType: 'rectangle' | 'ellipse' | 'diamond' =
@@ -2071,7 +2155,7 @@ export class AvelutBoardController {
                 el.kind === 'diamond' ? 'diamond' :
                 'rectangle';
 
-              const strokeColor = NEON_PALETTE[colorIdx % NEON_PALETTE.length];
+              const strokeColor = PALETTE[colorIdx % PALETTE.length];
               colorIdx++;
 
               this.drawShape({
@@ -2082,7 +2166,7 @@ export class AvelutBoardController {
                 y: isMobile ? undefined : el.y,
                 width: isMobile ? this.MOBILE_CARD_WIDTH : (el.x ? 240 : this.MOBILE_CARD_WIDTH),
                 height: this.MOBILE_CARD_HEIGHT,
-                backgroundColor: '#1E293B',
+                backgroundColor: p.cardBg,
                 strokeColor,
               });
             }
@@ -2097,6 +2181,7 @@ export class AvelutBoardController {
               fromId: el.from,
               toId: el.to,
               label: el.label,
+              color: p.arrowColor,
             });
           }
 

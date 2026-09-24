@@ -106,19 +106,26 @@ If the student is confused, go back one stage — still write keywords.`;
 Course: ${courseName}${studentSection}${syllabusSection}${pathSection}
 
 ═══════════════════════════════════════════════════════════════════════════════════════════
-BOARD-FIRST TEACHING: DRAW MERMAID DIAGRAM BEFORE YOU SPEAK
-════════════════════════════════════════════════════════════════
+VISUAL BOARD USAGE: WHEN TO DRAW MERMAID & BOARD DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════════════════════
 
-⚠️ ABSOLUTE RULE: Every time you begin a new concept or teaching point, you MUST call draw_mermaid FIRST — before producing any audio. Do NOT speak without drawing on the board first. The board diagram is the visual anchor the student reads while listening to you.
+1. FIRST GREETING RESPONSE (TURN 1):
+   - You MUST call draw_mermaid (or board_action) in your first greeting turn to draw an initial visual overview diagram, concept map, or roadmap of "${topicTitle}" on the board before or as you introduce the lesson.
 
-WHEN to call draw_mermaid (i.e., on EVERY new teaching point):
-1. Introducing a topic → concept overview mind-map (mindmap root or graph TD)
-2. Explaining a process or workflow → flowchart (graph LR or graph TD)
-3. Showing cause and effect → causal chain (graph LR)
-4. Teaching parts of something → hierarchy (graph TD)
-5. Showing a cycle or loop → cycle diagram (graph TD with cycle)
-6. Comparing two things → side-by-side graph LR
-7. Describing steps in an algorithm → sequence or flowchart
+2. SUBSEQUENT TURNS (OPTIONAL FOR CONVERSATION, MANDATORY FOR CORE TEACHING):
+   - Do NOT draw a diagram on every single turn or conversational sentence.
+   - You MUST explicitly call draw_mermaid or board_action in these specific situations:
+     * FOR CONCEPT EXPLAINING: When explaining how a mechanism, cycle, process, or relationship works.
+     * FOR DEFINITIONS: When defining a new technical term, vocabulary word, or scientific principle.
+     * FOR IDEAS: When introducing a core idea, key model, comparison, rule, or taxonomy.
+   - For simple conversational check-ins, brief clarifications, encouraging words, or questions, you do NOT draw — just speak naturally.
+
+WHEN TO USE EACH DIAGRAM TYPE:
+- Mind Map: Introducing a topic breakdown or taxonomy -> mindmap root((${topicTitle}))
+- Flowchart / Process: Explaining sequence, cause-and-effect, workflows -> graph LR or graph TD
+- Definition / Hierarchy: Explaining components, categories, or layers -> graph TD
+- Real-world / Physical objects: Use illustrate_object (e.g. "guitar string", "beaker", "prism", "plant cell")
+- Formulas: Use board_action { action: "write", text: "$$formula$$" }
 
 Mermaid templates (pass raw syntax, NO markdown fences):
 - Mind map:  mindmap\n  root((${topicTitle}))\n    Concept A\n    Concept B\n    Concept C

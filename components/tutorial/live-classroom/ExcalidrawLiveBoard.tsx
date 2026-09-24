@@ -7,10 +7,11 @@
  */
 
 import React, { useEffect, useRef, useMemo } from 'react';
-import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw';
+import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 export interface ExcalidrawLiveBoardProps {
   topicTitle: string;
@@ -25,19 +26,42 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
 }) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
 
+  // Hook into Avelut theme context with fallback to document/system dark mode
+  let themeMode: 'light' | 'dark' = 'dark';
+  try {
+    const themeContext = useTheme();
+    if (themeContext?.mode) {
+      themeMode = themeContext.mode;
+    }
+  } catch {
+    if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) {
+      themeMode = 'dark';
+    } else if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      themeMode = 'dark';
+    } else {
+      themeMode = 'light';
+    }
+  }
+
+  const isDark = themeMode === 'dark';
+  const boardBg = isDark ? '#0A0A0A' : '#F8FAFC';
+
   // Seed the initial elements with the lesson topic title
   const initialElements = useMemo(() => {
+    avelutBoardController.setTheme(themeMode);
     avelutBoardController.initBoard(topicTitle);
     return avelutBoardController.getElements();
   }, [topicTitle]);
 
   const handleApiSet = (api: ExcalidrawImperativeAPI) => {
-    console.log('[ExcalidrawLiveBoard] API ready');
+    console.log('[ExcalidrawLiveBoard] API ready, theme:', themeMode);
     apiRef.current = api;
 
-    // Lock the board immediately on load
+    // Lock the board immediately on load with correct theme & canvas background
     api.updateScene({
       appState: {
+        theme: themeMode,
+        viewBackgroundColor: boardBg,
         viewModeEnabled: true,
         zenModeEnabled: true,
         zoom: { value: 1.0 as any },
@@ -45,10 +69,24 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
         scrollY: 0,
       }
     });
+    avelutBoardController.setTheme(themeMode);
     avelutBoardController.setApi(api);
     avelutBoardController.setLessonTitle(topicTitle);
     onBoardReady?.(api);
   };
+
+  // Sync theme changes dynamically
+  useEffect(() => {
+    avelutBoardController.setTheme(themeMode);
+    if (apiRef.current) {
+      apiRef.current.updateScene({
+        appState: {
+          theme: themeMode,
+          viewBackgroundColor: boardBg,
+        }
+      });
+    }
+  }, [themeMode, boardBg]);
 
   useEffect(() => {
     if (apiRef.current) {
@@ -58,7 +96,9 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden bg-[#0A0A0A] select-none excalidraw-live-board ${className}`}
+      className={`relative w-full h-full overflow-hidden select-none excalidraw-live-board ${
+        isDark ? 'bg-[#0A0A0A]' : 'bg-[#F8FAFC]'
+      } ${className}`}
     >
       {/* Aggressively suppress all Excalidraw UI bars, docks, tools, sidebars */}
       <style>{`
@@ -86,7 +126,7 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
       `}</style>
       <Excalidraw
         excalidrawAPI={handleApiSet}
-        theme="dark"
+        theme={themeMode}
         viewModeEnabled={true}
         zenModeEnabled={true}
         gridModeEnabled={false}
@@ -104,10 +144,11 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
         initialData={{
           elements: initialElements,
           appState: {
-            viewBackgroundColor: '#0A0A0A',
+            theme: themeMode,
+            viewBackgroundColor: boardBg,
             viewModeEnabled: true,
             zenModeEnabled: true,
-            currentItemStrokeColor: '#38BDF8',
+            currentItemStrokeColor: isDark ? '#38BDF8' : '#0284C7',
             currentItemBackgroundColor: 'transparent',
             currentItemFontFamily: 1,
             gridSize: null,

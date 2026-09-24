@@ -439,7 +439,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in one simple sentence, and immediately call draw_mermaid to draw a concept map or mind map of the topic on the board. The board MUST have a Mermaid diagram from the very first turn — this is non-negotiable.`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in one simple sentence, and call draw_mermaid to draw a concept map or mind map of the topic on the board.`,
         }],
       },
     });
@@ -495,8 +495,8 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue naturally`);
 
       const promptText = this.lastResponseAskedQuestion
-        ? '[The student is quiet. Answer your own question gently in simple words, then call draw_mermaid to show the concept as a diagram on the board. A Mermaid diagram is required this turn.]'
-        : '[Continue the lesson. Call draw_mermaid FIRST with a Mermaid diagram that visualises the next concept you are about to explain. Then speak your explanation. Drawing on the board is mandatory every turn.]';
+        ? '[The student is quiet. Answer your own question gently in simple words, then continue explaining the lesson.]'
+        : '[Continue the lesson smoothly. If you are introducing or explaining a core concept, definition, or key idea, call draw_mermaid or board_action to diagram it on the board; otherwise continue your spoken explanation.]';
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -517,7 +517,7 @@ export class QwenRealtimeTeacherService {
         response: {
           modalities: ['text', 'audio'],
           tools: this.getTools(),
-          tool_choice: 'required',
+          tool_choice: 'auto',
         },
       });
     }, waitMs);
@@ -962,17 +962,20 @@ export class QwenRealtimeTeacherService {
       toolResult = this.boardController.executeBoardAction(args);
     } else if (name === 'draw_mermaid') {
       const code = args.mermaid_code || '';
-      // 1. Draw native Excalidraw boxes & arrows on canvas immediately
+      // Parse Mermaid syntax into native Excalidraw shapes & arrows
       const elements = MermaidBoardService.toExcalidrawElements(code);
       if (elements.length > 0) {
+        // Draw native elements cleanly on the canvas once
         this.boardController.executeBoardAction({ action: 'draw', elements });
+      } else {
+        // Fallback to SVG only if native parsing produced no elements
+        const theme = (this.boardController as any).getTheme?.() || 'dark';
+        MermaidBoardService.renderToSvg(code, theme).then(svg => {
+          if (svg) this.boardController.setSvgIllustration(svg);
+        }).catch(err => {
+          liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
+        });
       }
-      // 2. Render SVG illustration (uses local offline generator if remote fails)
-      MermaidBoardService.renderToSvg(code).then(svg => {
-        if (svg) this.boardController.setSvgIllustration(svg);
-      }).catch(err => {
-        liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
-      });
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || '';
       LlmSvgObjectCache.getOrGenerate(desc, async () => {

@@ -148,10 +148,11 @@ export class MermaidBoardService {
   /**
    * Generates a sleek, dark-themed SVG locally without any external network dependency.
    */
-  public static generateLocalSvg(mermaidCode: string): string {
+  public static generateLocalSvg(mermaidCode: string, theme: 'light' | 'dark' = 'dark'): string {
     const { direction, nodes, edges } = this.parseMermaid(mermaidCode);
     if (nodes.length === 0) return '';
 
+    const isDark = theme === 'dark';
     const isLR = direction === 'LR';
     const boxW = 180;
     const boxH = 54;
@@ -162,7 +163,16 @@ export class MermaidBoardService {
     const totalH = Math.max(300, isLR ? boxH + 160 : nodes.length * (boxH + padY) + 80);
 
     const positions = new Map<string, { cx: number; cy: number; x: number; y: number }>();
-    const nodeColors = ['#0284C7', '#059669', '#D97706', '#7C3AED', '#DB2777', '#2563EB'];
+    const nodeColors = isDark
+      ? ['#38BDF8', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#60A5FA']
+      : ['#0284C7', '#059669', '#D97706', '#7C3AED', '#DB2777', '#2563EB'];
+
+    const arrowColor = isDark ? '#38BDF8' : '#0284C7';
+    const arrowLabelColor = isDark ? '#94A3B8' : '#334155';
+    const boxBg = isDark ? '#1E293B' : '#FFFFFF';
+    const textColor = isDark ? '#F8FAFC' : '#0F172A';
+    const svgBg = isDark ? '#0B0F17' : '#F8FAFC';
+    const svgBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
     nodes.forEach((node, idx) => {
       const x = isLR ? 40 + idx * (boxW + padX) : (totalW - boxW) / 2;
@@ -198,8 +208,8 @@ export class MermaidBoardService {
       }
 
       edgesSvg += `
-        <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="#38BDF8" stroke-width="2.5" marker-end="url(#arrowhead)" />
-        ${edge.label ? `<text x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 8}" fill="#94A3B8" font-size="12" text-anchor="middle" font-family="sans-serif">${escapeXml(edge.label)}</text>` : ''}
+        <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${arrowColor}" stroke-width="2.5" marker-end="url(#arrowhead)" />
+        ${edge.label ? `<text x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 8}" fill="${arrowLabelColor}" font-size="12" font-weight="600" text-anchor="middle" font-family="sans-serif">${escapeXml(edge.label)}</text>` : ''}
       `;
     }
 
@@ -210,17 +220,17 @@ export class MermaidBoardService {
 
       nodesSvg += `
         <g>
-          <rect x="${pos.x}" y="${pos.y}" width="${boxW}" height="${boxH}" rx="12" fill="#1E293B" stroke="${color}" stroke-width="2" />
-          <text x="${pos.cx}" y="${pos.cy + 5}" fill="#F8FAFC" font-size="14" font-weight="600" text-anchor="middle" font-family="sans-serif">${escapeXml(node.label.slice(0, 24))}</text>
+          <rect x="${pos.x}" y="${pos.y}" width="${boxW}" height="${boxH}" rx="12" fill="${boxBg}" stroke="${color}" stroke-width="2.5" />
+          <text x="${pos.cx}" y="${pos.cy + 5}" fill="${textColor}" font-size="14" font-weight="700" text-anchor="middle" font-family="sans-serif">${escapeXml(node.label.slice(0, 24))}</text>
         </g>
       `;
     });
 
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="100%" height="100%" style="background-color: #0B0F17; border-radius: 16px;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="100%" height="100%" style="background-color: ${svgBg}; border: 1px solid ${svgBorder}; border-radius: 16px;">
         <defs>
           <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <polygon points="0 0, 8 3, 0 6" fill="#38BDF8" />
+            <polygon points="0 0, 8 3, 0 6" fill="${arrowColor}" />
           </marker>
         </defs>
         ${edgesSvg}
@@ -233,22 +243,28 @@ export class MermaidBoardService {
    * Fetches an SVG representation of the provided Mermaid code.
    * Uses mermaid.ink with immediate fallback to local high-resolution SVG.
    */
-  public static async renderToSvg(mermaidCode: string): Promise<string> {
+  public static async renderToSvg(mermaidCode: string, theme: 'light' | 'dark' = 'dark'): string {
     const trimmed = mermaidCode.trim();
     if (!trimmed) return '';
 
-    if (this.cache.has(trimmed)) {
-      return this.cache.get(trimmed)!;
+    const cacheKey = `${theme}:${trimmed}`;
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!;
     }
+
+    const isDark = theme === 'dark';
+    const themeName = isDark ? 'dark' : 'default';
+    const bgColorHex = isDark ? '0A0A0A' : 'F8FAFC';
+    const textColorHex = isDark ? '#F8FAFC' : '#0F172A';
 
     try {
       let codeWithTheme = trimmed;
       if (!codeWithTheme.includes('%%{init')) {
-        codeWithTheme = `%%{init: {'theme': 'dark', 'themeVariables': { 'darkMode': true, 'background': '#0A0A0A', 'fontSize': '22px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif' }}}%%\n${codeWithTheme}`;
+        codeWithTheme = `%%{init: {'theme': '${themeName}', 'themeVariables': { 'darkMode': ${isDark}, 'background': '#${bgColorHex}', 'primaryTextColor': '${textColorHex}', 'fontSize': '20px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif' }}}%%\n${codeWithTheme}`;
       }
 
       const encoded = btoa(unescape(encodeURIComponent(codeWithTheme)));
-      const url = `https://mermaid.ink/svg/${encoded}?bgColor=0A0A0A`;
+      const url = `https://mermaid.ink/svg/${encoded}?bgColor=${bgColorHex}`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -259,7 +275,7 @@ export class MermaidBoardService {
       if (response.ok) {
         const svgString = await response.text();
         if (svgString && svgString.includes('<svg')) {
-          this.cache.set(trimmed, svgString);
+          this.cache.set(cacheKey, svgString);
           return svgString;
         }
       }
@@ -267,9 +283,9 @@ export class MermaidBoardService {
       // Fallback seamlessly to local SVG generator
     }
 
-    const localSvg = this.generateLocalSvg(trimmed);
+    const localSvg = this.generateLocalSvg(trimmed, theme);
     if (localSvg) {
-      this.cache.set(trimmed, localSvg);
+      this.cache.set(cacheKey, localSvg);
       return localSvg;
     }
 

@@ -36,6 +36,7 @@ import {
   type TeacherState,
 } from '../../../services/live-classroom/QwenRealtimeTeacherService';
 import { avelutBoardController } from '../../../services/live-classroom/AvelutBoardController';
+import { useTheme } from '../../../contexts/ThemeContext';
 import type { UserProfile } from '../../../types';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -143,8 +144,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [activeFormula, setActiveFormula] = useState<string | null>(null);
-  const [activeSvgIllustration, setActiveSvgIllustration] = useState<string | null>(null);
-  const [isIllustrationExpanded, setIsIllustrationExpanded] = useState(false);
 
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
@@ -264,17 +263,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       setActiveFormula(formula);
     });
 
-    avelutBoardController.setOnSvgIllustrationChange((svg) => {
-      setActiveSvgIllustration(svg);
-    });
-
     if (!startedSessionRef.current) {
       startedSessionRef.current = true;
       startSession();
     }
     return () => {
       avelutBoardController.setOnFormulaChange(null);
-      avelutBoardController.setOnSvgIllustrationChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
@@ -359,24 +353,40 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
+  let isDark = true;
+  try {
+    const themeContext = useTheme();
+    if (themeContext?.mode) isDark = themeContext.mode === 'dark';
+  } catch {
+    if (typeof document !== 'undefined') {
+      isDark = document.documentElement.classList.contains('dark');
+    }
+  }
+
   return (
     <div
       onClick={ensureAudioUnlocked}
       onTouchStart={ensureAudioUnlocked}
-      className="fixed inset-0 z-50 flex flex-col w-full h-full bg-[#0A0A0A] text-[#FAFAFA] overflow-hidden select-none"
+      className={`fixed inset-0 z-50 flex flex-col w-full h-full ${
+        isDark ? 'bg-[#0A0A0A] text-[#FAFAFA]' : 'bg-[#F8FAFC] text-[#0F172A]'
+      } overflow-hidden select-none`}
     >
 
       {/* ── TOP BAR ──────────────────────────────────────────────────────── */}
-      <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 py-2.5
-                          bg-gradient-to-b from-[#0A0A0A]/95 via-[#0A0A0A]/60 to-transparent
-                          pointer-events-none">
+      <header className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 py-2.5 ${
+        isDark
+          ? 'bg-gradient-to-b from-[#0A0A0A]/95 via-[#0A0A0A]/60 to-transparent'
+          : 'bg-gradient-to-b from-[#F8FAFC]/95 via-[#F8FAFC]/60 to-transparent'
+      } pointer-events-none`}>
         {/* Left: back + title */}
         <div className="flex items-center gap-2.5 pointer-events-auto">
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10
-                       hover:bg-white/20 active:scale-90 transition-all backdrop-blur-md
-                       border border-white/10 text-white"
+            className={`flex items-center justify-center w-9 h-9 rounded-full ${
+              isDark
+                ? 'bg-white/10 hover:bg-white/20 border-white/10 text-white'
+                : 'bg-black/5 hover:bg-black/10 border-black/10 text-slate-800'
+            } active:scale-90 transition-all backdrop-blur-md border`}
             aria-label="Leave Classroom"
           >
             <X className="w-4 h-4" />
@@ -385,12 +395,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-              <span className="text-[10px] font-bold tracking-widest uppercase text-red-400">LIVE</span>
-              <span className="text-[10px] text-white/40 truncate max-w-[140px] sm:max-w-[240px]">
+              <span className="text-[10px] font-bold tracking-widest uppercase text-red-500">LIVE</span>
+              <span className={`text-[10px] ${isDark ? 'text-white/40' : 'text-slate-500'} truncate max-w-[140px] sm:max-w-[240px]`}>
                 • {courseName} • {durationMinutes}m
               </span>
             </div>
-            <h1 className="text-sm font-bold tracking-tight text-white truncate max-w-[180px] sm:max-w-sm leading-tight">
+            <h1 className={`text-sm font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'} truncate max-w-[180px] sm:max-w-sm leading-tight`}>
               {topicTitle}
             </h1>
           </div>
@@ -430,13 +440,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       {activeFormula && (
         <aside
           aria-label="Active Formula"
-          className="absolute top-14 left-3 sm:left-6 z-30 flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-[#121024]/95 border border-[#FDE047]/40 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 pointer-events-auto max-w-[90vw] sm:max-w-md overflow-hidden"
+          className={`absolute top-14 left-3 sm:left-6 z-30 flex items-center gap-2.5 px-4 py-2 rounded-2xl ${
+            isDark
+              ? 'bg-[#121024]/95 border-[#FDE047]/40 shadow-2xl text-[#FDE047]'
+              : 'bg-amber-50/95 border-amber-400/60 shadow-lg text-amber-950'
+          } border backdrop-blur-xl animate-in fade-in slide-in-from-top-2 pointer-events-auto max-w-[90vw] sm:max-w-md overflow-hidden`}
         >
-          <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-[#FDE047]/20 text-[#FDE047] font-serif font-bold text-xs select-none shrink-0">
+          <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${
+            isDark ? 'bg-[#FDE047]/20 text-[#FDE047]' : 'bg-amber-200/60 text-amber-900'
+          } font-serif font-bold text-xs select-none shrink-0`}>
             ∑
           </div>
           <div
-            className="text-[#FDE047] font-semibold text-sm sm:text-base select-text overflow-x-auto py-0.5"
+            className={`${isDark ? 'text-[#FDE047]' : 'text-amber-950'} font-semibold text-sm sm:text-base select-text overflow-x-auto py-0.5`}
             dangerouslySetInnerHTML={{
               __html: (() => {
                 try {
@@ -457,7 +473,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           />
           <button
             onClick={() => setActiveFormula(null)}
-            className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors ml-1 shrink-0"
+            className={`p-1 rounded-lg ${
+              isDark ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-amber-700/60 hover:text-amber-900 hover:bg-amber-200/50'
+            } transition-colors ml-1 shrink-0`}
             title="Dismiss formula"
           >
             <X className="w-3.5 h-3.5" />
@@ -465,47 +483,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         </aside>
       )}
 
-      {/* ── ACTIVE SVG DIAGRAM / ILLUSTRATION BADGE & OVERLAY ───────────── */}
-      {activeSvgIllustration && (
-        <aside
-          aria-label="Active Board Diagram"
-          className={`absolute z-30 transition-all duration-300 pointer-events-auto shadow-2xl backdrop-blur-2xl bg-[#090D16]/95 border border-sky-500/40 rounded-2xl overflow-hidden flex flex-col ${
-            isIllustrationExpanded
-              ? 'inset-3 sm:inset-10 z-40'
-              : 'top-14 right-3 sm:right-6 w-[92vw] sm:w-[480px] max-h-[55vh]'
-          }`}
-        >
-          <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900/80 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-              <span className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Board Diagram</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIsIllustrationExpanded((prev) => !prev)}
-                className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                title={isIllustrationExpanded ? 'Minimize' : 'Expand diagram'}
-              >
-                {isIllustrationExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={() => {
-                  setActiveSvgIllustration(null);
-                  avelutBoardController.clearSvgIllustration();
-                }}
-                className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                title="Dismiss diagram"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <div
-            className="w-full flex-1 overflow-auto p-2.5 flex items-center justify-center min-h-[160px]"
-            dangerouslySetInnerHTML={{ __html: activeSvgIllustration }}
-          />
-        </aside>
-      )}
+      {/* ── ACTIVE SVG DIAGRAM OVERLAY REMOVED (All diagrams render directly inside the board canvas) ── */}
 
       {/* ── SUBTITLE PILL (Hidden as requested) ─────────────────────────── */}
 
@@ -539,9 +517,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
       {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
       <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-        <div className="flex items-center gap-3 px-4 py-2 rounded-full
-                         bg-[#18181B]/90 border border-white/15 shadow-2xl backdrop-blur-md
-                         pointer-events-auto">
+        <div className={`flex items-center gap-3 px-4 py-2 rounded-full ${
+          isDark
+            ? 'bg-[#18181B]/90 border-white/15 text-white shadow-2xl'
+            : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
+        } border backdrop-blur-md pointer-events-auto`}>
 
           {/* Text input toggle */}
           <button
@@ -549,7 +529,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
               showTextInput
                 ? 'bg-[#38BDF8] text-black'
-                : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                : isDark
+                  ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
             }`}
             aria-label="Type a message"
           >
@@ -581,9 +563,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           {/* Clear board */}
           <button
             onClick={handleClearBoard}
-            className="flex items-center justify-center w-11 h-11 rounded-full
-                        bg-white/10 hover:bg-white/15 active:scale-90 text-white/70
-                        hover:text-white transition-all"
+            className={`flex items-center justify-center w-11 h-11 rounded-full ${
+              isDark
+                ? 'bg-white/10 hover:bg-white/15 text-white/70 hover:text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+            } active:scale-90 transition-all`}
             aria-label="Clear board"
           >
             <RotateCcw className="w-5 h-5" />
