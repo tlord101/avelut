@@ -190,16 +190,22 @@ Return valid JSON with key "sessions" containing an array of objects.`;
             });
 
             if (result.success && result.data && Array.isArray(result.data.sessions)) {
-                // Fetch existing sessions from Supabase & local storage
+                // Fetch existing sessions and activities from Supabase & local storage
                 let existingSessions: StudySession[] = [];
+                let existingActivities: any[] = [];
                 try {
                     const { data } = await supabase
                         .from('app_kv')
                         .select('value')
                         .eq('key', `timetable:${userProfile.uid}`)
                         .maybeSingle();
-                    if (data && Array.isArray(data.value)) {
-                        existingSessions = data.value;
+                    if (data && data.value) {
+                        if (Array.isArray(data.value)) {
+                            existingSessions = data.value;
+                        } else if (typeof data.value === 'object') {
+                            existingSessions = data.value.sessions || [];
+                            existingActivities = data.value.activities || [];
+                        }
                     }
                 } catch (e) {
                     console.warn('[Supabase] Could not fetch existing sessions:', e);
@@ -210,7 +216,12 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                         const localRaw = localStorage.getItem(`avelut_timetable_${userProfile.uid}`);
                         if (localRaw) {
                             const parsed = JSON.parse(localRaw);
-                            if (Array.isArray(parsed)) existingSessions = parsed;
+                            if (Array.isArray(parsed)) {
+                                existingSessions = parsed;
+                            } else if (typeof parsed === 'object') {
+                                existingSessions = parsed.sessions || [];
+                                existingActivities = parsed.activities || [];
+                            }
                         }
                     } catch {}
                 }
@@ -227,6 +238,11 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                 }));
 
                 const mergedSessions = [...newSessions, ...existingSessions.slice(0, 30)];
+                const timetablePayload = {
+                    sessions: mergedSessions,
+                    activities: existingActivities,
+                    updated_at: new Date().toISOString(),
+                };
 
                 // Persist to Supabase app_kv
                 try {
@@ -234,7 +250,7 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                         .from('app_kv')
                         .upsert({
                             key: `timetable:${userProfile.uid}`,
-                            value: mergedSessions,
+                            value: timetablePayload,
                             updated_at: new Date().toISOString(),
                         }, { onConflict: 'key' });
                 } catch (supaErr) {
@@ -242,13 +258,13 @@ Return valid JSON with key "sessions" containing an array of objects.`;
                 }
 
                 try {
-                    localStorage.setItem(`avelut_timetable_${userProfile.uid}`, JSON.stringify(mergedSessions));
+                    localStorage.setItem(`avelut_timetable_${userProfile.uid}`, JSON.stringify(timetablePayload));
                 } catch {}
 
                 void deductAICredits(userProfile.uid, cost, 'AI Study Timetable Generation', appSettings);
 
                 // Notify any listening timetable views
-                window.dispatchEvent(new CustomEvent('avelut_timetable_updated', { detail: { sessions: mergedSessions } }));
+                window.dispatchEvent(new CustomEvent('avelut_timetable_updated', { detail: timetablePayload }));
 
                 addToast('Timetable updated successfully!', 'success');
                 onClose();
