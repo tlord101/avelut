@@ -301,12 +301,13 @@ export async function getOrGenerateTeachingPlan(
     return fallbackPlan;
   }
 
-  // 3. Attempt fast AI generation with 3.5s timeout
-  try {
-    const ai = createAvelutAI(appSettings);
-    const targetPhaseCount = durationMinutes === 15 ? 3 : durationMinutes === 60 ? 5 : 4;
+  // 3. Return fallback instantly so the lesson never waits, then generate AI
+  //    plan in the background and cache it for the next session.
+  //    Alibaba Qwen models (qwen3.7-flash, qwen-plus, etc.) can take 5–30 s
+  //    when routed through the proxy; we give them up to 60 s in background.
+  const targetPhaseCount = durationMinutes === 15 ? 3 : durationMinutes === 60 ? 5 : 4;
 
-    const prompt = `You are a master curriculum architect. Create a structured, time-paced teaching plan for an interactive 1-on-1 live voice tutorial.
+  const buildPrompt = () => `You are a master curriculum architect. Create a structured, time-paced teaching plan for an interactive 1-on-1 live voice tutorial.
 Topic: "${topicTitle}"
 Course: "${courseName}"
 ${syllabusContext ? `Syllabus / Context: "${syllabusContext}"` : ''}
@@ -342,36 +343,41 @@ Rules:
 - Exactly ${targetPhaseCount} phases.
 - Every phase MUST include actionable board visual plan.`;
 
-    const fetchPromise = ai.models.generateContent({
-      contents: prompt,
-    });
+  // Fire-and-forget background AI generation (60 s budget for thinking models)
+  const generateInBackground = async () => {
+    try {
+      const ai = createAvelutAI(appSettings!);
+      const fetchPromise = ai.models.generateContent({ contents: buildPrompt() });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI generation timeout (60 s)')), 60_000)
+      );
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI generation timeout')), 3500)
-    );
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const rawText = getResponseText(response);
+      const parsed = cleanAndParseJson<TeachingPlan>(rawText);
 
-    const response = await Promise.race([fetchPromise, timeoutPromise]);
-    const rawText = getResponseText(response);
-    const parsed = cleanAndParseJson<TeachingPlan>(rawText);
-
-    if (parsed && Array.isArray(parsed.phases) && parsed.phases.length > 0) {
-      const validatedPlan: TeachingPlan = {
-        topicTitle: parsed.topicTitle || topicTitle,
-        courseName: parsed.courseName || courseName,
-        durationMinutes,
-        totalPhases: parsed.phases.length,
-        phases: parsed.phases,
-        summaryTakeaways: parsed.summaryTakeaways || fallbackPlan.summaryTakeaways,
-        createdAt: Date.now(),
-      };
-      writeCachedJson(cacheKey, validatedPlan, uid);
-      return validatedPlan;
+      if (parsed && Array.isArray(parsed.phases) && parsed.phases.length > 0) {
+        const validatedPlan: TeachingPlan = {
+          topicTitle: parsed.topicTitle || topicTitle,
+          courseName: parsed.courseName || courseName,
+          durationMinutes,
+          totalPhases: parsed.phases.length,
+          phases: parsed.phases,
+          summaryTakeaways: parsed.summaryTakeaways || fallbackPlan.summaryTakeaways,
+          createdAt: Date.now(),
+        };
+        writeCachedJson(cacheKey, validatedPlan, uid);
+        console.log('[teachingPlanService] Background AI plan cached for next session:', topicTitle);
+      }
+    } catch (err) {
+      console.warn('[teachingPlanService] Background AI generation failed (will retry next session):', err);
     }
-  } catch (err) {
-    console.warn('[teachingPlanService] AI generation skipped/failed, using fallback:', err);
-  }
+  };
 
-  // 4. Save and return high-quality fallback
+  // Kick off background generation without awaiting it
+  generateInBackground();
+
+  // 4. Return structured fallback immediately so the lesson starts right away
   writeCachedJson(cacheKey, fallbackPlan, uid);
   return fallbackPlan;
 }

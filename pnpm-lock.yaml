@@ -47,9 +47,6 @@ importers:
       '@capacitor/keyboard':
         specifier: ^8.0.3
         version: 8.0.5(@capacitor/core@8.4.1)
-      '@capacitor/push-notifications':
-        specifier: ^8.1.1
-        version: 8.1.1(@capacitor/core@8.4.1)
       '@capacitor/share':
         specifier: ^8.0.1
         version: 8.0.1(@capacitor/core@8.4.1)
@@ -508,11 +505,6 @@ packages:
 
   '@capacitor/keyboard@8.0.5':
     resolution: {integrity: sha512-oFXygC4eKYA5l2MdpTR06L2M/4x6e2SLD5yS1T9+UBDKTkzyvhWKEhbYLUaTIBPpLKqlfGudJw1X73S1H9eUzQ==}
-    peerDependencies:
-      '@capacitor/core': '>=8.0.0'
-
-  '@capacitor/push-notifications@8.1.1':
-    resolution: {integrity: sha512-WqzjPKIbYbARMN+GC0XMAJcxJpUUzqgzS/Ny8RODLrro38pQhm3GXYwX2Mwd+LZlLY39rGImkCkrKyQSNfuikA==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -5551,10 +5543,6 @@ snapshots:
       '@capacitor/core': 8.4.1
 
   '@capacitor/keyboard@8.0.5(@capacitor/core@8.4.1)':
-    dependencies:
-      '@capacitor/core': 8.4.1
-
-  '@capacitor/push-notifications@8.1.1(@capacitor/core@8.4.1)':
     dependencies:
       '@capacitor/core': 8.4.1
 
