@@ -410,14 +410,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Choose the
-most appropriate visual tool for the opening explanation. Use draw_mermaid for a
-concept map, relationship diagram, flow, hierarchy, or process when that is the
-best visual. Use board_action for a formula, calculation, annotation, or genuine
-step-by-step procedure. Use illustrate_object when a detailed physical or
-scientific object is needed. Do not call board_action merely because every turn
-requires a board action. Then speak to greet the student warmly, explain the
-intuition, and teach interactively!`,
+          text: `Start the lesson on "${topic}". We have ${duration} minutes. Teach with a clear plan in simple words (like explaining to a 10-year-old). On EVERY turn you MUST call board_action write to put short keywords on the board. Opening turn: write the topic title as keywords, optionally add a simple concept diagram with draw_mermaid if relationships matter, then greet the student warmly and begin Stage 1 of the teaching plan.`,
         }],
       },
     });
@@ -470,11 +463,7 @@ intuition, and teach interactively!`,
           role: 'user',
           content: [{
             type: 'input_text',
-            text: '[The student was quiet for 3 seconds. Continue naturally. Choose the
-visual tool that best matches the idea: board_action for formulas/calculations/
-sequential steps, draw_mermaid for relationships/flows/concept maps, and
-illustrate_object for detailed objects. Do not force a board_action call if no
-visual is useful.]',
+            text: '[The student was quiet for 3 seconds. Continue the teaching plan kindly in simple words. You MUST call board_action write to put short keywords for this idea on the board, then keep teaching.]',
           }],
         },
       });
@@ -568,11 +557,11 @@ visual is useful.]',
     };
 
     const description =
-      'Control the educational Excalidraw board. Use this for formulas, equations, ' +
-      'worked calculations, derivations, annotations, highlighting, and genuinely ' +
-      'sequential procedures. Do NOT use it for ordinary concept maps or relationship ' +
-      'diagrams when draw_mermaid is more appropriate. For comparisons, it may be used ' +
-      'to create a compact table-like grid. Calling board_action is NOT mandatory on every turn.';
+      'Control the educational Excalidraw board. On EVERY turn you MUST call board_action ' +
+      'with action "write" to put 1–5 short keywords or a tiny takeaway on the board while teaching. ' +
+      'Also use write/draw for formulas, calculations, derivations, and sequential steps. ' +
+      'Do NOT use draw boxes for ordinary concept maps — use draw_mermaid for those. ' +
+      'For comparisons, a compact table-like grid is OK.';
 
     return {
       type: 'function',
