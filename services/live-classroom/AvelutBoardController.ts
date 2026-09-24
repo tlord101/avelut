@@ -226,8 +226,27 @@ export class AvelutBoardController {
 
     try {
       let trimmed = svgString.trim();
+      // Extract <svg ... </svg> if embedded in markdown or commentary
+      const match = trimmed.match(/<svg[\s\S]*?<\/svg>/i);
+      if (match) {
+        trimmed = match[0];
+      } else if (!trimmed.startsWith('<svg')) {
+        console.warn('[BoardController] String does not appear to be valid SVG, skipping board image insert');
+        return;
+      }
+
       // Ensure XML well-formedness: escape any raw '&' that is not already an XML entity
       trimmed = trimmed.replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
+
+      // Verify DOMParser passes without XML parser errors before passing to Excalidraw
+      if (typeof DOMParser !== 'undefined') {
+        const doc = new DOMParser().parseFromString(trimmed, 'image/svg+xml');
+        const parserErr = doc.querySelector('parsererror');
+        if (parserErr) {
+          console.warn('[BoardController] SVG has XML parser error, skipping board image insert:', parserErr.textContent);
+          return;
+        }
+      }
 
       const fileId = `svg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const base64Svg = btoa(unescape(encodeURIComponent(trimmed)));

@@ -492,10 +492,7 @@ export class QwenRealtimeTeacherService {
       }
 
       this.consecutiveSilenceNudges++;
-      liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue with board action`);
-
-      // Draw diagram on board immediately
-      this._triggerSilenceBoardAction();
+      liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue naturally`);
 
       const promptText = this.lastResponseAskedQuestion
         ? '[The student is quiet. Answer your question gently in simple words, and seamlessly proceed to the next teaching point. Proactively use draw_mermaid or board_action to show the idea visually on the board without narrating the action.]'
@@ -530,45 +527,6 @@ export class QwenRealtimeTeacherService {
     if (this.studentWaitTimer) {
       clearTimeout(this.studentWaitTimer);
       this.studentWaitTimer = null;
-    }
-  }
-
-  /**
-   * Directly renders a Mermaid concept-map onto the board during student silence.
-   * Bypasses the LLM entirely — always fires instantly and is guaranteed to draw.
-   */
-  private _triggerSilenceBoardAction(): void {
-    try {
-      const topic = this.promptConfig?.topicTitle || 'the topic';
-      const phase = this.promptConfig?.teachingPlan?.phases?.[this.consecutiveSilenceNudges % 3];
-      const phaseLabel = phase?.phaseName || 'Key Concepts';
-      const keyword1 = phase?.boardVisualPlan?.content?.split(/[\s,|]+/)?.[0] || topic;
-      const keyword2 = phase?.boardVisualPlan?.content?.split(/[\s,|]+/)?.[1] || 'Definition';
-
-      // Build a minimal concept-map Mermaid diagram for the current topic/phase
-      const mermaidCode = [
-        'graph LR',
-        `  A["${topic}"] --> B["${phaseLabel}"]`,
-        `  B --> C["${keyword1}"]`,
-        `  B --> D["${keyword2}"]`,
-      ].join('\n');
-
-      liveLogger.log('[QwenRealtime] _triggerSilenceBoardAction: rendering diagram for', topic);
-
-      // 1. Draw native Excalidraw boxes & arrows on board
-      const elements = MermaidBoardService.toExcalidrawElements(mermaidCode);
-      if (elements.length > 0) {
-        this.boardController.executeBoardAction({ action: 'draw', elements });
-      }
-
-      // 2. Set SVG illustration
-      MermaidBoardService.renderToSvg(mermaidCode).then(svg => {
-        if (svg) this.boardController.setSvgIllustration(svg);
-      }).catch(err => {
-        liveLogger.warn('[QwenRealtime] Silence board action mermaid render failed:', err);
-      });
-    } catch (err) {
-      liveLogger.warn('[QwenRealtime] _triggerSilenceBoardAction error (non-fatal):', err);
     }
   }
 
@@ -922,12 +880,6 @@ export class QwenRealtimeTeacherService {
       case 'response.done': {
         liveLogger.log('[QwenRealtime] response.done');
 
-        // Fallback: If opening turn completes and no tool call was executed, guarantee topic keyword is on board
-        if (this.executedCallIds.size === 0 && this.promptConfig?.topicTitle) {
-          liveLogger.log('[QwenRealtime] Initial turn completed without tool call — writing topic title as fallback');
-          this.boardController.writeText(this.promptConfig.topicTitle, { fontSize: 'medium' });
-        }
-
         // If we are currently awaiting tool continuation, do NOT reset to listening
         if (this.isAwaitingContinuation) {
           liveLogger.log('[QwenRealtime] Tool response done — awaiting continuation audio');
@@ -1023,9 +975,6 @@ export class QwenRealtimeTeacherService {
       });
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || '';
-      if (desc) {
-        this.boardController.writeText(`🔬 ${desc}`, { fontSize: 'medium' });
-      }
       LlmSvgObjectCache.getOrGenerate(desc, async () => {
         if (!this.appSettings) return null;
         const textModel =
