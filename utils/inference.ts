@@ -602,55 +602,18 @@ function resolveAlibabaEndpoints(
   isNative: boolean,
   options?: AvelutAIOptions
 ): string[] {
-  let customBase = appSettings?.alibaba_base_url?.trim() || '';
-  if (customBase.includes('dashscope.aliyuncs.com') || customBase.includes('dashscope-intl.aliyuncs.com')) {
-    customBase = '';
-  }
-
-  let envBase = '';
-  try {
-    const metaEnv = (import.meta as any)?.env;
-    if (metaEnv) {
-      envBase = metaEnv.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || metaEnv.ALIBABA_OPENAI_COMPATIBLE_URL || '';
-    }
-  } catch (_) {}
-  if (!envBase && typeof process !== 'undefined' && process?.env) {
-    envBase = process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || process.env.ALIBABA_OPENAI_COMPATIBLE_URL || '';
-  }
-
-  const workspaceId =
-    (appSettings as any)?.alibaba_workspace_id ||
-    (typeof import.meta !== 'undefined' && ((import.meta as any)?.env?.VITE_ALIBABA_WORKSPACE_ID || (import.meta as any)?.env?.ALIBABA_WORKSPACE_ID)) ||
-    (typeof process !== 'undefined' && (process?.env?.VITE_ALIBABA_WORKSPACE_ID || process?.env?.ALIBABA_WORKSPACE_ID)) ||
-    'ws-o3v6mh0i8y9tqdfx';
-
-  const defaultMaasBase = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`;
-  const baseToUse = customBase || envBase || defaultMaasBase;
-  const workspaceEndpoint = baseToUse.endsWith('/chat/completions')
-    ? baseToUse
-    : `${baseToUse.replace(/\/+$/, '')}/chat/completions`;
-
-  const proxyEndpoints = isNative
-    ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
-    : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
-
-  const publicEndpoints = [
-    'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
-    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-  ];
-
-  if (isNative && apiKey) {
+  // Always route via the fast, server-side alibaba-chat proxy endpoint.
+  // This completely eliminates CORS preflight blocks and client 401 unauthorized errors,
+  // and routes directly to Model Studio Singapore MaaS on the backend.
+  if (isNative) {
     return [
-      workspaceEndpoint,
-      ...proxyEndpoints,
-      ...publicEndpoints,
+      'https://www.avelut.xyz/api/alibaba-chat',
+      '/api/alibaba-chat',
     ];
   }
-
   return [
-    ...proxyEndpoints,
-    workspaceEndpoint,
-    ...publicEndpoints,
+    '/api/alibaba-chat',
+    'https://www.avelut.xyz/api/alibaba-chat',
   ];
 }
 
@@ -719,7 +682,7 @@ async function callAlibabaQwen(
         }
 
         const fetchController = new AbortController();
-        const timeoutId = setTimeout(() => fetchController.abort(), 12000);
+        const timeoutId = setTimeout(() => fetchController.abort(), 45000);
 
         let response: Response;
         try {
@@ -821,7 +784,7 @@ async function* callAlibabaQwenStream(
       }
 
       const fetchController = new AbortController();
-      const timeoutId = setTimeout(() => fetchController.abort(), 12000);
+      const timeoutId = setTimeout(() => fetchController.abort(), 45000);
 
       let res: Response;
       try {
@@ -853,6 +816,17 @@ async function* callAlibabaQwenStream(
     return;
   }
 
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    const text = await response.text();
+    yield {
+      text: () => text,
+      reasoningText: () => '',
+      candidates: [{ content: { parts: [{ text }], role: 'model' } }],
+    };
+    return;
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
@@ -876,7 +850,17 @@ async function* callAlibabaQwenStream(
           try {
             const parsed = JSON.parse(jsonStr);
             const delta = parsed?.choices?.[0]?.delta;
-            let deltaText = delta?.content || '';
+            let deltaText = '';
+            if (typeof delta?.content === 'string') {
+              deltaText = delta.content;
+            } else if (Array.isArray(delta?.content)) {
+              deltaText = delta.content.map((p: any) => p?.text || '').join('');
+            } else if (typeof parsed?.choices?.[0]?.text === 'string') {
+              deltaText = parsed.choices[0].text;
+            } else if (typeof parsed?.choices?.[0]?.message?.content === 'string') {
+              deltaText = parsed.choices[0].message.content;
+            }
+
             let reasoningText = delta?.reasoning || delta?.reasoning_content || '';
             if (!reasoningText && parsed?.choices?.[0]?.message?.reasoning_content) {
               reasoningText = parsed.choices[0].message.reasoning_content;

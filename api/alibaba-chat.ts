@@ -93,7 +93,7 @@ export async function POST(req: Request) {
         for (const baseUrl of targetBases) {
           try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 10000);
+            const timer = setTimeout(() => controller.abort(), 45000);
 
             const payload: any = {
               model: currentModel,
@@ -131,10 +131,11 @@ export async function POST(req: Request) {
                 return new Response(response.body, {
                   status: 200,
                   headers: {
-                    'Content-Type': 'text/event-stream',
-                    'Cache-Control': 'no-cache',
+                    'Content-Type': 'text/event-stream; charset=utf-8',
+                    'Cache-Control': 'no-cache, no-transform',
                     'Connection': 'keep-alive',
                     'Access-Control-Allow-Origin': '*',
+                    'X-Accel-Buffering': 'no',
                   },
                 });
               }
