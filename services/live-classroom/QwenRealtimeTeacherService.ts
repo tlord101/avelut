@@ -580,7 +580,7 @@ export class QwenRealtimeTeacherService {
       response: {
         modalities: ['text', 'audio'],
         instructions:
-          'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. Continue teaching smoothly without stopping.',
+          'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. When pronouncing formulas or math, speak them naturally in conversational English (e.g. say "a equals negative omega squared x" or "velocity equals frequency times lambda"). NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Continue teaching smoothly without stopping.',
         tools: this.getTools(),
         tool_choice: 'auto',
       },
@@ -631,13 +631,13 @@ export class QwenRealtimeTeacherService {
         this.lastResponseAskedQuestion = false;
         this.requestTeacherContinuation('silence_after_question', {
           injectUserHint:
-            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself. Draw a clarifying diagram or write key terms on the board, then continue explaining the next concept smoothly. Do not wait for the student.',
+            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself. Write key terms or draw a clarifying diagram on the board first, then continue explaining the next concept smoothly. Pronounce formulas naturally — never say "dollar" aloud. Do not wait for the student.',
         });
       } else {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Move directly to introducing and explaining the core concepts. Writing on the board with board_action write is primary — write key terms, definitions, and formulas ($$ ... $$). Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches — NEVER 360-degree radial trees or mindmaps, or board_action draw) to visualize concepts. Keep teaching actively.',
+            'Continue teaching smoothly without waiting. Call board_action write FIRST to put the key term, definition, or formula on the board so the student sees it, then explain it naturally in spoken words. Pronounce formulas naturally in conversational English (e.g. "a equals negative omega squared x") — STRICTLY NEVER say "dollar", "dollar dollar", or LaTeX code aloud in your spoken voice. Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches, or board_action draw) to visualize concepts. Keep teaching actively.',
         });
       }
     }, waitMs);
@@ -685,7 +685,7 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
           this.requestTeacherContinuation('auto_continue_no_question', {
             injectUserHint:
-              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next concept or step. Writing on the board with board_action write is primary — write key terms, definitions, and formulas ($$ ... $$). Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches — NEVER 360-degree radial trees or mindmaps, or board_action draw) to visualize concepts. Keep teaching actively.',
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next concept or step. Call board_action write FIRST to put key terms and formulas on the board, then speak naturally to explain them. Pronounce formulas naturally in conversational English (e.g. "a equals negative omega squared x") — STRICTLY NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches, or board_action draw) to visualize concepts. Keep teaching actively.',
           });
         }
       }, 500);
@@ -750,7 +750,7 @@ export class QwenRealtimeTeacherService {
         },
         text: {
           type: 'string',
-          description: 'Keyword, key term, definition, summary note, or formula ($$ ... $$) to write on the board (MANDATORY on every teaching turn for "write" action)',
+          description: 'Keyword, key term, definition, summary note, or formula to write on the board. Structure as "Key Term: definition or formula" (e.g. "Wave Equation: v = f \\lambda").',
         },
         target: {
           type: 'string',
@@ -761,7 +761,7 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational whiteboard. Writing on the board (action: "write") is PRIMARY — write key terms, core definitions, formulas ($$ ... $$), and step summaries. Use "draw" to create step-by-step boxes with connecting arrows, or use draw_mermaid for flowcharts/pipelines in rows and columns. Prioritize visualizing ideas and concepts on the board.';
+      'Control the educational whiteboard. Writing on the board (action: "write") is PRIMARY — write key terms, core definitions, formulas, and step summaries. Call this FIRST when introducing a concept so the student sees the key terms on the board before you speak. Use "draw" to create step-by-step boxes with connecting arrows, or use draw_mermaid for flowcharts/pipelines in rows and columns. Prioritize visualizing ideas and concepts on the board.';
 
     return {
       type: 'function',
