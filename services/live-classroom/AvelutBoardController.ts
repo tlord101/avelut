@@ -22,23 +22,31 @@ export function formatMathForCanvas(raw: string): string {
   if (!raw) return '';
   let s = String(raw).trim();
 
-  // Strip LaTeX math delimiters
-  s = s.replace(/^\$\$\s*/, '').replace(/\s*\$\$$/, '');
-  s = s.replace(/^\$\s*/, '').replace(/\s*\$$/, '');
-  s = s.replace(/^\\\[\s*/, '').replace(/\s*\\\]$/, '');
-  s = s.replace(/^\\\(\s*/, '').replace(/\s*\\\)$/, '');
+  // Strip LaTeX math delimiters across the string (both multiline and inline)
+  s = s.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  s = s.replace(/\$([^\$\n]+)\$/g, '$1');
+  s = s.replace(/\\\[([\s\S]*?)\\\]/g, '$1');
+  s = s.replace(/\\\(([^\n]*?)\\\)/g, '$1');
+  // Strip any remaining lone $$ or $ that were unclosed
+  s = s.replace(/\$\$/g, '').replace(/\$/g, '');
 
-  // Strip \text{...}, \mathrm{...}, \mathbf{...}, \mathit{...}
+  // Strip \text{...}, \mathrm{...}, \mathbf{...}, \mathit{...}, \textbf{...}
   s = s.replace(/\\(text|mathrm|mathbf|mathit|textbf|textit)\{([^}]+)\}/g, '$2');
 
-  // Fractions: \frac{a}{b} -> a / b
-  s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1 / $2');
+  // Fractions: \frac{a}{b}, \dfrac{a}{b} -> a / b
+  s = s.replace(/\\d?frac\{([^}]+)\}\{([^}]+)\}/g, '($1) / ($2)');
+  s = s.replace(/\(([a-zA-Z0-9])\)\s*\/\s*\(([a-zA-Z0-9])\)/g, '$1 / $2');
 
-  // Square roots: \sqrt{x} -> √(x), \sqrt -> √
+  // Square roots: \sqrt[3]{x} -> ∛(x), \sqrt[n]{x} -> ⁿ√(x), \sqrt{x} -> √(x), \sqrt -> √
+  s = s.replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛($1)');
+  s = s.replace(/\\sqrt\[([^\]]+)\]\{([^}]+)\}/g, '$1√($2)');
   s = s.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
   s = s.replace(/\\sqrt/g, '√');
 
-  // Greek letters
+  // Math & trig function names: strip leading backslash
+  s = s.replace(/\\(sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|lim|max|min|det|deg)\b/g, '$1');
+
+  // Greek letters (case-sensitive)
   const greekMap: Record<string, string> = {
     '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\Gamma': 'Γ',
     '\\delta': 'δ', '\\Delta': 'Δ', '\\epsilon': 'ε', '\\varepsilon': 'ε',
@@ -64,34 +72,57 @@ export function formatMathForCanvas(raw: string): string {
     '\\to': '→', '\\rightarrow': '→', '\\leftarrow': '←',
     '\\Rightarrow': '⇒', '\\Leftarrow': '⇐', '\\leftrightarrow': '↔',
     '\\degree': '°', '^{\\circ}': '°', '\\circ': '°',
+    '\\hbar': 'ℏ', '\\ell': 'ℓ', '\\AA': 'Å',
   };
   for (const [tex, uni] of Object.entries(symbolMap)) {
     s = s.split(tex).join(uni);
   }
 
-  // Superscripts (common in physics & math formulas like ^2, ^3, ^n, ^-1)
-  const superMap: Record<string, string> = {
-    '^0': '⁰', '^1': '¹', '^2': '²', '^3': '³', '^4': '⁴',
-    '^5': '⁵', '^6': '⁶', '^7': '⁷', '^8': '⁸', '^9': '⁹',
-    '^+': '⁺', '^-': '⁻', '^n': 'ⁿ', '^x': 'ˣ', '^t': 'ᵗ',
+  // Superscript mapping table
+  const SUPER_CHAR_MAP: Record<string, string> = {
+    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+    '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+    '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+    'n': 'ⁿ', 'i': 'ⁱ', 'x': 'ˣ', 'y': 'ʸ', 't': 'ᵗ',
+    'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ',
+    'm': 'ᵐ', 'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 'v': 'ᵛ',
   };
-  for (const [tex, uni] of Object.entries(superMap)) {
-    s = s.split(tex).join(uni);
-  }
 
-  // Subscripts (common in physics like _0, _1, _2, _x, _y, _i, _n)
-  const subMap: Record<string, string> = {
-    '_0': '₀', '_1': '₁', '_2': '₂', '_3': '₃', '_4': '₄',
-    '_5': '₅', '_6': '₆', '_7': '₇', '_8': '₈', '_9': '₉',
-    '_a': 'ₐ', '_e': 'ₑ', '_i': 'ᵢ', '_o': 'ₒ', '_r': 'ᵣ',
-    '_u': 'ᵤ', '_v': 'ᵥ', '_x': 'ₓ',
+  // Subscript mapping table
+  const SUB_CHAR_MAP: Record<string, string> = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+    '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+    '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+    'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
+    'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
+    'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
+    'v': 'ᵥ', 'x': 'ₓ',
   };
-  for (const [tex, uni] of Object.entries(subMap)) {
-    s = s.split(tex).join(uni);
-  }
+
+  // Superscripts with braces: ^{...}
+  s = s.replace(/\^{([^{}]+)}/g, (_, inner) => {
+    return inner.split('').map((c: string) => SUPER_CHAR_MAP[c] || c).join('');
+  });
+  // Single-char superscripts: ^2, ^3, ^+, ^-
+  s = s.replace(/\^([0-9nixyt+\-])/g, (_, c) => SUPER_CHAR_MAP[c] || `^${c}`);
+
+  // Subscripts with braces: _{...}
+  s = s.replace(/_{([^{}]+)}/g, (_, inner) => {
+    return inner.split('').map((c: string) => SUB_CHAR_MAP[c] || c).join('');
+  });
+  // Single-char subscripts: _0, _1, _x
+  s = s.replace(/_([0-9aehijklmnoprstuvx])/g, (_, c) => SUB_CHAR_MAP[c] || `_${c}`);
+
+  // Physics SHM / angular frequency correction: convert -w² or w² in equations to -ω² or ω²
+  s = s.replace(/(^|[^a-zA-Z0-9])w²(?=[^a-zA-Z0-9]|$)/g, '$1ω²');
+  s = s.replace(/(^|[^a-zA-Z0-9])-w²(?=[^a-zA-Z0-9]|$)/g, '$1-ω²');
+
+  // Spacing commands: \quad, \qquad, \;, \,, \:
+  s = s.replace(/\\(quad|qquad)/g, '   ');
+  s = s.replace(/\\[,;:]/g, ' ');
 
   // Clean up any double spaces or orphan braces
-  s = s.replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
+  s = s.replace(/[{}]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
 
   return s;
 }
@@ -742,47 +773,214 @@ export class AvelutBoardController {
     this.clearStageIfFull();
 
     const p = this.getThemePalette();
-    const fontSize = this.fontSizeToNumber(args?.fontSize);
-    const x = this.clampX(args?.x ?? 30, 20);
-    const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
-    const color = args?.color ?? p.text;
-
+    const isDark = this.currentTheme === 'dark';
     const isMobile = this.isMobileView();
-    const isMathLike = args?.isFormula || /[$^·×±√\\]/.test(text) || (text.includes('=') && !text.includes('\n'));
-    let displayText = isMathLike ? formatMathForCanvas(text) : text.trim();
+    const baseFontSize = this.fontSizeToNumber(args?.fontSize);
+    const startX = this.clampX(args?.x ?? (isMobile ? 16 : 30), 20);
+    let curY = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
+    const defaultColor = args?.color ?? p.text;
 
-    if (!isMathLike) {
-      // Auto-wrap lines to prevent text clipping horizontally off the canvas on mobile & desktop
-      const maxLineChars = isMobile
-        ? (fontSize >= 24 ? 22 : fontSize >= 18 ? 30 : 43)
-        : (fontSize >= 24 ? 45 : fontSize >= 18 ? 60 : 75);
-
-      displayText = displayText
-        .split('\n')
-        .map(line => (line.length > maxLineChars ? wordWrap(line, maxLineChars) : line))
-        .join('\n');
+    // Check if any formulas are present in the text to update the top KaTeX formula banner
+    const formulaMatch = text.match(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/);
+    if (formulaMatch) {
+      const rawFormula = (formulaMatch[1] || formulaMatch[2] || '').trim();
+      if (rawFormula) {
+        this.onFormulaChangeCallback?.(rawFormula);
+      }
     }
 
-    const lines = displayText.split('\n');
-    const longestLine = Math.max(...lines.map(l => l.length));
-    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), isMobile ? 380 : 800);
-    const approxH = Math.max(lines.length * fontSize * 1.4, 30);
-    this.lastActivePoint = { x: x + approxW / 2, y: y + approxH / 2 };
+    // Split text into individual lines to render structured educational notes
+    const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const elementsToAppend: any[] = [];
+    const maxLineChars = isMobile
+      ? (baseFontSize >= 24 ? 22 : baseFontSize >= 18 ? 32 : 44)
+      : (baseFontSize >= 24 ? 45 : baseFontSize >= 18 ? 62 : 78);
 
-    this.appendElements([{
-      type: 'text',
-      x, y,
-      text: displayText,
-      fontSize,
-      fontFamily: 1,
-      textAlign: 'left',
-      verticalAlign: 'top',
-      strokeColor: color,
-    }], y >= 400 ? 'notes' : 'stage');
+    const isExplicitTitle = args?.fontSize === 'title' || (args?.color && args.color !== p.text);
 
-    // ALWAYS advance layout cursor below any written text, whether y was passed or defaulted
-    const textHeight = Math.max(36, lines.length * fontSize * 1.4 + 20);
-    this.cursorY = Math.max(this.cursorY, y + textHeight);
+    if (isExplicitTitle || (rawLines.length === 1 && !rawLines[0].includes(':') && !rawLines[0].includes('='))) {
+      const formatted = formatMathForCanvas(text);
+      const wrapped = wordWrap(formatted, maxLineChars);
+      const lines = wrapped.split('\n');
+      const longestLine = Math.max(...lines.map(l => l.length));
+      const approxW = Math.min(Math.max(longestLine * baseFontSize * 0.55, 60), isMobile ? 360 : 800);
+      const approxH = Math.max(lines.length * baseFontSize * 1.4, 30);
+      this.lastActivePoint = { x: startX + approxW / 2, y: curY + approxH / 2 };
+
+      elementsToAppend.push({
+        type: 'text',
+        x: startX,
+        y: curY,
+        text: wrapped,
+        fontSize: baseFontSize,
+        fontFamily: isExplicitTitle ? 2 : 1,
+        textAlign: 'left',
+        verticalAlign: 'top',
+        strokeColor: defaultColor,
+      });
+
+      curY += Math.max(36, lines.length * baseFontSize * 1.4 + 20);
+    } else {
+      // Structured Multi-line Note with Blue Highlights & KaTeX formatting
+      for (const line of rawLines) {
+        // Check if line is a pure formula e.g. "$$a = -w^2 x$$" or "a = -ω² x"
+        const isPureFormula = /^\$\$[\s\S]+\$\$$/.test(line) || (!line.includes(':') && line.includes('=') && /[a-zA-Z0-9$^·×±√\\ωλθ]/.test(line));
+
+        if (isPureFormula) {
+          const formulaText = formatMathForCanvas(line);
+          const formulaW = Math.min(Math.max(formulaText.length * (baseFontSize * 0.62) + 36, 180), isMobile ? 350 : 540);
+          const formulaH = Math.round(baseFontSize * 1.8 + 8);
+
+          // Subtle highlighted formula badge
+          elementsToAppend.push({
+            type: 'rectangle',
+            x: startX,
+            y: curY,
+            width: formulaW,
+            height: formulaH,
+            strokeColor: isDark ? '#38BDF8' : '#0284C7',
+            backgroundColor: isDark ? '#082F49' : '#F0F9FF',
+            fillStyle: 'solid',
+            roundness: { type: 3 },
+            roughness: 0,
+            strokeWidth: 1.5,
+            label: {
+              text: formulaText,
+              fontSize: baseFontSize,
+              strokeColor: isDark ? '#38BDF8' : '#0284C7',
+            },
+            customData: { zone: curY >= 400 ? 'notes' : 'stage', slot: 'formula' },
+          });
+
+          this.lastActivePoint = { x: startX + formulaW / 2, y: curY + formulaH / 2 };
+          curY += formulaH + 16;
+          continue;
+        }
+
+        // Check if line has a key term before a colon e.g. "Simple Harmonic Motion (SHM): ..." or "1. Vibration: ..."
+        const colonIdx = line.indexOf(':');
+        const hasKeyTerm = colonIdx > 0 && colonIdx < 50;
+
+        if (hasKeyTerm) {
+          const rawKeyTerm = line.slice(0, colonIdx + 1).trim();
+          const rawExplanation = line.slice(colonIdx + 1).trim();
+
+          const keyTerm = formatMathForCanvas(rawKeyTerm);
+          const explanation = formatMathForCanvas(rawExplanation);
+
+          // Blue highlight badge behind the key term!
+          const badgeWidth = Math.min(Math.max(keyTerm.length * (baseFontSize * 0.58) + 20, 80), isMobile ? 350 : 600);
+          const badgeHeight = Math.round(baseFontSize * 1.5 + 4);
+
+          // 1. Background rectangle (Blue translucent highlight)
+          elementsToAppend.push({
+            type: 'rectangle',
+            x: startX,
+            y: curY - 2,
+            width: badgeWidth,
+            height: badgeHeight,
+            strokeColor: isDark ? '#38BDF860' : '#0284C740',
+            backgroundColor: isDark ? '#0284C725' : '#E0F2FE',
+            fillStyle: 'solid',
+            roundness: { type: 3 },
+            roughness: 0,
+            strokeWidth: 1,
+            customData: { zone: curY >= 400 ? 'notes' : 'stage' },
+          });
+
+          // 2. Text of key term in vibrant blue
+          elementsToAppend.push({
+            type: 'text',
+            x: startX + 10,
+            y: curY,
+            text: keyTerm,
+            fontSize: baseFontSize,
+            fontFamily: 2, // crisp sans-serif
+            textAlign: 'left',
+            verticalAlign: 'top',
+            strokeColor: isDark ? '#38BDF8' : '#0284C7',
+            customData: { zone: curY >= 400 ? 'notes' : 'stage' },
+          });
+
+          this.lastActivePoint = { x: startX + badgeWidth / 2, y: curY + badgeHeight / 2 };
+          curY += badgeHeight + 8;
+
+          // 3. Explanation text (if any)
+          if (explanation) {
+            // Check if explanation is a formula e.g. "v = f λ" or "n₁ sin θ₁ = n₂ sin θ₂"
+            const isExplFormula = explanation.includes('=') && /[$^·×±√\\ωλθa-z]/i.test(explanation);
+            if (isExplFormula) {
+              const expFormulaW = Math.min(Math.max(explanation.length * (baseFontSize * 0.62) + 32, 160), isMobile ? 350 : 500);
+              const expFormulaH = Math.round(baseFontSize * 1.7 + 6);
+              elementsToAppend.push({
+                type: 'rectangle',
+                x: startX + 16,
+                y: curY,
+                width: expFormulaW,
+                height: expFormulaH,
+                strokeColor: isDark ? '#FDE047' : '#D97706',
+                backgroundColor: isDark ? '#1E1B4B' : '#FEF3C7',
+                fillStyle: 'solid',
+                roundness: { type: 3 },
+                roughness: 0,
+                strokeWidth: 1.2,
+                label: {
+                  text: explanation,
+                  fontSize: baseFontSize,
+                  strokeColor: isDark ? '#FDE047' : '#B45309',
+                },
+                customData: { zone: curY >= 400 ? 'notes' : 'stage' },
+              });
+              curY += expFormulaH + 16;
+            } else {
+              const wrappedExpl = wordWrap(explanation, maxLineChars - 4);
+              const explLines = wrappedExpl.split('\n');
+              elementsToAppend.push({
+                type: 'text',
+                x: startX + 16,
+                y: curY,
+                text: wrappedExpl,
+                fontSize: Math.max(14, baseFontSize - 2),
+                fontFamily: 1,
+                textAlign: 'left',
+                verticalAlign: 'top',
+                strokeColor: p.text,
+                customData: { zone: curY >= 400 ? 'notes' : 'stage' },
+              });
+              curY += Math.max(26, explLines.length * (baseFontSize - 2) * 1.4 + 14);
+            }
+          }
+          continue;
+        }
+
+        // Standard line without colon or formula:
+        const formattedLine = formatMathForCanvas(line);
+        const wrappedLine = wordWrap(formattedLine, maxLineChars);
+        const lineCount = wrappedLine.split('\n').length;
+
+        elementsToAppend.push({
+          type: 'text',
+          x: startX,
+          y: curY,
+          text: wrappedLine,
+          fontSize: baseFontSize,
+          fontFamily: 1,
+          textAlign: 'left',
+          verticalAlign: 'top',
+          strokeColor: p.text,
+          customData: { zone: curY >= 400 ? 'notes' : 'stage' },
+        });
+
+        curY += Math.max(26, lineCount * baseFontSize * 1.4 + 12);
+      }
+    }
+
+    if (elementsToAppend.length > 0) {
+      this.appendElements(elementsToAppend, curY >= 400 ? 'notes' : 'stage');
+    }
+
+    // ALWAYS advance layout cursor below any written text
+    this.cursorY = Math.max(this.cursorY, curY + 10);
     this.nextFreeY = Math.max(this.nextFreeY, this.cursorY);
     this.lastAnnotationY = Math.max(this.lastAnnotationY, this.cursorY);
   }
