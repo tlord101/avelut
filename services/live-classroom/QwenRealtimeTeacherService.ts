@@ -85,6 +85,10 @@ export class QwenRealtimeTeacherService {
   private userProfile: UserProfile | null = null;
   private fullTranscript = '';
   private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
+  private toolItemIdToCallId = new Map<string, string>();
+  private isTurnResponseDone = false;
+  private hasPendingToolContinuation = false;
+  private toolContinuationWatchdog: ReturnType<typeof setTimeout> | null = null;
   private executedCallIds = new Set<string>();
   private hasGreeted = false;
   private isStarting = false;
@@ -247,7 +251,10 @@ export class QwenRealtimeTeacherService {
     this.ws = null;
 
     this.pendingToolCalls.clear();
+    this.toolItemIdToCallId.clear();
     this.executedCallIds.clear();
+    this.clearToolContinuationWatchdog();
+    this.hasPendingToolContinuation = false;
     this.hasGreeted = false;
     this.isStarting = false;
     this.isSessionUpdated = false;
@@ -522,6 +529,58 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        tools: this.getTools(),
+        tool_choice: 'auto',
+      },
+    });
+  }
+
+  private startToolContinuationWatchdog(): void {
+    this.clearToolContinuationWatchdog();
+    this.toolContinuationWatchdog = setTimeout(() => {
+      this.toolContinuationWatchdog = null;
+      if (this.isAwaitingContinuation || this.hasPendingToolContinuation) {
+        liveLogger.warn(`[QwenRealtime] ⚠️ Tool continuation watchdog expired! Forcing continuation for turn ${this.currentTeachingTurnId}`);
+        this.triggerToolContinuation();
+      }
+    }, 4000);
+  }
+
+  private clearToolContinuationWatchdog(): void {
+    if (this.toolContinuationWatchdog) {
+      clearTimeout(this.toolContinuationWatchdog);
+      this.toolContinuationWatchdog = null;
+    }
+  }
+
+  private triggerToolContinuation(): void {
+    this.clearToolContinuationWatchdog();
+    this.hasPendingToolContinuation = false;
+    this.isAwaitingContinuation = false;
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (this.isStudentSpeaking) {
+      liveLogger.log('[QwenRealtime] triggerToolContinuation skipped: student speaking');
+      return;
+    }
+
+    this.currentTeachingTurnId++;
+    liveLogger.log(`[QwenRealtime] Auto-continuing teaching after tool execution (turn ${this.currentTeachingTurnId})`);
+
+    this.isResponseActive = true;
+    this.continuationRequestedForTurn = this.currentTeachingTurnId;
+
+    if (this.state === 'drawing') {
+      this.setState(this.activeAudioSources.length > 0 ? 'speaking' : 'listening');
+    }
+
+    this.sendJson({
+      event_id: `resp_cont_${Date.now()}_tool_done`,
+      type: 'response.create',
+      response: {
+        modalities: ['text', 'audio'],
+        instructions:
+          'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. Continue teaching smoothly without stopping.',
         tools: this.getTools(),
         tool_choice: 'auto',
       },
@@ -875,6 +934,9 @@ export class QwenRealtimeTeacherService {
         this.isResponseActive = true;
         this.isAudioStreamingFromModel = true;
         this.isAwaitingContinuation = false;
+        this.isTurnResponseDone = false;
+        this.hasPendingToolContinuation = false;
+        this.clearToolContinuationWatchdog();
         this.continuationRequestedForTurn = -1;
         this.clearStudentWaitTimer();
         this.isBurstStart = true;
@@ -912,34 +974,36 @@ export class QwenRealtimeTeacherService {
         liveLogger.log(`[QwenRealtime] output_item.added:`, event.item?.type);
         if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
-          const key = item.call_id || item.id;
-          if (key) {
+          const callId = item.call_id || item.id;
+          if (callId) {
+            if (item.id && item.call_id) {
+              this.toolItemIdToCallId.set(item.id, item.call_id);
+            }
             const entry = {
-              name: item.name || item.function?.name,
-              call_id: item.call_id || item.id,
+              name: item.name || item.function?.name || '',
+              call_id: callId,
               arguments: item.arguments || item.function?.arguments || '',
             };
-            this.pendingToolCalls.set(key, entry);
-            if (item.id) this.pendingToolCalls.set(item.id, entry);
+            this.pendingToolCalls.set(callId, entry);
           }
         }
         break;
       }
 
       case 'response.function_call_arguments.delta': {
-        const key = event.call_id || event.item_id;
-        if (key && this.pendingToolCalls.has(key)) {
-          const pending = this.pendingToolCalls.get(key)!;
+        const callId = event.call_id || (event.item_id ? this.toolItemIdToCallId.get(event.item_id) : null) || event.item_id;
+        if (callId && this.pendingToolCalls.has(callId)) {
+          const pending = this.pendingToolCalls.get(callId)!;
           pending.arguments += (event.delta || '');
         }
         break;
       }
 
       case 'response.function_call_arguments.done': {
-        const key = event.call_id || event.item_id;
-        const pending = key ? this.pendingToolCalls.get(key) : null;
+        const callId = event.call_id || (event.item_id ? this.toolItemIdToCallId.get(event.item_id) : null) || event.item_id;
+        const pending = callId ? this.pendingToolCalls.get(callId) : null;
         const toolName = event.name || event.function?.name || pending?.name;
-        const callId = event.call_id || pending?.call_id || key;
+        const effectiveCallId = pending?.call_id || callId;
         
         let argsStr = event.arguments || event.function?.arguments || '';
         if (pending && pending.arguments && pending.arguments.length > argsStr.length) {
@@ -950,12 +1014,12 @@ export class QwenRealtimeTeacherService {
         liveLogger.log(
           `[QwenRealtime] TOOL CALL RECEIVED\n` +
           `name: ${toolName}\n` +
-          `call_id: ${callId}\n` +
+          `call_id: ${effectiveCallId}\n` +
           `arguments: ${argsStr}`
         );
 
-        if (toolName && callId) {
-          void this.executeToolCall(callId, toolName, argsStr);
+        if (toolName && effectiveCallId) {
+          void this.executeToolCall(effectiveCallId, toolName, argsStr);
         }
         break;
       }
@@ -964,9 +1028,10 @@ export class QwenRealtimeTeacherService {
         liveLogger.log(`[QwenRealtime] output_item.done:`, event.item?.type);
         if (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call') {
           const item = event.item;
-          const callId = item.call_id || item.id;
+          const callId = item.call_id || (item.id ? this.toolItemIdToCallId.get(item.id) : null) || item.id;
           const toolName = item.name || item.function?.name;
           const pending = callId ? this.pendingToolCalls.get(callId) : null;
+          const effectiveCallId = pending?.call_id || callId;
           
           let argsStr = item.arguments || item.function?.arguments || '';
           if (pending && pending.arguments && pending.arguments.length > argsStr.length) {
@@ -974,14 +1039,14 @@ export class QwenRealtimeTeacherService {
           }
           if (!argsStr) argsStr = '{}';
           
-          if (toolName && callId && !this.executedCallIds.has(callId)) {
+          if (toolName && effectiveCallId && !this.executedCallIds.has(effectiveCallId)) {
             liveLogger.log(
-              `[QwenRealtime] TOOL CALL RECEIVED\n` +
+              `[QwenRealtime] TOOL CALL RECEIVED (from output_item.done)\n` +
               `name: ${toolName}\n` +
-              `call_id: ${callId}\n` +
+              `call_id: ${effectiveCallId}\n` +
               `arguments: ${argsStr}`
             );
-            void this.executeToolCall(callId, toolName, argsStr);
+            void this.executeToolCall(effectiveCallId, toolName, argsStr);
           }
         }
         break;
@@ -999,13 +1064,22 @@ export class QwenRealtimeTeacherService {
       case 'response.done': {
         liveLogger.log(`[QwenRealtime] response.done turn=${this.currentTeachingTurnId}`);
         this.isAudioStreamingFromModel = false;
+        this.isTurnResponseDone = true;
         this.drainAudioQueue(true);
 
-        // Tool path still waiting for continuation — keep state
-        if (this.isAwaitingContinuation) {
-          liveLogger.log('[QwenRealtime] response.done while awaiting continuation');
+        // If a tool output was submitted and is waiting for response.done to finish turn
+        if (this.hasPendingToolContinuation) {
+          liveLogger.log('[QwenRealtime] response.done arrived with pending tool continuation — triggering now');
+          this.triggerToolContinuation();
           break;
         }
+
+        // If tools are still executing (e.g. SVG generation in progress)
+        if (this.isAwaitingContinuation || this.pendingToolCalls.size > 0) {
+          liveLogger.log('[QwenRealtime] response.done while tool is executing — awaiting tool completion');
+          break;
+        }
+
         // If all scheduled audio has finished playing, declare audio finished
         if (this.totalQueuedSamples === 0 && this.activeAudioSources.length === 0) {
           this.onTeacherAudioFinished();
@@ -1063,6 +1137,7 @@ export class QwenRealtimeTeacherService {
     const turnAtStart = this.currentTeachingTurnId;
     this.setState('drawing');
     this.isAwaitingContinuation = true;
+    this.startToolContinuationWatchdog();
 
     let args: any = {};
     try {
@@ -1149,6 +1224,11 @@ export class QwenRealtimeTeacherService {
     if (turnAtStart !== this.currentTeachingTurnId) {
       liveLogger.log(`[QwenRealtime] Tool ${name} finished for stale turn ${turnAtStart}`);
       this.pendingToolCalls.delete(callId);
+      for (const [itId, cId] of this.toolItemIdToCallId.entries()) {
+        if (cId === callId) {
+          this.toolItemIdToCallId.delete(itId);
+        }
+      }
       return;
     }
 
@@ -1166,30 +1246,28 @@ export class QwenRealtimeTeacherService {
 
     // Clear pending entry
     this.pendingToolCalls.delete(callId);
+    for (const [itId, cId] of this.toolItemIdToCallId.entries()) {
+      if (cId === callId) {
+        this.toolItemIdToCallId.delete(itId);
+      }
+    }
 
     // Tool has finished execution — reset state
     if (this.state === 'drawing') {
       this.setState(this.activeAudioSources.length > 0 ? 'speaking' : 'listening');
     }
 
-    // AUTO-CONTINUE IMMEDIATELY WHEN TOOL EXECUTES:
+    // AUTO-CONTINUE TEACHING:
     if (this.pendingToolCalls.size === 0) {
-      liveLogger.log(`[QwenRealtime] Tool ${name} finished — AUTO-CONTINUING TEACHING IMMEDIATELY`);
-      this.isAwaitingContinuation = false;
-      this.isResponseActive = false;
-      this.continuationRequestedForTurn = -1;
-      this.currentTeachingTurnId++;
-
-      this.sendJson({
-        event_id: `resp_cont_${Date.now()}_tool_done`,
-        type: 'response.create',
-        response: {
-          modalities: ['text', 'audio'],
-          tools: this.getTools(),
-          tool_choice: 'auto',
-        },
-      });
-      this.isResponseActive = true;
+      liveLogger.log(`[QwenRealtime] All pending tools finished (isTurnResponseDone=${this.isTurnResponseDone})`);
+      if (this.isTurnResponseDone) {
+        // Server already sent response.done for this turn! Safe to dispatch continuation immediately.
+        this.triggerToolContinuation();
+      } else {
+        // Server has not yet sent response.done. Await response.done before requesting continuation.
+        this.hasPendingToolContinuation = true;
+        liveLogger.log('[QwenRealtime] Awaiting server response.done before requesting continuation');
+      }
     }
   }
 
