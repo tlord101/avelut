@@ -741,7 +741,7 @@ export class AvelutBoardController {
     if (!isMathLike) {
       // Auto-wrap lines to prevent text clipping horizontally off the canvas on mobile & desktop
       const maxLineChars = isMobile
-        ? (fontSize >= 24 ? 22 : fontSize >= 18 ? 30 : 38)
+        ? (fontSize >= 24 ? 22 : fontSize >= 18 ? 30 : 43)
         : (fontSize >= 24 ? 45 : fontSize >= 18 ? 60 : 75);
 
       displayText = displayText
@@ -752,7 +752,7 @@ export class AvelutBoardController {
 
     const lines = displayText.split('\n');
     const longestLine = Math.max(...lines.map(l => l.length));
-    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), isMobile ? 340 : 800);
+    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), isMobile ? 380 : 800);
     const approxH = Math.max(lines.length * fontSize * 1.4, 30);
     this.lastActivePoint = { x: x + approxW / 2, y: y + approxH / 2 };
 
