@@ -16,6 +16,8 @@ const DASHSCOPE_BASE_URLS = [
   'https://dashscope.aliyuncs.com/compatible-mode/v1',
 ];
 
+export const DEFAULT_MODEL = 'qwen3.8-omni-flash';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -61,15 +63,15 @@ export async function POST(req: Request) {
       .replace(/^meta-llama\//i, '');
 
     // Alibaba DashScope strictly hosts native Qwen models.
-    // Default model is strictly qwen3.8-omni-flash.
+    // Strictly use Qwen3.8-Omni-Flash everywhere as the default text & multimodal model.
     const isQwenModel = rawModel.toLowerCase().startsWith('qwen');
-    const primaryDashscopeModel = hasImage
-      ? (isQwenModel ? rawModel : 'qwen-vl-plus')
-      : (isQwenModel ? rawModel : 'qwen3.8-omni-flash');
+    const primaryDashscopeModel = isQwenModel ? rawModel : DEFAULT_MODEL;
 
-    const candidateModels = hasImage
-      ? Array.from(new Set([primaryDashscopeModel, 'qwen-vl-plus', 'qwen-vl-max']))
-      : Array.from(new Set([primaryDashscopeModel, 'qwen3.8-omni-flash', 'qwen3.7-flash']));
+    const candidateModels = Array.from(new Set([
+      primaryDashscopeModel,
+      DEFAULT_MODEL,
+      'qwen3.7-flash',
+    ]));
 
     // Attempt DashScope / Model Studio MaaS endpoints
     let lastUpstreamError = '';
