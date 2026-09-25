@@ -96,8 +96,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
   if (navItems.length !== 5) {
     return (
-      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent">
-        <div className="relative w-full max-w-md h-16 bg-white/90 dark:bg-[#0A0A0A]/90 backdrop-blur-xl rounded-full border border-slate-200/80 dark:border-white/10 px-6 flex items-center justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] animate-fade-in-up pb-[env(safe-area-inset-bottom,0px)] bg-transparent pointer-events-none">
+        <div className="relative w-full max-w-md h-16 bg-white/90 dark:bg-[#0A0A0A]/90 backdrop-blur-xl rounded-full border border-slate-200/80 dark:border-white/10 px-6 flex items-center justify-around pointer-events-auto shadow-lg">
           {navItems.map((item) => {
             const isActive = activeItem === item.id;
             const activeColorClass = isActive
@@ -151,7 +151,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   ].join(' ');
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] md:hidden animate-fade-in-up">
+    <nav className="fixed bottom-0 left-0 right-0 flex justify-center z-[120] animate-fade-in-up pointer-events-none">
       <svg width="0" height="0" className="absolute pointer-events-none">
         <defs>
           <clipPath id={clipId}>
@@ -161,7 +161,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       </svg>
       <div
         ref={containerRef}
-        className="relative w-full max-w-md h-[calc(76px+env(safe-area-inset-bottom,0px))] bg-transparent"
+        className="relative w-full max-w-md h-[calc(76px+env(safe-area-inset-bottom,0px))] bg-transparent pointer-events-auto"
       >
         <div
           className="absolute inset-0 z-0 transform-gpu"

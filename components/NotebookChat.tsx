@@ -145,9 +145,6 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
   // ── Configure Main App Header for Notebook Chat ──
   useEffect(() => {
     if (setCustomHeaderConfig) {
-      const activeStepNumber = (chapterStructure?.currentStepIndex ?? 0) + 1;
-      const totalSteps = chapterStructure?.steps?.length || 4;
-
       setCustomHeaderConfig({
         hideBottomNav: true,
         leftActions: (
@@ -161,15 +158,10 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
               <i className="bi bi-arrow-left text-base font-bold text-[#2563EB] dark:text-[#3B82F6]"></i>
             </button>
             <div className="min-w-0 flex flex-col justify-center">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A3A3A3] uppercase tracking-wider block truncate">
-                  {notebook.title}
-                </span>
-                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#3B82F6] text-[9px] font-extrabold border border-[#2563EB]/20">
-                  Step {activeStepNumber}/{totalSteps}
-                </span>
-              </div>
-              <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[140px] sm:max-w-[280px] md:max-w-[400px]">
+              <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A3A3A3] uppercase tracking-wider block truncate">
+                {notebook.title}
+              </span>
+              <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[160px] sm:max-w-[300px] md:max-w-[420px]">
                 {chapter.title}
               </h2>
             </div>
@@ -221,12 +213,11 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
     setInputText('');
     setIsLoading(true);
 
-    // Track and advance chapter structure step progress
+    // Track and advance chapter structure progress dynamically
     let currentStepIdx = chapterStructure?.currentStepIndex || 0;
-    const totalSteps = chapterStructure?.steps?.length || 4;
     const userMsgCount = messages.filter((m) => m.sender === 'user').length;
 
-    if (userMsgCount > 0 && userMsgCount % 2 === 0 && currentStepIdx < totalSteps - 1) {
+    if (userMsgCount > 0 && userMsgCount % 2 === 0) {
       currentStepIdx = currentStepIdx + 1;
       if (chapterStructure) {
         const updatedStruct = { ...chapterStructure, currentStepIndex: currentStepIdx };
@@ -234,12 +225,6 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
         saveTopicStructureProgress(updatedStruct, userProfile?.uid);
       }
     }
-
-    const activeStep = chapterStructure?.steps?.[currentStepIdx] || {
-      title: 'Chapter Step',
-      objective: `Master ${chapter.title}`,
-      keyConcepts: ['Core principles'],
-    };
 
     try {
       const ai = createAvelutAI(appSettings, userProfile, {
@@ -261,22 +246,23 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
 
       const isGroundingAvailable = excerptToUse.length > 0;
 
-      // Extract a focused segment corresponding to the active step rather than sending 14k raw characters
+      // Extract a focused segment corresponding to current progression rather than sending 14k raw characters
       let focusedExcerpt = '';
       if (isGroundingAvailable) {
-        const stepOffset = Math.floor((currentStepIdx / Math.max(1, totalSteps)) * excerptToUse.length);
+        const stepOffset = Math.min(
+          Math.floor((currentStepIdx * 1500) % Math.max(1, excerptToUse.length)),
+          Math.max(0, excerptToUse.length - 2200)
+        );
         const rawSlice = excerptToUse.slice(stepOffset, stepOffset + 2200);
         focusedExcerpt = rawSlice.trim() || excerptToUse.slice(0, 2200);
       }
 
-      const prompt = `You are an expert, precise, and encouraging academic tutor helping a student understand their textbook material: "${chapter.title}" from "${notebook.title}".
+      const prompt = `You are an expert, precise, and encouraging academic tutor helping a student deeply master their textbook chapter: "${chapter.title}" from "${notebook.title}".
 
-CURRENT STRUCTURED CHAPTER STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}"
-STEP OBJECTIVE: "${activeStep.objective}"
-KEY CONCEPTS: ${activeStep.keyConcepts?.join(', ') || 'Core concepts'}
+MISSION: Conduct a dynamic, adaptive tutoring session. Ensure the student comprehensively understands every essential area and concept of this chapter — intuition, key mechanisms, formulas/theories, practical step-by-step examples, edge cases, and exam questions. Do not artificially limit or cap the depth of the session.
 
-CRITICAL TUTORING & PROGRESSIVE TEACHING RULES:
-1. PROGRESSIVE IN-DEPTH TEACHING: You are guiding the student through STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}". Teach this step thoroughly and in depth, focusing on "${activeStep.objective}".
+CRITICAL TUTORING RULES:
+1. PROGRESSIVE IN-DEPTH TEACHING: Guide the student through each concept thoroughly. Dynamically expand on definitions, underlying logic, and nuances as the student progresses.
 2. STRICTLY BITE-SIZED: Keep explanations brief, clear, and digestible (target 90-130 words per turn). Teach ONE micro-concept at a time.
 3. INTERACTIVE TEACHING LOOP: Conclude your response with 1 quick check question or thought prompt before proceeding to verify understanding.
 4. TYPOGRAPHIC HIERARCHY:
@@ -284,7 +270,7 @@ CRITICAL TUTORING & PROGRESSIVE TEACHING RULES:
    - Use **bold** for key concepts and essential definitions.
    - Format all math, formulas, and variables using LaTeX ($...$ inline or $$...$$ block).
 ${isGroundingAvailable
-  ? `5. TEXTBOOK GROUNDING: Base your explanations and definitions on the focused step excerpt below.`
+  ? `5. TEXTBOOK GROUNDING: Base your explanations and definitions on the focused excerpt below.`
   : `5. ACADEMIC PRINCIPLES: Explain the core concepts of "${chapter.title}" accurately.`
 }
 6. GREETINGS: Reply warmly and concisely to greetings.
@@ -292,7 +278,7 @@ ${isGroundingAvailable
 BOOK: ${notebook.title}
 CHAPTER: ${chapter.title} (Pages ${chapter.startPage}-${chapter.endPage})
 
-${isGroundingAvailable ? `RELEVANT CHAPTER EXCERPT (STEP ${currentStepIdx + 1}):\n${focusedExcerpt}` : `(Grounding from curriculum)`}
+${isGroundingAvailable ? `RELEVANT CHAPTER EXCERPT:\n${focusedExcerpt}` : `(Grounding from curriculum)`}
 
 CONVERSATION HISTORY:
 ${nextMessagesWithUser.slice(-6).map((m) => `${m.sender === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n')}

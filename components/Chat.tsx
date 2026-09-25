@@ -246,6 +246,7 @@ const GrokChatComposer: React.FC<{
   onToggleVoice: () => void;
   attachedImage: string | null;
   onRemoveImage: () => void;
+  onAttachImage?: (base64Img: string) => void;
   onOpenGallery: () => void;
   onOpenCamera: () => void;
   onSend: () => void;
@@ -258,6 +259,7 @@ const GrokChatComposer: React.FC<{
   onToggleVoice,
   attachedImage,
   onRemoveImage,
+  onAttachImage,
   onOpenGallery,
   onOpenCamera,
   onSend,
@@ -297,6 +299,30 @@ const GrokChatComposer: React.FC<{
     }
   }, [input]);
 
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const result = ev.target?.result as string;
+            if (result && onAttachImage) {
+              onAttachImage(result);
+            }
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    }
+  }, [onAttachImage]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -311,7 +337,10 @@ const GrokChatComposer: React.FC<{
   const hasText = Boolean(input.trim()) || Boolean(attachedImage);
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-3 sm:pb-5 pt-2 relative">
+    <div
+      className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-3 sm:pb-5 pt-2 relative"
+      onPaste={handlePaste}
+    >
       <div className="relative flex flex-col bg-[#f4f4f5] dark:bg-[#212124] rounded-[28px] border border-neutral-200/70 dark:border-white/5 transition-all focus-within:ring-1 focus-within:ring-black/10 dark:focus-within:ring-white/10 shadow-sm">
         
         {/* Attached Image Preview Pill */}
@@ -342,7 +371,8 @@ const GrokChatComposer: React.FC<{
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything"
+            onPaste={handlePaste}
+            placeholder="Ask anything or paste an image"
             rows={1}
             className="w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 text-[15px] sm:text-base resize-none max-h-36 py-0 leading-relaxed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           />
@@ -838,6 +868,36 @@ export const Chat: React.FC<ChatProps> = ({
       stopVoiceRecognition();
     };
   }, [stopVoiceRecognition]);
+
+  // Support pasting images anywhere in Avelut AI chat
+  useEffect(() => {
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const result = ev.target?.result as string;
+              if (result) {
+                setAttachedImage(result);
+              }
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleWindowPaste);
+    return () => window.removeEventListener('paste', handleWindowPaste);
+  }, []);
 
   const handleSendMessage = async (customText?: string) => {
     stopVoiceRecognition();
@@ -1353,6 +1413,7 @@ export const Chat: React.FC<ChatProps> = ({
         onToggleVoice={toggleVoice}
         attachedImage={attachedImage}
         onRemoveImage={() => setAttachedImage(null)}
+        onAttachImage={(img) => setAttachedImage(img)}
         onOpenGallery={() => fileInputRef.current?.click()}
         onOpenCamera={() => setIsCameraOpen(true)}
         onSend={() => handleSendMessage()}

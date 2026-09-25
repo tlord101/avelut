@@ -154,9 +154,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   // Configure Main App Header for Course Chat Tutor
   useEffect(() => {
     if (setCustomHeaderConfig) {
-      const activeStepNumber = (topicStructure?.currentStepIndex ?? 0) + 1;
-      const totalSteps = topicStructure?.steps?.length || 4;
-
       setCustomHeaderConfig({
         hideBottomNav: true,
         hideTitle: true,
@@ -192,17 +189,12 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               )}
             </button>
 
-            {/* Topic & Course Info with Step Progress Pill */}
+            {/* Topic & Course Info */}
             <div className="min-w-0 flex flex-col justify-center ml-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
-                  {course.course_code || course.course_name}
-                </span>
-                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#3B82F6] text-[9px] font-extrabold border border-[#2563EB]/20">
-                  Step {activeStepNumber}/{totalSteps}
-                </span>
-              </div>
-              <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[110px] sm:max-w-[220px] md:max-w-[320px]">
+              <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block truncate">
+                {course.course_code || course.course_name}
+              </span>
+              <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white truncate max-w-[130px] sm:max-w-[240px] md:max-w-[340px]">
                 {topic.topic_name}
               </h2>
             </div>
@@ -277,46 +269,40 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setMessages([initialPlaceholder]);
     setStreamingMsgId(starterAiMsgId);
 
-    const activeStep = topicStructure?.steps?.[topicStructure?.currentStepIndex || 0] || {
-      title: 'Core Fundamentals',
-      objective: `Master basic intuition and definition of ${topic.topic_name}`,
-      keyConcepts: ['Definition', 'Intuition'],
-    };
-
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
-      `STRUCTURED STEP ${(topicStructure?.currentStepIndex || 0) + 1} OF ${topicStructure?.steps?.length || 4}: "${activeStep.title}"`,
-      `STEP OBJECTIVE: "${activeStep.objective}"`,
-      `KEY CONCEPTS TO COVER IN THIS STEP: ${activeStep.keyConcepts?.join(', ') || 'Core concepts'}`,
+      topic.topic_context ? `CURRICULUM CONTEXT: ${topic.topic_context}` : '',
       '',
-      'TASK: Teach the student Step 1 of this topic from the saved topic structure.',
-      'MANDATORY TEACHING CONSTRAINTS:',
-      '1. STRICTLY BITE-SIZED: Keep total response under 80-110 words. Teach only this step. Never dump paragraphs of text.',
-      '2. INTERACTIVE CHECK: Conclude with 1 simple, engaging check question or thought prompt to test the student before moving to the next step.',
-      '3. TYPOGRAPHIC HIERARCHY (Strictly Follow):',
-      '   - Use a clear ### Subheading for Step 1 title.',
-      '   - Use **bold** for key concepts, essential terms, and definitions.',
-      '   - Use *italics* for emphasis or subtle terminology.',
-      '   - Highlight critical terms with ==this== or <mark>this</mark>.',
-      '   - Format all math, formulas, and symbols with LaTeX ($...$ inline, $$...$$ block).',
-      '   - Use code fences for code examples.',
-      '4. ANALOGY: Use an intuitive everyday Nigerian analogy (e.g. POS charges, Danfo bus speeds, NEPA power vs. generator, market prices).',
-      '5. Provide your response directly without meta commentary or emojis.',
-    ].join('\n');
+      'MISSION: Conduct a dynamic, comprehensive Socratic tutorial session. Your goal is to guide the student to understand EVERY essential area possible to know on this topic — intuition, definitions, mechanisms, formulas/theories, practical step-by-step worked examples, edge cases, exam traps, and real-world applications.',
+      '',
+      'SESSION COMMENCEMENT:',
+      '- Welcome the student warmly to the tutorial on this topic.',
+      '- Introduce the foundational intuition and core concept with a vivid, relatable everyday Nigerian analogy (e.g. POS charges, NEPA power vs generator, Danfo bus routes, market bargaining).',
+      '- Keep this opening bite-sized (80-110 words).',
+      '- Conclude with 1 simple, engaging check question or thought prompt to gauge their current understanding before diving into mechanics.',
+      '',
+      'TYPOGRAPHIC HIERARCHY (Strictly Follow):',
+      '- Use ### Subheadings for sections.',
+      '- Use **bold** for key concepts and definitions.',
+      '- Highlight critical terms with ==this== or <mark>this</mark>.',
+      '- Format all math, formulas, and symbols with LaTeX ($...$ inline, $$...$$ block).',
+      '- Use code fences for code examples.',
+      '- Provide teaching directly without meta-commentary, robot greetings, or emojis.',
+    ].filter(Boolean).join('\n');
 
     const aiParams = {
       model: 'qwen3.8-omni-flash',
       contents: [
         {
           role: 'user',
-          parts: [{ text: `Hello! I am ready to learn "${topic.topic_name}" - Step 1: ${activeStep.title}. Please begin.` }],
+          parts: [{ text: `Hello! I am ready to learn "${topic.topic_name}". Please begin our dynamic tutorial session.` }],
         },
       ],
       config: {
         systemInstruction: socraticSystemPrompt,
         temperature: 0.35,
-        maxOutputTokens: 400,
+        maxOutputTokens: 450,
       },
     };
 
@@ -344,7 +330,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     }
 
     if (!streamedText.trim()) {
-      streamedText = `Welcome to **${topic.topic_name}** - Step 1: ${activeStep.title}!\n\nLet's master this concept step by step. Ready to begin?`;
+      streamedText = `Welcome to **${topic.topic_name}**!\n\nLet's break down this topic thoroughly step by step, covering every single area you need to master. Ready to begin?`;
     }
 
     setMessages((prev) => {
@@ -434,12 +420,11 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       inputElementRef.current.style.height = 'auto';
     }
 
-    // Determine current step and advance step progress if student responded correctly/moved ahead
+    // Advance dynamic progress and assess areas
     let currentStepIdx = topicStructure?.currentStepIndex || 0;
-    const totalSteps = topicStructure?.steps?.length || 4;
     const userMsgCount = messages.filter((m) => m.sender === 'user').length;
 
-    if (userMsgCount > 0 && userMsgCount % 2 === 0 && currentStepIdx < totalSteps - 1) {
+    if (userMsgCount > 0 && userMsgCount % 2 === 0) {
       currentStepIdx = currentStepIdx + 1;
       if (topicStructure) {
         const updatedStruct = { ...topicStructure, currentStepIndex: currentStepIdx };
@@ -448,32 +433,33 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       }
     }
 
-    const activeStep = topicStructure?.steps?.[currentStepIdx] || {
-      title: 'Topic Deep Dive',
-      objective: `Master ${topic.topic_name}`,
-      keyConcepts: ['Core principles'],
-    };
-
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
-      `CURRENT TOPIC STRUCTURE STEP ${currentStepIdx + 1} OF ${totalSteps}: "${activeStep.title}"`,
-      `STEP OBJECTIVE: "${activeStep.objective}"`,
-      `KEY CONCEPTS: ${activeStep.keyConcepts?.join(', ') || 'Core principles'}`,
+      topic.topic_context ? `CURRICULUM CONTEXT: ${topic.topic_context}` : '',
       '',
-      'CRITICAL SOCRATIC TEACHING RULES:',
-      '1. STRICTLY BITE-SIZED: Teach in small, digestible bits. Never dump long textbook text walls or multi-paragraph lectures. Target 80-120 words per response.',
-      '2. STEP-BY-STEP GUIDANCE: Guide the student through current step objective. When they demonstrate understanding, transition smoothly to the next step.',
-      '3. INTERACTIVE TEACHING LOOP: Teach ONE micro-step at a time, then ALWAYS end with 1 quick check question or thought experiment.',
+      'MISSION: Conduct a dynamic, adaptive masterclass tutorial session that ensures the student thoroughly understands EVERY area possible to know on this topic.',
+      'Do NOT limit or truncate the tutorial to 4 steps or any artificial limits. Guide the student continuously and progressively through all dimensions of the topic:',
+      '- Foundational intuition & core definitions',
+      '- Mathematical / theoretical mechanics, laws & formulas (formatted with LaTeX)',
+      '- Step-by-step worked calculations & concrete derivations',
+      '- Real-world Nigerian applications & case scenarios',
+      '- Tricky exam traps, edge cases & common misconceptions',
+      '- Active problem-solving checks & student synthesis',
+      '',
+      'CRITICAL TEACHING RULES:',
+      '1. ADAPTIVE PROGRESSION: Evaluate the student\'s response. If they answered correctly or showed grasp, briefly validate, reinforce the key takeaway, and smoothly transition to the next essential area of the topic. If they are confused or made an error, break it down with simpler intuition before moving forward.',
+      '2. STRICTLY BITE-SIZED: Keep each turn focused and bite-sized (80-120 words). Never dump long textbook text walls or multi-paragraph lectures.',
+      '3. ALWAYS INCLUDE 1 INTERACTIVE CHECK: Conclude your response with ONE specific question or problem for the student to solve or explain next.',
       '4. TYPOGRAPHIC HIERARCHY:',
-      '   - Use ### Subheadings to organize sections or step titles.',
+      '   - Use ### Subheadings to organize concept sections.',
       '   - Use **bold** for crucial terms and definitions.',
       '   - Highlight critical terms with ==this== or <mark>this</mark>.',
       '   - Format all math, equations, and variables with LaTeX ($...$ inline or $$...$$ block).',
       '   - Use code fences for code examples.',
       '5. PRACTICAL EXAMPLES: Use relatable Nigerian real-world scenarios when illustrating ideas.',
       '6. DIRECT RESPONSE: Provide response directly without meta commentary or emojis.',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
     const historyContents = messages
       .filter((m) => m.text && m.text.trim())
@@ -869,13 +855,28 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
                 }}
+                onPaste={(e) => {
+                  const items = e.clipboardData?.items;
+                  if (!items || items.length === 0) return;
+                  for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.type.startsWith('image/')) {
+                      const file = item.getAsFile();
+                      if (file) {
+                        e.preventDefault();
+                        setAttachments((prev) => [...prev, file]);
+                        return;
+                      }
+                    }
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     void handleSend();
                   }
                 }}
-                placeholder={`Ask about ${topic.topic_name}...`}
+                placeholder={`Ask about ${topic.topic_name} or paste image...`}
                 className="w-full bg-transparent text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-[15px] sm:text-[16px] font-normal leading-relaxed focus:outline-none resize-none py-2 px-1 max-h-[140px] overflow-y-auto"
                 style={{ height: 'auto' }}
               />
