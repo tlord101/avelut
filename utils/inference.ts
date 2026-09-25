@@ -761,10 +761,10 @@ async function* callAlibabaQwenStream(
     messages,
     modalities: ['text'],
     stream: true,
-    stream_options: { include_usage: true },
+    enable_thinking: false,
+    include_reasoning: false,
     temperature: params?.config?.temperature ?? 0.7,
     max_tokens: params?.config?.maxOutputTokens ?? 4096,
-    include_reasoning: false,
   };
 
   if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {

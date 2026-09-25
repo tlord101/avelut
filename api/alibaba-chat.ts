@@ -99,6 +99,8 @@ export async function POST(req: Request) {
               model: currentModel,
               messages,
               modalities: ['text'],
+              enable_thinking: false,
+              include_reasoning: false,
               temperature: body.temperature ?? 0.35,
               max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
             };
@@ -107,7 +109,6 @@ export async function POST(req: Request) {
               payload.stream = false; // Strictly enforce non-streaming for JSON mode
             } else if (body.stream) {
               payload.stream = true;
-              payload.stream_options = { include_usage: true };
             }
 
             const requestHeaders: Record<string, string> = {

@@ -86,6 +86,15 @@ export const ThinkingTypingIndicator: React.FC<ThinkingTypingIndicatorProps> = (
           for {timeDisplay}
         </span>
       </div>
+
+      {reasoningText ? (
+        <div className="mt-1.5 w-full max-w-2xl text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 font-reading bg-slate-50/80 dark:bg-white/[0.03] p-3 rounded-2xl border border-slate-200/70 dark:border-white/10 max-h-44 overflow-y-auto whitespace-pre-wrap select-text animate-fade-in">
+          {reasoningText}
+          {isStreaming && (
+            <span className="inline-block w-1.5 h-3.5 ml-1 bg-blue-500 dark:bg-blue-400 rounded-xs animate-pulse align-middle" />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 };

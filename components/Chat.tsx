@@ -1214,10 +1214,12 @@ export const Chat: React.FC<ChatProps> = ({
                           />
                         </div>
                       ) : (
-                        <>
-
+                        <div className="min-w-0">
                           <MarkdownContent content={msg.text} />
-                        </>
+                          {isLoading && index === messages.length - 1 && (
+                            <span aria-hidden="true" className="inline-block w-2 h-4 ml-1 bg-blue-600 dark:bg-blue-400 rounded-xs animate-pulse align-middle" />
+                          )}
+                        </div>
                       )}
                     </div>
 

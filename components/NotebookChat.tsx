@@ -1,7 +1,7 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
-import { checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
+import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, getChapterContent } from '../services/notebookStorageService';
 import { LimitExceededModal } from './LimitExceededModal';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -313,7 +313,7 @@ ${messageText}`;
       }]);
 
       const responseStream = await ai.models.generateContentStream({
-        model: 'qwen/qwen3.7-flash',
+        model: getFeatureModel('chat_interaction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash',
         contents: prompt,
         config: {
           temperature: 0.3,
