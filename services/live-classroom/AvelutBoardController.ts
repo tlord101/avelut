@@ -593,6 +593,15 @@ export class AvelutBoardController {
     this.lastAnnotationY = 100;
     this.elements = [];
     this.boardFiles = {};
+    if (title && title.trim()) {
+      const blueColor = this.currentTheme === 'dark' ? '#38BDF8' : '#2563EB';
+      this.writeText(title.trim(), {
+        color: blueColor,
+        fontSize: 'title',
+        x: 30,
+        y: 100,
+      });
+    }
     if (this.api) {
       this.syncScene();
     }
