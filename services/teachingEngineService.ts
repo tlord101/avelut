@@ -570,7 +570,7 @@ export class TeachingEngineService {
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const responseStream = await ai.models.generateContentStream({
-            model: this.appSettings.alibaba_model || 'qwen3.7-flash',
+            model: this.appSettings.alibaba_model || 'qwen3.8-omni-flash',
             contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
             config: {
               responseMimeType: 'application/json',
@@ -978,7 +978,7 @@ export class TeachingEngineService {
 
       try {
         const responseStream = await ai.models.generateContentStream({
-          model: this.appSettings.alibaba_model || 'qwen3.7-flash',
+          model: this.appSettings.alibaba_model || 'qwen3.8-omni-flash',
           contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
           config: {
             responseMimeType: 'application/json',
@@ -1399,7 +1399,7 @@ export class TeachingEngineService {
       });
 
       const response = await ai.models.generateContent({
-        model: this.appSettings.alibaba_model || 'qwen3.7-flash',
+        model: this.appSettings.alibaba_model || 'qwen3.8-omni-flash',
         contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
         config: { responseMimeType: 'application/json', temperature: 0.3 },
       });
@@ -1467,7 +1467,7 @@ export class TeachingEngineService {
       });
 
       const response = await ai.models.generateContent({
-        model: this.appSettings.alibaba_model || 'qwen3.7-flash',
+        model: this.appSettings.alibaba_model || 'qwen3.8-omni-flash',
         contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
         config: { responseMimeType: 'application/json', temperature: 0.25 },
       });
@@ -1519,7 +1519,7 @@ export class TeachingEngineService {
       });
 
       const response = await ai.models.generateContent({
-        model: this.appSettings.alibaba_model || 'qwen3.7-flash',
+        model: this.appSettings.alibaba_model || 'qwen3.8-omni-flash',
         contents: [{ role: 'user', parts: [{ text: `${TEACHING_DIRECTOR_SYSTEM_PROMPT}\n\n${prompt}` }] }],
         config: { responseMimeType: 'application/json', temperature: 0.3 },
       });

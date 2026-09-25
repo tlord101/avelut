@@ -306,7 +306,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     ].join('\n');
 
     const aiParams = {
-      model: 'qwen3.7-flash',
+      model: 'qwen3.8-omni-flash',
       contents: [
         {
           role: 'user',
@@ -496,7 +496,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     });
 
     const aiParams = {
-      model: 'qwen3.7-flash',
+      model: 'qwen3.8-omni-flash',
       contents: historyContents,
       config: {
         systemInstruction: socraticSystemPrompt,

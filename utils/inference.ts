@@ -647,6 +647,22 @@ function resolveAlibabaEndpoints(
   ];
 }
 
+export function normalizeAlibabaDashScopeModel(model?: string, hasImage: boolean = false): string {
+  if (hasImage) return 'qwen-vl-plus';
+  const clean = (model || '')
+    .replace(/^qwen\//i, '')
+    .replace(/^alibaba\//i, '')
+    .replace(/^google\//i, '')
+    .replace(/^openai\//i, '')
+    .replace(/^anthropic\//i, '')
+    .replace(/^meta-llama\//i, '')
+    .trim();
+  if (!clean || !clean.toLowerCase().startsWith('qwen')) {
+    return 'qwen3.8-omni-flash';
+  }
+  return clean;
+}
+
 /**
  * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with candidate model fallbacks
  */
@@ -657,14 +673,10 @@ async function callAlibabaQwen(
 ): Promise<any> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages, hasImage } = paramsToChatMessages(params);
-  const requestedModel = (params?.model || appSettings?.alibaba_model || 'qwen3.7-flash')
-    .replace(/^qwen\//i, '')
-    .replace(/^alibaba\//i, '')
-    .trim();
-  const primaryModel = hasImage ? 'qwen-vl-plus' : (requestedModel || 'qwen3.7-flash');
+  const primaryModel = normalizeAlibabaDashScopeModel(params?.model || appSettings?.alibaba_model || 'qwen3.8-omni-flash', hasImage);
   const candidateModels = hasImage
     ? Array.from(new Set([primaryModel, 'qwen-vl-plus', 'qwen-vl-max']))
-    : Array.from(new Set(['qwen3.7-flash', primaryModel]));
+    : Array.from(new Set([primaryModel, 'qwen3.8-omni-flash', 'qwen3.7-flash']));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -755,13 +767,7 @@ async function* callAlibabaQwenStream(
 ): AsyncGenerator<any, void, unknown> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages, hasImage } = paramsToChatMessages(params);
-  const requestedModel = (params?.model || appSettings?.alibaba_model || 'qwen3.7-flash')
-    .replace(/^qwen\//i, '')
-    .replace(/^alibaba\//i, '')
-    .trim();
-  const model = hasImage
-    ? 'qwen-vl-plus'
-    : (requestedModel || 'qwen3.7-flash');
+  const model = normalizeAlibabaDashScopeModel(params?.model || appSettings?.alibaba_model || 'qwen3.8-omni-flash', hasImage);
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||

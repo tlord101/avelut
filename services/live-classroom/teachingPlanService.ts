@@ -124,7 +124,7 @@ Rules:
     const textModel =
       getFeatureModel('chat_interaction', appSettings) ||
       appSettings?.alibaba_model ||
-      'qwen3.7-flash';
+      'qwen3.8-omni-flash';
 
     const ai = createAvelutAI(appSettings, userProfile, { feature: 'chat_interaction' });
     const fetchPromise = ai.models.generateContent({

@@ -162,13 +162,13 @@ export const DEFAULT_USAGE_SETTINGS = {
     study_guide_extraction: 10,
   },
   feature_models: {
-    visual_solve: 'qwen3.7-flash',
-    chat_interaction: 'qwen3.7-flash',
-    flashcard_generation: 'qwen3.7-flash',
-    ai_quiz_generation: 'qwen3.7-flash',
-    study_guide_lesson: 'qwen3.7-flash',
-    study_guide_extraction: 'qwen3.7-flash',
-    title_generation: 'qwen3.7-flash',
+    visual_solve: 'qwen3.8-omni-flash',
+    chat_interaction: 'qwen3.8-omni-flash',
+    flashcard_generation: 'qwen3.8-omni-flash',
+    ai_quiz_generation: 'qwen3.8-omni-flash',
+    study_guide_lesson: 'qwen3.8-omni-flash',
+    study_guide_extraction: 'qwen3.8-omni-flash',
+    title_generation: 'qwen3.8-omni-flash',
   },
   additional_prices: {
     live_tutorial_pass: 150,
@@ -189,7 +189,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   openrouter_base_url: 'https://openrouter.ai/api/v1',
   alibaba_api_key: '',
   alibaba_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-  alibaba_model: 'qwen3.7-flash',
+  alibaba_model: 'qwen3.8-omni-flash',
   active_voice_provider: 'grok',
   studyguide_voice_provider: 'grok',
   notebook_voice_provider: 'grok',
@@ -293,6 +293,18 @@ export const getAlibabaApiKey = (appSettings?: AppSettings | Partial<AppSettings
   return fromEnv ? fromEnv.trim() : '';
 };
 
+export const cleanQwenModel = (model?: any, fallback: string = 'qwen3.8-omni-flash'): string => {
+  if (!model || typeof model !== 'string') return fallback;
+  const clean = model
+    .replace(/^qwen\//i, '')
+    .replace(/^alibaba\//i, '')
+    .replace(/^google\//i, '')
+    .replace(/^openai\//i, '')
+    .replace(/^anthropic\//i, '')
+    .trim();
+  return clean.toLowerCase().startsWith('qwen') ? clean : fallback;
+};
+
 export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefined): AppSettings => ({
   primary_ai_provider: raw?.primary_ai_provider || DEFAULT_APP_SETTINGS.primary_ai_provider,
   openrouter_api_key: (raw?.openrouter_api_key || DEFAULT_APP_SETTINGS.openrouter_api_key || '').toString().trim(),
@@ -300,7 +312,7 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
   openrouter_base_url: (raw?.openrouter_base_url || DEFAULT_APP_SETTINGS.openrouter_base_url || '').toString().trim(),
   alibaba_api_key: (raw?.alibaba_api_key || DEFAULT_APP_SETTINGS.alibaba_api_key || '').toString().trim(),
   alibaba_base_url: (raw?.alibaba_base_url || DEFAULT_APP_SETTINGS.alibaba_base_url || '').toString().trim(),
-  alibaba_model: (raw?.alibaba_model || DEFAULT_APP_SETTINGS.alibaba_model || '').toString().trim(),
+  alibaba_model: cleanQwenModel(raw?.alibaba_model, DEFAULT_APP_SETTINGS.alibaba_model || 'qwen3.8-omni-flash'),
   active_voice_provider: raw?.active_voice_provider || DEFAULT_APP_SETTINGS.active_voice_provider,
   studyguide_voice_provider: raw?.studyguide_voice_provider || raw?.active_voice_provider || DEFAULT_APP_SETTINGS.studyguide_voice_provider,
   notebook_voice_provider: raw?.notebook_voice_provider || raw?.active_voice_provider || DEFAULT_APP_SETTINGS.notebook_voice_provider,
@@ -335,13 +347,13 @@ export const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefine
       live_tutorial_60: typeof (raw.usage_settings.feature_costs as any)?.live_tutorial_60 === 'number' ? (raw.usage_settings.feature_costs as any).live_tutorial_60 : DEFAULT_USAGE_SETTINGS.feature_costs.live_tutorial_60,
     },
     feature_models: {
-      visual_solve: raw.usage_settings.feature_models?.visual_solve || DEFAULT_USAGE_SETTINGS.feature_models.visual_solve,
-      chat_interaction: raw.usage_settings.feature_models?.chat_interaction || DEFAULT_USAGE_SETTINGS.feature_models.chat_interaction,
-      flashcard_generation: raw.usage_settings.feature_models?.flashcard_generation || DEFAULT_USAGE_SETTINGS.feature_models.flashcard_generation,
-      ai_quiz_generation: raw.usage_settings.feature_models?.ai_quiz_generation || DEFAULT_USAGE_SETTINGS.feature_models.ai_quiz_generation,
-      study_guide_lesson: raw.usage_settings.feature_models?.study_guide_lesson || DEFAULT_USAGE_SETTINGS.feature_models.study_guide_lesson,
-      study_guide_extraction: raw.usage_settings.feature_models?.study_guide_extraction || DEFAULT_USAGE_SETTINGS.feature_models.study_guide_extraction,
-      title_generation: raw.usage_settings.feature_models?.title_generation || DEFAULT_USAGE_SETTINGS.feature_models.title_generation,
+      visual_solve: cleanQwenModel(raw.usage_settings.feature_models?.visual_solve, DEFAULT_USAGE_SETTINGS.feature_models.visual_solve),
+      chat_interaction: cleanQwenModel(raw.usage_settings.feature_models?.chat_interaction, DEFAULT_USAGE_SETTINGS.feature_models.chat_interaction),
+      flashcard_generation: cleanQwenModel(raw.usage_settings.feature_models?.flashcard_generation, DEFAULT_USAGE_SETTINGS.feature_models.flashcard_generation),
+      ai_quiz_generation: cleanQwenModel(raw.usage_settings.feature_models?.ai_quiz_generation, DEFAULT_USAGE_SETTINGS.feature_models.ai_quiz_generation),
+      study_guide_lesson: cleanQwenModel(raw.usage_settings.feature_models?.study_guide_lesson, DEFAULT_USAGE_SETTINGS.feature_models.study_guide_lesson),
+      study_guide_extraction: cleanQwenModel(raw.usage_settings.feature_models?.study_guide_extraction, DEFAULT_USAGE_SETTINGS.feature_models.study_guide_extraction),
+      title_generation: cleanQwenModel(raw.usage_settings.feature_models?.title_generation, DEFAULT_USAGE_SETTINGS.feature_models.title_generation),
     },
     tiers: {
       free: {

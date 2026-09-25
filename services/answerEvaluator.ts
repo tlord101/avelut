@@ -245,7 +245,7 @@ export async function evaluateStudentAnswer(
     studentAnswer: string,
     dialogueContext: string,
     aiClient: any,
-    model: string = 'qwen3.7-flash'
+    model: string = 'qwen3.8-omni-flash'
 ): Promise<{
     isCorrect: boolean;
     misconceptionType?: MisconceptionType;
