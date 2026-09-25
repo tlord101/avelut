@@ -974,9 +974,8 @@ export class QwenRealtimeTeacherService {
         if (!this.appSettings) return null;
         const textModel =
           getFeatureModel('chat_interaction', this.appSettings) ||
-          this.appSettings?.openrouter_model ||
-          OPENROUTER_MODEL ||
-          'qwen/qwen3.7-flash';
+          this.appSettings?.alibaba_model ||
+          'qwen3.7-flash';
 
         const ai = createAvelutAI(this.appSettings, this.userProfile, { feature: 'chat_interaction' });
         const res = await ai.models.generateContent({

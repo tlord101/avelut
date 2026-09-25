@@ -26,15 +26,9 @@ export async function POST(req: Request) {
       req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
       '';
 
-    const openRouterApiKey =
-      process.env.OPENROUTER_API_KEY ||
-      process.env.VITE_OPENROUTER_API_KEY ||
-      req.headers.get('x-openrouter-key') ||
-      '';
-
-    if (!alibabaApiKey && !openRouterApiKey) {
+    if (!alibabaApiKey) {
       return new Response(
-        JSON.stringify({ error: 'Missing required API keys (ALIBABA_API_KEY or OPENROUTER_API_KEY).' }),
+        JSON.stringify({ error: 'Missing required ALIBABA_API_KEY for Alibaba DashScope endpoint.' }),
         {
           status: 401,
           headers: {
@@ -62,19 +56,20 @@ export async function POST(req: Request) {
 
     const dashscopeModel = hasImage
       ? (rawModel || 'qwen-vl-plus')
-      : (rawModel || 'qwen3.8-flash');
-    const openrouterModel = hasImage
-      ? 'qwen/qwen-vl-plus'
-      : (rawModel ? `qwen/${rawModel}` : 'qwen/qwen3.8-flash');
+      : (rawModel || 'qwen3.7-flash');
 
-    // 1. If Alibaba DashScope API key exists, attempt Model Studio MaaS / DashScope endpoints
+    // Attempt DashScope / Model Studio MaaS endpoints
+    let lastUpstreamError = '';
+    let lastUpstreamStatus = 502;
+
     if (alibabaApiKey) {
       const maasBaseUrl = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`;
       const customEnvUrl = process.env.ALIBABA_OPENAI_COMPATIBLE_URL || process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL;
       const targetBases = Array.from(new Set([
+        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
         maasBaseUrl,
         ...(customEnvUrl ? [customEnvUrl] : []),
-        ...DASHSCOPE_BASE_URLS,
       ]));
 
       for (const baseUrl of targetBases) {
@@ -134,6 +129,8 @@ export async function POST(req: Request) {
             });
           } else {
             const errText = await response.text().catch(() => '');
+            lastUpstreamError = errText;
+            lastUpstreamStatus = response.status;
             console.warn(`[Alibaba Chat Proxy] Upstream ${baseUrl} (${dashscopeModel}) HTTP ${response.status}:`, errText);
             if (response.status === 429) {
               return new Response(
@@ -149,112 +146,16 @@ export async function POST(req: Request) {
             }
           }
         } catch (fetchErr: any) {
+          lastUpstreamError = fetchErr?.message || '';
           console.warn(`[Alibaba Chat Proxy] Upstream fetch to ${baseUrl} failed:`, fetchErr?.message);
         }
       }
     }
 
-    // 2. Resilient Fallback to OpenRouter (guarantees fast 2-3s response with Qwen)
-    if (openRouterApiKey) {
-      try {
-        const openRouterPayload: any = {
-          model: openrouterModel,
-          messages,
-          temperature: body.temperature ?? 0.35,
-          max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
-          include_reasoning: false,
-        };
-        if (body.response_format && body.response_format.type === 'json_object') {
-          openRouterPayload.response_format = { type: 'json_object' };
-          openRouterPayload.stream = false; // Strictly enforce non-streaming for JSON mode
-        } else if (body.stream) {
-          openRouterPayload.stream = true;
-        }
-
-        const orController = new AbortController();
-        const orTimer = setTimeout(() => orController.abort(), 25000);
-
-        const orResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openRouterApiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://avelut.xyz',
-            'X-Title': 'Avelut AI',
-          },
-          body: JSON.stringify(openRouterPayload),
-          signal: orController.signal,
-        });
-        clearTimeout(orTimer);
-
-        if (orResponse.ok) {
-          if (openRouterPayload.stream && orResponse.body) {
-            return new Response(orResponse.body, {
-              status: 200,
-              headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*',
-              },
-            });
-          }
-          const orData = await orResponse.json();
-          const extractedText = orData?.choices?.[0]?.message?.content || '';
-          return new Response(extractedText, {
-            status: 200,
-            headers: {
-              'Content-Type': 'text/plain',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
-        }
-
-        const orErrText = await orResponse.text().catch(() => '');
-        console.warn('[Alibaba Chat Proxy] OpenRouter fallback failed:', orResponse.status, orErrText);
-
-        if (orResponse.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "RATE_LIMIT", message: "Upstream provider is temporarily overloaded." }),
-            {
-              status: 429,
-              headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-              },
-            }
-          );
-        }
-
-        return new Response(
-          JSON.stringify({ error: `OpenRouter fallback failed: ${orResponse.status} ${orResponse.statusText}. ${orErrText}` }),
-          {
-            status: orResponse.status >= 400 && orResponse.status < 600 ? orResponse.status : 500,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          }
-        );
-      } catch (fallbackError: any) {
-        console.warn('[Alibaba Chat Proxy] OpenRouter fallback fetch threw error:', fallbackError);
-        return new Response(
-          JSON.stringify({ error: `OpenRouter fallback threw error: ${fallbackError.message}` }),
-          {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          }
-        );
-      }
-    }
-
     return new Response(
-      JSON.stringify({ error: 'All AI model providers temporarily unavailable. Please retry.' }),
+      JSON.stringify({ error: `Alibaba DashScope (${dashscopeModel}) temporarily unavailable: ${lastUpstreamError || 'Connection error'}` }),
       {
-        status: 503,
+        status: lastUpstreamStatus || 503,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',

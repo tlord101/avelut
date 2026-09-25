@@ -618,7 +618,7 @@ function resolveAlibabaEndpoints(
     envBase = process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || process.env.ALIBABA_OPENAI_COMPATIBLE_URL || '';
   }
 
-  const baseToUse = customBase || envBase || 'https://ws-o3v6mh0i8y9tqdfx.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1';
+  const baseToUse = customBase || envBase || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
   const workspaceEndpoint = baseToUse.endsWith('/chat/completions')
     ? baseToUse
     : `${baseToUse.replace(/\/+$/, '')}/chat/completions`;
@@ -627,22 +627,23 @@ function resolveAlibabaEndpoints(
     ? ['https://www.avelut.xyz/api/alibaba-chat', '/api/alibaba-chat']
     : ['/api/alibaba-chat', 'https://www.avelut.xyz/api/alibaba-chat'];
 
-  // For study guide chat or any browser web client, strictly call backend proxy endpoint directly.
-  // In web browsers, direct cross-origin fetches to Alibaba MaaS fail CORS preflight checks.
-  if (!isNative || options?.feature === 'study_guide_chat' || options?.feature === 'live_classroom_visual') {
-    return proxyEndpoints;
-  }
-
   const publicEndpoints = [
     'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
     'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
   ];
 
-  // Always prioritize app proxy endpoints first instead of direct calling
+  if (isNative && apiKey) {
+    return [
+      ...publicEndpoints,
+      ...proxyEndpoints,
+      workspaceEndpoint,
+    ];
+  }
+
   return [
     ...proxyEndpoints,
-    workspaceEndpoint,
     ...publicEndpoints,
+    workspaceEndpoint,
   ];
 }
 
@@ -656,10 +657,14 @@ async function callAlibabaQwen(
 ): Promise<any> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages, hasImage } = paramsToChatMessages(params);
-  const primaryModel = appSettings?.alibaba_model?.trim() || (hasImage ? 'qwen-vl-plus' : 'qwen3.7-flash');
+  const requestedModel = (params?.model || appSettings?.alibaba_model || 'qwen3.7-flash')
+    .replace(/^qwen\//i, '')
+    .replace(/^alibaba\//i, '')
+    .trim();
+  const primaryModel = hasImage ? 'qwen-vl-plus' : (requestedModel || 'qwen3.7-flash');
   const candidateModels = hasImage
-    ? Array.from(new Set([params?.model || primaryModel, 'qwen-vl-plus', 'qwen-vl-max']))
-    : Array.from(new Set([params?.model || primaryModel, primaryModel, 'qwen3.8-flash', 'qwen-plus', 'qwen-turbo']));
+    ? Array.from(new Set([primaryModel, 'qwen-vl-plus', 'qwen-vl-max']))
+    : Array.from(new Set(['qwen3.7-flash', primaryModel]));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -737,8 +742,7 @@ async function callAlibabaQwen(
     }
   }
 
-  console.warn('[Alibaba Direct API] Direct call failed or key missing, attempting OpenRouter fallback:', lastError?.message);
-  return await callOpenRouterQwen(params, appSettings);
+  throw new Error(`[Alibaba Qwen API Error] Request failed on model "${primaryModel}": ${lastError?.message || 'No available endpoint'}`);
 }
 
 /**
@@ -751,9 +755,13 @@ async function* callAlibabaQwenStream(
 ): AsyncGenerator<any, void, unknown> {
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages, hasImage } = paramsToChatMessages(params);
+  const requestedModel = (params?.model || appSettings?.alibaba_model || 'qwen3.7-flash')
+    .replace(/^qwen\//i, '')
+    .replace(/^alibaba\//i, '')
+    .trim();
   const model = hasImage
-    ? (params?.model || 'qwen-vl-plus')
-    : (appSettings?.alibaba_model?.trim() || 'qwen3.7-flash');
+    ? 'qwen-vl-plus'
+    : (requestedModel || 'qwen3.7-flash');
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -894,25 +902,12 @@ export const createAvelutAI = (
   userProfile?: UserProfile | null,
   options?: AvelutAIOptions
 ): any => {
-  const provider = appSettings?.primary_ai_provider || 'alibaba_qwen';
-
   return {
     models: {
       generateContent: async (params: any) => {
-        if (provider === 'openrouter') {
-          return await callOpenRouterQwen(params, appSettings);
-        }
         return await callAlibabaQwen(params, appSettings, options);
       },
       generateContentStream: async (params: any) => {
-        if (provider === 'openrouter') {
-          const streamGen = callOpenRouterQwenStream(params, appSettings);
-          return {
-            [Symbol.asyncIterator]: () => streamGen,
-            stream: streamGen,
-            response: Promise.resolve(null),
-          };
-        }
         const streamGen = callAlibabaQwenStream(params, appSettings, options);
         return {
           [Symbol.asyncIterator]: () => streamGen,
@@ -926,9 +921,6 @@ export const createAvelutAI = (
     },
     interactions: {
       create: async (params: any) => {
-        if (provider === 'openrouter') {
-          return await callOpenRouterQwen(params, appSettings);
-        }
         return await callAlibabaQwen(params, appSettings, options);
       },
     },

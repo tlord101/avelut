@@ -275,9 +275,8 @@ export class VisualIllustrationEngine {
 
       const defaultModel =
         getFeatureModel('chat_interaction', this.appSettings) ||
-        this.appSettings?.openrouter_model ||
-        OPENROUTER_MODEL ||
-        'qwen/qwen3.7-flash';
+        this.appSettings?.alibaba_model ||
+        'qwen3.7-flash';
 
       console.log(`[VisualEngine] Requesting illustration decision from ${defaultModel}...`);
       this.callbacks.onStatusChange?.('generating');
@@ -412,9 +411,8 @@ export class VisualIllustrationEngine {
 
       const defaultModel =
         getFeatureModel('chat_interaction', this.appSettings) ||
-        this.appSettings?.openrouter_model ||
-        OPENROUTER_MODEL ||
-        'qwen/qwen3.7-flash';
+        this.appSettings?.alibaba_model ||
+        'qwen3.7-flash';
 
       const ai = createAvelutAI(this.appSettings || ({} as any), this.userProfile, {
         feature: 'live_classroom_visual',

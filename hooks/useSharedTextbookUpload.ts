@@ -91,7 +91,7 @@ export const useSharedTextbookUpload = () => {
     const { addToast } = useToast();
     const { attemptApiCall } = useApiLimiter();
     const { settings: appSettings } = useAppSettings();
-    const aiModel = appSettings?.usage_settings?.feature_models?.study_guide_extraction || appSettings?.openrouter_model || 'qwen/qwen3.7-flash';
+    const aiModel = appSettings?.usage_settings?.feature_models?.study_guide_extraction || appSettings?.alibaba_model || 'qwen3.7-flash';
     const ai = useMemo(() => createAvelutAI(appSettings, null), [appSettings]);
 
     const [uploadProgress, setUploadProgress] = useState<{ status: string; percent: number } | null>(null);
