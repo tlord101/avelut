@@ -602,8 +602,8 @@ export class QwenRealtimeTeacherService {
     liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
     this.isResponseActive = false;
 
-    if (this.pendingToolCalls.size > 0 || this.isAwaitingContinuation || this.state === 'drawing') {
-      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete, awaiting tool completion`);
+    if (this.pendingToolCalls.size > 0) {
+      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete, awaiting ${this.pendingToolCalls.size} pending tool calls`);
       return;
     }
 
@@ -1167,6 +1167,11 @@ export class QwenRealtimeTeacherService {
     // Clear pending entry
     this.pendingToolCalls.delete(callId);
 
+    // Tool has finished execution — reset state
+    if (this.state === 'drawing') {
+      this.setState(this.activeAudioSources.length > 0 ? 'speaking' : 'listening');
+    }
+
     // AUTO-CONTINUE IMMEDIATELY WHEN TOOL EXECUTES:
     if (this.pendingToolCalls.size === 0) {
       liveLogger.log(`[QwenRealtime] Tool ${name} finished — AUTO-CONTINUING TEACHING IMMEDIATELY`);
@@ -1186,21 +1191,6 @@ export class QwenRealtimeTeacherService {
       });
       this.isResponseActive = true;
     }
-
-    // Safety timeout
-    const safetyTurn = this.currentTeachingTurnId;
-    setTimeout(() => {
-      if (
-        this.currentTeachingTurnId === safetyTurn &&
-        this.isAwaitingContinuation &&
-        this.state === 'drawing'
-      ) {
-        liveLogger.warn('[QwenRealtime] Continuation timeout — reverting to listening');
-        this.isAwaitingContinuation = false;
-        this.isResponseActive = false;
-        this.setState('listening');
-      }
-    }, 12000);
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
