@@ -12,13 +12,13 @@
       "androidSplashResourceName": "splash",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false,
-      "splashFullScreen": true,
-      "splashImmersive": true
+      "splashFullScreen": false,
+      "splashImmersive": false
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#000000",
-      "overlaysWebView": false
+      "backgroundColor": "#00000000",
+      "overlaysWebView": true
     },
     "Keyboard": {
       "resize": "body",
