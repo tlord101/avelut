@@ -90,8 +90,6 @@ export class QwenRealtimeTeacherService {
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
   private consecutiveSilenceNudges = 0;
-  /** At most one gentle recovery after a question, then continue teaching */
-  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
   private isStudentSpeaking = false;
   /** True only when the last teacher response ended with a question to the student */
   private lastResponseAskedQuestion = false;
@@ -101,6 +99,8 @@ export class QwenRealtimeTeacherService {
   private continuationRequestedForTurn = -1;
   /** True while a response.create is in flight or audio is still expected */
   private isResponseActive = false;
+  /** True while the model is actively transmitting audio chunks over WebSocket */
+  private isAudioStreamingFromModel = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -518,6 +518,8 @@ export class QwenRealtimeTeacherService {
       !this.hasGreeted ||
       this.isAwaitingContinuation ||
       this.isResponseActive ||
+      this.isAudioStreamingFromModel ||
+      this.activeAudioSources.length > 0 ||
       this.state !== 'listening' ||
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN
@@ -526,9 +528,9 @@ export class QwenRealtimeTeacherService {
     }
 
     // Natural classroom pacing:
-    // - Explanation (no question): brief pause then continue (~1.5–2s)
-    // - Explicit question: give student time (~6–7s) before one gentle recovery
-    const waitMs = this.lastResponseAskedQuestion ? 6500 : 1800;
+    // - Explanation (no question): brief pause then continue speaking (~1.5s) without waiting for student
+    // - Explicit question: give student ample time (~7s) before answering/hinting and resuming lesson
+    const waitMs = this.lastResponseAskedQuestion ? 7000 : 1500;
 
     this.studentWaitTimer = setTimeout(() => {
       this.studentWaitTimer = null;
@@ -537,33 +539,31 @@ export class QwenRealtimeTeacherService {
         this.state !== 'listening' ||
         this.isAwaitingContinuation ||
         this.isResponseActive ||
+        this.isAudioStreamingFromModel ||
+        this.activeAudioSources.length > 0 ||
         !this.ws ||
         this.ws.readyState !== WebSocket.OPEN
       ) {
         return;
       }
 
-      if (this.consecutiveSilenceNudges >= this.MAX_CONSECUTIVE_SILENCE_NUDGES) {
-        liveLogger.log('[QwenRealtime] Max silence nudges reached — waiting for student or typed input');
-        return;
-      }
-
       this.consecutiveSilenceNudges++;
-      liveLogger.log(`[QwenRealtime] ⏱️ Silence elapsed (nudge #${this.consecutiveSilenceNudges}) askedQ=${this.lastResponseAskedQuestion}`);
+      liveLogger.log(`[QwenRealtime] ⏱️ Silence timer fired (nudge #${this.consecutiveSilenceNudges}, askedQuestion=${this.lastResponseAskedQuestion})`);
 
-      if (this.lastResponseAskedQuestion && this.consecutiveSilenceNudges === 1) {
-        // One gentle recovery only after a real question
+      if (this.lastResponseAskedQuestion) {
+        // Student didn't answer question — answer/hint and continue lesson without getting stuck
+        this.lastResponseAskedQuestion = false;
         this.requestTeacherContinuation('silence_after_question', {
           injectUserHint:
-            'The student has not answered your question yet. Give a short hint or briefly answer it yourself in simple words, then continue the lesson. Do not repeat your previous sentence.',
+            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself, then continue explaining the lesson smoothly. Do not wait for the student.',
         });
-      } else if (!this.lastResponseAskedQuestion) {
+      } else {
+        // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Move to the next concept or example. Silently write key keywords on the board with board_action write when helpful. Do not repeat the previous sentence.',
+            'Continue teaching smoothly without waiting. Move directly to the next concept or practical example in the syllabus. Write key terms and formulas on the board with board_action write. Keep teaching actively.',
         });
       }
-      // After the single question recovery, stop auto-nudging until student speaks
     }, waitMs);
   }
 
@@ -571,6 +571,29 @@ export class QwenRealtimeTeacherService {
     if (this.studentWaitTimer) {
       clearTimeout(this.studentWaitTimer);
       this.studentWaitTimer = null;
+    }
+  }
+
+  /**
+   * Called strictly when all audio sources have finished playing out of the speaker
+   * and the model has finished sending all audio deltas.
+   */
+  private onTeacherAudioFinished(): void {
+    if (this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) return;
+    if (!this.isResponseActive && this.state !== 'speaking') return;
+
+    liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
+    this.isResponseActive = false;
+
+    if (this.pendingToolCalls.size > 0 || this.isAwaitingContinuation || this.state === 'drawing') {
+      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete, awaiting tool completion`);
+      return;
+    }
+
+    if (this.state === 'speaking') {
+      this.setState('listening');
+    } else if (this.state === 'listening') {
+      this.startStudentWaitTimer();
     }
   }
 
@@ -775,10 +798,11 @@ export class QwenRealtimeTeacherService {
 
       case 'response.audio.delta':
         if (event.delta) {
+          this.isAudioStreamingFromModel = true;
+          this.isResponseActive = true;
           if (!this.hasReceivedAudioInCurrentResponse) {
             this.hasReceivedAudioInCurrentResponse = true;
             this.isAwaitingContinuation = false;
-            this.isResponseActive = true;
             liveLogger.log('[QwenRealtime] Audio response receiving / playing');
           }
           this.setState('speaking');
@@ -814,6 +838,7 @@ export class QwenRealtimeTeacherService {
         this.lastResponseAskedQuestion = false;
         this.hasReceivedAudioInCurrentResponse = false;
         this.isResponseActive = true;
+        this.isAudioStreamingFromModel = true;
         this.isAwaitingContinuation = false;
         this.continuationRequestedForTurn = -1;
         this.clearStudentWaitTimer();
@@ -823,7 +848,7 @@ export class QwenRealtimeTeacherService {
       // ── Student interruption / speech events ─────────────────────────────
       case 'input_audio_buffer.speech_started':
         // If teacher is actively speaking, verify it is not speaker acoustic echo
-        if (this.activeAudioSources.length > 0 && this.lastMicRms < 0.08) {
+        if ((this.isResponseActive || this.activeAudioSources.length > 0 || this.state === 'speaking') && this.lastMicRms < 0.16) {
           liveLogger.log('[QwenRealtime] Ignored false speech_started from speaker acoustic echo (rms:', this.lastMicRms.toFixed(3), ')');
           break;
         }
@@ -925,22 +950,26 @@ export class QwenRealtimeTeacherService {
         break;
       }
 
+      case 'response.audio.done':
+        liveLogger.log(`[QwenRealtime] response.audio.done turn=${this.currentTeachingTurnId}`);
+        this.isAudioStreamingFromModel = false;
+        if (this.activeAudioSources.length === 0) {
+          this.onTeacherAudioFinished();
+        }
+        break;
+
       case 'response.done': {
         liveLogger.log(`[QwenRealtime] response.done turn=${this.currentTeachingTurnId}`);
+        this.isAudioStreamingFromModel = false;
 
         // Tool path still waiting for continuation — keep state
         if (this.isAwaitingContinuation) {
           liveLogger.log('[QwenRealtime] response.done while awaiting continuation');
           break;
         }
-        // If no more audio is queued, mark response inactive so silence timer / continuation can run
+        // If all scheduled audio has finished playing, declare audio finished
         if (this.activeAudioSources.length === 0) {
-          this.isResponseActive = false;
-          if (this.state === 'speaking' || this.state === 'drawing') {
-            this.setState('listening');
-          }
-        } else if (this.state === 'drawing') {
-          this.setState('listening');
+          this.onTeacherAudioFinished();
         }
         break;
       }
@@ -1152,7 +1181,8 @@ export class QwenRealtimeTeacherService {
 
       // Suppress mic streaming if teacher is actively outputting audio and RMS is below loud interruption threshold
       // Prevents web browser speaker-to-mic acoustic echo loopback from cutting teacher off
-      if (this.activeAudioSources.length > 0 && rms < 0.08) {
+      const isTeacherSpeaking = this.isResponseActive || this.activeAudioSources.length > 0 || this.state === 'speaking';
+      if (isTeacherSpeaking && rms < 0.16) {
         return;
       }
 
@@ -1360,16 +1390,10 @@ export class QwenRealtimeTeacherService {
 
       const now = this.outputAudioCtx.currentTime;
       // Fluid streaming schedule:
-      // If nextPlayTime has fallen slightly behind (< 60ms), continue seamlessly at `now`
-      // without injecting an audible silent gap. Only add a small cushion (35ms) if the
-      // channel was truly idle for > 150ms.
+      // If nextPlayTime has fallen slightly behind, add a 45ms lead-in buffer to absorb jitter
+      // and prevent audio pops or dropouts.
       if (this.nextPlayTime < now) {
-        const gap = now - this.nextPlayTime;
-        if (gap > 0.15) {
-          this.nextPlayTime = now + 0.035;
-        } else {
-          this.nextPlayTime = now;
-        }
+        this.nextPlayTime = now + 0.045;
       }
       src.start(this.nextPlayTime);
       this.nextPlayTime += buf.duration;
@@ -1378,14 +1402,8 @@ export class QwenRealtimeTeacherService {
       src.onended = () => {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
-        if (this.activeAudioSources.length === 0) {
-          this.isResponseActive = false;
-          liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
-          setTimeout(() => {
-            if (this.state === 'speaking' || this.state === 'drawing') {
-              this.setState('listening');
-            }
-          }, 300);
+        if (!this.isAudioStreamingFromModel && this.activeAudioSources.length === 0) {
+          this.onTeacherAudioFinished();
         }
       };
     } catch (err) {
@@ -1395,6 +1413,7 @@ export class QwenRealtimeTeacherService {
 
   /** Instantly stop all queued teacher speech buffers */
   public stopPlayback(): void {
+    this.isAudioStreamingFromModel = false;
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
     this.pendingOutputDeltas = [];
