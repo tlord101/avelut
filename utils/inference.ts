@@ -618,7 +618,14 @@ function resolveAlibabaEndpoints(
     envBase = process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL || process.env.ALIBABA_OPENAI_COMPATIBLE_URL || '';
   }
 
-  const baseToUse = customBase || envBase || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+  const workspaceId =
+    (appSettings as any)?.alibaba_workspace_id ||
+    (typeof import.meta !== 'undefined' && ((import.meta as any)?.env?.VITE_ALIBABA_WORKSPACE_ID || (import.meta as any)?.env?.ALIBABA_WORKSPACE_ID)) ||
+    (typeof process !== 'undefined' && (process?.env?.VITE_ALIBABA_WORKSPACE_ID || process?.env?.ALIBABA_WORKSPACE_ID)) ||
+    'ws-o3v6mh0i8y9tqdfx';
+
+  const defaultMaasBase = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`;
+  const baseToUse = customBase || envBase || defaultMaasBase;
   const workspaceEndpoint = baseToUse.endsWith('/chat/completions')
     ? baseToUse
     : `${baseToUse.replace(/\/+$/, '')}/chat/completions`;
@@ -634,16 +641,16 @@ function resolveAlibabaEndpoints(
 
   if (isNative && apiKey) {
     return [
-      ...publicEndpoints,
-      ...proxyEndpoints,
       workspaceEndpoint,
+      ...proxyEndpoints,
+      ...publicEndpoints,
     ];
   }
 
   return [
     ...proxyEndpoints,
-    ...publicEndpoints,
     workspaceEndpoint,
+    ...publicEndpoints,
   ];
 }
 
@@ -691,6 +698,7 @@ async function callAlibabaQwen(
     const bodyPayload: any = {
       model,
       messages,
+      modalities: ['text'],
       temperature: params?.config?.temperature ?? 0.7,
       max_tokens: params?.config?.maxOutputTokens ?? 4096,
       include_reasoning: false,
@@ -710,11 +718,20 @@ async function callAlibabaQwen(
           headers['Authorization'] = `Bearer ${apiKey}`;
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(bodyPayload),
-        });
+        const fetchController = new AbortController();
+        const timeoutId = setTimeout(() => fetchController.abort(), 12000);
+
+        let response: Response;
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(bodyPayload),
+            signal: fetchController.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -779,11 +796,12 @@ async function* callAlibabaQwenStream(
   const bodyPayload: any = {
     model,
     messages,
+    modalities: ['text'],
     stream: true,
     stream_options: { include_usage: true },
     temperature: params?.config?.temperature ?? 0.7,
     max_tokens: params?.config?.maxOutputTokens ?? 4096,
-      include_reasoning: false,
+    include_reasoning: false,
   };
 
   if (params?.config?.responseMimeType === 'application/json' || params?.config?.response_format?.type === 'json_object') {
@@ -803,7 +821,7 @@ async function* callAlibabaQwenStream(
       }
 
       const fetchController = new AbortController();
-      const timeoutId = setTimeout(() => fetchController.abort(), 35000);
+      const timeoutId = setTimeout(() => fetchController.abort(), 12000);
 
       let res: Response;
       try {

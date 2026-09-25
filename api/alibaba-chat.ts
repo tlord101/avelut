@@ -82,10 +82,10 @@ export async function POST(req: Request) {
       const maasBaseUrl = `https://${workspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`;
       const customEnvUrl = process.env.ALIBABA_OPENAI_COMPATIBLE_URL || process.env.VITE_ALIBABA_OPENAI_COMPATIBLE_URL;
       const targetBases = Array.from(new Set([
+        ...(customEnvUrl ? [customEnvUrl] : []),
+        maasBaseUrl,
         'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
         'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        maasBaseUrl,
-        ...(customEnvUrl ? [customEnvUrl] : []),
       ]));
 
       modelLoop: for (const currentModel of candidateModels) {
@@ -93,11 +93,12 @@ export async function POST(req: Request) {
         for (const baseUrl of targetBases) {
           try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 18000);
+            const timer = setTimeout(() => controller.abort(), 10000);
 
             const payload: any = {
               model: currentModel,
               messages,
+              modalities: ['text'],
               temperature: body.temperature ?? 0.35,
               max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
             };
@@ -106,6 +107,7 @@ export async function POST(req: Request) {
               payload.stream = false; // Strictly enforce non-streaming for JSON mode
             } else if (body.stream) {
               payload.stream = true;
+              payload.stream_options = { include_usage: true };
             }
 
             const requestHeaders: Record<string, string> = {
