@@ -470,9 +470,9 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
-    // If teacher asked a question, wait 5s for student response.
-    // If teacher just explained a concept, wait 3.2s before seamlessly continuing the lesson.
-    const waitMs = this.lastResponseAskedQuestion ? 5000 : 3200;
+    // If teacher asked a question expecting a response, wait 5s for student response.
+    // If teacher just explained a concept without asking a question, continue teaching immediately (brief 600ms pause).
+    const waitMs = this.lastResponseAskedQuestion ? 5000 : 600;
 
     this.studentWaitTimer = setTimeout(() => {
       this.studentWaitTimer = null;
@@ -495,8 +495,8 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue naturally`);
 
       const promptText = this.lastResponseAskedQuestion
-        ? '[The student is quiet. Answer your own question gently in simple words, then continue explaining the lesson.]'
-        : '[Continue the lesson smoothly. If you are introducing or explaining a core concept, definition, or key idea, call draw_mermaid or board_action to diagram it on the board; otherwise continue your spoken explanation.]';
+        ? '[The student is listening. Answer your question gently in simple words and continue teaching.]'
+        : '[Continue teaching smoothly without waiting. Move directly to the next concept or example. As always, silently write key keywords on the board using board_action write.]';
 
       this.sendJson({
         event_id: `silence_nudge_${Date.now()}`,
@@ -588,7 +588,7 @@ export class QwenRealtimeTeacherService {
         },
         text: {
           type: 'string',
-          description: 'Text, formula ($$ ... $$), or key takeaway keyword to write on the board (for "write" action)',
+          description: 'Keyword, key term, definition, summary note, or formula ($$ ... $$) to write on the board (MANDATORY on every teaching turn for "write" action)',
         },
         target: {
           type: 'string',
@@ -599,9 +599,8 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational Excalidraw board. Use "draw" to create visual step-by-step boxes with arrows for algorithms, ' +
-      'derivations, and procedures. Use "write" to put key formulas ($$ ... $$) and summary terms on the board while teaching. ' +
-      'Whenever explaining conceptual relationships or processes, use draw_mermaid or illustrate_object proactively.';
+      'Control the educational Excalidraw board. MANDATORY: On EVERY explanation turn, use "write" to put keywords, definitions, formulas ($$ ... $$), and core terms on the board. ' +
+      'Use "draw" to create visual step-by-step boxes with arrows. For conceptual diagrams and mindmaps, use draw_mermaid.';
 
     return {
       type: 'function',
@@ -962,20 +961,13 @@ export class QwenRealtimeTeacherService {
       toolResult = this.boardController.executeBoardAction(args);
     } else if (name === 'draw_mermaid') {
       const code = args.mermaid_code || '';
-      // Parse Mermaid syntax into native Excalidraw shapes & arrows
-      const elements = MermaidBoardService.toExcalidrawElements(code);
-      if (elements.length > 0) {
-        // Draw native elements cleanly on the canvas once
-        this.boardController.executeBoardAction({ action: 'draw', elements });
-      } else {
-        // Fallback to SVG only if native parsing produced no elements
-        const theme = (this.boardController as any).getTheme?.() || 'dark';
-        MermaidBoardService.renderToSvg(code, theme).then(svg => {
-          if (svg) this.boardController.setSvgIllustration(svg);
-        }).catch(err => {
-          liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
-        });
-      }
+      const theme = (this.boardController as any).getTheme?.() || 'dark';
+      MermaidBoardService.renderToSvg(code, theme).then(svg => {
+        if (svg) this.boardController.setSvgIllustration(svg);
+      }).catch(err => {
+        liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
+      });
+      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered inboard' };
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || '';
       LlmSvgObjectCache.getOrGenerate(desc, async () => {
