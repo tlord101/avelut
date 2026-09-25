@@ -102,6 +102,14 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
     >
       {/* Aggressively suppress all Excalidraw UI bars, docks, tools, sidebars, and mobile bottom bars */}
       <style>{`
+        .excalidraw-live-board .excalidraw.theme--dark {
+          --theme-filter: none !important;
+        }
+        .excalidraw-live-board .excalidraw canvas,
+        .excalidraw-live-board canvas {
+          --theme-filter: none !important;
+          filter: none !important;
+        }
         .excalidraw-live-board .excalidraw .layer-ui__wrapper,
         .excalidraw-live-board .excalidraw .App-bottom-bar,
         .excalidraw-live-board .excalidraw .bottom-bar,

@@ -221,7 +221,7 @@ export class AvelutBoardController {
     return {
       isDark,
       bg: isDark ? '#0A0A0A' : '#F8FAFC',
-      text: isDark ? '#F8FAFC' : '#0F172A',
+      text: isDark ? '#FFFFFF' : '#0F172A',
       textMuted: isDark ? '#94A3B8' : '#475569',
       cardBg: isDark ? '#1E293B' : '#FFFFFF',
       cardBorder: isDark ? '#38BDF8' : '#0284C7',

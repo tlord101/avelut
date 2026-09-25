@@ -2,122 +2,150 @@
  * MermaidBoardService.ts
  *
  * Renders Mermaid syntax into high-resolution SVG using Mermaid engine.
- * Applies robust educational SVG normalization for white/light boards.
- * No mock / offline diagram fallbacks.
+ * Applies robust educational SVG normalization for high-contrast visibility.
+ * Ensures all diagram text, nodes, branches, and connecting lines are sharp,
+ * bold, and clearly readable on both light and dark educational boards.
  */
 
-/** High-contrast palette for white educational whiteboard */
+/** High-contrast palette for white/light educational whiteboard */
 const WHITEBOARD_PALETTE = {
   bg: '#FFFFFF',
-  text: '#111827',
+  text: '#0F172A',
   primaryStroke: '#2563EB',
-  secondary: '#059669',
-  highlight: '#F59E0B',
-  warning: '#DC2626',
+  secondaryStroke: '#059669',
+  highlightStroke: '#D97706',
+  pinkStroke: '#DB2777',
+  purpleStroke: '#7C3AED',
   lightFill: '#EFF6FF',
   nodeFill: '#F0F9FF',
   edge: '#1E40AF',
 };
 
+/** High-contrast palette for dark educational board */
+const DARK_PALETTE = {
+  bg: '#0A0A0A',
+  text: '#FFFFFF',
+  primaryStroke: '#38BDF8',
+  secondaryStroke: '#34D399',
+  highlightStroke: '#FBBF24',
+  pinkStroke: '#F472B6',
+  purpleStroke: '#A78BFA',
+  lightFill: '#1E293B',
+  nodeFill: '#1E293B',
+  edge: '#38BDF8',
+};
+
 /**
- * Normalize educational SVG for high contrast on white Excalidraw board.
+ * Normalize educational SVG for high contrast on the Excalidraw board.
  * Inspects fill/stroke attributes and style, replaces low-contrast colors.
  */
 export function normalizeEducationalSvg(svg: string, options?: { theme?: 'light' | 'dark' }): string {
   if (!svg || !svg.includes('<svg')) return svg;
 
   const theme = options?.theme ?? 'light';
-  const isLight = theme === 'light' || theme === 'base';
+  const isDark = theme === 'dark';
+  const isLight = !isDark;
 
-  // Target colors for light (white) board
-  const textColor = isLight ? WHITEBOARD_PALETTE.text : '#F8FAFC';
-  const strokeColor = isLight ? WHITEBOARD_PALETTE.primaryStroke : '#38BDF8';
-  const edgeColor = isLight ? WHITEBOARD_PALETTE.edge : '#38BDF8';
-  const fillLight = isLight ? WHITEBOARD_PALETTE.lightFill : '#1E293B';
-  const nodeFill = isLight ? WHITEBOARD_PALETTE.nodeFill : '#1E293B';
+  const pal = isDark ? DARK_PALETTE : WHITEBOARD_PALETTE;
+  const textColor = pal.text;
+  const strokeColor = pal.primaryStroke;
+  const edgeColor = pal.edge;
+  const nodeFill = pal.nodeFill;
 
   let out = svg;
 
-  // Inject strong contrast CSS (works with class-based Mermaid output)
-  const contrastCss = isLight
-    ? `<style type="text/css">
-        text, .node text, .mindmap-node text, .label text, tspan {
-          fill: ${textColor} !important;
-          font-weight: 600 !important;
-          stroke: none !important;
-        }
-        .node rect, .node circle, .node polygon, .node path,
-        .mindmap-node rect, .mindmap-node circle, .mindmap-node polygon,
-        rect.basic, .cluster rect {
-          stroke: ${strokeColor} !important;
-          stroke-width: 2px !important;
-          fill: ${nodeFill} !important;
-        }
-        .edgePath path, path.edge, .mindmap-edges path, .flowchart-link,
-        line, polyline {
-          stroke: ${edgeColor} !important;
-          stroke-width: 2.5px !important;
-          fill: none !important;
-        }
-        .arrowheadPath, marker path {
-          fill: ${edgeColor} !important;
-          stroke: ${edgeColor} !important;
-        }
-        .label foreignObject div, .label foreignObject span {
-          color: ${textColor} !important;
-        }
-      </style>`
-    : `<style type="text/css">
-        text, .node text, .mindmap-node text, .label text, tspan {
-          fill: #F8FAFC !important;
-          font-weight: 600 !important;
-        }
-        .node rect, .node circle, .node polygon, .node path,
-        .mindmap-node rect, .mindmap-node circle, .mindmap-node polygon {
-          stroke: #38BDF8 !important;
-          stroke-width: 2px !important;
-        }
-        .edgePath path, path.edge, .mindmap-edges path {
-          stroke: #38BDF8 !important;
-          stroke-width: 2.5px !important;
-        }
-      </style>`;
-
-  out = out.replace(/(<svg[^>]*>)/i, `$1${contrastCss}`);
-
-  // Direct attribute normalization for elements that carry inline colors
-  // Replace pure white / near-white fills that would disappear on white board
-  if (isLight) {
-    // fill="white" / fill="#fff" / fill="#ffffff" / fill="#FFF" etc.
-    out = out.replace(
-      /fill\s*=\s*["'](#fff(?:fff)?|white|#f{3,6}|#e{3,6}|#fafafa|#f8fafc|#ffffff)["']/gi,
-      `fill="${nodeFill}"`
-    );
-    // stroke white on light board → use primary stroke
-    out = out.replace(
-      /stroke\s*=\s*["'](#fff(?:fff)?|white|#f{3,6}|#ffffff)["']/gi,
-      `stroke="${strokeColor}"`
-    );
-    // style="...fill:white..." etc.
-    out = out.replace(/fill\s*:\s*(#fff(?:fff)?|white|#f{3,6}|#ffffff)\b/gi, `fill: ${nodeFill}`);
-    out = out.replace(/stroke\s*:\s*(#fff(?:fff)?|white|#f{3,6}|#ffffff)\b/gi, `stroke: ${strokeColor}`);
-    // Very light grays that lack contrast
-    out = out.replace(
-      /fill\s*=\s*["'](#f[0-9a-f]{5}|#e[0-9a-f]{5}|#d[0-9a-f]{5})["']/gi,
-      (m) => {
-        // Keep intentional light fills but ensure they are not pure white
-        if (/#fff|#ffffff|#fafafa|#f8fafc/i.test(m)) return `fill="${nodeFill}"`;
-        return m;
+  // Powerful contrast CSS targeting all text elements, shapes, branches, and connecting lines
+  const contrastCss = `
+    <style type="text/css">
+      /* 1. All text elements must be crisp, high-contrast, bold, and fully opaque */
+      text, tspan, foreignObject, foreignObject div, foreignObject span, foreignObject p,
+      .mindmap-node text, .mindmap-node foreignObject, .mindmap-node span, .mindmap-node div,
+      .mindmap-node-label, .node text, .node-label, .node-label span,
+      .label, .label text, .label span, .label div, .label foreignObject,
+      .cluster text, .edgeLabel text, .edgeLabel span {
+        fill: ${textColor} !important;
+        color: ${textColor} !important;
+        -webkit-text-fill-color: ${textColor} !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        stroke: none !important;
+        text-shadow: none !important;
+        opacity: 1 !important;
       }
-    );
+
+      /* 2. Mindmap nodes & shapes: strong visible borders and clean solid fills */
+      .node rect, .node circle, .node polygon, .node path,
+      .mindmap-node rect, .mindmap-node circle, .mindmap-node polygon,
+      .node-bkg, .mindmap-node path, rect.basic, .cluster rect, .mindmap-node .node-bkg {
+        stroke-width: 2.5px !important;
+        opacity: 1 !important;
+      }
+
+      /* 3. Connecting branches & edges: thick and high-contrast */
+      .edgePath path, path.edge, .mindmap-edges path, .flowchart-link,
+      .edge, path.flowchart-link, line, polyline {
+        stroke: ${edgeColor} !important;
+        stroke-width: 2.5px !important;
+        opacity: 1 !important;
+        fill: none !important;
+      }
+
+      /* 4. Arrow markers */
+      .arrowheadPath, marker path {
+        fill: ${edgeColor} !important;
+        stroke: ${edgeColor} !important;
+      }
+    </style>
+  `;
+
+  // Inject CSS right before </svg> closing tag for maximum cascade specificity, and after <svg> opening
+  out = out.replace(/(<svg[^>]*>)/i, `$1${contrastCss}`);
+  if (out.includes('</svg>')) {
+    out = out.replace('</svg>', `${contrastCss}</svg>`);
   }
 
-  // Ensure stroke-width is visible
-  out = out.replace(/stroke-width\s*=\s*["']0(\.0+)?["']/gi, 'stroke-width="2"');
-  out = out.replace(/stroke-width\s*:\s*0(\.0+)?\b/gi, 'stroke-width: 2');
+  // Direct attribute normalization for elements carrying inline low-contrast colors
+  if (isLight) {
+    // On a light board: replace white / near-white text fills with bold dark slate
+    out = out.replace(
+      /(<text[^>]*\bfill\s*=\s*["'])(#fff(?:fff)?|white|#f{3,6}|#e{3,6}|#fafafa|#f8fafc|#ffffff)(["'][^>]*>)/gi,
+      `$1${textColor}$3`
+    );
+    out = out.replace(
+      /(<tspan[^>]*\bfill\s*=\s*["'])(#fff(?:fff)?|white|#f{3,6}|#e{3,6}|#fafafa|#f8fafc|#ffffff)(["'][^>]*>)/gi,
+      `$1${textColor}$3`
+    );
+    // Replace inline styles on text/spans
+    out = out.replace(/color\s*:\s*(#fff(?:fff)?|white|#f{3,6}|#ffffff)\b/gi, `color: ${textColor}`);
+    out = out.replace(/fill\s*:\s*(#fff(?:fff)?|white|#f{3,6}|#ffffff)\b/gi, `fill: ${textColor}`);
 
-  // Remove any remaining transparent or none that might hide structure (conservative)
-  // Do not force fill on every path (arrows often use fill=none intentionally)
+    // If a node background has near-white fill, ensure it has a visible border
+    out = out.replace(
+      /(<path[^>]*class=["'][^"']*node-bkg[^"']*["'][^>]*\bfill\s*=\s*["'])(#fff(?:fff)?|white|#f{3,6}|#ffffff)(["'])/gi,
+      `$1${nodeFill}$3 stroke="${strokeColor}" stroke-width="2.5"`
+    );
+    out = out.replace(
+      /(<rect[^>]*class=["'][^"']*node-bkg[^"']*["'][^>]*\bfill\s*=\s*["'])(#fff(?:fff)?|white|#f{3,6}|#ffffff)(["'])/gi,
+      `$1${nodeFill}$3 stroke="${strokeColor}" stroke-width="2.5"`
+    );
+  } else {
+    // On a dark board: replace dark / black text fills with bright white
+    out = out.replace(
+      /(<text[^>]*\bfill\s*=\s*["'])(#000(?:000)?|black|#111827|#0f172a|#1e1e1e)(["'][^>]*>)/gi,
+      `$1${textColor}$3`
+    );
+    out = out.replace(
+      /(<tspan[^>]*\bfill\s*=\s*["'])(#000(?:000)?|black|#111827|#0f172a|#1e1e1e)(["'][^>]*>)/gi,
+      `$1${textColor}$3`
+    );
+    out = out.replace(/color\s*:\s*(#000(?:000)?|black|#111827|#0f172a|#1e1e1e)\b/gi, `color: ${textColor}`);
+    out = out.replace(/fill\s*:\s*(#000(?:000)?|black|#111827|#0f172a|#1e1e1e)\b/gi, `fill: ${textColor}`);
+  }
+
+  // Ensure stroke-width is visible across all paths
+  out = out.replace(/stroke-width\s*=\s*["']0(\.0+)?["']/gi, 'stroke-width="2.5"');
+  out = out.replace(/stroke-width\s*:\s*0(\.0+)?\b/gi, 'stroke-width: 2.5');
 
   return out;
 }
@@ -141,17 +169,23 @@ export class MermaidBoardService {
 
     const isDark = theme === 'dark';
     const themeName = isDark ? 'dark' : 'base';
-    // Prefer white/light board defaults for classroom visibility
     const bgColorHex = isDark ? '0A0A0A' : 'FFFFFF';
-    const textColorHex = isDark ? '#F8FAFC' : '#111827';
 
     try {
       let codeWithTheme = trimmed;
       if (!codeWithTheme.includes('%%{init')) {
-        const themeVars = isDark
-          ? `'darkMode': true, 'background': '#0A0A0A', 'primaryColor': '#1E293B', 'primaryTextColor': '#F8FAFC', 'primaryBorderColor': '#38BDF8', 'lineColor': '#38BDF8', 'fontSize': '20px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`
-          : `'darkMode': false, 'background': '#FFFFFF', 'primaryColor': '#EFF6FF', 'primaryTextColor': '#111827', 'primaryBorderColor': '#2563EB', 'lineColor': '#1E40AF', 'secondaryColor': '#ECFDF5', 'tertiaryColor': '#FEF3C7', 'fontSize': '20px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`;
-        codeWithTheme = `%%{init: {'theme': '${themeName}', 'themeVariables': { ${themeVars} }}}%%\n${codeWithTheme}`;
+        // High-contrast theme variables tailored for either dark or light board
+        const baseThemeVars = isDark
+          ? `'darkMode': true, 'background': '#0A0A0A', 'primaryColor': '#1E293B', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#38BDF8', 'lineColor': '#38BDF8', 'secondaryColor': '#064E3B', 'tertiaryColor': '#78350F', 'fontSize': '18px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`
+          : `'darkMode': false, 'background': '#FFFFFF', 'primaryColor': '#EFF6FF', 'primaryTextColor': '#0F172A', 'primaryBorderColor': '#2563EB', 'lineColor': '#1E40AF', 'secondaryColor': '#ECFDF5', 'tertiaryColor': '#FEF3C7', 'fontSize': '18px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`;
+
+        // Explicit section colors for mindmap branches to guarantee contrast and distinct visibility
+        const mindmapThemeVars = isDark
+          ? `'mindmapTextColor': '#FFFFFF', 'nodeTextColor': '#FFFFFF', 'sectionTextColor-0': '#FFFFFF', 'sectionTextColor-1': '#FFFFFF', 'sectionTextColor-2': '#FFFFFF', 'sectionTextColor-3': '#FFFFFF', 'sectionTextColor-4': '#FFFFFF', 'sectionColor-0': '#1E293B', 'sectionColor-1': '#064E3B', 'sectionColor-2': '#78350F', 'sectionColor-3': '#831843', 'sectionColor-4': '#4C1D95', 'sectionBorderColor-0': '#38BDF8', 'sectionBorderColor-1': '#34D399', 'sectionBorderColor-2': '#FBBF24', 'sectionBorderColor-3': '#F472B6', 'sectionBorderColor-4': '#A78BFA'`
+          : `'mindmapTextColor': '#0F172A', 'nodeTextColor': '#0F172A', 'sectionTextColor-0': '#0F172A', 'sectionTextColor-1': '#0F172A', 'sectionTextColor-2': '#0F172A', 'sectionTextColor-3': '#0F172A', 'sectionTextColor-4': '#0F172A', 'sectionColor-0': '#EFF6FF', 'sectionColor-1': '#ECFDF5', 'sectionColor-2': '#FEF3C7', 'sectionColor-3': '#FDF2F8', 'sectionColor-4': '#F5F3FF', 'sectionBorderColor-0': '#2563EB', 'sectionBorderColor-1': '#059669', 'sectionBorderColor-2': '#D97706', 'sectionBorderColor-3': '#DB2777', 'sectionBorderColor-4': '#7C3AED'`;
+
+        // Crucial: htmlLabels: false forces Mermaid to generate native SVG <text> instead of <foreignObject><div>
+        codeWithTheme = `%%{init: {'theme': '${themeName}', 'themeVariables': { ${baseThemeVars}, ${mindmapThemeVars} }, 'mindmap': { 'htmlLabels': false }, 'flowchart': { 'htmlLabels': false }}}%%\n${codeWithTheme}`;
       }
 
       const encoded = btoa(unescape(encodeURIComponent(codeWithTheme)));
