@@ -90,10 +90,17 @@ export class QwenRealtimeTeacherService {
   private isAwaitingContinuation = false;
   private studentWaitTimer: ReturnType<typeof setTimeout> | null = null;
   private consecutiveSilenceNudges = 0;
-  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 50;
+  /** At most one gentle recovery after a question, then continue teaching */
+  private readonly MAX_CONSECUTIVE_SILENCE_NUDGES = 2;
   private isStudentSpeaking = false;
   /** True only when the last teacher response ended with a question to the student */
   private lastResponseAskedQuestion = false;
+  /** Unique id for the current teaching turn (response + tools + continuation) */
+  private currentTeachingTurnId = 0;
+  /** Prevents duplicate continuation for the same turn */
+  private continuationRequestedForTurn = -1;
+  /** True while a response.create is in flight or audio is still expected */
+  private isResponseActive = false;
 
   // ── State helpers ─────────────────────────────────────────────────────────
 
@@ -457,12 +464,60 @@ export class QwenRealtimeTeacherService {
 
   // ── 5-Second Student Silence Watchdog ─────────────────────────────────────
 
+  /**
+   * Single owner of teacher continuation. All paths (silence, tool complete)
+   * must go through this so we never fire duplicate response.create for one turn.
+   */
+  private requestTeacherContinuation(reason: string, options?: { injectUserHint?: string }): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (this.isStudentSpeaking) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): student speaking`);
+      return;
+    }
+    if (this.isResponseActive || this.isAwaitingContinuation) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): response already active`);
+      return;
+    }
+    if (this.continuationRequestedForTurn === this.currentTeachingTurnId) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): already requested for turn ${this.currentTeachingTurnId}`);
+      return;
+    }
+
+    this.continuationRequestedForTurn = this.currentTeachingTurnId;
+    this.isAwaitingContinuation = true;
+    this.isResponseActive = true;
+    liveLogger.log(`[QwenRealtime] requestTeacherContinuation reason=${reason} turn=${this.currentTeachingTurnId}`);
+
+    if (options?.injectUserHint) {
+      this.sendJson({
+        event_id: `cont_hint_${Date.now()}`,
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: options.injectUserHint }],
+        },
+      });
+    }
+
+    this.sendJson({
+      event_id: `resp_cont_${Date.now()}_${reason}`,
+      type: 'response.create',
+      response: {
+        modalities: ['text', 'audio'],
+        tools: this.getTools(),
+        tool_choice: 'auto',
+      },
+    });
+  }
+
   private startStudentWaitTimer(): void {
     this.clearStudentWaitTimer();
     if (
       this.isStudentSpeaking ||
       !this.hasGreeted ||
       this.isAwaitingContinuation ||
+      this.isResponseActive ||
       this.state !== 'listening' ||
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN
@@ -470,9 +525,10 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
-    // If teacher asked a question expecting a response, wait 5s for student response.
-    // If teacher just explained a concept without asking a question, continue teaching immediately (brief 600ms pause).
-    const waitMs = this.lastResponseAskedQuestion ? 5000 : 600;
+    // Natural classroom pacing:
+    // - Explanation (no question): brief pause then continue (~1.5–2s)
+    // - Explicit question: give student time (~6–7s) before one gentle recovery
+    const waitMs = this.lastResponseAskedQuestion ? 6500 : 1800;
 
     this.studentWaitTimer = setTimeout(() => {
       this.studentWaitTimer = null;
@@ -480,6 +536,7 @@ export class QwenRealtimeTeacherService {
         this.isStudentSpeaking ||
         this.state !== 'listening' ||
         this.isAwaitingContinuation ||
+        this.isResponseActive ||
         !this.ws ||
         this.ws.readyState !== WebSocket.OPEN
       ) {
@@ -487,39 +544,26 @@ export class QwenRealtimeTeacherService {
       }
 
       if (this.consecutiveSilenceNudges >= this.MAX_CONSECUTIVE_SILENCE_NUDGES) {
-        liveLogger.log('[QwenRealtime] Max consecutive silence nudges reached — pausing auto-nudge until student speaks or types');
+        liveLogger.log('[QwenRealtime] Max silence nudges reached — waiting for student or typed input');
         return;
       }
 
       this.consecutiveSilenceNudges++;
-      liveLogger.log(`[QwenRealtime] ⏱️ Student silence elapsed (nudge #${this.consecutiveSilenceNudges}) — prompting teacher to continue naturally`);
+      liveLogger.log(`[QwenRealtime] ⏱️ Silence elapsed (nudge #${this.consecutiveSilenceNudges}) askedQ=${this.lastResponseAskedQuestion}`);
 
-      const promptText = this.lastResponseAskedQuestion
-        ? '[The student is listening. Answer your question gently in simple words and continue teaching.]'
-        : '[Continue teaching smoothly without waiting. Move directly to the next concept or example. As always, silently write key keywords on the board using board_action write.]';
-
-      this.sendJson({
-        event_id: `silence_nudge_${Date.now()}`,
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [{
-            type: 'input_text',
-            text: promptText,
-          }],
-        },
-      });
-
-      this.sendJson({
-        event_id: `resp_silence_${Date.now()}`,
-        type: 'response.create',
-        response: {
-          modalities: ['text', 'audio'],
-          tools: this.getTools(),
-          tool_choice: 'auto',
-        },
-      });
+      if (this.lastResponseAskedQuestion && this.consecutiveSilenceNudges === 1) {
+        // One gentle recovery only after a real question
+        this.requestTeacherContinuation('silence_after_question', {
+          injectUserHint:
+            'The student has not answered your question yet. Give a short hint or briefly answer it yourself in simple words, then continue the lesson. Do not repeat your previous sentence.',
+        });
+      } else if (!this.lastResponseAskedQuestion) {
+        this.requestTeacherContinuation('silence_continue', {
+          injectUserHint:
+            'Continue teaching smoothly without waiting. Move to the next concept or example. Silently write key keywords on the board with board_action write when helpful. Do not repeat the previous sentence.',
+        });
+      }
+      // After the single question recovery, stop auto-nudging until student speaks
     }, waitMs);
   }
 
@@ -734,6 +778,7 @@ export class QwenRealtimeTeacherService {
           if (!this.hasReceivedAudioInCurrentResponse) {
             this.hasReceivedAudioInCurrentResponse = true;
             this.isAwaitingContinuation = false;
+            this.isResponseActive = true;
             liveLogger.log('[QwenRealtime] Audio response receiving / playing');
           }
           this.setState('speaking');
@@ -763,12 +808,16 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'response.created':
-        // New response turn — reset transcript accumulator and question flag
+        // New teaching turn — reset transcript, flags, and ownership
+        this.currentTeachingTurnId += 1;
         this.fullTranscript = '';
         this.lastResponseAskedQuestion = false;
         this.hasReceivedAudioInCurrentResponse = false;
+        this.isResponseActive = true;
+        this.isAwaitingContinuation = false;
+        this.continuationRequestedForTurn = -1;
         this.clearStudentWaitTimer();
-        liveLogger.log('[QwenRealtime] response.created');
+        liveLogger.log(`[QwenRealtime] response.created turn=${this.currentTeachingTurnId}`);
         break;
 
       // ── Student interruption / speech events ─────────────────────────────
@@ -877,17 +926,17 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'response.done': {
-        liveLogger.log('[QwenRealtime] response.done');
+        liveLogger.log(`[QwenRealtime] response.done turn=${this.currentTeachingTurnId}`);
 
-        // If we are currently awaiting tool continuation, do NOT reset to listening
+        // Tool path still waiting for continuation — keep state
         if (this.isAwaitingContinuation) {
-          liveLogger.log('[QwenRealtime] Tool response done — awaiting continuation audio');
+          liveLogger.log('[QwenRealtime] response.done while awaiting continuation');
           break;
         }
-        if (this.state === 'speaking') {
-          // Audio may still be playing — playback completion sets state to listening
-          // If no audio was playing, transition now
-          if (this.activeAudioSources.length === 0) {
+        // If no more audio is queued, mark response inactive so silence timer / continuation can run
+        if (this.activeAudioSources.length === 0) {
+          this.isResponseActive = false;
+          if (this.state === 'speaking' || this.state === 'drawing') {
             this.setState('listening');
           }
         } else if (this.state === 'drawing') {
@@ -943,6 +992,7 @@ export class QwenRealtimeTeacherService {
     if (this.executedCallIds.has(callId)) return;
     this.executedCallIds.add(callId);
 
+    const turnAtStart = this.currentTeachingTurnId;
     this.setState('drawing');
     this.isAwaitingContinuation = true;
 
@@ -956,53 +1006,86 @@ export class QwenRealtimeTeacherService {
     }
 
     let toolResult: any;
+    const t0 = Date.now();
 
     if (name === 'board_action') {
       toolResult = this.boardController.executeBoardAction(args);
+      liveLogger.log(`[BoardSync] turn=${turnAtStart} action=board_action call=${callId} latency=${Date.now() - t0}ms`);
     } else if (name === 'draw_mermaid') {
-      const code = args.mermaid_code || '';
-      const theme = (this.boardController as any).getTheme?.() ||
-        (typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-      MermaidBoardService.renderToSvg(code, theme).then(svg => {
-        if (svg) this.boardController.setSvgIllustration(svg);
-      }).catch(err => {
-        liveLogger.error('[QwenRealtime] draw_mermaid background error:', err);
-      });
-      toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered inboard' };
+      const code = args.mermaid_code || args.code || '';
+      const theme = (this.boardController as any).getTheme?.() || 'light';
+      liveLogger.log(`[MermaidSync] turn=${turnAtStart} render-start call=${callId}`);
+      try {
+        const svg = await MermaidBoardService.renderToSvg(code, theme);
+        if (turnAtStart !== this.currentTeachingTurnId) {
+          liveLogger.warn('[MermaidSync] stale turn — discarding SVG');
+          toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Superseded by newer turn' };
+        } else if (svg) {
+          this.boardController.setSvgIllustration(svg);
+          liveLogger.log(`[MermaidSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
+          toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered and inserted' };
+        } else {
+          toolResult = { status: 'error', action: 'draw_mermaid', message: 'Mermaid render returned empty SVG' };
+        }
+      } catch (err) {
+        liveLogger.error('[QwenRealtime] draw_mermaid error:', err);
+        toolResult = { status: 'error', action: 'draw_mermaid', message: String(err) };
+      }
     } else if (name === 'illustrate_object') {
-      const desc = args.object_description || '';
-      LlmSvgObjectCache.getOrGenerate(desc, async () => {
-        if (!this.appSettings) return null;
-        const textModel =
-          getFeatureModel('chat_interaction', this.appSettings) ||
-          this.appSettings?.alibaba_model ||
-          'qwen3.8-omni-flash';
+      const desc = args.object_description || args.description || '';
+      liveLogger.log(`[SvgSync] turn=${turnAtStart} generate-start call=${callId}`);
+      try {
+        const svg = await LlmSvgObjectCache.getOrGenerate(desc, async () => {
+          if (!this.appSettings) return null;
+          const textModel =
+            getFeatureModel('chat_interaction', this.appSettings) ||
+            this.appSettings?.alibaba_model ||
+            'qwen3.8-omni-flash';
 
-        const ai = createAvelutAI(this.appSettings, this.userProfile, { feature: 'chat_interaction' });
-        const res = await ai.models.generateContent({
-          model: textModel,
-          contents: "You are an expert SVG illustrator. Generate ONLY raw valid dark-themed SVG code (no markdown, no explanations) for: " + desc,
-          config: {
-            temperature: 0.2,
-            maxOutputTokens: 1500,
-          },
+          const ai = createAvelutAI(this.appSettings, this.userProfile, { feature: 'chat_interaction' });
+          const res = await ai.models.generateContent({
+            model: textModel,
+            contents:
+              'Generate ONLY raw valid SVG for a white educational whiteboard. ' +
+              'Transparent background. High-contrast dark strokes and readable fills. ' +
+              'No white-on-white, no white text, no invisible shapes. No markdown, no explanations. Object: ' +
+              desc,
+            config: {
+              temperature: 0.2,
+              maxOutputTokens: 1500,
+            },
+          });
+          return getResponseText(res);
         });
-        return getResponseText(res);
-      }).then(svg => {
-        if (svg) this.boardController.setSvgIllustration(svg);
-      }).catch(err => {
-        liveLogger.error('[QwenRealtime] illustrate_object background error:', err);
-      });
-      toolResult = { status: 'ok', action: 'illustrate_object', message: 'Generating in background' };
+        if (turnAtStart !== this.currentTeachingTurnId) {
+          liveLogger.warn('[SvgSync] stale turn — discarding SVG');
+          toolResult = { status: 'ok', action: 'illustrate_object', message: 'Superseded by newer turn' };
+        } else if (svg) {
+          // Optional: run through same normalizer if available
+          this.boardController.setSvgIllustration(svg);
+          liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
+          toolResult = { status: 'ok', action: 'illustrate_object', message: 'Illustration generated and inserted' };
+        } else {
+          toolResult = { status: 'error', action: 'illustrate_object', message: 'SVG generation returned empty' };
+        }
+      } catch (err) {
+        liveLogger.error('[QwenRealtime] illustrate_object error:', err);
+        toolResult = { status: 'error', action: 'illustrate_object', message: String(err) };
+      }
     } else {
       liveLogger.warn('[QwenRealtime] Unknown tool:', name);
       toolResult = { status: 'error', message: `Unknown tool: ${name}` };
     }
 
-    liveLogger.log('[QwenRealtime] TOOL EXECUTED');
+    // Race guard: if a newer turn started, do not continue this one
+    if (turnAtStart !== this.currentTeachingTurnId) {
+      liveLogger.log(`[QwenRealtime] Tool ${name} finished for stale turn ${turnAtStart}`);
+      this.pendingToolCalls.delete(callId);
+      return;
+    }
 
-    liveLogger.log('[QwenRealtime] SENDING TOOL RESULT');
-    // Return function result to close the tool call
+    liveLogger.log('[QwenRealtime] TOOL EXECUTED', name, toolResult?.status);
+
     this.sendJson({
       event_id: `tool_out_${Date.now()}`,
       type: 'conversation.item.create',
@@ -1013,26 +1096,27 @@ export class QwenRealtimeTeacherService {
       },
     });
 
-    liveLogger.log('[QwenRealtime] REQUESTING TEACHER CONTINUATION');
-    // Ask the model to continue teaching
-    this.sendJson({
-      event_id: `resp_after_tool_${Date.now()}`,
-      type: 'response.create',
-      response: {
-        modalities: ['text', 'audio'],
-        tools: this.getTools(),
-        tool_choice: 'auto',
-      },
-    });
+    // Clear pending entry
+    this.pendingToolCalls.delete(callId);
 
-    // Safety timeout: if continuation audio does not arrive within 10s, revert state to listening
+    // Single continuation owner — only after visual is actually ready
+    this.isAwaitingContinuation = false; // allow requestTeacherContinuation
+    this.requestTeacherContinuation('after_tool');
+
+    // Safety timeout
+    const safetyTurn = this.currentTeachingTurnId;
     setTimeout(() => {
-      if (this.isAwaitingContinuation && this.state === 'drawing') {
+      if (
+        this.currentTeachingTurnId === safetyTurn &&
+        this.isAwaitingContinuation &&
+        this.state === 'drawing'
+      ) {
         liveLogger.warn('[QwenRealtime] Continuation timeout — reverting to listening');
         this.isAwaitingContinuation = false;
+        this.isResponseActive = false;
         this.setState('listening');
       }
-    }, 10000);
+    }, 12000);
   }
 
   // ── Audio input (mic → WebSocket) ─────────────────────────────────────────
@@ -1295,6 +1379,8 @@ export class QwenRealtimeTeacherService {
         const i = this.activeAudioSources.indexOf(src);
         if (i !== -1) this.activeAudioSources.splice(i, 1);
         if (this.activeAudioSources.length === 0) {
+          this.isResponseActive = false;
+          liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
           setTimeout(() => {
             if (this.state === 'speaking' || this.state === 'drawing') {
               this.setState('listening');

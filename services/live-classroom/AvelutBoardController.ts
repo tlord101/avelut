@@ -130,7 +130,10 @@ function isGenericLabel(s: string | undefined | null): boolean {
   return GENERIC_LABEL_RE.test(String(s).trim());
 }
 
-function wordWrap(text: string, maxLineLength: number): string {
+/** Default max characters per line for board labels (~35 for readable classroom text) */
+const BOARD_LABEL_MAX_CHARS = 35;
+
+function wordWrap(text: string, maxLineLength: number = BOARD_LABEL_MAX_CHARS): string {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let currentLine = '';
@@ -160,7 +163,7 @@ function wordWrap(text: string, maxLineLength: number): string {
 function sanitizeLabel(s: string, fallback = ''): string {
   const t = String(s || '').trim();
   if (!t || isGenericLabel(t)) return fallback;
-  return wordWrap(t, 26);
+  return wordWrap(t, BOARD_LABEL_MAX_CHARS);
 }
 
 class BoardActionQueue {
