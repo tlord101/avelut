@@ -30,6 +30,7 @@ export interface HeaderProps {
   onNewChat?: () => void;
   onClearChat?: () => void;
   onDeleteChat?: () => void;
+  onOpenMemoryBank?: () => void;
   hasActiveChat?: boolean;
   hasMessages?: boolean;
 }
@@ -58,6 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNewChat,
   onClearChat,
   onDeleteChat,
+  onOpenMemoryBank,
   hasActiveChat = false,
   hasMessages = false,
 }) => {
@@ -386,6 +388,26 @@ export const Header: React.FC<HeaderProps> = ({
                   </svg>
                   <span>My Profile</span>
                 </button>
+
+                {/* AI Memory Bank */}
+                {onOpenMemoryBank && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onOpenMemoryBank();
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-white/5 hover:text-neutral-900 dark:hover:text-white transition cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <i className="bi bi-cpu text-emerald-500 text-sm shrink-0" />
+                      <span>AI Memory Bank</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      Smart
+                    </span>
+                  </button>
+                )}
 
                 {/* Help & Support */}
                 <button

@@ -1782,6 +1782,7 @@ const App: React.FC = () => {
                     onNewChat={customHeaderConfig?.onNewChat || (() => { setActiveConversationId(null); setActiveItem('chat'); })}
                     onClearChat={customHeaderConfig?.onClearChat}
                     onDeleteChat={customHeaderConfig?.onDeleteChat}
+                    onOpenMemoryBank={customHeaderConfig?.onOpenMemoryBank}
                     hasActiveChat={customHeaderConfig?.hasActiveChat ?? Boolean(activeConversationId)}
                     hasMessages={customHeaderConfig?.hasMessages ?? false}
                 />

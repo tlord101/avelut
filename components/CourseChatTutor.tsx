@@ -16,6 +16,7 @@ import {
   saveTopicStructureProgress,
   TopicStructureData,
 } from '../services/topicStructureService';
+import { getAIMemoryBank, buildMemoryPromptContext, type AIMemoryBank } from '../services/aiMemoryBankService';
 import type { Course, Topic, UserProfile } from '../types';
 
 const PlusIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -107,6 +108,19 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [memoryBank, setMemoryBank] = useState<AIMemoryBank | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (userProfile?.uid) {
+      getAIMemoryBank(userProfile.uid, userProfile).then((bank) => {
+        if (isMounted) setMemoryBank(bank);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [userProfile?.uid, userProfile]);
 
   // Check live tutorial access
   const liveAccess = hasLiveTutorialAccess(userProfile);
@@ -269,10 +283,13 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     setMessages([initialPlaceholder]);
     setStreamingMsgId(starterAiMsgId);
 
+    const memoryContext = memoryBank?.isEnabled ? buildMemoryPromptContext(memoryBank, userProfile) : '';
+
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
       topic.topic_context ? `CURRICULUM CONTEXT: ${topic.topic_context}` : '',
+      memoryContext || '',
       '',
       'MISSION: Conduct a dynamic, comprehensive Socratic tutorial session. Your goal is to guide the student to understand EVERY essential area possible to know on this topic — intuition, definitions, mechanisms, formulas/theories, practical step-by-step worked examples, edge cases, exam traps, and real-world applications.',
       '',
@@ -433,10 +450,13 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       }
     }
 
+    const memoryContext = memoryBank?.isEnabled ? buildMemoryPromptContext(memoryBank, userProfile) : '';
+
     const socraticSystemPrompt = [
       `You are AVELUT Socratic Course Tutor for "${course.course_name}" (${course.course_code || ''}).`,
       `TOPIC: "${topic.topic_name}"`,
       topic.topic_context ? `CURRICULUM CONTEXT: ${topic.topic_context}` : '',
+      memoryContext || '',
       '',
       'MISSION: Conduct a dynamic, adaptive masterclass tutorial session that ensures the student thoroughly understands EVERY area possible to know on this topic.',
       'Do NOT limit or truncate the tutorial to 4 steps or any artificial limits. Guide the student continuously and progressively through all dimensions of the topic:',

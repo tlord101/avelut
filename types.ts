@@ -425,6 +425,7 @@ export interface HeaderConfig {
   onNewChat?: () => void;
   onClearChat?: () => void;
   onDeleteChat?: () => void;
+  onOpenMemoryBank?: () => void;
   hasActiveChat?: boolean;
   hasMessages?: boolean;
 }

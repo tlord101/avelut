@@ -13,6 +13,7 @@ import {
   saveTopicStructureProgress,
   TopicStructureData,
 } from '../services/topicStructureService';
+import { getAIMemoryBank, buildMemoryPromptContext, type AIMemoryBank } from '../services/aiMemoryBankService';
 import type { UserProfile } from '../types';
 import type { Notebook, NotebookChapter } from '../services/notebookStorageService';
 
@@ -54,6 +55,19 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
   const [showLimitBanner, setShowLimitBanner] = useState(false);
   const [limitCost, setLimitCost] = useState(1);
   const [chapterStructure, setChapterStructure] = useState<TopicStructureData | null>(null);
+  const [memoryBank, setMemoryBank] = useState<AIMemoryBank | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (userProfile?.uid) {
+      getAIMemoryBank(userProfile.uid, userProfile).then((bank) => {
+        if (isMounted) setMemoryBank(bank);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [userProfile?.uid, userProfile]);
 
   // Load or generate chapter structure JSON stored on device
   useEffect(() => {
@@ -257,8 +271,10 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
         focusedExcerpt = rawSlice.trim() || excerptToUse.slice(0, 2200);
       }
 
-      const prompt = `You are an expert, precise, and encouraging academic tutor helping a student deeply master their textbook chapter: "${chapter.title}" from "${notebook.title}".
+      const memoryContext = memoryBank?.isEnabled ? buildMemoryPromptContext(memoryBank, userProfile) : '';
 
+      const prompt = `You are an expert, precise, and encouraging academic tutor helping a student deeply master their textbook chapter: "${chapter.title}" from "${notebook.title}".
+${memoryContext ? `\n${memoryContext}\n` : ''}
 MISSION: Conduct a dynamic, adaptive tutoring session. Ensure the student comprehensively understands every essential area and concept of this chapter — intuition, key mechanisms, formulas/theories, practical step-by-step examples, edge cases, and exam questions. Do not artificially limit or cap the depth of the session.
 
 CRITICAL TUTORING RULES:

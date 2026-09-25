@@ -25,6 +25,13 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { MarkdownContent } from './MarkdownContent';
 import { ThinkingTypingIndicator } from './ThinkingTypingIndicator';
 import { ChatLimitBanner } from './ChatLimitBanner';
+import {
+  getAIMemoryBank,
+  buildMemoryPromptContext,
+  extractAndSaveMemoriesFromExchange,
+  type AIMemoryBank,
+} from '../services/aiMemoryBankService';
+import { MemoryBankModal } from './memory/MemoryBankModal';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
 
@@ -251,6 +258,9 @@ const GrokChatComposer: React.FC<{
   onOpenCamera: () => void;
   onSend: () => void;
   autoFocus?: boolean;
+  onOpenMemoryBank?: () => void;
+  isMemoryActive?: boolean;
+  memoryCount?: number;
 }> = ({
   input,
   setInput,
@@ -264,6 +274,9 @@ const GrokChatComposer: React.FC<{
   onOpenCamera,
   onSend,
   autoFocus,
+  onOpenMemoryBank,
+  isMemoryActive,
+  memoryCount,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -429,9 +442,46 @@ const GrokChatComposer: React.FC<{
                   </svg>
                   Camera
                 </button>
+                {onOpenMemoryBank && (
+                  <>
+                    <div className="h-[1px] bg-neutral-200 dark:bg-white/10" />
+                    <button
+                      onClick={() => {
+                        setShowAttachMenu(false);
+                        onOpenMemoryBank();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
+                    >
+                      <i className="bi bi-cpu text-emerald-500 text-sm" />
+                      Memory Bank
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
+
+          {/* Center-Left: Memory Bank Pill Toggle */}
+          {onOpenMemoryBank && (
+            <button
+              type="button"
+              onClick={onOpenMemoryBank}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all mr-auto ml-1.5 ${
+                isMemoryActive
+                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-neutral-200/60 dark:bg-white/10 hover:bg-neutral-200 text-neutral-600 dark:text-neutral-400'
+              }`}
+              title="AI Memory Bank: Personalizes answers based on what Avelut knows about you"
+            >
+              <i className="bi bi-cpu text-xs text-emerald-500" />
+              <span className="hidden xs:inline font-medium">Memory</span>
+              {memoryCount !== undefined && memoryCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-bold leading-tight">
+                  {memoryCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Right: Pill-shaped Action Button for Speaker and Send states */}
           <div className="flex items-center">
@@ -520,6 +570,8 @@ export const Chat: React.FC<ChatProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [memoryBank, setMemoryBank] = useState<AIMemoryBank | null>(null);
+  const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -529,6 +581,18 @@ export const Chat: React.FC<ChatProps> = ({
 
   const aiModel = getFeatureModel('chat_interaction', appSettings);
   const ai = useMemo(() => createAvelutAI(appSettings, userProfile), [appSettings, userProfile]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (userProfile?.uid) {
+      getAIMemoryBank(userProfile.uid, userProfile).then((bank) => {
+        if (isMounted) setMemoryBank(bank);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [userProfile?.uid, userProfile]);
 
   const isLoadingRef = useRef(isLoading);
   isLoadingRef.current = isLoading;
@@ -628,6 +692,7 @@ export const Chat: React.FC<ChatProps> = ({
       onNewChat: handleNewChat,
       onClearChat: handleClearCurrentChat,
       onDeleteChat: handleDeleteCurrentChat,
+      onOpenMemoryBank: () => setIsMemoryModalOpen(true),
       hasActiveChat: Boolean(activeConversationId),
       hasMessages: messages.length > 0,
     });
@@ -1039,7 +1104,8 @@ export const Chat: React.FC<ChatProps> = ({
         modeInstruction = '\nFormat as practice exam question style.';
       }
 
-      const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}`;
+      const memoryContext = memoryBank?.isEnabled ? buildMemoryPromptContext(memoryBank, userProfile) : '';
+      const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}${memoryContext ? `\n\n${memoryContext}` : ''}`;
 
       // Build multimodal parts for the current user turn
       const userParts: any[] = [];
@@ -1183,6 +1249,20 @@ export const Chat: React.FC<ChatProps> = ({
       }
 
       void deductAICredits(userProfile.uid, cost, 'AI Chat Assistant', appSettings);
+
+      if (memoryBank?.isEnabled) {
+        void extractAndSaveMemoriesFromExchange({
+          userId: userProfile.uid,
+          userMessage: displayInput,
+          aiResponse: responseText,
+          appSettings,
+          userProfile,
+        }).then((newItems) => {
+          if (newItems && newItems.length > 0) {
+            void getAIMemoryBank(userProfile.uid, userProfile).then(setMemoryBank);
+          }
+        });
+      }
     } catch (err) {
       console.error('Error in chat:', err);
       addToast('An error occurred while sending your message.', 'error');
@@ -1416,6 +1496,9 @@ export const Chat: React.FC<ChatProps> = ({
         onAttachImage={(img) => setAttachedImage(img)}
         onOpenGallery={() => fileInputRef.current?.click()}
         onOpenCamera={() => setIsCameraOpen(true)}
+        onOpenMemoryBank={() => setIsMemoryModalOpen(true)}
+        isMemoryActive={Boolean(memoryBank?.isEnabled)}
+        memoryCount={memoryBank?.items?.filter((i) => i.enabled).length}
         onSend={() => handleSendMessage()}
         autoFocus={true}
       />
@@ -1444,6 +1527,13 @@ export const Chat: React.FC<ChatProps> = ({
         {...modalState}
         onCancel={() => setModalState((s) => ({ ...s, isOpen: false }))}
         isConfirming={isDeleting}
+      />
+
+      <MemoryBankModal
+        isOpen={isMemoryModalOpen}
+        onClose={() => setIsMemoryModalOpen(false)}
+        userProfile={userProfile}
+        onMemoryBankChange={(updated) => setMemoryBank(updated)}
       />
     </div>
   );

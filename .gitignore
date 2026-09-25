@@ -29,5 +29,6 @@ dist-ssr
 # Android build outputs
 *.apk
 *.aab
+*.zip
 avelut-release-key.keystore
 !app-release.apk
