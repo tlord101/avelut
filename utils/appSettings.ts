@@ -148,18 +148,18 @@ export const DEFAULT_USAGE_SETTINGS = {
     },
   },
   feature_costs: {
-    // Live duration pricing (credits ≈ ₦1 each for PAYG)
-    live_tutorial: 150,              // 15-min when over free/plan quota
-    live_tutorial_15: 150,
-    live_tutorial_30: 350,           // always credit-paid (not in plan allowance)
-    live_tutorial_60: 650,           // always credit-paid
-    live_tutorial_question: 50,
-    flashcard_generation: 50,
-    chat_interaction: 1,             // study-guide / notebook chat only; main Avelut chat free on Free
-    visual_solve: 5,
-    ai_quiz_generation: 50,
-    study_guide_lesson: 300,
-    study_guide_extraction: 10,
+    // 1 Credit = ₦1 mapping calibrated for >= 60% gross profit margin
+    live_tutorial: 150,              // 15-min live tutorial (Cost: ₦45.08, Margin: 69.9%)
+    live_tutorial_15: 150,           // 15-min live tutorial (Cost: ₦45.08, Margin: 69.9%)
+    live_tutorial_30: 350,           // 30-min live tutorial (Cost: ₦98.42, Margin: 71.9%)
+    live_tutorial_60: 650,           // 60-min live tutorial (Cost: ₦225.12, Margin: 65.4%)
+    live_tutorial_question: 10,      // In-session extra question (Cost: ~₦0.80, Margin: 92%)
+    chat_interaction: 2,             // AI tutor chat message (Cost: ₦0.43, Margin: 78.5%)
+    visual_solve: 5,                 // Camera homework solve (Cost: ₦0.85, Margin: 83.0%)
+    flashcard_generation: 5,         // 10-flashcard set generation (Cost: ₦0.84, Margin: 83.2%)
+    ai_quiz_generation: 5,           // 5-question AI quiz generation (Cost: ₦1.08, Margin: 78.4%)
+    study_guide_lesson: 15,          // Full chapter study guide lesson (Cost: ₦2.28, Margin: 84.8%)
+    study_guide_extraction: 3,       // Document / syllabus extraction (Cost: ₦0.50, Margin: 83.3%)
   },
   feature_models: {
     visual_solve: 'qwen3.8-omni-flash',
@@ -171,14 +171,14 @@ export const DEFAULT_USAGE_SETTINGS = {
     title_generation: 'qwen3.8-omni-flash',
   },
   additional_prices: {
-    live_tutorial_pass: 150,
-    live_tutorial_30_pass: 350,
-    live_tutorial_60_pass: 650,
-    flashcards_pack_10: 500,
-    visual_messages_price: 200,
+    live_tutorial_pass: 150,         // 15-min single pass (₦150)
+    live_tutorial_30_pass: 350,      // 30-min single pass (₦350)
+    live_tutorial_60_pass: 650,      // 60-min single pass (₦650)
+    flashcards_pack_10: 50,          // 10 flashcard sets pack (₦50)
+    visual_messages_price: 50,       // 10 camera scans bundle (₦50)
     visual_messages_count: 10,
-    studyguide_course_price: 300,
-    studyguide_request_price: 50,
+    studyguide_course_price: 150,    // Full course study guide package (₦150)
+    studyguide_request_price: 25,    // Custom syllabus study guide request (₦25)
   },
 };
 

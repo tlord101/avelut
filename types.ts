@@ -253,6 +253,11 @@ export interface UsageSettings {
     ai_quiz_generation: number;
     study_guide_lesson: number;
     study_guide_extraction: number;
+    live_tutorial?: number;
+    live_tutorial_15?: number;
+    live_tutorial_30?: number;
+    live_tutorial_60?: number;
+    live_tutorial_question?: number;
   };
   feature_models?: {
     visual_solve?: string;
@@ -268,6 +273,10 @@ export interface UsageSettings {
     visual_messages_count: number;
     studyguide_course_price: number;
     studyguide_request_price: number;
+    live_tutorial_pass?: number;
+    live_tutorial_30_pass?: number;
+    live_tutorial_60_pass?: number;
+    flashcards_pack_10?: number;
   };
 }
 
