@@ -588,9 +588,9 @@ export class AvelutBoardController {
 
   public initBoard(title: string): void {
     this.lessonTitle = title;
-    this.cursorY = 90;
-    this.nextFreeY = 100;
-    this.lastAnnotationY = 100;
+    this.cursorY = 50;
+    this.nextFreeY = 60;
+    this.lastAnnotationY = 60;
     this.elements = [];
     this.boardFiles = {};
     if (title && title.trim()) {
@@ -599,8 +599,12 @@ export class AvelutBoardController {
         color: blueColor,
         fontSize: 'title',
         x: 30,
-        y: 100,
+        y: 50,
       });
+      // Ensure cursor for subsequent writes starts well below the title
+      this.cursorY = Math.max(this.cursorY, 130);
+      this.nextFreeY = Math.max(this.nextFreeY, 130);
+      this.lastAnnotationY = Math.max(this.lastAnnotationY, 130);
     }
     if (this.api) {
       this.syncScene();
@@ -776,11 +780,11 @@ export class AvelutBoardController {
       strokeColor: color,
     }], y >= 400 ? 'notes' : 'stage');
 
-    if (args?.y === undefined) {
-      this.cursorY = y + Math.max(36, lines.length * fontSize * 1.4 + 14);
-      this.nextFreeY = Math.max(this.nextFreeY, this.cursorY);
-      this.lastAnnotationY = Math.max(this.lastAnnotationY, this.cursorY);
-    }
+    // ALWAYS advance layout cursor below any written text, whether y was passed or defaulted
+    const textHeight = Math.max(36, lines.length * fontSize * 1.4 + 20);
+    this.cursorY = Math.max(this.cursorY, y + textHeight);
+    this.nextFreeY = Math.max(this.nextFreeY, this.cursorY);
+    this.lastAnnotationY = Math.max(this.lastAnnotationY, this.cursorY);
   }
 
   public setFormula(formulaText: string): void {

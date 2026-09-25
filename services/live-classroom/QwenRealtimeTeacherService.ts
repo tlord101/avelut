@@ -445,14 +445,16 @@ export class QwenRealtimeTeacherService {
     const phase1Name = plan?.phases?.[0]?.phaseName || 'Stage 1';
     liveLogger.log('[QwenRealtime] Triggering initial greeting for', topic, `(${duration} min) [Phase 1: ${phase1Name}]`);
 
-    // Immediately write the topic in blue on the board as text
-    const blueColor = this.boardController.getTheme() === 'dark' ? '#38BDF8' : '#2563EB';
-    this.boardController.writeText(topic, {
-      color: blueColor,
-      fontSize: 'title',
-      x: 30,
-      y: 100,
-    });
+    // Immediately write the topic in blue on the board as text (only if not already seeded)
+    if (!this.boardController.hasElements()) {
+      const blueColor = this.boardController.getTheme() === 'dark' ? '#38BDF8' : '#2563EB';
+      this.boardController.writeText(topic, {
+        color: blueColor,
+        fontSize: 'title',
+        x: 30,
+        y: 50,
+      });
+    }
 
     // Give the model its starting instruction as a user message:
     // First turn is strictly warm greeting and introduction. Diagrams initiate on the second response.
@@ -492,17 +494,14 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): student speaking`);
       return;
     }
-    if (this.isResponseActive || this.isAwaitingContinuation) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): response already active`);
-      return;
-    }
-    if (this.continuationRequestedForTurn === this.currentTeachingTurnId) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): already requested for turn ${this.currentTeachingTurnId}`);
+    if (this.isAudioStreamingFromModel) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): audio still streaming from model`);
       return;
     }
 
+    this.currentTeachingTurnId++;
     this.continuationRequestedForTurn = this.currentTeachingTurnId;
-    this.isAwaitingContinuation = true;
+    this.isAwaitingContinuation = false;
     this.isResponseActive = true;
     liveLogger.log(`[QwenRealtime] requestTeacherContinuation reason=${reason} turn=${this.currentTeachingTurnId}`);
 
@@ -608,10 +607,29 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
-    if (this.state === 'speaking') {
+    if (this.lastResponseAskedQuestion) {
+      // ONLY STOP AND WAIT WHEN TEACHER ASKED A QUESTION
+      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} waiting for student answer (question asked)`);
       this.setState('listening');
-    } else if (this.state === 'listening') {
       this.startStudentWaitTimer();
+    } else {
+      // CONTINUOUS TEACHING: Move to the next concept without waiting for student
+      this.setState('listening');
+      setTimeout(() => {
+        if (
+          !this.lastResponseAskedQuestion &&
+          !this.isStudentSpeaking &&
+          !this.isAudioStreamingFromModel &&
+          this.activeAudioSources.length === 0 &&
+          this.ws?.readyState === WebSocket.OPEN
+        ) {
+          liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
+          this.requestTeacherContinuation('auto_continue_no_question', {
+            injectUserHint:
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next concept or step. Writing on the board with board_action write is primary — write key terms, definitions, and formulas ($$ ... $$). Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches — NEVER 360-degree radial trees or mindmaps, or board_action draw) to visualize concepts. Keep teaching actively.',
+          });
+        }
+      }, 500);
     }
   }
 
@@ -1149,9 +1167,25 @@ export class QwenRealtimeTeacherService {
     // Clear pending entry
     this.pendingToolCalls.delete(callId);
 
-    // Single continuation owner — only after visual is actually ready
-    this.isAwaitingContinuation = false; // allow requestTeacherContinuation
-    this.requestTeacherContinuation('after_tool');
+    // AUTO-CONTINUE IMMEDIATELY WHEN TOOL EXECUTES:
+    if (this.pendingToolCalls.size === 0) {
+      liveLogger.log(`[QwenRealtime] Tool ${name} finished — AUTO-CONTINUING TEACHING IMMEDIATELY`);
+      this.isAwaitingContinuation = false;
+      this.isResponseActive = false;
+      this.continuationRequestedForTurn = -1;
+      this.currentTeachingTurnId++;
+
+      this.sendJson({
+        event_id: `resp_cont_${Date.now()}_tool_done`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          tools: this.getTools(),
+          tool_choice: 'auto',
+        },
+      });
+      this.isResponseActive = true;
+    }
 
     // Safety timeout
     const safetyTurn = this.currentTeachingTurnId;
