@@ -63,7 +63,7 @@ export class QwenRealtimeTeacherService {
   private processorNode: AudioNode | null = null;
   private isMuted = false;
 
-  // ── Audio — output (WS → speaker) ──────────────────────────────────────
+  // ── Audio — output (WS → speaker) & Jitter Smoothing ──────────────────
   private outputAudioCtx: AudioContext | null = null;
   private outputGainNode: GainNode | null = null;
   private activeAudioSources: AudioBufferSourceNode[] = [];
@@ -72,6 +72,13 @@ export class QwenRealtimeTeacherService {
   private pendingOutputDeltas: string[] = [];
   private isFlushingDeltas = false;
   private lastMicRms = 0;
+  private pcmSampleQueue: Float32Array[] = [];
+  private totalQueuedSamples = 0;
+  private isStreamPlaying = false;
+  private readonly TARGET_CHUNK_SAMPLES = 2400; // ~100ms contiguous chunks @ 24kHz
+  private readonly PREROLL_MIN_SAMPLES = 2880; // ~120ms initial cushion before audio playback starts
+  private isBurstStart = true;
+  private hasDrawnFirstDiagram = false;
 
   // ── Session ────────────────────────────────────────────────────────────────
   private promptConfig: TeacherPromptConfig | null = null;
@@ -243,6 +250,7 @@ export class QwenRealtimeTeacherService {
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
     this.hasGreeted = false;
+    this.hasDrawnFirstDiagram = false;
     this.isStarting = false;
     this.isSessionUpdated = false;
     this.retriedWithDefaultVoice = false;
@@ -410,6 +418,58 @@ export class QwenRealtimeTeacherService {
   }
 
   /**
+   * Renders a mandatory, rich educational concept map or mind map diagram
+   * onto the Excalidraw whiteboard canvas on session start / first turn.
+   */
+  public async renderInitialMandatoryDiagram(): Promise<void> {
+    if (this.hasDrawnFirstDiagram) return;
+    this.hasDrawnFirstDiagram = true;
+
+    const topic = this.promptConfig?.topicTitle || 'Core Concept';
+    const plan = this.promptConfig?.teachingPlan;
+    const path = this.promptConfig?.learningPath;
+    const theme = (this.boardController as any).getTheme?.() || 'dark';
+
+    let mermaidCode = '';
+
+    if (plan && Array.isArray(plan.phases) && plan.phases.length > 0) {
+      const cleanTopic = topic.replace(/["()]/g, '').trim();
+      const phaseNodes = plan.phases.slice(0, 4).map((p, idx) => {
+        const cleanName = p.phaseName.replace(/["()]/g, '').trim();
+        return `P${idx + 1}["${p.phaseIndex ? `Phase ${p.phaseIndex}: ` : ''}${cleanName}"]`;
+      });
+      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n`;
+      for (let i = 0; i < phaseNodes.length; i++) {
+        mermaidCode += `  Root --> ${phaseNodes[i]}\n`;
+      }
+    } else if (path && Array.isArray(path) && path.length > 0) {
+      const cleanTopic = topic.replace(/["()]/g, '').trim();
+      const stepNodes = path.slice(0, 4).map((step, idx) => {
+        const cleanStep = step.replace(/["()]/g, '').trim();
+        return `S${idx + 1}["${idx + 1}. ${cleanStep}"]`;
+      });
+      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n`;
+      for (let i = 0; i < stepNodes.length; i++) {
+        mermaidCode += `  Root --> ${stepNodes[i]}\n`;
+      }
+    } else {
+      const cleanTopic = topic.replace(/["()]/g, '').trim();
+      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n  A["1. Core Concept & Principles"]\n  B["2. Mechanisms & Process"]\n  C["3. Practical Applications"]\n  Root --> A\n  Root --> B\n  Root --> C`;
+    }
+
+    try {
+      liveLogger.log('[QwenRealtime] Rendering MANDATORY initial board diagram...');
+      const svg = await MermaidBoardService.renderToSvg(mermaidCode, theme);
+      if (svg) {
+        this.boardController.setSvgIllustration(svg);
+        liveLogger.log('[QwenRealtime] Mandatory initial diagram successfully rendered to whiteboard canvas! ✅');
+      }
+    } catch (err) {
+      liveLogger.warn('[QwenRealtime] Failed to render initial mandatory diagram:', err);
+    }
+  }
+
+  /**
    * Triggers the initial teacher greeting.
    * The session is already configured — just ask the model to begin.
    */
@@ -431,6 +491,9 @@ export class QwenRealtimeTeacherService {
     // Ensure audio contexts are resumed on this user gesture
     void this.resumeAudio();
 
+    // Render mandatory whiteboard diagram right on kickoff so the board is visually primed
+    void this.renderInitialMandatoryDiagram();
+
     const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
     const plan = this.promptConfig?.teachingPlan;
@@ -446,7 +509,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Start the lesson on "${topic}". We have ${duration} minutes. Greet the student warmly, introduce the topic in one simple sentence, and call draw_mermaid to draw a concept map or mind map of the topic on the board.`,
+          text: `MANDATORY FIRST ACTION: Draw a visual concept map or mind map diagram of "${topic}" on the board immediately using draw_mermaid. Greet the student warmly in one simple sentence and introduce what we are exploring. Drawing the diagram on the board in this first turn is strictly mandatory.`,
         }],
       },
     });
@@ -840,6 +903,8 @@ export class QwenRealtimeTeacherService {
         this.isAwaitingContinuation = false;
         this.continuationRequestedForTurn = -1;
         this.clearStudentWaitTimer();
+        this.isBurstStart = true;
+        this.isStreamPlaying = false;
         liveLogger.log(`[QwenRealtime] response.created turn=${this.currentTeachingTurnId}`);
         break;
 
@@ -951,7 +1016,8 @@ export class QwenRealtimeTeacherService {
       case 'response.audio.done':
         liveLogger.log(`[QwenRealtime] response.audio.done turn=${this.currentTeachingTurnId}`);
         this.isAudioStreamingFromModel = false;
-        if (this.activeAudioSources.length === 0) {
+        this.drainAudioQueue(true);
+        if (this.totalQueuedSamples === 0 && this.activeAudioSources.length === 0) {
           this.onTeacherAudioFinished();
         }
         break;
@@ -959,6 +1025,7 @@ export class QwenRealtimeTeacherService {
       case 'response.done': {
         liveLogger.log(`[QwenRealtime] response.done turn=${this.currentTeachingTurnId}`);
         this.isAudioStreamingFromModel = false;
+        this.drainAudioQueue(true);
 
         // Tool path still waiting for continuation — keep state
         if (this.isAwaitingContinuation) {
@@ -966,7 +1033,7 @@ export class QwenRealtimeTeacherService {
           break;
         }
         // If all scheduled audio has finished playing, declare audio finished
-        if (this.activeAudioSources.length === 0) {
+        if (this.totalQueuedSamples === 0 && this.activeAudioSources.length === 0) {
           this.onTeacherAudioFinished();
         }
         break;
@@ -1283,7 +1350,7 @@ export class QwenRealtimeTeacherService {
     liveLogger.log('[QwenRealtime] ScriptProcessor fallback input initialized ✅');
   }
 
-  // ── Audio output (WebSocket → speaker) ───────────────────────────────────
+  // ── Audio output (WebSocket → speaker) & Jitter Smoothing ──────────────────
 
   private async ensureOutputRunning(): Promise<boolean> {
     if (!this.outputAudioCtx) return false;
@@ -1304,7 +1371,7 @@ export class QwenRealtimeTeacherService {
       while (this.pendingOutputDeltas.length > 0 && this.outputAudioCtx.state === 'running') {
         const delta = this.pendingOutputDeltas.shift();
         if (delta) {
-          await this.renderPcmDelta(delta);
+          this.processIncomingPcmDelta(delta);
         }
       }
     } finally {
@@ -1330,14 +1397,13 @@ export class QwenRealtimeTeacherService {
         return;
       }
 
-      await this.renderPcmDelta(base64);
+      this.processIncomingPcmDelta(base64);
     } catch (err) {
       liveLogger.warn('[QwenRealtime] playDelta error:', err);
     }
   }
 
-  private async renderPcmDelta(base64: string): Promise<void> {
-    if (!this.outputAudioCtx) return;
+  private processIncomingPcmDelta(base64: string): void {
     try {
       const binary = atob(base64);
       const incomingBytes = new Uint8Array(binary.length);
@@ -1372,49 +1438,140 @@ export class QwenRealtimeTeacherService {
         float32[i] = view.getInt16(i * 2, true) / 32768.0;
       }
 
-      // DashScope/Qwen Realtime PCM audio is 24,000 Hz
-      const buf = this.outputAudioCtx.createBuffer(1, sampleCount, 24000);
-      buf.copyToChannel(float32, 0);
+      this.pcmSampleQueue.push(float32);
+      this.totalQueuedSamples += sampleCount;
 
-      const src = this.outputAudioCtx.createBufferSource();
-      src.buffer = buf;
-
-      if (!this.outputGainNode) {
-        this.outputGainNode = this.outputAudioCtx.createGain();
-        this.outputGainNode.gain.value = 1.0;
-        this.outputGainNode.connect(this.outputAudioCtx.destination);
-      }
-      src.connect(this.outputGainNode);
-
-      const now = this.outputAudioCtx.currentTime;
-      // Fluid streaming schedule:
-      // If nextPlayTime has fallen slightly behind, add a 45ms lead-in buffer to absorb jitter
-      // and prevent audio pops or dropouts.
-      if (this.nextPlayTime < now) {
-        this.nextPlayTime = now + 0.045;
-      }
-      src.start(this.nextPlayTime);
-      this.nextPlayTime += buf.duration;
-
-      this.activeAudioSources.push(src);
-      src.onended = () => {
-        const i = this.activeAudioSources.indexOf(src);
-        if (i !== -1) this.activeAudioSources.splice(i, 1);
-        if (!this.isAudioStreamingFromModel && this.activeAudioSources.length === 0) {
-          this.onTeacherAudioFinished();
-        }
-      };
+      this.drainAudioQueue(false);
     } catch (err) {
-      liveLogger.warn('[QwenRealtime] renderPcmDelta error:', err);
+      liveLogger.warn('[QwenRealtime] processIncomingPcmDelta error:', err);
     }
   }
 
-  /** Instantly stop all queued teacher speech buffers */
+  private drainAudioQueue(forceFlush: boolean): void {
+    if (!this.outputAudioCtx || this.totalQueuedSamples === 0) return;
+
+    // Preroll cushion: when starting speech, accumulate ~120ms before scheduling the first chunk.
+    // This absorbs initial WebSocket packet jitter completely.
+    if (!this.isStreamPlaying && !forceFlush) {
+      if (this.totalQueuedSamples < this.PREROLL_MIN_SAMPLES) {
+        return;
+      }
+      this.isStreamPlaying = true;
+      this.isBurstStart = true;
+    }
+
+    // While we have enough samples for standard ~100ms contiguous playback chunks:
+    while (
+      (this.totalQueuedSamples >= this.TARGET_CHUNK_SAMPLES) ||
+      (forceFlush && this.totalQueuedSamples > 0)
+    ) {
+      const neededSamples = forceFlush
+        ? this.totalQueuedSamples
+        : Math.min(this.TARGET_CHUNK_SAMPLES, this.totalQueuedSamples);
+
+      if (neededSamples <= 0) break;
+
+      const chunk = new Float32Array(neededSamples);
+      let copied = 0;
+
+      while (copied < neededSamples && this.pcmSampleQueue.length > 0) {
+        const head = this.pcmSampleQueue[0];
+        const remainingToCopy = neededSamples - copied;
+
+        if (head.length <= remainingToCopy) {
+          chunk.set(head, copied);
+          copied += head.length;
+          this.pcmSampleQueue.shift();
+        } else {
+          chunk.set(head.subarray(0, remainingToCopy), copied);
+          this.pcmSampleQueue[0] = head.subarray(remainingToCopy);
+          copied += remainingToCopy;
+        }
+      }
+
+      this.totalQueuedSamples -= copied;
+
+      // Micro-fade at burst boundaries to prevent clicks / pops
+      if (this.isBurstStart && chunk.length >= 48) {
+        for (let i = 0; i < 48; i++) {
+          chunk[i] *= (i / 48);
+        }
+        this.isBurstStart = false;
+      }
+
+      if (forceFlush && this.totalQueuedSamples === 0 && chunk.length >= 48) {
+        for (let i = 0; i < 48; i++) {
+          chunk[chunk.length - 1 - i] *= (i / 48);
+        }
+      }
+
+      this.scheduleAudioBuffer(chunk);
+    }
+
+    if (forceFlush) {
+      this.isStreamPlaying = false;
+      this.isBurstStart = true;
+    }
+  }
+
+  private scheduleAudioBuffer(samples: Float32Array): void {
+    if (!this.outputAudioCtx || samples.length === 0) return;
+
+    // DashScope/Qwen Realtime PCM audio is 24,000 Hz
+    const sampleRate = 24000;
+    const duration = samples.length / sampleRate;
+
+    const buf = this.outputAudioCtx.createBuffer(1, samples.length, sampleRate);
+    buf.copyToChannel(samples, 0);
+
+    const src = this.outputAudioCtx.createBufferSource();
+    src.buffer = buf;
+
+    if (!this.outputGainNode) {
+      this.outputGainNode = this.outputAudioCtx.createGain();
+      this.outputGainNode.gain.value = 1.0;
+      this.outputGainNode.connect(this.outputAudioCtx.destination);
+    }
+    src.connect(this.outputGainNode);
+
+    const now = this.outputAudioCtx.currentTime;
+
+    // Smooth gapless scheduling:
+    // If nextPlayTime has fallen slightly behind 'now':
+    // If the gap is small (< 50ms), schedule AT 'now' seamlessly WITHOUT inserting a 45ms silence hole!
+    // If the gap is larger (cold start or long gap), prime with a tiny 25ms lead-in to give the audio driver headroom.
+    if (this.nextPlayTime < now) {
+      const gap = now - this.nextPlayTime;
+      if (gap < 0.05) {
+        this.nextPlayTime = now;
+      } else {
+        this.nextPlayTime = now + 0.025;
+      }
+    }
+
+    src.start(this.nextPlayTime);
+    this.nextPlayTime += duration;
+
+    this.activeAudioSources.push(src);
+    src.onended = () => {
+      const i = this.activeAudioSources.indexOf(src);
+      if (i !== -1) this.activeAudioSources.splice(i, 1);
+      if (!this.isAudioStreamingFromModel && this.totalQueuedSamples === 0 && this.activeAudioSources.length === 0) {
+        this.onTeacherAudioFinished();
+      }
+    };
+  }
+
+  /** Instantly stop all queued teacher speech buffers and drain buffers */
   public stopPlayback(): void {
     this.isAudioStreamingFromModel = false;
     this.activeAudioSources.forEach(s => { try { s.stop(); s.disconnect(); } catch (_) {} });
     this.activeAudioSources = [];
     this.pendingOutputDeltas = [];
+    this.pcmSampleQueue = [];
+    this.totalQueuedSamples = 0;
+    this.isStreamPlaying = false;
+    this.isBurstStart = true;
     this.pcmRemainder = new Uint8Array(0);
     if (this.outputAudioCtx) this.nextPlayTime = this.outputAudioCtx.currentTime;
   }
