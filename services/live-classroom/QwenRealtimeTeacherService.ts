@@ -961,7 +961,8 @@ export class QwenRealtimeTeacherService {
       toolResult = this.boardController.executeBoardAction(args);
     } else if (name === 'draw_mermaid') {
       const code = args.mermaid_code || '';
-      const theme = (this.boardController as any).getTheme?.() || 'dark';
+      const theme = (this.boardController as any).getTheme?.() ||
+        (typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light');
       MermaidBoardService.renderToSvg(code, theme).then(svg => {
         if (svg) this.boardController.setSvgIllustration(svg);
       }).catch(err => {

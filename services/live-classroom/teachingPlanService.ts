@@ -117,6 +117,7 @@ Output ONLY a valid JSON object matching this schema without markdown fences:
 Rules:
 - Total sum of timeBudgetMins across all phases must equal approximately ${durationMinutes}.
 - Exactly ${targetPhaseCount} phases.
+- Keep pedagogicalGoal, speechFocus, and boardVisualPlan concise (1-2 sentences each) for speed.
 - Every phase MUST include actionable board visual plan.
 - At least 2 phases MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") rather than plain text only.`;
 
@@ -132,12 +133,12 @@ Rules:
       contents: prompt,
       config: {
         temperature: 0.3,
-        maxOutputTokens: 2000,
+        maxOutputTokens: 1800,
       },
     });
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI generation timeout (25 s)')), 25_000)
+      setTimeout(() => reject(new Error('AI generation timeout (50 s)')), 50_000)
     );
 
     const response = await Promise.race([fetchPromise, timeoutPromise]);

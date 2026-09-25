@@ -100,25 +100,31 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
         isDark ? 'bg-[#0A0A0A]' : 'bg-[#F8FAFC]'
       } ${className}`}
     >
-      {/* Aggressively suppress all Excalidraw UI bars, docks, tools, sidebars */}
+      {/* Aggressively suppress all Excalidraw UI bars, docks, tools, sidebars, and mobile bottom bars */}
       <style>{`
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-toolbar,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-toolbar-content,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .App-menu,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar-trigger,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .sidebar,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .footer-center,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .zoom-actions,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .undo-redo-buttons,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .hint,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .help-icon,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .buttonList,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .UserList,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .dropdown-menu-container,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .encrypted-icon-tooltip,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .shapes-section,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .stack,
-        .excalidraw-live-board .excalidraw .layer-ui__wrapper .Island {
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper,
+        .excalidraw-live-board .excalidraw .App-bottom-bar,
+        .excalidraw-live-board .excalidraw .bottom-bar,
+        .excalidraw-live-board .excalidraw .layer-ui__wrapper__footer,
+        .excalidraw-live-board .excalidraw .mobile-misc-buttons,
+        .excalidraw-live-board .excalidraw [data-testid="main-menu-trigger"],
+        .excalidraw-live-board .excalidraw .App-toolbar,
+        .excalidraw-live-board .excalidraw .App-toolbar-content,
+        .excalidraw-live-board .excalidraw .App-menu,
+        .excalidraw-live-board .excalidraw .sidebar-trigger,
+        .excalidraw-live-board .excalidraw .sidebar,
+        .excalidraw-live-board .excalidraw .footer-center,
+        .excalidraw-live-board .excalidraw .zoom-actions,
+        .excalidraw-live-board .excalidraw .undo-redo-buttons,
+        .excalidraw-live-board .excalidraw .hint,
+        .excalidraw-live-board .excalidraw .help-icon,
+        .excalidraw-live-board .excalidraw .buttonList,
+        .excalidraw-live-board .excalidraw .UserList,
+        .excalidraw-live-board .excalidraw .dropdown-menu-container,
+        .excalidraw-live-board .excalidraw .encrypted-icon-tooltip,
+        .excalidraw-live-board .excalidraw .shapes-section,
+        .excalidraw-live-board .excalidraw .stack,
+        .excalidraw-live-board .excalidraw .Island {
           display: none !important;
           visibility: hidden !important;
           pointer-events: none !important;

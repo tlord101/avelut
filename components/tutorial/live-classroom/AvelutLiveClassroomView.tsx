@@ -379,10 +379,10 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           : 'bg-gradient-to-b from-[#F8FAFC]/95 via-[#F8FAFC]/60 to-transparent'
       } pointer-events-none`}>
         {/* Left: back + title */}
-        <div className="flex items-center gap-2.5 pointer-events-auto">
+        <div className="flex items-center gap-2.5 pointer-events-auto flex-1 min-w-0 mr-2">
           <button
             onClick={onClose}
-            className={`flex items-center justify-center w-9 h-9 rounded-full ${
+            className={`flex items-center justify-center w-9 h-9 rounded-full shrink-0 ${
               isDark
                 ? 'bg-white/10 hover:bg-white/20 border-white/10 text-white'
                 : 'bg-black/5 hover:bg-black/10 border-black/10 text-slate-800'
@@ -392,15 +392,18 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             <X className="w-4 h-4" />
           </button>
 
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-              <span className="text-[10px] font-bold tracking-widest uppercase text-red-500">LIVE</span>
-              <span className={`text-[10px] ${isDark ? 'text-white/40' : 'text-slate-500'} truncate max-w-[140px] sm:max-w-[240px]`}>
+              <span className="text-[10px] font-bold tracking-widest uppercase text-red-500 shrink-0">LIVE</span>
+              <span className={`text-[10px] ${isDark ? 'text-white/40' : 'text-slate-500'} truncate max-w-[160px] sm:max-w-[260px]`}>
                 • {courseName} • {durationMinutes}m
               </span>
             </div>
-            <h1 className={`text-sm font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'} truncate max-w-[180px] sm:max-w-sm leading-tight`}>
+            <h1
+              className={`text-xs sm:text-sm font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'} truncate sm:line-clamp-2 leading-tight`}
+              title={topicTitle}
+            >
               {topicTitle}
             </h1>
           </div>

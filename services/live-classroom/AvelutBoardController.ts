@@ -365,18 +365,19 @@ export class AvelutBoardController {
       }
 
       const isMobile = this.isMobileView();
-      // Generous, legible diagram dimensions:
-      // On mobile: span the board width cleanly (340-360px).
+      // On mobile: span the board width cleanly (340-360px) and give ample height
       // On desktop: allow rich, high-resolution rendering up to 880px wide.
-      const maxW = isMobile ? 350 : 880;
-      const minW = isMobile ? 320 : 640;
+      const maxW = isMobile ? 360 : 880;
+      const minW = isMobile ? 330 : 640;
       const renderW = isMobile
         ? Math.min(maxW, Math.max(minW, origW > 0 ? Math.min(origW, maxW) : 340))
         : Math.min(maxW, Math.max(minW, origW));
 
       const aspect = (origH && origW) ? origH / origW : 0.6;
-      // Do not artificially clamp height to a tiny 380px or 500px, which squishes and shrinks the diagram!
-      const renderH = Math.max(160, Math.round(renderW * aspect));
+      // Ensure generous height and legible scaling on mobile portrait viewports
+      const renderH = isMobile
+        ? Math.max(220, Math.min(420, Math.round(renderW * aspect)))
+        : Math.max(200, Math.round(renderW * aspect));
 
       this.clearStageIfFull();
 
@@ -402,7 +403,9 @@ export class AvelutBoardController {
 
       const converted = convertToExcalidrawElements([skeleton], { regenerateIds: false });
       this.elements = [...this.elements, ...converted];
-      this.cursorY = y + renderH + 32;
+      this.cursorY = y + renderH + 24;
+      this.nextFreeY = this.cursorY;
+      this.lastAnnotationY = this.cursorY;
       this.lastActivePoint = { x: x + renderW / 2, y: y + renderH / 2 };
       this.syncScene();
     } catch (err) {
@@ -492,9 +495,10 @@ export class AvelutBoardController {
   }
 
   reserveVerticalSpace(estimatedHeight: number): { y: number } {
-    const y = this.nextFreeY;
-    this.nextFreeY += estimatedHeight + 80;   // 80px gap between diagrams
+    const y = Math.max(this.cursorY, this.nextFreeY);
+    this.nextFreeY = y + estimatedHeight + 24;
     this.cursorY = this.nextFreeY;
+    this.lastAnnotationY = this.cursorY;
     return { y };
   }
 
@@ -727,12 +731,25 @@ export class AvelutBoardController {
     const y = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
     const color = args?.color ?? p.text;
 
+    const isMobile = this.isMobileView();
     const isMathLike = args?.isFormula || /[$^·×±√\\]/.test(text) || (text.includes('=') && !text.includes('\n'));
-    const displayText = isMathLike ? formatMathForCanvas(text) : text.trim();
+    let displayText = isMathLike ? formatMathForCanvas(text) : text.trim();
+
+    if (!isMathLike) {
+      // Auto-wrap lines to prevent text clipping horizontally off the canvas on mobile & desktop
+      const maxLineChars = isMobile
+        ? (fontSize >= 24 ? 22 : fontSize >= 18 ? 30 : 38)
+        : (fontSize >= 24 ? 45 : fontSize >= 18 ? 60 : 75);
+
+      displayText = displayText
+        .split('\n')
+        .map(line => (line.length > maxLineChars ? wordWrap(line, maxLineChars) : line))
+        .join('\n');
+    }
 
     const lines = displayText.split('\n');
     const longestLine = Math.max(...lines.map(l => l.length));
-    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), 320);
+    const approxW = Math.min(Math.max(longestLine * fontSize * 0.55, 60), isMobile ? 340 : 800);
     const approxH = Math.max(lines.length * fontSize * 1.4, 30);
     this.lastActivePoint = { x: x + approxW / 2, y: y + approxH / 2 };
 
@@ -749,6 +766,8 @@ export class AvelutBoardController {
 
     if (args?.y === undefined) {
       this.cursorY = y + Math.max(36, lines.length * fontSize * 1.4 + 14);
+      this.nextFreeY = Math.max(this.nextFreeY, this.cursorY);
+      this.lastAnnotationY = Math.max(this.lastAnnotationY, this.cursorY);
     }
   }
 
