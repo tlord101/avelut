@@ -83,6 +83,8 @@ class AuthService {
         data: {
           full_name: fullName || '',
           ...metadata,
+          role: 'user',
+          is_admin: false,
         },
       },
     });

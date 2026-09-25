@@ -107,7 +107,9 @@ BEGIN
         avatar_url,
         username,
         ai_credits,
-        live_tutorial_minutes
+        live_tutorial_minutes,
+        is_admin,
+        role
     )
     VALUES (
         NEW.id,
@@ -116,7 +118,9 @@ BEGIN
         NEW.raw_user_meta_data->>'avatar_url',
         LOWER(REGEXP_REPLACE(split_part(NEW.email, '@', 1), '[^a-zA-Z0-9_]', '', 'g')) || '_' || SUBSTRING(NEW.id::text FROM 1 FOR 4),
         50,
-        120
+        120,
+        FALSE,
+        'user'
     )
     ON CONFLICT (id) DO UPDATE SET
         email = EXCLUDED.email,

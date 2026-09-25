@@ -85,7 +85,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
 
                         <button
                             type="submit"
-                            className="w-full bg-lime-500 hover:bg-lime-600  dark:text-white font-bold py-3 rounded-lg transition-colors focus:ring-4 focus:ring-lime-500/50"
+                            className="w-full bg-lime-500 hover:bg-lime-600 text-white font-bold py-3 rounded-lg transition-colors focus:ring-4 focus:ring-lime-500/50 shadow-md shadow-lime-500/20"
                         >
                             Access Admin Panel
                         </button>

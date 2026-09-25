@@ -74,6 +74,8 @@ class SupabaseAuthService {
             name: fullName.trim(),
             username,
             ...metadata,
+            role: 'user',
+            is_admin: false,
           },
         },
       });
@@ -98,8 +100,9 @@ class SupabaseAuthService {
         current_streak: 0,
         last_activity_date: Date.now(),
         notifications_enabled: false,
-        is_admin: false,
         ...metadata,
+        is_admin: false,
+        role: 'user',
       };
 
       await this.upsertProfile(user.id, profile);
@@ -228,6 +231,7 @@ class SupabaseAuthService {
         last_activity_date: Date.now(),
         notifications_enabled: Boolean(data.notifications_enabled),
         is_admin: Boolean(data.is_admin),
+        role: (data.role as any) || (data.is_admin ? 'superadmin' : 'user'),
       };
     } catch (err) {
       console.warn('[SupabaseAuth] Failed to load profile:', err);
@@ -250,7 +254,8 @@ class SupabaseAuthService {
         school_id: profile.school_id,
         department_id: profile.department_id,
         level: profile.level,
-        is_admin: profile.is_admin,
+        is_admin: profile.is_admin ?? false,
+        role: profile.role || (profile.is_admin ? 'superadmin' : 'user'),
         updated_at: new Date().toISOString(),
       });
     } catch (err) {

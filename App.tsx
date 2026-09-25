@@ -1069,6 +1069,8 @@ const App: React.FC = () => {
                     is_activated: true,
                     subscription_status: 'free',
                     ai_credits_balance: 50,
+                    is_admin: false,
+                    role: 'user',
                 };
                 setUserProfile(defaultProfile);
                 userProfileRef.current = defaultProfile;

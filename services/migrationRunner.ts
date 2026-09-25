@@ -69,6 +69,8 @@ BEGIN
         full_name,
         avatar_url,
         username,
+        is_admin,
+        role,
         created_at,
         updated_at
     )
@@ -78,6 +80,8 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
         NEW.raw_user_meta_data->>'avatar_url',
         LOWER(COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1) || '_' || SUBSTRING(NEW.id::text FROM 1 FOR 6))),
+        FALSE,
+        'user',
         NOW(),
         NOW()
     )

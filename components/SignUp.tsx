@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { supabaseAuthService } from '../services/supabaseAuthService';
 import { GoogleIcon } from './icons/GoogleIcon';
@@ -62,23 +61,23 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-zinc-950 p-4 transition-colors">
       <div className="w-full max-w-md">
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
           <div className="flex justify-center mb-6">
               <img src="/logo_full_black.png" alt="AVELUT Logo" className="h-16 object-contain dark:hidden" />
               <img src="/logo_full_white.png" alt="AVELUT Logo" className="h-16 object-contain hidden dark:block" />
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold  dark:text-white tracking-wider">Create Account</h2>
-            <p className="text-gray-600 mt-2">Join AVELUT to start learning.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white tracking-wider">Create Account</h2>
+            <p className="text-gray-600 dark:text-zinc-400 mt-2">Join AVELUT to start learning.</p>
           </div>
 
           <form onSubmit={handleSubmit}>
             <div className="space-y-6">
               <div>
-                <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                   Display Name
                 </label>
                 <input
@@ -89,12 +88,13 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
                   required
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3  dark:text-white focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                  placeholder="John Doe"
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg py-2.5 px-3 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none transition-colors"
                 />
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                   Email Address
                 </label>
                 <input
@@ -105,12 +105,13 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3  dark:text-white focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                  placeholder="you@example.com"
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg py-2.5 px-3 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none transition-colors"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                   Password
                 </label>
                 <div className="relative">
@@ -122,12 +123,13 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 pl-3 pr-10  dark:text-white focus:ring-2 focus:ring-lime-500 focus:outline-none"
+                    placeholder="••••••••"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg py-2.5 pl-3 pr-10 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-lime-500 focus:border-lime-500 focus:outline-none transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-lime-500 rounded focus:outline-none"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-lime-500 rounded focus:outline-none"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     title={showPassword ? 'Hide password' : 'Show password'}
                   >
@@ -145,7 +147,7 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
               <button
                 type="submit"
                 disabled={isSubmitting || isGoogleSubmitting}
-                className="w-full bg-gradient-to-r from-lime-500 to-teal-500 text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                className="w-full bg-gradient-to-r from-lime-500 to-teal-500 text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-md shadow-lime-500/20"
               >
                 {isSubmitting ? (
                   <>
@@ -160,15 +162,15 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
           </form>
 
           <div className="relative flex py-5 items-center">
-              <div className="flex-grow border-t border-gray-200"></div>
-              <span className="flex-shrink mx-4 text-gray-500 text-xs uppercase">Or continue with</span>
-              <div className="flex-grow border-t border-gray-200"></div>
+              <div className="flex-grow border-t border-gray-200 dark:border-zinc-800"></div>
+              <span className="flex-shrink mx-4 text-gray-500 dark:text-zinc-400 text-xs uppercase">Or continue with</span>
+              <div className="flex-grow border-t border-gray-200 dark:border-zinc-800"></div>
           </div>
 
           <button
               onClick={handleGoogleSignIn}
               disabled={isSubmitting || isGoogleSubmitting}
-              className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-200 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-700/80 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
           >
               {isGoogleSubmitting ? (
                   <>
@@ -183,17 +185,17 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
               )}
           </button>
           
-          <p className="text-center text-sm text-gray-600 mt-6">
+          <p className="text-center text-sm text-gray-600 dark:text-zinc-400 mt-6">
             Already have an account?{' '}
-            <button onClick={onSwitchToLogin} className="font-medium text-lime-600 hover:text-lime-500">
+            <button onClick={onSwitchToLogin} className="font-semibold text-lime-600 dark:text-lime-400 hover:text-lime-500">
               Log In
             </button>
           </p>
 
-          <div className="mt-6 text-center text-xs text-gray-500 space-x-2">
-            <a href="/t&c" className="underline hover:text-gray-700">Terms & Conditions</a>
+          <div className="mt-6 text-center text-xs text-gray-500 dark:text-zinc-500 space-x-2">
+            <a href="/t&c" className="underline hover:text-gray-700 dark:hover:text-zinc-300">Terms &amp; Conditions</a>
             <span>&middot;</span>
-            <a href="https://www.avelut.xyz/policy" className="underline hover:text-gray-700">Privacy Policy</a>
+            <a href="https://www.avelut.xyz/policy" className="underline hover:text-gray-700 dark:hover:text-zinc-300">Privacy Policy</a>
           </div>
 
         </div>
