@@ -118,8 +118,7 @@ Rules:
 - Total sum of timeBudgetMins across all phases must equal approximately ${durationMinutes}.
 - Exactly ${targetPhaseCount} phases.
 - Keep pedagogicalGoal, speechFocus, and boardVisualPlan concise (1-2 sentences each) for speed.
-- Every phase MUST include actionable board visual plan.
-- At least 2 phases MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") rather than plain text only.`;
+- Visual Diagrams are MANDATORY (60% of board activity): Every single phase/concept MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") representing the concepts, flows, mindmaps, cycles, relationships, or mechanisms. The remaining 40% is concise supporting keywords/formulas ("write").`;
 
   try {
     const textModel =

@@ -555,13 +555,13 @@ export class QwenRealtimeTeacherService {
         this.lastResponseAskedQuestion = false;
         this.requestTeacherContinuation('silence_after_question', {
           injectUserHint:
-            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself, then continue explaining the lesson smoothly. Do not wait for the student.',
+            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself. Draw a clarifying diagram or write key terms on the board, then continue explaining the next concept smoothly. Do not wait for the student.',
         });
       } else {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Move directly to the next concept or practical example in the syllabus. Write key terms and formulas on the board with board_action write. Keep teaching actively.',
+            'Continue teaching smoothly without waiting. Move directly to the next concept or practical example in the syllabus. MANDATORY: Draw a visual diagram on the board (using draw_mermaid, board_action draw, or illustrate_object) to visualize this concept (diagrams form ~60% of teaching), and write core keywords/formulas with board_action write (~40% of teaching). Keep teaching actively.',
         });
       }
     }, waitMs);
@@ -666,8 +666,7 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational Excalidraw board. MANDATORY: On EVERY explanation turn, use "write" to put keywords, definitions, formulas ($$ ... $$), and core terms on the board. ' +
-      'Use "draw" to create visual step-by-step boxes with arrows. For conceptual diagrams and mindmaps, use draw_mermaid.';
+      'Control the educational Excalidraw board. MANDATORY: 60% of teaching must be visual diagrams (use "draw" for step-by-step boxes with arrows, or use draw_mermaid for flowcharts/mindmaps/processes). Use "write" for the 40% supporting keywords, formulas ($$ ... $$), and core definitions. For ANY concept taught, visually diagram it on the board.';
 
     return {
       type: 'function',
@@ -693,10 +692,9 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'draw_mermaid',
         description:
-          'PROACTIVELY render a Mermaid.js diagram inboard directly onto the visual whiteboard canvas. Call this proactively ' +
-          'whenever explaining concept relationships, concept maps, mind maps, flowcharts, branching processes, ' +
-          'cause/effect, hierarchies, classifications, cycles, and component interactions. Do NOT wait for the student to ask ' +
-          'for a diagram — draw proactively to anchor their understanding! Choose LR or TD layout according to the idea.',
+          'MANDATORY & PROACTIVE: Render a Mermaid.js diagram directly onto the visual whiteboard canvas. Diagrams form ~60% of teaching visuals! Call this for EVERY concept introduced: ' +
+          'concept maps, mind maps, flowcharts, branching processes, cause/effect, hierarchies, classifications, cycles, and component interactions. ' +
+          'Subsequently draw a new diagram whenever advancing to a new concept or phase. Do NOT wait for the student to ask — draw proactively! Choose LR or TD layout according to the idea.',
         parameters: {
           type: 'object',
           properties: {
