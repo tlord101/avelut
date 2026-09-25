@@ -841,9 +841,19 @@ export const Chat: React.FC<ChatProps> = ({
     };
   }, [activeConversationId]);
 
+  // Only scroll down when a conversation loads or a new message is sent.
+  // DO NOT auto-scroll on every streaming chunk of text so user can read from line 1 while streaming.
+  const prevMsgCountRef = useRef(messages.length);
+  const activeConvoRef = useRef(activeConversationId);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    const isConvoSwitched = activeConvoRef.current !== activeConversationId;
+    activeConvoRef.current = activeConversationId;
+
+    if (isConvoSwitched || messages.length > prevMsgCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMsgCountRef.current = messages.length;
+  }, [messages.length, activeConversationId]);
 
   const recognitionRef = useRef<any>(null);
 

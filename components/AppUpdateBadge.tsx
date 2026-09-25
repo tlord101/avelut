@@ -17,10 +17,10 @@ export const AppUpdateBadge: React.FC<{ className?: string }> = ({ className = '
                 <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
                     <span className="w-3.5 h-3.5 border-2 border-[#0066FF]/30 border-t-[#0066FF] dark:border-blue-400/30 dark:border-t-blue-400 rounded-full animate-spin" />
                 </div>
-                <span className="truncate max-w-[190px] sm:max-w-xs font-semibold">
+                <span className="truncate max-w-[210px] sm:max-w-xs font-semibold">
                     {downloadProgress > 0 && downloadProgress < 100
-                        ? `Updating from Supabase (${downloadProgress}%)`
-                        : 'Updating from Supabase...'}
+                        ? `Installing Update (${downloadProgress}%)`
+                        : 'Installing Update...'}
                 </span>
             </div>
         );

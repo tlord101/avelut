@@ -250,12 +250,14 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     return () => clearTimeout(timer);
   }, [scrollToBottom]);
 
-  // Keep scrolled to bottom during streaming and on message updates
+  // Only scroll to bottom when a new message is added (e.g. user sends message), NOT on every streaming chunk
+  const prevMsgCountRef = useRef(messages.length);
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > prevMsgCountRef.current) {
       scrollToBottom('smooth');
     }
-  }, [messages, scrollToBottom]);
+    prevMsgCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   // Auto-initiate first Socratic bite-sized step if chat is empty
   useEffect(() => {

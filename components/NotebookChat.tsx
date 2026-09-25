@@ -141,12 +141,14 @@ export const NotebookChat: React.FC<NotebookChatProps> = ({
     };
   }, [notebook.id, chapter.id, scrollToBottom]);
 
-  // Keep scrolled to bottom during live streaming or on new messages
+  // Only scroll down when a new message is added (e.g. user sends message), NOT on every streaming chunk
+  const prevMsgCountRef = useRef(messages.length);
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > prevMsgCountRef.current) {
       scrollToBottom('smooth');
     }
-  }, [messages, isLoading, scrollToBottom]);
+    prevMsgCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   const handleClearHistory = useCallback(async () => {
     if (window.confirm('Clear conversation history for this chapter?')) {
