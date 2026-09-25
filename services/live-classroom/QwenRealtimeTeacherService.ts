@@ -79,6 +79,7 @@ export class QwenRealtimeTeacherService {
   private readonly PREROLL_MIN_SAMPLES = 2880; // ~120ms initial cushion before audio playback starts
   private isBurstStart = true;
   private hasDrawnFirstDiagram = false;
+  private initialDiagramTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // ── Session ────────────────────────────────────────────────────────────────
   private promptConfig: TeacherPromptConfig | null = null;
@@ -249,6 +250,7 @@ export class QwenRealtimeTeacherService {
 
     this.pendingToolCalls.clear();
     this.executedCallIds.clear();
+    this.clearInitialDiagramTimeout();
     this.hasGreeted = false;
     this.hasDrawnFirstDiagram = false;
     this.isStarting = false;
@@ -418,12 +420,36 @@ export class QwenRealtimeTeacherService {
   }
 
   /**
-   * Renders a mandatory, rich educational concept map or mind map diagram
-   * onto the Excalidraw whiteboard canvas on session start / first turn.
+   * Arm a fallback safety timer: if the model fails to execute draw_mermaid
+   * within 7 seconds, client-side renders the initial diagram once.
+   */
+  private armInitialDiagramFallbackTimer(): void {
+    this.clearInitialDiagramTimeout();
+    this.initialDiagramTimeout = setTimeout(() => {
+      this.initialDiagramTimeout = null;
+      if (!this.hasDrawnFirstDiagram && this.state !== 'closed' && this.state !== 'error') {
+        liveLogger.log('[QwenRealtime] Initial diagram fallback timer fired (model did not call tool in time) — rendering locally');
+        void this.renderInitialMandatoryDiagram();
+      }
+    }, 7000);
+  }
+
+  private clearInitialDiagramTimeout(): void {
+    if (this.initialDiagramTimeout) {
+      clearTimeout(this.initialDiagramTimeout);
+      this.initialDiagramTimeout = null;
+    }
+  }
+
+  /**
+   * Renders a mandatory, rich educational structured horizontal flowchart pipeline
+   * onto the Excalidraw whiteboard canvas. Formatted as horizontal rows/columns with branches,
+   * strictly avoiding 360-degree radial trees or mindmaps.
    */
   public async renderInitialMandatoryDiagram(): Promise<void> {
     if (this.hasDrawnFirstDiagram) return;
     this.hasDrawnFirstDiagram = true;
+    this.clearInitialDiagramTimeout();
 
     const topic = this.promptConfig?.topicTitle || 'Core Concept';
     const plan = this.promptConfig?.teachingPlan;
@@ -434,31 +460,33 @@ export class QwenRealtimeTeacherService {
 
     if (plan && Array.isArray(plan.phases) && plan.phases.length > 0) {
       const cleanTopic = topic.replace(/["()]/g, '').trim();
-      const phaseNodes = plan.phases.slice(0, 4).map((p, idx) => {
+      const phases = plan.phases.slice(0, 4);
+      mermaidCode = `graph LR\n  Start["📌 ${cleanTopic}"]\n`;
+      let prev = 'Start';
+      phases.forEach((p, idx) => {
+        const id = `P${idx + 1}`;
         const cleanName = p.phaseName.replace(/["()]/g, '').trim();
-        return `P${idx + 1}["${p.phaseIndex ? `Phase ${p.phaseIndex}: ` : ''}${cleanName}"]`;
+        mermaidCode += `  ${prev} --> ${id}["${p.phaseIndex ? `Phase ${p.phaseIndex}: ` : ''}${cleanName}"]\n`;
+        prev = id;
       });
-      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n`;
-      for (let i = 0; i < phaseNodes.length; i++) {
-        mermaidCode += `  Root --> ${phaseNodes[i]}\n`;
-      }
     } else if (path && Array.isArray(path) && path.length > 0) {
       const cleanTopic = topic.replace(/["()]/g, '').trim();
-      const stepNodes = path.slice(0, 4).map((step, idx) => {
+      const steps = path.slice(0, 4);
+      mermaidCode = `graph LR\n  Start["📌 ${cleanTopic}"]\n`;
+      let prev = 'Start';
+      steps.forEach((step, idx) => {
+        const id = `S${idx + 1}`;
         const cleanStep = step.replace(/["()]/g, '').trim();
-        return `S${idx + 1}["${idx + 1}. ${cleanStep}"]`;
+        mermaidCode += `  ${prev} --> ${id}["${idx + 1}. ${cleanStep}"]\n`;
+        prev = id;
       });
-      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n`;
-      for (let i = 0; i < stepNodes.length; i++) {
-        mermaidCode += `  Root --> ${stepNodes[i]}\n`;
-      }
     } else {
       const cleanTopic = topic.replace(/["()]/g, '').trim();
-      mermaidCode = `graph TD\n  Root["📌 ${cleanTopic}"]\n  A["1. Core Concept & Principles"]\n  B["2. Mechanisms & Process"]\n  C["3. Practical Applications"]\n  Root --> A\n  Root --> B\n  Root --> C`;
+      mermaidCode = `graph LR\n  Start["📌 ${cleanTopic}"] --> A["1. Core Concept"]\n  A --> B["2. Working Mechanism"]\n  B --> C["3. Practical Applications"]`;
     }
 
     try {
-      liveLogger.log('[QwenRealtime] Rendering MANDATORY initial board diagram...');
+      liveLogger.log('[QwenRealtime] Rendering MANDATORY initial board diagram (horizontal pipeline)...');
       const svg = await MermaidBoardService.renderToSvg(mermaidCode, theme);
       if (svg) {
         this.boardController.setSvgIllustration(svg);
@@ -491,8 +519,9 @@ export class QwenRealtimeTeacherService {
     // Ensure audio contexts are resumed on this user gesture
     void this.resumeAudio();
 
-    // Render mandatory whiteboard diagram right on kickoff so the board is visually primed
-    void this.renderInitialMandatoryDiagram();
+    // Arm fallback safety timer so the board diagram is NEVER triggered twice:
+    // Model's required first turn tool execution draws the diagram. If delayed, fallback draws it.
+    this.armInitialDiagramFallbackTimer();
 
     const topic = this.promptConfig?.topicTitle || 'the topic';
     const duration = this.promptConfig?.durationMinutes || 30;
@@ -509,7 +538,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `MANDATORY FIRST ACTION: Draw a visual concept map or mind map diagram of "${topic}" on the board immediately using draw_mermaid. Greet the student warmly in one simple sentence and introduce what we are exploring. Drawing the diagram on the board in this first turn is strictly mandatory.`,
+          text: `MANDATORY FIRST ACTION: Draw a clear structured flow diagram of "${topic}" on the board immediately using draw_mermaid (use "graph LR" in rows/columns with sequential steps or branches; STRICTLY NEVER use 360-degree radial trees or mindmaps). Greet the student warmly in one simple sentence and introduce what we are exploring. Drawing the diagram on the board in this first turn is strictly mandatory.`,
         }],
       },
     });
@@ -624,7 +653,7 @@ export class QwenRealtimeTeacherService {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Move directly to the next concept or practical example in the syllabus. MANDATORY: Draw a visual diagram on the board (using draw_mermaid, board_action draw, or illustrate_object) to visualize this concept (diagrams form ~60% of teaching), and write core keywords/formulas with board_action write (~40% of teaching). Keep teaching actively.',
+            'Continue teaching smoothly without waiting. Move directly to the next concept or practical example in the syllabus. MANDATORY: Draw a visual diagram on the board (using draw_mermaid formatted as horizontal flow "graph LR" in rows/columns with branches — NEVER 360-degree radial trees or mindmaps, board_action draw, or illustrate_object) to visualize this concept (diagrams form ~60% of teaching), and write core keywords/formulas with board_action write (~40% of teaching). Keep teaching actively.',
         });
       }
     }, waitMs);
@@ -729,7 +758,7 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational Excalidraw board. MANDATORY: 60% of teaching must be visual diagrams (use "draw" for step-by-step boxes with arrows, or use draw_mermaid for flowcharts/mindmaps/processes). Use "write" for the 40% supporting keywords, formulas ($$ ... $$), and core definitions. For ANY concept taught, visually diagram it on the board.';
+      'Control the educational Excalidraw board. MANDATORY: 60% of teaching must be visual diagrams (use "draw" for step-by-step boxes with arrows, or use draw_mermaid for flowcharts/pipelines/processes in rows and columns). Use "write" for the 40% supporting keywords, formulas ($$ ... $$), and core definitions. For ANY concept taught, visually diagram it on the board.';
 
     return {
       type: 'function',
@@ -756,8 +785,9 @@ export class QwenRealtimeTeacherService {
         name: 'draw_mermaid',
         description:
           'MANDATORY & PROACTIVE: Render a Mermaid.js diagram directly onto the visual whiteboard canvas. Diagrams form ~60% of teaching visuals! Call this for EVERY concept introduced: ' +
-          'concept maps, mind maps, flowcharts, branching processes, cause/effect, hierarchies, classifications, cycles, and component interactions. ' +
-          'Subsequently draw a new diagram whenever advancing to a new concept or phase. Do NOT wait for the student to ask — draw proactively! Choose LR or TD layout according to the idea.',
+          'flowcharts, sequential pipelines, row/column processes with branches, cause/effect, architectures, and component interactions. ' +
+          'Use "graph LR" (horizontal flow in rows/columns with branches) or "graph TD". STRICTLY NEVER generate 360-degree radial trees or mindmaps. ' +
+          'Subsequently draw a new diagram whenever advancing to a new concept or phase. Do NOT wait for the student to ask — draw proactively!',
         parameters: {
           type: 'object',
           properties: {
@@ -1103,6 +1133,10 @@ export class QwenRealtimeTeacherService {
     const t0 = Date.now();
 
     if (name === 'board_action') {
+      if (args.action === 'draw') {
+        this.hasDrawnFirstDiagram = true;
+        this.clearInitialDiagramTimeout();
+      }
       toolResult = this.boardController.executeBoardAction(args);
       liveLogger.log(`[BoardSync] turn=${turnAtStart} action=board_action call=${callId} latency=${Date.now() - t0}ms`);
     } else if (name === 'draw_mermaid') {
@@ -1115,6 +1149,8 @@ export class QwenRealtimeTeacherService {
           liveLogger.warn('[MermaidSync] stale turn — discarding SVG');
           toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Superseded by newer turn' };
         } else if (svg) {
+          this.hasDrawnFirstDiagram = true;
+          this.clearInitialDiagramTimeout();
           this.boardController.setSvgIllustration(svg);
           liveLogger.log(`[MermaidSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
           toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered and inserted' };

@@ -150,17 +150,72 @@ export function normalizeEducationalSvg(svg: string, options?: { theme?: 'light'
   return out;
 }
 
+/**
+ * Converts a Mermaid mindmap structure into a clean, horizontal flowchart (graph LR)
+ * with structured rows, columns, and branches, strictly eliminating 360-degree radial trees.
+ */
+export function convertMindmapToFlowchart(mindmapCode: string): string {
+  const lines = mindmapCode.split('\n');
+  const stack: { indent: number; id: string }[] = [];
+  const edges: string[] = [];
+  const nodes: string[] = [];
+  let nodeCounter = 0;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed === 'mindmap' || trimmed.startsWith('%%')) continue;
+
+    const indent = rawLine.search(/\S/);
+    let label = trimmed;
+
+    // Remove root(( ... )) or root[ ... ] or brackets
+    const rootMatch = label.match(/^root(?:\(\((.*?)\)\)|\[(.*?)\]|\((.*?)\)|:(.*))$/i);
+    if (rootMatch) {
+      label = (rootMatch[1] || rootMatch[2] || rootMatch[3] || rootMatch[4] || 'Core Topic').trim();
+    } else {
+      label = label.replace(/^[()+\[\]]+|[()+\[\]]+$/g, '').trim();
+    }
+
+    const nodeId = `N${nodeCounter++}`;
+    const cleanLabel = label.replace(/["\\]/g, '').trim() || 'Concept';
+    nodes.push(`  ${nodeId}["${cleanLabel}"]`);
+
+    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    if (stack.length > 0) {
+      const parent = stack[stack.length - 1];
+      edges.push(`  ${parent.id} --> ${nodeId}`);
+    }
+
+    stack.push({ indent, id: nodeId });
+  }
+
+  if (nodes.length === 0) {
+    return 'graph LR\n  A["Core Concept"]';
+  }
+
+  return `graph LR\n${nodes.join('\n')}\n${edges.join('\n')}`;
+}
+
 export class MermaidBoardService {
   private static cache = new Map<string, string>();
 
   /**
    * Fetches an SVG representation of the provided Mermaid code.
    * Renders the authentic Mermaid diagram and normalizes contrast for the board.
+   * Automatically normalizes any radial mindmap into a clean horizontal row flowchart (graph LR).
    * Awaits full render before returning — never reports success early.
    */
   public static async renderToSvg(mermaidCode: string, theme: 'light' | 'dark' = 'light'): Promise<string> {
-    const trimmed = mermaidCode.trim();
+    let trimmed = mermaidCode.trim();
     if (!trimmed) return '';
+
+    // If mindmap syntax was passed, convert it to a clean horizontal row/column flowchart
+    if (trimmed.startsWith('mindmap') || /^mindmap\b/m.test(trimmed)) {
+      trimmed = convertMindmapToFlowchart(trimmed);
+    }
 
     const cacheKey = `${theme}:${trimmed}`;
     if (this.cache.has(cacheKey)) {
