@@ -93,16 +93,22 @@ export function getLiveMinuteAllowance(
 
   if (key === 'weekly' || key === 'basic') {
     const allowance =
-      typeof tier.live_tutorial_minutes_pool === 'number' ? tier.live_tutorial_minutes_pool : 105;
+      typeof tier.live_tutorial_minutes_pool === 'number'
+        ? tier.live_tutorial_minutes_pool
+        : typeof tier.live_tutorial_included_minutes === 'number'
+          ? tier.live_tutorial_included_minutes
+          : 105;
     return { allowance, period: 'week', periodKey: weekKey() };
   }
 
   const allowance =
     typeof tier.live_tutorial_minutes_pool === 'number'
       ? tier.live_tutorial_minutes_pool
-      : key === 'free'
-        ? 15
-        : 150;
+      : typeof tier.live_tutorial_included_minutes === 'number'
+        ? tier.live_tutorial_included_minutes
+        : key === 'free'
+          ? 15
+          : 450;
 
   return { allowance, period: 'month', periodKey: monthKey() };
 }
@@ -212,7 +218,8 @@ export function evaluateLiveTutorialStart(
   const creditCost = getLiveDurationCreditCost(minutes, appSettings);
   const balance = userProfile.ai_credits_balance ?? 0;
 
-  if (pool.remaining >= minutes) {
+  // If user has ANY included minutes remaining, allow them to start
+  if (pool.remaining > 0) {
     return {
       allowed: true,
       payment: 'included',
@@ -222,11 +229,12 @@ export function evaluateLiveTutorialStart(
       poolUsed: pool.used,
       poolRemaining: pool.remaining,
       reason: 'allowed_included',
-      message: `Uses ${minutes} of your ${pool.remaining} remaining included minutes this ${pool.period}.`,
+      message: `${pool.remaining} live minutes left in your ${pool.period} pool. Billed per actual minute spent.`,
     };
   }
 
-  if (balance >= creditCost) {
+  // If pool is exhausted, allow pay-as-you-go with credits at 10 credits / minute
+  if (balance >= 10) {
     return {
       allowed: true,
       payment: 'credits',
@@ -236,11 +244,11 @@ export function evaluateLiveTutorialStart(
       poolUsed: pool.used,
       poolRemaining: pool.remaining,
       reason: 'allowed_credits',
-      message: `Included minutes low (${pool.remaining} left). This ${minutes}-min lesson costs ${creditCost} credits.`,
+      message: `Pool exhausted. Billed at 10 credits / minute from your balance (${balance} credits available).`,
     };
   }
 
-  if (!isPaidSubscriber(userProfile) && pool.remaining < minutes) {
+  if (!isPaidSubscriber(userProfile) && pool.remaining <= 0) {
     return {
       allowed: false,
       payment: 'blocked',
@@ -249,11 +257,8 @@ export function evaluateLiveTutorialStart(
       poolAllowance: pool.allowance,
       poolUsed: pool.used,
       poolRemaining: pool.remaining,
-      reason: pool.allowance > 0 && pool.remaining < minutes ? 'insufficient_credits' : 'locked_free',
-      message:
-        pool.remaining > 0
-          ? `Only ${pool.remaining} included minutes left. Need ${minutes} min or ${creditCost} credits.`
-          : `No included minutes left this ${pool.period}. Upgrade to Pro or buy ${creditCost} credits for a ${minutes}-min lesson.`,
+      reason: 'locked_free',
+      message: `Free trial minutes used up. Upgrade to Pro for 450 monthly live minutes or buy credits (10 credits / min).`,
     };
   }
 
@@ -266,11 +271,52 @@ export function evaluateLiveTutorialStart(
     poolUsed: pool.used,
     poolRemaining: pool.remaining,
     reason: 'insufficient_credits',
-    message: `Need ${creditCost} credits for a ${minutes}-min lesson (you have ${balance}). Included minutes left: ${pool.remaining}.`,
+    message: `Need at least 10 credits to start a live tutorial (you have ${balance}). Included minutes left: ${pool.remaining}.`,
   };
 }
 
-/** Persist included-minute usage. Credits must be deducted by the caller. */
+/**
+ * Persist actual minute usage to the pool when a session completes or exits.
+ * If user spent 4 minutes, p_minutes = 4.
+ */
+export async function commitActualLiveTutorialMinutes(
+  userProfile: UserProfile,
+  actualMinutes: number,
+  appSettings?: AppSettings | null
+): Promise<{ success: boolean; remainingMinutes?: number; error?: string }> {
+  if (actualMinutes <= 0 || !userProfile.uid) return { success: true };
+  if (isExempt(userProfile)) return { success: true };
+
+  const { periodKey, allowance } = getLiveMinuteAllowance(userProfile, appSettings);
+  try {
+    const { data, error } = await supabase.rpc('consume_live_tutorial_minutes', {
+      p_user_id: userProfile.uid,
+      p_period_key: periodKey,
+      p_minutes: actualMinutes,
+      p_allowance: allowance,
+    });
+
+    if (error || data?.success === false) {
+      const errMsg = data?.error || error?.message || 'Failed to consume live tutorial minutes';
+      console.warn('[liveTutorialQuota] commitActualLiveTutorialMinutes RPC error:', errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    const remaining = data?.remaining_minutes;
+    const nextUsed = Math.max(0, allowance - (typeof remaining === 'number' ? remaining : 0));
+    writeCachedJson(storageKey(userProfile.uid), {
+      periodKey,
+      usedMinutes: nextUsed,
+      updatedAt: Date.now(),
+    });
+    return { success: true, remainingMinutes: remaining };
+  } catch (err: any) {
+    console.warn('[liveTutorialQuota] commitActualLiveTutorialMinutes exception:', err);
+    return { success: false, error: err?.message || 'Exception during minute consumption' };
+  }
+}
+
+/** Persist included-minute usage. Legacy wrapper for commitActualLiveTutorialMinutes. */
 export async function commitLiveTutorialStart(
   userProfile: UserProfile,
   decision: LiveTutorialStartDecision,
@@ -280,34 +326,7 @@ export async function commitLiveTutorialStart(
   if (isExempt(userProfile)) return { success: true };
 
   if (decision.payment === 'included') {
-    const { periodKey, allowance } = getLiveMinuteAllowance(userProfile, appSettings);
-    try {
-      const { data, error } = await supabase.rpc('consume_live_tutorial_minutes', {
-        p_user_id: userProfile.uid,
-        p_period_key: periodKey,
-        p_minutes: decision.durationMinutes,
-        p_allowance: allowance,
-      });
-
-      if (error || data?.success === false) {
-        const errMsg = data?.error || error?.message || 'Failed to consume live tutorial minutes';
-        console.warn('[liveTutorialQuota] commitLiveTutorialStart RPC error:', errMsg);
-        return { success: false, error: errMsg };
-      }
-
-      const usedMinutes = data?.used_minutes;
-      if (typeof usedMinutes === 'number') {
-        writeCachedJson(storageKey(userProfile.uid), {
-          periodKey,
-          usedMinutes,
-          updatedAt: Date.now(),
-        });
-      }
-      return { success: true };
-    } catch (err: any) {
-      console.warn('[liveTutorialQuota] commitLiveTutorialStart exception:', err);
-      return { success: false, error: err?.message || 'Exception during minute consumption' };
-    }
+    return commitActualLiveTutorialMinutes(userProfile, decision.durationMinutes, appSettings);
   }
   return { success: true };
 }

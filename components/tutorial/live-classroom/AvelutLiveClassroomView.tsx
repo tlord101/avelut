@@ -42,7 +42,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import {
   evaluateLiveTutorialStart,
-  commitLiveTutorialStart,
+  commitActualLiveTutorialMinutes,
   type LiveDurationMinutes,
 } from '../../../utils/liveTutorialQuota';
 import { deductAICredits } from '../../../utils/usage';
@@ -148,7 +148,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const startedSessionRef = useRef(false);
-  const startCommittedRef = useRef(false);
+  const lessonStartTimeRef = useRef<number | null>(null);
+  const hasFinalizedUsageRef = useRef(false);
+  const paymentModeRef = useRef<'included' | 'credits'>('included');
 
   // ── Pre-generate teaching plan on mount ──────────────────────────────────
   useEffect(() => {
@@ -258,6 +260,52 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     );
   }, []);
 
+  const finalizeLessonUsage = useCallback(() => {
+    if (!lessonStartTimeRef.current || hasFinalizedUsageRef.current || !userProfile?.uid) return;
+    hasFinalizedUsageRef.current = true;
+
+    const elapsedMs = Date.now() - lessonStartTimeRef.current;
+    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
+    // Grace period: if user left within 20s (accidental tap), do not deduct anything
+    if (elapsedSeconds < 20) {
+      console.log('[AvelutLiveClassroomView] Exited within 20s grace period — 0 minutes deducted');
+      return;
+    }
+
+    const durMode = (durationMinutes as LiveDurationMinutes) || 15;
+    // Billed strictly by actual minutes spent (rounded up to nearest whole minute, capped at session duration)
+    const actualMinutes = Math.min(Math.ceil(elapsedSeconds / 60), durMode);
+    const paymentMode = paymentModeRef.current;
+
+    console.log(`[AvelutLiveClassroomView] Finalizing usage: ${actualMinutes} min(s) (${elapsedSeconds}s elapsed, mode=${paymentMode})`);
+
+    if (paymentMode === 'included') {
+      commitActualLiveTutorialMinutes(userProfile, actualMinutes, appSettings)
+        .then((res) => {
+          if (res.success) {
+            console.log('[AvelutLiveClassroomView] Deducted actual minutes from pool:', actualMinutes, 'remaining pool:', res.remainingMinutes);
+          }
+        })
+        .catch((err) => {
+          console.warn('[AvelutLiveClassroomView] commitActualLiveTutorialMinutes error:', err);
+        });
+    } else if (paymentMode === 'credits') {
+      // 10 credits per actual minute spent
+      const creditCost = actualMinutes * 10;
+      deductAICredits(userProfile.uid, creditCost, `live_tutorial_${actualMinutes}m`, appSettings)
+        .then((res) => {
+          if (res.success && typeof res.balance === 'number') {
+            notifyUserCreditsUpdated(userProfile.uid, res.balance);
+            console.log('[AvelutLiveClassroomView] Deducted credits for actual minutes:', creditCost, 'newBalance:', res.balance);
+          }
+        })
+        .catch((err) => {
+          console.warn('[AvelutLiveClassroomView] deductAICredits error:', err);
+        });
+    }
+  }, [userProfile, durationMinutes, appSettings]);
+
   useEffect(() => {
     avelutBoardController.setOnFormulaChange((formula) => {
       setActiveFormula(formula);
@@ -267,14 +315,22 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       startedSessionRef.current = true;
       startSession();
     }
+
+    const handleBeforeUnload = () => {
+      finalizeLessonUsage();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      finalizeLessonUsage();
       avelutBoardController.setOnFormulaChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
       }
     };
-  }, [startSession]);
+  }, [startSession, finalizeLessonUsage]);
 
   // Ensure AudioContext is unlocked on any user gesture
   const ensureAudioUnlocked = useCallback(() => {
@@ -286,29 +342,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const handleStartLesson = async () => {
     if (!serviceRef.current) return;
 
-    // ── Commit Lesson Cost (Pool minute or Credit debit) ───────────────────
-    if (!startCommittedRef.current && userProfile?.uid) {
-      startCommittedRef.current = true;
-      const durMode = (durationMinutes as LiveDurationMinutes) || 30;
+    // Record session start timestamp for per-minute deduction
+    if (!lessonStartTimeRef.current && userProfile?.uid) {
+      lessonStartTimeRef.current = Date.now();
+      const durMode = (durationMinutes as LiveDurationMinutes) || 15;
       const decision = evaluateLiveTutorialStart(userProfile, durMode, appSettings);
-
-      if (decision.allowed) {
-        if (decision.payment === 'included') {
-          commitLiveTutorialStart(userProfile, decision, appSettings).catch((err) => {
-            console.warn('[AvelutLiveClassroomView] commitLiveTutorialStart error:', err);
-          });
-        } else if (decision.payment === 'credits' && decision.creditCost > 0) {
-          deductAICredits(userProfile.uid, decision.creditCost, `live_tutorial_${durMode}`, appSettings)
-            .then((res) => {
-              if (res.success && typeof res.balance === 'number') {
-                notifyUserCreditsUpdated(userProfile.uid, res.balance);
-              }
-            })
-            .catch((err) => {
-              console.warn('[AvelutLiveClassroomView] deductAICredits error:', err);
-            });
-        }
-      }
+      paymentModeRef.current = decision.payment === 'included' ? 'included' : 'credits';
     }
 
     const unlocked = await serviceRef.current.resumeAudio();
@@ -320,6 +359,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
     serviceRef.current.triggerInitialGreeting();
     setHasStarted(true);
+  };
+
+  const handleClose = () => {
+    finalizeLessonUsage();
+    onClose();
   };
 
   const handleBoardReady = useCallback(() => {
@@ -381,7 +425,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         {/* Left: back + title */}
         <div className="flex items-center gap-2.5 pointer-events-auto flex-1 min-w-0 mr-2">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className={`flex items-center justify-center w-9 h-9 rounded-full shrink-0 ${
               isDark
                 ? 'bg-white/10 hover:bg-white/20 border-white/10 text-white'
