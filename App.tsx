@@ -12,7 +12,6 @@ import { Onboarding } from './components/Onboarding';
 
 import { createAvelutAI } from './utils/inference';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { SplashScreen } from '@capacitor/splash-screen';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
@@ -408,12 +407,6 @@ const App: React.FC = () => {
     const [isReadyForBackgroundSync, setIsReadyForBackgroundSync] = useState(false);
     const [recentConversations, setRecentConversations] = useState<ChatConversation[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (Capacitor.isNativePlatform()) {
-            SplashScreen.hide({ fadeOutDuration: 150 }).catch(() => {});
-        }
-    }, []);
 
     useEffect(() => {
         getDatabaseConnection().then(() => {
