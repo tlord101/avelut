@@ -306,6 +306,14 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     }
   }, [userProfile, durationMinutes, appSettings]);
 
+  // Always call the latest finalizeLessonUsage from unmount-only cleanups,
+  // so its closure never goes stale while keeping it out of effect deps.
+  const finalizeLessonUsageRef = useRef(finalizeLessonUsage);
+  finalizeLessonUsageRef.current = finalizeLessonUsage;
+
+  // ── Mount-only: board subscription, session start, beforeunload ────────────
+  // Deliberately NOT dependent on finalizeLessonUsage: identity changes of
+  // userProfile/appSettings must never tear down a live lesson mid-session.
   useEffect(() => {
     avelutBoardController.setOnFormulaChange((formula) => {
       setActiveFormula(formula);
@@ -317,20 +325,28 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     }
 
     const handleBeforeUnload = () => {
-      finalizeLessonUsage();
+      finalizeLessonUsageRef.current();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      finalizeLessonUsage();
+    };
+  }, [startSession]);
+
+  // ── Unmount-only: finalize usage + close the socket ────────────────────────
+  // Runs ONLY when the component truly unmounts (user exit / parent removal),
+  // never because a callback identity changed mid-lesson.
+  useEffect(() => {
+    return () => {
+      finalizeLessonUsageRef.current();
       avelutBoardController.setOnFormulaChange(null);
       if (serviceRef.current) {
         serviceRef.current.endSession();
         serviceRef.current = null;
       }
     };
-  }, [startSession, finalizeLessonUsage]);
+  }, []);
 
   // Ensure AudioContext is unlocked on any user gesture
   const ensureAudioUnlocked = useCallback(() => {

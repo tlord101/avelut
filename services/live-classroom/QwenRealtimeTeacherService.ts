@@ -112,6 +112,38 @@ export class QwenRealtimeTeacherService {
   /** True while the model is actively transmitting audio chunks over WebSocket */
   private isAudioStreamingFromModel = false;
 
+  // ── Turn detection (semantic_vad with safe server_vad fallback) ─────────────
+  private turnDetectionMode: 'semantic_vad' | 'server_vad' = 'semantic_vad';
+  /** Ensures we only fall back from semantic_vad → server_vad once per session */
+  private hasTurnDetectionFallback = false;
+  /** Explicit response.create fallback when server does not create one after commit */
+  private responseCreateFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Echo gate: rolling peak mic RMS ────────────────────────────────────────
+  private micRmsWindow: { rms: number; t: number }[] = [];
+  private readonly MIC_RMS_WINDOW_MS = 300;
+  /** Ignore as speaker echo only when peak mic RMS is near the noise floor */
+  private readonly ECHO_IGNORE_PEAK_RMS = 0.08;
+  /** Peak mic RMS at/above this is always accepted as real student speech */
+  private readonly REAL_SPEECH_PEAK_RMS = 0.12;
+
+  // ── Auto-continue cancellation while student speaks ────────────────────────
+  private autoContinueTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timestamp of last input_audio_buffer.speech_stopped */
+  private lastSpeechStoppedAt = 0;
+  /** Do not auto-continue within this window after student stopped speaking */
+  private readonly AUTO_CONTINUE_POST_SPEECH_GUARD_MS = 800;
+
+  // ── Stuck-listening watchdog ───────────────────────────────────────────────
+  private stuckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private stuckListeningSince: number | null = null;
+  private forcedContinuationCount = 0;
+  private readonly MAX_FORCED_CONTINUATIONS = 5;
+  private readonly STUCK_LISTENING_THRESHOLD_MS = 9000;
+
+  // ── Reconnect resume ───────────────────────────────────────────────────────
+  private pendingResumeAfterReconnect = false;
+
   // ── State helpers ─────────────────────────────────────────────────────────
 
   public setCallbacks(cb: QwenTeacherCallbacks): void { this.callbacks = cb; }
@@ -151,6 +183,11 @@ export class QwenRealtimeTeacherService {
     this.hasGreeted = false;
     this.consecutiveSilenceNudges = 0;
     this.isStarting = true;
+    this.hasTurnDetectionFallback = false;
+    this.turnDetectionMode = 'semantic_vad';
+    this.forcedContinuationCount = 0;
+    this.stuckListeningSince = null;
+    this.pendingResumeAfterReconnect = false;
 
     this.promptConfig = config;
     if (appSettings) this.appSettings = appSettings;
@@ -180,6 +217,7 @@ export class QwenRealtimeTeacherService {
       await this.connectWebSocket();
       await this.startMicRecording();
       this.isStarting = false;
+      this.startStuckListeningWatchdog();
     } catch (err: any) {
       this.isStarting = false;
       liveLogger.error('[QwenRealtime] startSession failed:', err);
@@ -226,9 +264,13 @@ export class QwenRealtimeTeacherService {
     this.isExplicitlyClosed = true;
     this.clearHeartbeat();
     this.clearStudentWaitTimer();
+    this.clearResponseCreateFallbackTimer();
+    this.clearAutoContinueTimer();
+    this.stopStuckListeningWatchdog();
     this.consecutiveSilenceNudges = 0;
     this.isStudentSpeaking = false;
     this.isReconnecting = false;
+    this.pendingResumeAfterReconnect = false;
     this.stopPlayback();
 
     this.processorNode?.disconnect();
@@ -259,6 +301,12 @@ export class QwenRealtimeTeacherService {
     this.isStarting = false;
     this.isSessionUpdated = false;
     this.retriedWithDefaultVoice = false;
+    this.isResponseActive = false;
+    this.isAwaitingContinuation = false;
+    this.isTurnResponseDone = false;
+    this.stuckListeningSince = null;
+    this.continuationRequestedForTurn = -1;
+    this.micRmsWindow = [];
 
     this.setState('closed');
   }
@@ -289,6 +337,8 @@ export class QwenRealtimeTeacherService {
     if (this.isReconnecting || this.isExplicitlyClosed) return;
     this.isReconnecting = true;
     this.reconnectAttempts++;
+    // If a lesson was already in progress, resume teaching after reconnect
+    this.pendingResumeAfterReconnect = this.hasGreeted;
     this.setState('connecting');
 
     const delayMs = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts - 1), 5000);
@@ -338,6 +388,31 @@ export class QwenRealtimeTeacherService {
         this.setState('connected');
         this.startHeartbeat();
         this.sendSessionInit();
+        if (this.pendingResumeAfterReconnect) {
+          this.pendingResumeAfterReconnect = false;
+          liveLogger.log('[QwenRealtime] Reconnected mid-lesson — resuming teaching');
+          this.sendJson({
+            event_id: `resume_${Date.now()}`,
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'user',
+              content: [{
+                type: 'input_text',
+                text: 'Continuing the lesson — the connection was briefly interrupted. Keep teaching from where you left off: write the next key points on the board first, then speak. Do not wait for the student.',
+              }],
+            },
+          });
+          this.sendJson({
+            event_id: `resume_resp_${Date.now()}`,
+            type: 'response.create',
+            response: {
+              modalities: ['text', 'audio'],
+              tools: this.getTools(),
+              tool_choice: 'auto',
+            },
+          });
+        }
         resolve();
       };
 
@@ -492,10 +567,18 @@ export class QwenRealtimeTeacherService {
   // ── 5-Second Student Silence Watchdog ─────────────────────────────────────
 
   /**
-   * Single owner of teacher continuation. All paths (silence, tool complete)
-   * must go through this so we never fire duplicate response.create for one turn.
+   * Single owner of teacher continuation. All paths (silence, tool complete,
+   * stuck-listening watchdog) must go through this so we never fire duplicate
+   * response.create for one turn.
+   *
+   * Turn ID hygiene: this method does NOT increment currentTeachingTurnId.
+   * The turn id is owned exclusively by the server `response.created` event,
+   * so tool stale checks stay reliable.
    */
-  private requestTeacherContinuation(reason: string, options?: { injectUserHint?: string }): void {
+  private requestTeacherContinuation(
+    reason: string,
+    options?: { injectUserHint?: string; force?: boolean; instructions?: string },
+  ): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     if (this.isStudentSpeaking) {
       liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): student speaking`);
@@ -505,11 +588,23 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): audio still streaming from model`);
       return;
     }
+    if (!options?.force && this.continuationRequestedForTurn === this.currentTeachingTurnId) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): already requested for turn ${this.currentTeachingTurnId}`);
+      return;
+    }
+    if (
+      !options?.force &&
+      this.lastSpeechStoppedAt > 0 &&
+      Date.now() - this.lastSpeechStoppedAt < this.AUTO_CONTINUE_POST_SPEECH_GUARD_MS
+    ) {
+      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): within ${this.AUTO_CONTINUE_POST_SPEECH_GUARD_MS}ms of student speech_stopped`);
+      return;
+    }
 
-    this.currentTeachingTurnId++;
     this.continuationRequestedForTurn = this.currentTeachingTurnId;
     this.isAwaitingContinuation = false;
     this.isResponseActive = true;
+    this.clearAutoContinueTimer();
     liveLogger.log(`[QwenRealtime] requestTeacherContinuation reason=${reason} turn=${this.currentTeachingTurnId}`);
 
     if (options?.injectUserHint) {
@@ -529,21 +624,32 @@ export class QwenRealtimeTeacherService {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
+        ...(options?.instructions ? { instructions: options.instructions } : {}),
         tools: this.getTools(),
         tool_choice: 'auto',
       },
     });
   }
 
-  private startToolContinuationWatchdog(): void {
+  private startToolContinuationWatchdog(toolName?: string): void {
     this.clearToolContinuationWatchdog();
+    // Slow tools (remote Mermaid render / LLM SVG generation) legitimately take 15–20s.
+    // A short watchdog previously forced a continuation mid-tool, which bumped the turn
+    // id and caused "[MermaidSync] stale turn — discarding SVG".
+    const hasSlowTool =
+      toolName === 'draw_mermaid' ||
+      toolName === 'illustrate_object' ||
+      [...this.pendingToolCalls.values()].some(
+        (t) => t.name === 'draw_mermaid' || t.name === 'illustrate_object',
+      );
+    const delayMs = hasSlowTool ? 20000 : 6000;
     this.toolContinuationWatchdog = setTimeout(() => {
       this.toolContinuationWatchdog = null;
       if (this.isAwaitingContinuation || this.hasPendingToolContinuation) {
-        liveLogger.warn(`[QwenRealtime] ⚠️ Tool continuation watchdog expired! Forcing continuation for turn ${this.currentTeachingTurnId}`);
+        liveLogger.warn(`[QwenRealtime] ⚠️ Tool continuation watchdog expired after ${delayMs}ms! Forcing continuation for turn ${this.currentTeachingTurnId}`);
         this.triggerToolContinuation();
       }
-    }, 4000);
+    }, delayMs);
   }
 
   private clearToolContinuationWatchdog(): void {
@@ -564,26 +670,16 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
-    this.currentTeachingTurnId++;
-    liveLogger.log(`[QwenRealtime] Auto-continuing teaching after tool execution (turn ${this.currentTeachingTurnId})`);
-
-    this.isResponseActive = true;
-    this.continuationRequestedForTurn = this.currentTeachingTurnId;
-
     if (this.state === 'drawing') {
       this.setState(this.activeAudioSources.length > 0 ? 'speaking' : 'listening');
     }
 
-    this.sendJson({
-      event_id: `resp_cont_${Date.now()}_tool_done`,
-      type: 'response.create',
-      response: {
-        modalities: ['text', 'audio'],
-        instructions:
-          'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. When pronouncing formulas or math, speak them naturally in conversational English (e.g. say "a equals negative omega squared x" or "velocity equals frequency times lambda"). NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Continue teaching smoothly without stopping.',
-        tools: this.getTools(),
-        tool_choice: 'auto',
-      },
+    liveLogger.log(`[QwenRealtime] Auto-continuing teaching after tool execution (turn ${this.currentTeachingTurnId})`);
+
+    // requestTeacherContinuation owns the once-per-turn guard and does NOT bump the turn id.
+    this.requestTeacherContinuation('tool_done', {
+      instructions:
+        'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. When pronouncing formulas or math, speak them naturally in conversational English (e.g. say "a equals negative omega squared x" or "velocity equals frequency times lambda"). NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Continue teaching smoothly without stopping.',
     });
   }
 
@@ -650,6 +746,63 @@ export class QwenRealtimeTeacherService {
     }
   }
 
+  // ── Hard "stuck listening / silent teacher" watchdog (B4) ──────────────────
+
+  /**
+   * If the session sits in `listening` with no student speech, no response, and
+   * no teacher audio while the socket is OPEN for > STUCK_LISTENING_THRESHOLD_MS,
+   * force a continuation. Capped at MAX_FORCED_CONTINUATIONS consecutive fires;
+   * after that a recoverable UI error is surfaced instead of looping silently.
+   */
+  private startStuckListeningWatchdog(): void {
+    if (this.stuckWatchdogTimer) return;
+    this.stuckWatchdogTimer = setInterval(() => {
+      const conditionsHold =
+        this.hasGreeted &&
+        this.state === 'listening' &&
+        !this.isStudentSpeaking &&
+        !this.isResponseActive &&
+        !this.isAudioStreamingFromModel &&
+        this.activeAudioSources.length === 0 &&
+        this.pendingToolCalls.size === 0 &&
+        this.ws?.readyState === WebSocket.OPEN;
+
+      if (!conditionsHold) {
+        this.stuckListeningSince = null;
+        return;
+      }
+
+      if (this.stuckListeningSince === null) {
+        this.stuckListeningSince = Date.now();
+        return;
+      }
+      if (Date.now() - this.stuckListeningSince < this.STUCK_LISTENING_THRESHOLD_MS) return;
+      this.stuckListeningSince = null;
+
+      if (this.forcedContinuationCount >= this.MAX_FORCED_CONTINUATIONS) {
+        liveLogger.error(`[QwenRealtime] stuck_listening_watchdog: ${this.forcedContinuationCount} forced continuations already attempted — surfacing recoverable error instead of looping`);
+        this.setState('error');
+        this.callbacks.onError?.(new Error('The teacher stopped responding. Tap retry to continue the lesson.'));
+        return;
+      }
+
+      this.forcedContinuationCount++;
+      liveLogger.warn(`[QwenRealtime] stuck_listening_watchdog fired (forced #${this.forcedContinuationCount}/${this.MAX_FORCED_CONTINUATIONS})`);
+      this.requestTeacherContinuation('stuck_listening_watchdog', {
+        injectUserHint: 'Continue teaching the next concept. Write key points on the board, then speak. Do not wait for the student.',
+        force: true,
+      });
+    }, 2000);
+  }
+
+  private stopStuckListeningWatchdog(): void {
+    if (this.stuckWatchdogTimer) {
+      clearInterval(this.stuckWatchdogTimer);
+      this.stuckWatchdogTimer = null;
+    }
+    this.stuckListeningSince = null;
+  }
+
   /**
    * Called strictly when all audio sources have finished playing out of the speaker
    * and the model has finished sending all audio deltas.
@@ -672,12 +825,16 @@ export class QwenRealtimeTeacherService {
       this.setState('listening');
       this.startStudentWaitTimer();
     } else {
-      // CONTINUOUS TEACHING: Move to the next concept without waiting for student
+      // CONTINUOUS TEACHING: Move to the next concept without waiting for student.
+      // Timer is stored so an accepted student speech_started can cancel it (B2).
       this.setState('listening');
-      setTimeout(() => {
+      this.clearAutoContinueTimer();
+      this.autoContinueTimer = setTimeout(() => {
+        this.autoContinueTimer = null;
         if (
           !this.lastResponseAskedQuestion &&
           !this.isStudentSpeaking &&
+          !this.isResponseActive &&
           !this.isAudioStreamingFromModel &&
           this.activeAudioSources.length === 0 &&
           this.ws?.readyState === WebSocket.OPEN
@@ -694,11 +851,88 @@ export class QwenRealtimeTeacherService {
 
 
 
+  private clearAutoContinueTimer(): void {
+    if (this.autoContinueTimer) {
+      clearTimeout(this.autoContinueTimer);
+      this.autoContinueTimer = null;
+    }
+  }
+
+  // ── Rolling peak mic RMS (echo gate) ───────────────────────────────────────
+
+  /** Record a mic chunk RMS into the rolling window and return its peak. */
+  private recordMicRms(rms: number): number {
+    const now = Date.now();
+    this.micRmsWindow.push({ rms, t: now });
+    const cutoff = now - this.MIC_RMS_WINDOW_MS;
+    while (this.micRmsWindow.length > 0 && this.micRmsWindow[0].t < cutoff) {
+      this.micRmsWindow.shift();
+    }
+    let peak = 0;
+    for (const s of this.micRmsWindow) {
+      if (s.rms > peak) peak = s.rms;
+    }
+    return peak;
+  }
+
+  /** Peak mic RMS over the last MIC_RMS_WINDOW_MS (defaults to last known window). */
+  private getMicPeakRms(): number {
+    const cutoff = Date.now() - this.MIC_RMS_WINDOW_MS;
+    let peak = 0;
+    for (const s of this.micRmsWindow) {
+      if (s.t >= cutoff && s.rms > peak) peak = s.rms;
+    }
+    return peak;
+  }
+
+  // ── response.create fallback after student commit ──────────────────────────
+
+  /**
+   * After the student's speech is committed, wait ~1.2s for the server's
+   * response.created. If none arrives (e.g. semantic_vad create_response not
+   * honored), send an explicit response.create with tools attached.
+   */
+  private startResponseCreateFallbackTimer(): void {
+    this.clearResponseCreateFallbackTimer();
+    this.responseCreateFallbackTimer = setTimeout(() => {
+      this.responseCreateFallbackTimer = null;
+      if (
+        this.ws?.readyState !== WebSocket.OPEN ||
+        this.isResponseActive ||
+        this.isAudioStreamingFromModel ||
+        this.isStudentSpeaking ||
+        this.activeAudioSources.length > 0
+      ) {
+        return;
+      }
+      liveLogger.log('[QwenRealtime] No response.created within 1200ms of commit — sending explicit response.create');
+      this.isResponseActive = true;
+      this.continuationRequestedForTurn = this.currentTeachingTurnId;
+      this.sendJson({
+        event_id: `resp_fallback_${Date.now()}`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          tools: this.getTools(),
+          tool_choice: 'auto',
+        },
+      });
+    }, 1200);
+  }
+
+  private clearResponseCreateFallbackTimer(): void {
+    if (this.responseCreateFallbackTimer) {
+      clearTimeout(this.responseCreateFallbackTimer);
+      this.responseCreateFallbackTimer = null;
+    }
+  }
+
   private sendSessionInit(overrideVoice?: string): void {
     if (!this.promptConfig) return;
 
     const instructions = buildTeacherSystemPrompt(this.promptConfig);
     liveLogger.log('[QwenRealtime] Sending session.update...');
+    liveLogger.log(`[QwenRealtime] turn_detection mode: ${this.turnDetectionMode}`);
 
     // Voice selection
     let selectedVoice = overrideVoice || this.appSettings?.alibaba_voice_name || 'Katerina';
@@ -716,14 +950,46 @@ export class QwenRealtimeTeacherService {
         instructions,
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          silence_duration_ms: 800,
-        },
+        turn_detection: this.turnDetectionMode === 'semantic_vad'
+          ? {
+              // Preferred: semantic turn detection — recommended by Alibaba for
+              // qwen3.8-omni-flash-realtime / qwen3.5-omni-realtime series.
+              type: 'semantic_vad',
+              eagerness: 'medium',
+              create_response: true,
+            }
+          : {
+              // Fallback (used exactly once if semantic_vad is rejected by the server)
+              type: 'server_vad',
+              threshold: 0.4,
+              silence_duration_ms: 900,
+              prefix_padding_ms: 300,
+            },
         tools: this.getTools(),
       },
     });
+  }
+
+  /**
+   * If the server rejects session.update because of turn_detection
+   * (e.g. semantic_vad unsupported for this model), log clearly and fall back
+   * to a tuned server_vad exactly once — never loop.
+   * Returns true when the fallback was applied (caller must not surface an error).
+   */
+  private maybeFallbackTurnDetection(errorMessage: string): boolean {
+    if (!errorMessage || this.hasTurnDetectionFallback) return false;
+    const isTurnDetectionRejection =
+      /turn_detection|semantic_vad|unknown.*(type|value)|invalid.*turn/i.test(errorMessage);
+    if (!isTurnDetectionRejection) return false;
+
+    this.hasTurnDetectionFallback = true;
+    this.turnDetectionMode = 'server_vad';
+    this.isSessionUpdated = false;
+    liveLogger.warn(
+      `[QwenRealtime] semantic_vad rejected by server — falling back to tuned server_vad once. Server said: ${errorMessage}`,
+    );
+    this.sendSessionInit();
+    return true;
   }
 
   /**
@@ -867,6 +1133,11 @@ export class QwenRealtimeTeacherService {
           return;
         }
 
+        // semantic_vad rejected → one-shot fallback to tuned server_vad (no loop)
+        if (typeof errMsg === 'string' && this.maybeFallbackTurnDetection(errMsg)) {
+          return;
+        }
+
         this.setState('error');
         this.callbacks.onError?.(new Error(`DashScope error [${event.code || 'UNKNOWN'}]: ${errMsg}`));
       } else {
@@ -894,6 +1165,8 @@ export class QwenRealtimeTeacherService {
         if (event.delta) {
           this.isAudioStreamingFromModel = true;
           this.isResponseActive = true;
+          // Teacher is speaking again — reset the forced-continuation cap (B4)
+          this.forcedContinuationCount = 0;
           if (!this.hasReceivedAudioInCurrentResponse) {
             this.hasReceivedAudioInCurrentResponse = true;
             this.isAwaitingContinuation = false;
@@ -926,7 +1199,8 @@ export class QwenRealtimeTeacherService {
       }
 
       case 'response.created':
-        // New teaching turn — reset transcript, flags, and ownership
+        // New teaching turn — reset transcript, flags, and ownership.
+        // NOTE: currentTeachingTurnId is owned exclusively by this event (B6).
         this.currentTeachingTurnId += 1;
         this.fullTranscript = '';
         this.lastResponseAskedQuestion = false;
@@ -939,34 +1213,54 @@ export class QwenRealtimeTeacherService {
         this.clearToolContinuationWatchdog();
         this.continuationRequestedForTurn = -1;
         this.clearStudentWaitTimer();
+        this.clearResponseCreateFallbackTimer();
+        this.clearAutoContinueTimer();
         this.isBurstStart = true;
         this.isStreamPlaying = false;
         liveLogger.log(`[QwenRealtime] response.created turn=${this.currentTeachingTurnId}`);
         break;
 
       // ── Student interruption / speech events ─────────────────────────────
-      case 'input_audio_buffer.speech_started':
-        // If teacher is actively speaking, verify it is not speaker acoustic echo
-        if ((this.isResponseActive || this.activeAudioSources.length > 0 || this.state === 'speaking') && this.lastMicRms < 0.16) {
-          liveLogger.log('[QwenRealtime] Ignored false speech_started from speaker acoustic echo (rms:', this.lastMicRms.toFixed(3), ')');
+      case 'input_audio_buffer.speech_started': {
+        // Rolling-peak echo gate: only treat as speaker echo when the mic peak over
+        // the last ~300ms is near the noise floor WHILE the teacher is outputting.
+        // Real student speech (peak ≥ 0.12) is always accepted, even mid-playback.
+        const teacherActive =
+          this.isResponseActive || this.activeAudioSources.length > 0 || this.state === 'speaking';
+        const peakRms = this.getMicPeakRms();
+        // Ignore ONLY when near the noise floor while teacher outputs (echo leakage).
+        // Peak ≥ 0.12 is always real speech; the 0.08–0.12 band is accepted too
+        // (erring toward not ignoring quiet students).
+        const isDefinitelyRealSpeech = peakRms >= this.REAL_SPEECH_PEAK_RMS;
+        const isNearFloor = peakRms < this.ECHO_IGNORE_PEAK_RMS;
+        if (teacherActive && !isDefinitelyRealSpeech && isNearFloor) {
+          liveLogger.log('[QwenRealtime] Ignored false speech_started from speaker acoustic echo (peak rms:', peakRms.toFixed(3), ')');
           break;
         }
-        liveLogger.log('[QwenRealtime] 🎙️ Student speech started — stopping teacher audio');
+        liveLogger.log(`[QwenRealtime] 🎙️ Student speech started (peak rms: ${peakRms.toFixed(3)}) — stopping teacher audio`);
         this.isStudentSpeaking = true;
         this.consecutiveSilenceNudges = 0;
         this.clearStudentWaitTimer();
+        // Cancel any pending auto-continue so it cannot race the student (B2)
+        this.clearAutoContinueTimer();
         this.stopPlayback();
         this.setState('listening');
         break;
+      }
 
       case 'input_audio_buffer.speech_stopped':
         liveLogger.log('[QwenRealtime] 🎙️ Student speech stopped — awaiting model response');
         this.isStudentSpeaking = false;
+        this.lastSpeechStoppedAt = Date.now();
         this.clearStudentWaitTimer();
+        // If the server does not create a response within ~1.2s, send response.create ourselves
+        this.startResponseCreateFallbackTimer();
         break;
 
       case 'input_audio_buffer.committed':
         liveLogger.log('[QwenRealtime] input_audio_buffer.committed');
+        this.lastSpeechStoppedAt = Date.now();
+        this.startResponseCreateFallbackTimer();
         break;
 
       // ── Tool / function call ────────────────────────────────────────────
@@ -1115,6 +1409,10 @@ export class QwenRealtimeTeacherService {
           });
           return;
         }
+        // semantic_vad rejected → one-shot fallback to tuned server_vad (no loop)
+        if (typeof event.error?.message === 'string' && this.maybeFallbackTurnDetection(event.error.message)) {
+          return;
+        }
         this.setState('error');
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
         break;
@@ -1137,7 +1435,7 @@ export class QwenRealtimeTeacherService {
     const turnAtStart = this.currentTeachingTurnId;
     this.setState('drawing');
     this.isAwaitingContinuation = true;
-    this.startToolContinuationWatchdog();
+    this.startToolContinuationWatchdog(name);
 
     let args: any = {};
     try {
@@ -1161,9 +1459,11 @@ export class QwenRealtimeTeacherService {
       try {
         const svg = await MermaidBoardService.renderToSvg(code, theme);
         if (turnAtStart !== this.currentTeachingTurnId) {
-          liveLogger.warn('[MermaidSync] stale turn — discarding SVG');
-          toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Superseded by newer turn' };
-        } else if (svg) {
+          // Turn advanced while rendering (e.g. watchdog forced a continuation).
+          // Apply the visual anyway — never discard the only visual for a turn.
+          liveLogger.warn(`[MermaidSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
+        }
+        if (svg) {
           this.boardController.setSvgIllustration(svg);
           liveLogger.log(`[MermaidSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
           toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered and inserted' };
@@ -1201,9 +1501,10 @@ export class QwenRealtimeTeacherService {
           return getResponseText(res);
         });
         if (turnAtStart !== this.currentTeachingTurnId) {
-          liveLogger.warn('[SvgSync] stale turn — discarding SVG');
-          toolResult = { status: 'ok', action: 'illustrate_object', message: 'Superseded by newer turn' };
-        } else if (svg) {
+          // Turn advanced while generating — apply anyway, never discard the visual.
+          liveLogger.warn(`[SvgSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
+        }
+        if (svg) {
           // Optional: run through same normalizer if available
           this.boardController.setSvgIllustration(svg);
           liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
@@ -1220,16 +1521,10 @@ export class QwenRealtimeTeacherService {
       toolResult = { status: 'error', message: `Unknown tool: ${name}` };
     }
 
-    // Race guard: if a newer turn started, do not continue this one
+    // Always surface the tool result — even if the turn advanced while the tool
+    // ran, the server conversation must stay consistent (B3). Never drop it silently.
     if (turnAtStart !== this.currentTeachingTurnId) {
-      liveLogger.log(`[QwenRealtime] Tool ${name} finished for stale turn ${turnAtStart}`);
-      this.pendingToolCalls.delete(callId);
-      for (const [itId, cId] of this.toolItemIdToCallId.entries()) {
-        if (cId === callId) {
-          this.toolItemIdToCallId.delete(itId);
-        }
-      }
-      return;
+      liveLogger.log(`[QwenRealtime] Tool ${name} finished for advanced turn ${turnAtStart} (now ${this.currentTeachingTurnId}) — still submitting result`);
     }
 
     liveLogger.log('[QwenRealtime] TOOL EXECUTED', name, toolResult?.status);
@@ -1260,7 +1555,19 @@ export class QwenRealtimeTeacherService {
     // AUTO-CONTINUE TEACHING:
     if (this.pendingToolCalls.size === 0) {
       liveLogger.log(`[QwenRealtime] All pending tools finished (isTurnResponseDone=${this.isTurnResponseDone})`);
-      if (this.isTurnResponseDone) {
+      if (turnAtStart !== this.currentTeachingTurnId) {
+        // A newer response already owns the lesson. Request at most one extra
+        // continuation, and only when nothing is currently active for it.
+        if (
+          !this.isResponseActive &&
+          !this.isAudioStreamingFromModel &&
+          this.activeAudioSources.length === 0
+        ) {
+          this.requestTeacherContinuation('tool_done_after_turn_advance');
+        } else {
+          liveLogger.log('[QwenRealtime] Tool finished for advanced turn — active response continues (no extra continuation)');
+        }
+      } else if (this.isTurnResponseDone) {
         // Server already sent response.done for this turn! Safe to dispatch continuation immediately.
         this.triggerToolContinuation();
       } else {
@@ -1300,12 +1607,14 @@ export class QwenRealtimeTeacherService {
       for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
       const rms = Math.sqrt(sum / samples.length);
       this.lastMicRms = rms;
+      const peakRms = this.recordMicRms(rms);
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
 
-      // Suppress mic streaming if teacher is actively outputting audio and RMS is below loud interruption threshold
-      // Prevents web browser speaker-to-mic acoustic echo loopback from cutting teacher off
+      // Suppress mic upload ONLY while the teacher is outputting and the rolling
+      // peak is near the noise floor (speaker echo leakage). Loud audio — real
+      // student barge-in — always uploads so server VAD can hear the student.
       const isTeacherSpeaking = this.isResponseActive || this.activeAudioSources.length > 0 || this.state === 'speaking';
-      if (isTeacherSpeaking && rms < 0.16) {
+      if (isTeacherSpeaking && peakRms < this.ECHO_IGNORE_PEAK_RMS) {
         return;
       }
 
