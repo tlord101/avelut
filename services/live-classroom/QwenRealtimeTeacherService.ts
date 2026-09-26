@@ -61,7 +61,6 @@ export class QwenRealtimeTeacherService {
   private inputAudioCtx: AudioContext | null = null;
   private micStream: MediaStream | null = null;
   private processorNode: AudioNode | null = null;
-  private isMuted = false;
 
   // ── Audio — output (WS → speaker) & Jitter Smoothing ──────────────────
   private outputAudioCtx: AudioContext | null = null;
@@ -112,12 +111,27 @@ export class QwenRealtimeTeacherService {
   /** True while the model is actively transmitting audio chunks over WebSocket */
   private isAudioStreamingFromModel = false;
 
-  // ── Turn detection (semantic_vad with safe server_vad fallback) ─────────────
-  private turnDetectionMode: 'semantic_vad' | 'server_vad' = 'semantic_vad';
-  /** Ensures we only fall back from semantic_vad → server_vad once per session */
+  // ── Turn detection (manual push-to-talk with safe server_vad fallback) ─────
+  /**
+   * Turn detection strategy:
+   *  - 'manual'       (default): server VAD is disabled (`turn_detection: null`).
+   *                   The student opens the mic with a tap and closes it with a
+   *                   second tap; we then commit the captured audio and ask the
+   *                   teacher for a response ourselves.
+   *  - 'semantic_vad' : server semantic turn detection (auto commit + response).
+   *  - 'server_vad'   : tuned fallback, applied at most once per session.
+   */
+  private turnDetectionMode: 'manual' | 'semantic_vad' | 'server_vad' = 'manual';
+  /** Ensures we only fall back to the tuned server_vad config once per session */
   private hasTurnDetectionFallback = false;
   /** Explicit response.create fallback when server does not create one after commit */
   private responseCreateFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Push-to-talk (manual VAD) ──────────────────────────────────────────────
+  /** True while the student's mic is open (tap-to-talk active) */
+  private isPushToTalkActive = false;
+  /** True when mic audio was uploaded but not yet committed to the server */
+  private hasUncommittedStudentAudio = false;
 
   // ── Echo gate: rolling peak mic RMS ────────────────────────────────────────
   private micRmsWindow: { rms: number; t: number }[] = [];
@@ -148,7 +162,6 @@ export class QwenRealtimeTeacherService {
 
   public setCallbacks(cb: QwenTeacherCallbacks): void { this.callbacks = cb; }
   public getState(): TeacherState { return this.state; }
-  public getIsMuted(): boolean { return this.isMuted; }
 
   private setState(s: TeacherState): void {
     if (this.state === s) return;
@@ -184,7 +197,7 @@ export class QwenRealtimeTeacherService {
     this.consecutiveSilenceNudges = 0;
     this.isStarting = true;
     this.hasTurnDetectionFallback = false;
-    this.turnDetectionMode = 'semantic_vad';
+    this.turnDetectionMode = 'manual';
     this.forcedContinuationCount = 0;
     this.stuckListeningSince = null;
     this.pendingResumeAfterReconnect = false;
@@ -228,10 +241,117 @@ export class QwenRealtimeTeacherService {
     }
   }
 
-  /** Mute / unmute student mic. Returns new muted state. */
-  public toggleMute(): boolean {
-    this.isMuted = !this.isMuted;
-    return this.isMuted;
+  // ── Push-to-talk (manual VAD) ──────────────────────────────────────────────
+
+  /** True while the student's mic is open (tap-to-talk active). */
+  public getIsPushToTalkActive(): boolean {
+    return this.isPushToTalkActive;
+  }
+
+  /**
+   * Opens the student mic for a manually controlled turn (tap-to-talk).
+   *
+   * The teacher is interrupted immediately — any in-flight response is cancelled
+   * and queued speech is dropped — so the student can barge in at any moment.
+   * Returns true when capture is active.
+   */
+  public beginPushToTalk(): boolean {
+    if (this.isExplicitlyClosed) return false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if (this.isPushToTalkActive) return true;
+
+    const teacherWasActive =
+      this.isResponseActive || this.isAudioStreamingFromModel || this.activeAudioSources.length > 0;
+
+    this.isPushToTalkActive = true;
+    this.isStudentSpeaking = true;
+    this.consecutiveSilenceNudges = 0;
+    this.clearStudentWaitTimer();
+    this.clearAutoContinueTimer();
+    this.clearResponseCreateFallbackTimer();
+    this.stuckListeningSince = null;
+
+    if (teacherWasActive) {
+      // Barge-in: stop the teacher talking so the mic does not pick him up and
+      // the student is not talked over.
+      if (this.isResponseActive || this.isAudioStreamingFromModel) {
+        this.isResponseActive = false;
+        this.sendJson({
+          event_id: `resp_cancel_${Date.now()}`,
+          type: 'response.cancel',
+        });
+      }
+      this.stopPlayback();
+    }
+
+    // Drop anything captured before this press so the turn only contains what the
+    // student says now.
+    if (this.hasUncommittedStudentAudio) {
+      this.sendJson({
+        event_id: `buf_clear_${Date.now()}`,
+        type: 'input_audio_buffer.clear',
+      });
+      this.hasUncommittedStudentAudio = false;
+    }
+
+    this.setState('listening');
+    liveLogger.log('[QwenRealtime] 🎙️ Push-to-talk started (manual VAD) — mic open, teacher interrupted');
+    return true;
+  }
+
+  /**
+   * Closes the student mic: commits the captured audio and asks the teacher to
+   * answer it. The teacher answers, then keeps teaching the lesson (the normal
+   * auto-continue flow takes over), so the lesson never stops.
+   */
+  public endPushToTalk(): void {
+    if (!this.isPushToTalkActive) return;
+
+    this.isPushToTalkActive = false;
+    this.isStudentSpeaking = false;
+    this.lastSpeechStoppedAt = Date.now();
+    liveLogger.log('[QwenRealtime] 🎙️ Push-to-talk released — committing student audio');
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    if (!this.hasUncommittedStudentAudio) {
+      // Nothing was captured (instant tap) — stay quiet instead of committing an
+      // empty buffer.
+      liveLogger.log('[QwenRealtime] Push-to-talk released with no captured audio — skipping commit');
+      this.setState('listening');
+      return;
+    }
+
+    this.hasUncommittedStudentAudio = false;
+    this.consecutiveSilenceNudges = 0;
+    this.clearStudentWaitTimer();
+
+    // Manual VAD: the server never creates a response on its own, so commit the
+    // student turn and ask the teacher for a reply explicitly.
+    this.sendJson({
+      event_id: `buf_commit_${Date.now()}`,
+      type: 'input_audio_buffer.commit',
+    });
+    this.requestTeacherContinuation('push_to_talk_release', {
+      force: true,
+      instructions:
+        'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
+        'address it fully in a couple of clear sentences. Then continue teaching the lesson smoothly from where you left off ' +
+        'without waiting for another prompt. Write the key term, answer, or formula on the board first when it helps, then speak. ' +
+        'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
+    });
+  }
+
+  /**
+   * Control-plane errors that are expected while driving manual turns
+   * (cancelling with nothing to cancel, committing/clearing an empty buffer, …).
+   * They must never be surfaced as lesson errors.
+   */
+  private isBenignControlError(message?: string): boolean {
+    if (!message) return false;
+    return /no active response|already has an active response|active response|already (been )?cancel|buffer (is )?(too small|empty)|insufficient audio|empty buffer|input_audio_buffer\.(commit|clear)/i.test(
+      message,
+    );
   }
 
   /** Send a typed message into the realtime conversation */
@@ -307,6 +427,8 @@ export class QwenRealtimeTeacherService {
     this.stuckListeningSince = null;
     this.continuationRequestedForTurn = -1;
     this.micRmsWindow = [];
+    this.isPushToTalkActive = false;
+    this.hasUncommittedStudentAudio = false;
 
     this.setState('closed');
   }
@@ -950,43 +1072,61 @@ export class QwenRealtimeTeacherService {
         instructions,
         input_audio_format: 'pcm',
         output_audio_format: 'pcm',
-        turn_detection: this.turnDetectionMode === 'semantic_vad'
-          ? {
-              // Preferred: semantic turn detection — recommended by Alibaba for
-              // qwen3.8-omni-flash-realtime / qwen3.5-omni-realtime series.
-              type: 'semantic_vad',
-              eagerness: 'medium',
-              create_response: true,
-            }
-          : {
-              // Fallback (used exactly once if semantic_vad is rejected by the server)
-              type: 'server_vad',
-              threshold: 0.4,
-              silence_duration_ms: 900,
-              prefix_padding_ms: 300,
-            },
+        turn_detection: this.buildTurnDetection(),
         tools: this.getTools(),
       },
     });
   }
 
   /**
+   * Builds the `turn_detection` payload for the active mode.
+   *
+   * Manual mode sends `null`, which disables server-side VAD completely: the
+   * student owns the turns through the mic button (see `beginPushToTalk()` /
+   * `endPushToTalk()`), so the teacher never hears idle room noise and never
+   * cuts the student off mid-sentence.
+   */
+  private buildTurnDetection(): Record<string, any> | null {
+    if (this.turnDetectionMode === 'manual') {
+      return null;
+    }
+    if (this.turnDetectionMode === 'semantic_vad') {
+      // Semantic turn detection — recommended by Alibaba for the omni realtime series.
+      return {
+        type: 'semantic_vad',
+        eagerness: 'medium',
+        create_response: true,
+      };
+    }
+    // Tuned server VAD — also the one-shot fallback when the manual/semantic
+    // configuration is rejected by the server.
+    return {
+      type: 'server_vad',
+      threshold: 0.4,
+      silence_duration_ms: 900,
+      prefix_padding_ms: 300,
+    };
+  }
+
+  /**
    * If the server rejects session.update because of turn_detection
-   * (e.g. semantic_vad unsupported for this model), log clearly and fall back
-   * to a tuned server_vad exactly once — never loop.
+   * (e.g. `null` / manual mode or semantic_vad unsupported for this model),
+   * log clearly and fall back to a tuned server_vad exactly once — never loop.
    * Returns true when the fallback was applied (caller must not surface an error).
    */
   private maybeFallbackTurnDetection(errorMessage: string): boolean {
     if (!errorMessage || this.hasTurnDetectionFallback) return false;
+    if (this.turnDetectionMode === 'server_vad') return false;
     const isTurnDetectionRejection =
       /turn_detection|semantic_vad|unknown.*(type|value)|invalid.*turn/i.test(errorMessage);
     if (!isTurnDetectionRejection) return false;
 
+    const rejectedMode = this.turnDetectionMode;
     this.hasTurnDetectionFallback = true;
     this.turnDetectionMode = 'server_vad';
     this.isSessionUpdated = false;
     liveLogger.warn(
-      `[QwenRealtime] semantic_vad rejected by server — falling back to tuned server_vad once. Server said: ${errorMessage}`,
+      `[QwenRealtime] ${rejectedMode} turn detection rejected by server — falling back to tuned server_vad once. Server said: ${errorMessage}`,
     );
     this.sendSessionInit();
     return true;
@@ -1133,8 +1273,16 @@ export class QwenRealtimeTeacherService {
           return;
         }
 
-        // semantic_vad rejected → one-shot fallback to tuned server_vad (no loop)
+        // semantic_vad / manual rejected → one-shot fallback to tuned server_vad (no loop)
         if (typeof errMsg === 'string' && this.maybeFallbackTurnDetection(errMsg)) {
+          return;
+        }
+
+        // Control-plane noise that manual turns legitimately produce (e.g. clearing
+        // an empty buffer, cancelling a response that already finished) must never
+        // be surfaced as a lesson error.
+        if (typeof errMsg === 'string' && this.isBenignControlError(errMsg)) {
+          liveLogger.warn(`[QwenRealtime] Ignoring benign control-plane error: ${errMsg}`);
           return;
         }
 
@@ -1409,9 +1557,13 @@ export class QwenRealtimeTeacherService {
           });
           return;
         }
-        // semantic_vad rejected → one-shot fallback to tuned server_vad (no loop)
+        // semantic_vad / manual rejected → one-shot fallback to tuned server_vad (no loop)
         if (typeof event.error?.message === 'string' && this.maybeFallbackTurnDetection(event.error.message)) {
           return;
+        }
+        if (typeof event.error?.message === 'string' && this.isBenignControlError(event.error.message)) {
+          liveLogger.warn(`[QwenRealtime] Ignoring benign control-plane error: ${event.error.message}`);
+          break;
         }
         this.setState('error');
         this.callbacks.onError?.(new Error(event.error?.message ?? 'Qwen Realtime server error'));
@@ -1599,7 +1751,7 @@ export class QwenRealtimeTeacherService {
     let lastLogTime = 0;
 
     const flushChunk = (samples: Float32Array | number[]) => {
-      if (this.isMuted || this.ws?.readyState !== WebSocket.OPEN) return;
+      if (this.ws?.readyState !== WebSocket.OPEN) return;
       if (!samples || samples.length === 0) return;
 
       // Compute RMS for UI visualisation and echo tracking
@@ -1609,6 +1761,14 @@ export class QwenRealtimeTeacherService {
       this.lastMicRms = rms;
       const peakRms = this.recordMicRms(rms);
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
+
+      // ── Manual (push-to-talk) turn detection ──────────────────────────────
+      // The mic is only uploaded while the student holds the mic button, so idle
+      // room noise and speaker echo can never reach the server, and a turn can
+      // never be committed before the student pressed "stop".
+      if (this.turnDetectionMode === 'manual' && !this.isPushToTalkActive) {
+        return;
+      }
 
       // Suppress mic upload ONLY while the teacher is outputting and the rolling
       // peak is near the noise floor (speaker echo leakage). Loud audio — real
@@ -1641,6 +1801,9 @@ export class QwenRealtimeTeacherService {
         type: 'input_audio_buffer.append',
         audio: btoa(bin),
       });
+
+      // Remember that this student turn still has to be committed on release.
+      this.hasUncommittedStudentAudio = true;
 
       packetCount++;
       const now = Date.now();

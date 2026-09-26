@@ -7,7 +7,7 @@
  *   - Full-screen Excalidraw board canvas
  *   - Translucent top bar: back button, LIVE badge, topic title, teacher state pill
  *   - Floating subtitle pill (scrolling teacher transcript)
- *   - Bottom HUD: text input toggle, large mic button, clear board
+ *   - Bottom HUD: text input toggle, tap-to-talk mic button, clear board
  *   - Connection error overlay with retry
  *
  * Architecture:
@@ -138,7 +138,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [teacherState, setTeacherState] = useState<TeacherState>('connecting');
   const [transcript, setTranscript] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  /** True while the student's mic is open (manual push-to-talk turn) */
+  const [isTalking, setIsTalking] = useState(false);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -237,6 +238,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onStateChange: (s) => {
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
+        // Never leave the mic button stuck "on" if the session drops.
+        if (s === 'error' || s === 'closed') setIsTalking(false);
       },
       onTranscript: (text, _isFinal) => {
         setTranscript(text);
@@ -387,10 +390,26 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────
-  const handleToggleMute = () => {
-    if (!serviceRef.current) return;
-    const muted = serviceRef.current.toggleMute();
-    setIsMuted(muted);
+  /**
+   * Tap-to-talk (manual VAD).
+   * First tap opens the mic and interrupts the teacher; the second tap closes it,
+   * sends the captured audio to the teacher, and lets him answer + continue.
+   */
+  const handleToggleTalk = () => {
+    const svc = serviceRef.current;
+    if (!svc) return;
+
+    if (isTalking) {
+      svc.endPushToTalk();
+      setIsTalking(false);
+      return;
+    }
+
+    // Make sure the audio contexts are alive before opening the mic.
+    if (!svc.isAudioUnlocked()) {
+      svc.resumeAudio().catch(() => {});
+    }
+    setIsTalking(svc.beginPushToTalk());
   };
 
   const handleSendText = (e: React.FormEvent) => {
@@ -578,6 +597,23 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         </div>
       )}
 
+      {/* ── TAP-TO-TALK HINT (manual VAD) ─────────────────────────────────── */}
+      {hasStarted && teacherState !== 'connecting' && !showTextInput && (
+        <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
+          <span
+            className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border backdrop-blur-md ${
+              isTalking
+                ? 'bg-rose-500/20 border-rose-400/40 text-rose-200'
+                : isDark
+                  ? 'bg-white/5 border-white/10 text-white/50'
+                  : 'bg-slate-900/5 border-slate-900/10 text-slate-500'
+            }`}
+          >
+            {isTalking ? 'Mic open — speak now, then tap to send' : 'Tap the mic to speak anytime'}
+          </span>
+        </div>
+      )}
+
       {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
       <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
         <div className={`flex items-center gap-3 px-4 py-2 rounded-full ${
@@ -601,25 +637,25 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             <MessageSquare className="w-5 h-5" />
           </button>
 
-          {/* Mic button with audio level pulse ring */}
+          {/* Mic button — tap to talk, tap again to send (manual VAD) */}
           <div className="relative flex items-center justify-center">
-            {!isMuted && audioLevel > 0.04 && (
+            {isTalking && audioLevel > 0.04 && (
               <span
-                className="absolute inset-0 rounded-full bg-emerald-400/30 animate-ping pointer-events-none"
+                className="absolute inset-0 rounded-full bg-rose-400/30 animate-ping pointer-events-none"
                 style={{ transform: `scale(${1 + audioLevel})` }}
               />
             )}
             <button
-              onClick={handleToggleMute}
+              onClick={handleToggleTalk}
               className={`relative z-10 flex items-center justify-center w-14 h-14 rounded-full
                            shadow-lg transition-all active:scale-90 font-bold ${
-                isMuted
-                  ? 'bg-rose-500 hover:bg-rose-400 text-white'
+                isTalking
+                  ? 'bg-rose-500 hover:bg-rose-400 text-white animate-pulse'
                   : 'bg-emerald-500 hover:bg-emerald-400 text-black'
-              }`}
-              aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+              } ${teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''}`}
+              aria-label={isTalking ? 'Stop speaking and send to the teacher' : 'Tap to speak'}
             >
-              {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              {isTalking ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
             </button>
           </div>
 

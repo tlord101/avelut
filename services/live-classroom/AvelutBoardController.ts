@@ -164,6 +164,19 @@ function isGenericLabel(s: string | undefined | null): boolean {
 /** Default max characters per line for board labels (~35 for readable classroom text) */
 const BOARD_LABEL_MAX_CHARS = 35;
 
+/**
+ * Excalidraw font family used for every board element.
+ * 6 === "Nunito" — Excalidraw's normal (non hand-drawn) sans-serif.
+ * Never use 1 (Virgil), 3 (Cascadia) or 5 (Excalifont): those render as hand-writing.
+ */
+const BOARD_FONT_FAMILY = 6;
+
+/** Legacy Excalidraw families that render as hand-writing / code and must be normalised away */
+const HAND_DRAWN_FONT_FAMILIES = new Set<number>([1, 3, 4, 5]);
+
+/** Average glyph advance (in em) of the board sans-serif at normal weight */
+const BOARD_GLYPH_WIDTH_EM = 0.52;
+
 function wordWrap(text: string, maxLineLength: number = BOARD_LABEL_MAX_CHARS): string {
   const words = text.split(/\s+/);
   const lines: string[] = [];
@@ -399,13 +412,12 @@ export class AvelutBoardController {
       }
 
       const isMobile = this.isMobileView();
-      // On mobile: span the board width cleanly (340-360px) and give ample height
-      // On desktop: allow rich, high-resolution rendering up to 880px wide.
-      const maxW = isMobile ? 360 : 880;
-      const minW = isMobile ? 330 : 640;
-      const renderW = isMobile
-        ? Math.min(maxW, Math.max(minW, origW > 0 ? Math.min(origW, maxW) : 340))
-        : Math.min(maxW, Math.max(minW, origW));
+      const contentWidth = this.getContentWidth();
+      // Illustrations always span the readable board width: a comfortable minimum,
+      // never wider than the device screen.
+      const maxW = Math.min(isMobile ? 360 : 880, contentWidth);
+      const minW = Math.min(isMobile ? 330 : 640, maxW);
+      const renderW = Math.min(maxW, Math.max(minW, origW > 0 ? Math.min(origW, maxW) : minW));
 
       const aspect = (origH && origW) ? origH / origW : 0.6;
       // Ensure generous height and legible scaling on mobile portrait viewports
@@ -415,7 +427,7 @@ export class AvelutBoardController {
 
       this.clearStageIfFull();
 
-      const x = this.clampX(isMobile ? 10 : 40, renderW);
+      const x = this.clampX(this.getLeftMargin(), renderW);
       const y = Math.max(this.STAGE_TOP, this.cursorY + 12);
 
       const elementId = `svg_el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -480,13 +492,52 @@ export class AvelutBoardController {
     return true;
   }
 
-  private clampX(x: number, w = 300) {
-    if (this.isMobileView()) {
-      const maxX = Math.max(10, this.MOBILE_BOARD_WIDTH - w);
-      return Math.max(10, Math.min(x, maxX));
+  /** Live canvas width in scene units (zoom is always pinned to 1.0). */
+  private getViewportWidth(): number {
+    if (this.api && (this.api as any).getAppState) {
+      const w = (this.api as any).getAppState()?.width;
+      if (typeof w === 'number' && w > 0) return w;
     }
-    const maxDesktopX = Math.max(40, 1200 - w - 20);
-    return Math.max(30, Math.min(x, maxDesktopX));
+    if (typeof window !== 'undefined' && window.innerWidth > 0) return window.innerWidth;
+    return this.MOBILE_BOARD_WIDTH;
+  }
+
+  /** Single left gutter that every board element aligns to. */
+  private getLeftMargin(): number {
+    return this.isMobileView() ? 14 : 32;
+  }
+
+  /**
+   * Usable content width: the full device/canvas width minus the left/right
+   * gutters. Text always wraps inside this width so a line can run edge to edge
+   * on mobile and across the whole board on desktop.
+   */
+  private getContentWidth(): number {
+    return Math.max(240, Math.round(this.getViewportWidth() - this.getLeftMargin() * 2));
+  }
+
+  /** Characters that fit on one line for the given font size at the current width. */
+  private getMaxLineChars(fontSize: number): number {
+    const size = Math.max(12, fontSize || 18);
+    return Math.max(16, Math.floor(this.getContentWidth() / (size * BOARD_GLYPH_WIDTH_EM)));
+  }
+
+  /**
+   * Wraps text to the live board width instead of a fixed character budget.
+   * Pass `maxWidth` to wrap inside a narrower container (shape labels, notes).
+   */
+  private wrapToBoard(text: string, fontSize: number, maxWidth?: number): string {
+    const boardWidth = this.getContentWidth();
+    const usable = Math.max(80, Math.min(maxWidth ?? boardWidth, boardWidth));
+    const size = Math.max(12, fontSize || 18);
+    const chars = Math.max(8, Math.floor(usable / (size * BOARD_GLYPH_WIDTH_EM)));
+    return wordWrap(text, chars);
+  }
+
+  private clampX(x: number, w = 300) {
+    const margin = this.getLeftMargin();
+    const maxX = Math.max(margin, this.getViewportWidth() - w - margin);
+    return Math.max(margin, Math.min(x, maxX));
   }
 
   private clampY(y: number, h = 0) {
@@ -500,7 +551,7 @@ export class AvelutBoardController {
       this.flushScheduled = true;
       // Batch within 50ms to allow multiple draw calls in one turn
       setTimeout(() => {
-        const skeletons = [...this.pendingSkeletons];
+        const skeletons = [...this.pendingSkeletons].map(s => this.normalizeElementFont(s));
         this.pendingSkeletons = [];
         this.flushScheduled = false;
 
@@ -629,7 +680,7 @@ export class AvelutBoardController {
       this.writeText(title.trim(), {
         color: blueColor,
         fontSize: 'title',
-        x: 30,
+        x: this.getLeftMargin(),
         y: 50,
       });
       // Ensure cursor for subsequent writes starts well below the title
@@ -649,29 +700,22 @@ export class AvelutBoardController {
     }
     try {
       const appState = (this.api.getAppState ? this.api.getAppState() : null) as any;
-      const viewWidth = appState?.width || (typeof window !== 'undefined' ? window.innerWidth : 360);
       const viewHeight = appState?.height || (typeof window !== 'undefined' ? window.innerHeight : 700);
       const zoom = appState?.zoom?.value || 1.0;
-
-      const isMobile = this.isMobileView();
 
       let targetScrollX = 0;
       let targetScrollY = 0;
 
-      if (this.lastActivePoint) {
-        // Keep the most recent element centered on the board so user sees all of it in any direction
-        const targetCenterY = (viewHeight / 2) / zoom - this.lastActivePoint.y;
-        // Never scroll above the top header (keep scrollY <= 0)
-        targetScrollY = Math.min(0, Math.round(targetCenterY));
+      // Horizontal: always pin the viewport to scene x = 0. Every element is laid
+      // out from getLeftMargin(), so content sits flush in a single left gutter
+      // (screen x === scene x) and the board is never panned sideways.
+      targetScrollX = 0;
 
-        if (isMobile) {
-          // On mobile, center the vertical column horizontally
-          const columnCenter = this.MOBILE_BOARD_WIDTH / 2; // 180
-          targetScrollX = Math.round((viewWidth / 2) / zoom - columnCenter);
-        } else {
-          // On desktop, center horizontally on the active element
-          targetScrollX = Math.round((viewWidth / 2) / zoom - this.lastActivePoint.x);
-        }
+      if (this.lastActivePoint) {
+        // Vertical: follow the newest element so it stays fully visible, but never
+        // scroll above the top of the stage (keep scrollY <= 0).
+        const targetCenterY = (viewHeight / 2) / zoom - this.lastActivePoint.y;
+        targetScrollY = Math.min(0, Math.round(targetCenterY));
       } else {
         targetScrollY = this.cursorY > 360 ? -(this.cursorY - 260) : 0;
       }
@@ -693,7 +737,7 @@ export class AvelutBoardController {
 
   private appendElements(rawElements: any[], zone: 'stage' | 'notes' | 'header' = 'stage'): void {
     try {
-      const tagged = rawElements.map(el => ({
+      const tagged = rawElements.map(el => this.normalizeElementFont({
         ...el,
         customData: { ...(el.customData || {}), zone },
       }));
@@ -703,6 +747,34 @@ export class AvelutBoardController {
     } catch (err) {
       console.error('[BoardController] appendElements error:', err);
     }
+  }
+
+  /**
+   * Forces the board's normal (non hand-drawn) sans-serif family onto every text
+   * element and container label, so nothing on the classroom board is ever
+   * rendered in Excalidraw's hand-writing fonts.
+   */
+  private normalizeElementFont(el: any): any {
+    const next: any = { ...el };
+
+    if (next.type === 'text') {
+      const family = next.fontFamily;
+      next.fontFamily = typeof family === 'number' && !HAND_DRAWN_FONT_FAMILIES.has(family)
+        ? family
+        : BOARD_FONT_FAMILY;
+    }
+
+    if (next.label && typeof next.label === 'object') {
+      const labelFamily = next.label.fontFamily;
+      next.label = {
+        ...next.label,
+        fontFamily: typeof labelFamily === 'number' && !HAND_DRAWN_FONT_FAMILIES.has(labelFamily)
+          ? labelFamily
+          : BOARD_FONT_FAMILY,
+      };
+    }
+
+    return next;
   }
 
   public hasElements(): boolean {
@@ -774,9 +846,9 @@ export class AvelutBoardController {
 
     const p = this.getThemePalette();
     const isDark = this.currentTheme === 'dark';
-    const isMobile = this.isMobileView();
     const baseFontSize = this.fontSizeToNumber(args?.fontSize);
-    const startX = this.clampX(args?.x ?? (isMobile ? 16 : 30), 20);
+    const leftMargin = this.getLeftMargin();
+    const startX = this.clampX(args?.x ?? leftMargin, 20);
     let curY = Math.max(this.STAGE_TOP, args?.y ?? this.cursorY);
     const defaultColor = args?.color ?? p.text;
 
@@ -792,9 +864,10 @@ export class AvelutBoardController {
     // Split text into individual lines to render structured educational notes
     const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const elementsToAppend: any[] = [];
-    const maxLineChars = isMobile
-      ? (baseFontSize >= 24 ? 22 : baseFontSize >= 18 ? 32 : 44)
-      : (baseFontSize >= 24 ? 45 : baseFontSize >= 18 ? 62 : 78);
+    // Wrap to the live board width (100% of the visible screen) rather than a
+    // fixed character budget, so lines use the whole device width.
+    const maxLineChars = this.getMaxLineChars(baseFontSize);
+    const contentWidth = this.getContentWidth();
 
     const isExplicitTitle = args?.fontSize === 'title' || (args?.color && args.color !== p.text);
 
@@ -803,7 +876,7 @@ export class AvelutBoardController {
       const wrapped = wordWrap(formatted, maxLineChars);
       const lines = wrapped.split('\n');
       const longestLine = Math.max(...lines.map(l => l.length));
-      const approxW = Math.min(Math.max(longestLine * baseFontSize * 0.55, 60), isMobile ? 360 : 800);
+      const approxW = Math.min(Math.max(longestLine * baseFontSize * BOARD_GLYPH_WIDTH_EM, 60), contentWidth);
       const approxH = Math.max(lines.length * baseFontSize * 1.4, 30);
       this.lastActivePoint = { x: startX + approxW / 2, y: curY + approxH / 2 };
 
@@ -813,7 +886,7 @@ export class AvelutBoardController {
         y: curY,
         text: wrapped,
         fontSize: baseFontSize,
-        fontFamily: isExplicitTitle ? 2 : 1,
+        fontFamily: BOARD_FONT_FAMILY,
         textAlign: 'left',
         verticalAlign: 'top',
         strokeColor: defaultColor,
@@ -828,7 +901,7 @@ export class AvelutBoardController {
 
         if (isPureFormula) {
           const formulaText = formatMathForCanvas(line);
-          const formulaW = Math.min(Math.max(formulaText.length * (baseFontSize * 0.62) + 36, 180), isMobile ? 350 : 540);
+          const formulaW = Math.min(Math.max(formulaText.length * (baseFontSize * 0.62) + 36, 180), contentWidth);
           const formulaH = Math.round(baseFontSize * 1.8 + 8);
 
           // Subtle highlighted formula badge
@@ -847,6 +920,7 @@ export class AvelutBoardController {
             label: {
               text: formulaText,
               fontSize: baseFontSize,
+              fontFamily: BOARD_FONT_FAMILY,
               strokeColor: isDark ? '#38BDF8' : '#0284C7',
             },
             customData: { zone: curY >= 400 ? 'notes' : 'stage', slot: 'formula' },
@@ -869,7 +943,7 @@ export class AvelutBoardController {
           const explanation = formatMathForCanvas(rawExplanation);
 
           // Blue highlight badge behind the key term!
-          const badgeWidth = Math.min(Math.max(keyTerm.length * (baseFontSize * 0.58) + 20, 80), isMobile ? 350 : 600);
+          const badgeWidth = Math.min(Math.max(keyTerm.length * (baseFontSize * 0.58) + 20, 80), contentWidth);
           const badgeHeight = Math.round(baseFontSize * 1.5 + 4);
 
           // 1. Background rectangle (Blue translucent highlight)
@@ -895,7 +969,7 @@ export class AvelutBoardController {
             y: curY,
             text: keyTerm,
             fontSize: baseFontSize,
-            fontFamily: 2, // crisp sans-serif
+            fontFamily: BOARD_FONT_FAMILY,
             textAlign: 'left',
             verticalAlign: 'top',
             strokeColor: isDark ? '#38BDF8' : '#0284C7',
@@ -910,11 +984,11 @@ export class AvelutBoardController {
             // Check if explanation is a formula e.g. "v = f λ" or "n₁ sin θ₁ = n₂ sin θ₂"
             const isExplFormula = explanation.includes('=') && /[$^·×±√\\ωλθa-z]/i.test(explanation);
             if (isExplFormula) {
-              const expFormulaW = Math.min(Math.max(explanation.length * (baseFontSize * 0.62) + 32, 160), isMobile ? 350 : 500);
+              const expFormulaW = Math.min(Math.max(explanation.length * (baseFontSize * 0.62) + 32, 160), contentWidth);
               const expFormulaH = Math.round(baseFontSize * 1.7 + 6);
               elementsToAppend.push({
                 type: 'rectangle',
-                x: startX + 16,
+                x: startX,
                 y: curY,
                 width: expFormulaW,
                 height: expFormulaH,
@@ -927,21 +1001,22 @@ export class AvelutBoardController {
                 label: {
                   text: explanation,
                   fontSize: baseFontSize,
+                  fontFamily: BOARD_FONT_FAMILY,
                   strokeColor: isDark ? '#FDE047' : '#B45309',
                 },
                 customData: { zone: curY >= 400 ? 'notes' : 'stage' },
               });
               curY += expFormulaH + 16;
             } else {
-              const wrappedExpl = wordWrap(explanation, maxLineChars - 4);
+              const wrappedExpl = wordWrap(explanation, maxLineChars);
               const explLines = wrappedExpl.split('\n');
               elementsToAppend.push({
                 type: 'text',
-                x: startX + 16,
+                x: startX,
                 y: curY,
                 text: wrappedExpl,
                 fontSize: Math.max(14, baseFontSize - 2),
-                fontFamily: 1,
+                fontFamily: BOARD_FONT_FAMILY,
                 textAlign: 'left',
                 verticalAlign: 'top',
                 strokeColor: p.text,
@@ -964,7 +1039,7 @@ export class AvelutBoardController {
           y: curY,
           text: wrappedLine,
           fontSize: baseFontSize,
-          fontFamily: 1,
+          fontFamily: BOARD_FONT_FAMILY,
           textAlign: 'left',
           verticalAlign: 'top',
           strokeColor: p.text,
@@ -1003,12 +1078,16 @@ export class AvelutBoardController {
     const p = this.getThemePalette();
     // Canvas cannot render raw LaTeX ($$ ... $$ or \lambda), so format with Unicode symbols
     const canvasFormula = formatMathForCanvas(cleanFormula);
-    const cardWidth = Math.min(Math.max(canvasFormula.length * 13 + 40, 240), this.MOBILE_CARD_WIDTH);
-    this.lastActivePoint = { x: 30 + cardWidth / 2, y: this.cursorY + 34 };
+    const leftMargin = this.getLeftMargin();
+    const cardWidth = Math.min(
+      Math.max(canvasFormula.length * 13 + 40, 240),
+      this.getContentWidth(),
+    );
+    this.lastActivePoint = { x: leftMargin + cardWidth / 2, y: this.cursorY + 34 };
 
     const els = convertToExcalidrawElements([{
       type: 'rectangle',
-      x: 30,
+      x: leftMargin,
       y: this.cursorY + 10,
       width: cardWidth,
       height: 48,
@@ -1016,7 +1095,7 @@ export class AvelutBoardController {
       backgroundColor: p.formulaBg,
       fillStyle: 'solid',
       roundness: { type: 3 },
-      label: { text: canvasFormula, fontSize: 18, strokeColor: p.formulaText },
+      label: { text: canvasFormula, fontSize: 18, fontFamily: BOARD_FONT_FAMILY, strokeColor: p.formulaText },
       customData: { zone: 'notes', slot: 'formula' },
     }]);
 
@@ -1030,12 +1109,13 @@ export class AvelutBoardController {
   }
   private _drawShape(args: DrawShapeArgs): void {
     const p = this.getThemePalette();
+    const leftMargin = this.getLeftMargin();
     const {
       id = `shape_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
-      x = 30,
+      x = leftMargin,
       y = this.cursorY,
-      width = this.MOBILE_CARD_WIDTH,
+      width = Math.min(this.MOBILE_CARD_WIDTH, this.getContentWidth()),
       height = this.MOBILE_CARD_HEIGHT,
       label,
       color,
@@ -1047,7 +1127,8 @@ export class AvelutBoardController {
 
     const clampedX = this.clampX(x, width);
     const clampedY = Math.max(this.STAGE_TOP, y);
-    const cardWidth = Math.min(width, this.MOBILE_CARD_WIDTH);
+    // Shapes may span the whole board width, never more.
+    const cardWidth = Math.min(width, this.getContentWidth());
     let cardHeight = height || this.MOBILE_CARD_HEIGHT;
 
     this.lastActivePoint = { x: clampedX + cardWidth / 2, y: clampedY + cardHeight / 2 };
@@ -1071,10 +1152,13 @@ export class AvelutBoardController {
 
     if (label) {
       const rawText = typeof label === 'string' ? label.trim() : label.text.trim();
-      const text = /[$^·×±√\\]/.test(rawText) ? formatMathForCanvas(rawText) : rawText;
+      // Wrap the label inside the shape width so long labels stay readable.
+      const formatted = /[$^·×±√\\]/.test(rawText) ? formatMathForCanvas(rawText) : rawText;
+      const text = this.wrapToBoard(formatted, 16, cardWidth - 28);
       el.label = {
         text,
         fontSize: 16,
+        fontFamily: BOARD_FONT_FAMILY,
         strokeColor: p.labelColor,
       };
       
@@ -1134,7 +1218,7 @@ export class AvelutBoardController {
           endX = startX;
         }
       } else {
-        startX = this.clampX(args.startX ?? (this.MOBILE_BOARD_WIDTH / 2), 20);
+        startX = this.clampX(args.startX ?? (this.getLeftMargin() + 20), 20);
         startY = args.startY ?? Math.max(this.STAGE_TOP, this.cursorY - 24);
         endX = startX;
         endY = args.endY ?? startY + 36;
@@ -1164,6 +1248,7 @@ export class AvelutBoardController {
         skeleton.label = {
           text: args.label.trim(),
           fontSize: 13,
+          fontFamily: BOARD_FONT_FAMILY,
           strokeColor: p.arrowLabelColor,
         };
       }
@@ -1186,7 +1271,7 @@ export class AvelutBoardController {
     this.actionQueue.push(() => {
       const {
         text,
-        x = 950,
+        x = this.getLeftMargin(),
         y = 120,
         width = 240,
         height = 200,
@@ -1197,18 +1282,21 @@ export class AvelutBoardController {
 
       if (!text?.trim()) return;
 
+      const noteWidth = Math.min(width, this.getContentWidth());
+
       const skeleton = {
         type: 'rectangle', fillStyle: 'solid',
         id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        x: this.clampX(x, width),
+        x: this.clampX(x, noteWidth),
         y: this.clampY(y, height),
-        width,
+        width: noteWidth,
         height,
         backgroundColor,
         strokeColor,
         label: {
-          text: text.trim(),
+          text: this.wrapToBoard(text.trim(), 20, noteWidth - 32),
           fontSize: 20,
+          fontFamily: BOARD_FONT_FAMILY,
         },
         created: null,
         customData: { zone: 'stage' },
@@ -1228,7 +1316,7 @@ export class AvelutBoardController {
       el.label?.text?.toLowerCase().includes(targetText.toLowerCase())
     );
 
-    const tx = target?.x ?? 60;
+    const tx = target?.x ?? this.getLeftMargin();
     const ty = target?.y ?? (this.cursorY - 40);
     const tw = Math.max(target?.width ?? 0, 140);
     const th = Math.max(target?.height ?? 0, 36);
@@ -1399,20 +1487,21 @@ export class AvelutBoardController {
     return true;
   }
 
-  public writeKeywords(keywords: string[], startX = 50, startY = 475): void {
+  public writeKeywords(keywords: string[], startX = this.getLeftMargin(), startY = 475): void {
     this.actionQueue.push(() => { this._writeKeywords(keywords, startX, startY); });
   }
-  private _writeKeywords(keywords: string[], startX = 50, startY = 475): void {
+  private _writeKeywords(keywords: string[], startX = this.getLeftMargin(), startY = 475): void {
     if (!keywords || !keywords.length) return;
     const clean = keywords.map(k => sanitizeLabel(k)).filter(Boolean).slice(0, 4);
     if (!clean.length) return;
 
+    const contentWidth = this.getContentWidth();
     this.elements = this.elements.filter(el => el.customData?.slot !== 'keywords');
     let cx = startX;
     const rawEls: any[] = [];
 
     clean.forEach((kw) => {
-      const w = Math.max(kw.length * 10 + 20, 75);
+      const w = Math.min(Math.max(kw.length * 10 + 20, 75), contentWidth);
       const h = 32;
 
       rawEls.push({
@@ -1425,12 +1514,13 @@ export class AvelutBoardController {
         backgroundColor: '#0F172A',
         fillStyle: 'solid',
         roundness: { type: 3 },
-        label: { text: kw, fontSize: 13, strokeColor: '#38BDF8' },
+        label: { text: kw, fontSize: 13, fontFamily: BOARD_FONT_FAMILY, strokeColor: '#38BDF8' },
         customData: { zone: 'notes', slot: 'keywords' },
       });
 
       cx += w + 12;
-      if (cx > 650) cx = startX;
+      // Wrap keyword pills at the board's right edge instead of a fixed 650px.
+      if (cx + w > startX + contentWidth) cx = startX;
     });
 
     this.appendElements(rawEls, 'notes');
@@ -1444,7 +1534,7 @@ export class AvelutBoardController {
 
     this.clearStageIfFull();
 
-    const startX = 50;
+    const startX = this.getLeftMargin();
 
     // Estimate heights based on diagram type to reserve space properly
     let estimatedHeight = 200;
@@ -1515,7 +1605,7 @@ export class AvelutBoardController {
       },
       ...(data.equation ? [{
         type: 'text', x: sx + 30, y: sy + 130,
-        text: data.equation, fontSize: 18, strokeColor: '#FDE047', fontFamily: 1,
+        text: data.equation, fontSize: 18, strokeColor: '#FDE047', fontFamily: BOARD_FONT_FAMILY,
         textAlign: 'left', verticalAlign: 'top',
       }] : []),
     ], 'stage');
@@ -1561,17 +1651,17 @@ export class AvelutBoardController {
       { type: 'line', x: sx, y: sy + h, width: 0, height: -h, strokeColor: '#94A3B8', strokeWidth: 2 },
       {
         type: 'text', x: sx + w - 20, y: sy + h + 8,
-        text: data.xLabel || 'x', fontSize: 14, strokeColor: '#94A3B8', fontFamily: 1,
+        text: data.xLabel || 'x', fontSize: 14, strokeColor: '#94A3B8', fontFamily: BOARD_FONT_FAMILY,
       },
       {
         type: 'text', x: sx - 20, y: sy,
-        text: data.yLabel || 'y', fontSize: 14, strokeColor: '#94A3B8', fontFamily: 1,
+        text: data.yLabel || 'y', fontSize: 14, strokeColor: '#94A3B8', fontFamily: BOARD_FONT_FAMILY,
       },
     ];
     if (data.title && !isGenericLabel(data.title)) {
       els.push({
         type: 'text', x: sx, y: sy - 24,
-        text: data.title, fontSize: 16, strokeColor: '#38BDF8', fontFamily: 1,
+        text: data.title, fontSize: 16, strokeColor: '#38BDF8', fontFamily: BOARD_FONT_FAMILY,
       });
     }
     this.appendElements(els, 'stage');
@@ -1746,13 +1836,13 @@ export class AvelutBoardController {
       if (leftPoints[i]) {
         els.push({
           type: 'text', x: sx + 6, y: rowY,
-          text: `• ${leftPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: 1,
+          text: `• ${leftPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: BOARD_FONT_FAMILY,
         });
       }
       if (rightPoints[i]) {
         els.push({
           type: 'text', x: sx + colW + 58, y: rowY,
-          text: `• ${rightPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: 1,
+          text: `• ${rightPoints[i]}`, fontSize: 14, strokeColor: '#E2E8F0', fontFamily: BOARD_FONT_FAMILY,
         });
       }
       rowY += 28;
@@ -2089,7 +2179,7 @@ export class AvelutBoardController {
         text: `Resistor (R) [ ${label || '100 Ω'} ]`,
         fontSize: 22,
         strokeColor: '#FDE047',
-        fontFamily: 1,
+        fontFamily: BOARD_FONT_FAMILY,
       },
       // Current flow indicator
       {
@@ -2111,7 +2201,7 @@ export class AvelutBoardController {
         text: caption || "V = I · R  (Ohm's Law)",
         fontSize: 28,
         strokeColor: '#FAFAFA',
-        fontFamily: 1,
+        fontFamily: BOARD_FONT_FAMILY,
       },
       // Functional explanation
       {
@@ -2121,7 +2211,7 @@ export class AvelutBoardController {
         text: '• Limits electrical current  • Dissipates heat: P = I² · R',
         fontSize: 16,
         strokeColor: '#94A3B8',
-        fontFamily: 1,
+        fontFamily: BOARD_FONT_FAMILY,
       },
     ];
 
@@ -2202,7 +2292,7 @@ export class AvelutBoardController {
         text: caption || "V = I · R    |    I = V / R    |    P = V · I = I²R",
         fontSize: 24,
         strokeColor: '#FDE047',
-        fontFamily: 1,
+        fontFamily: BOARD_FONT_FAMILY,
       },
     ];
 
@@ -2265,7 +2355,7 @@ export class AvelutBoardController {
       {
         type: 'text', x: sx + 20, y: sy + 130,
         text: 'Hydraulic Analogy:\n• Water Pressure ≡ Voltage (V)\n• Flow Rate ≡ Current (I)\n• Pipe Constriction ≡ Resistance (R)\n• Ohm\'s Law: Current = Pressure / Resistance',
-        fontSize: 18, strokeColor: '#FDE047', fontFamily: 1,
+        fontSize: 18, strokeColor: '#FDE047', fontFamily: BOARD_FONT_FAMILY,
       },
     ];
     this.appendElements(els, 'stage');
@@ -2288,7 +2378,7 @@ export class AvelutBoardController {
       {
         type: 'text', x: sx + 30, y: sy + 115,
         text: caption || (gate === 'OR' ? 'Y = A + B' : gate === 'NOT' ? 'Y = ¬A' : 'Y = A · B (Logic AND)'),
-        fontSize: 24, strokeColor: '#FDE047', fontFamily: 1,
+        fontSize: 24, strokeColor: '#FDE047', fontFamily: BOARD_FONT_FAMILY,
       },
     ];
     this.appendElements(els, 'stage');
@@ -2326,7 +2416,7 @@ export class AvelutBoardController {
       {
         type: 'text', x: sx + 30, y: sy + 330,
         text: caption || 'Efficiency: η = W / Q_H = 1 − (T_C / T_H)',
-        fontSize: 24, strokeColor: '#FDE047', fontFamily: 1,
+        fontSize: 24, strokeColor: '#FDE047', fontFamily: BOARD_FONT_FAMILY,
       },
     ];
     this.appendElements(els, 'stage');
@@ -2367,7 +2457,10 @@ export class AvelutBoardController {
           const p = this.getThemePalette();
           const PALETTE = p.palette;
           let colorIdx = 0;
-          const isMobile = this.isMobileView();
+          const leftMargin = this.getLeftMargin();
+          // Every box drawn by the model spans the left gutter and the readable
+          // board width, so boxes never float in the middle of the screen.
+          const cardWidth = Math.min(300, this.getContentWidth());
 
           // Pass 1: shapes (must exist before arrows reference them)
           for (const el of args.elements) {
@@ -2377,7 +2470,7 @@ export class AvelutBoardController {
 
             if (el.kind === 'text') {
               this.writeText(el.text || '', {
-                x: isMobile ? 30 : el.x,
+                x: leftMargin,
                 y: el.y,
                 fontSize: 'medium',
                 color: p.text,
@@ -2395,9 +2488,9 @@ export class AvelutBoardController {
                 type: shapeType,
                 id,
                 label: el.text || '',
-                x: el.x !== undefined ? el.x : (isMobile ? 30 : 30),
-                y: el.y !== undefined ? el.y : (isMobile ? undefined : el.y),
-                width: el.x !== undefined ? (isMobile ? Math.min(240, this.MOBILE_CARD_WIDTH) : 240) : this.MOBILE_CARD_WIDTH,
+                x: el.x !== undefined ? el.x : leftMargin,
+                y: el.y !== undefined ? el.y : undefined,
+                width: cardWidth,
                 height: this.MOBILE_CARD_HEIGHT,
                 backgroundColor: p.cardBg,
                 strokeColor,

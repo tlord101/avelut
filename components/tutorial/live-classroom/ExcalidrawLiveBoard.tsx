@@ -164,7 +164,9 @@ export const ExcalidrawLiveBoard: React.FC<ExcalidrawLiveBoardProps> = ({
             zenModeEnabled: true,
             currentItemStrokeColor: isDark ? '#38BDF8' : '#0284C7',
             currentItemBackgroundColor: 'transparent',
-            currentItemFontFamily: 1,
+            // 6 === Excalidraw "Normal" (Nunito). Never 1/3/5 — those are hand-written fonts.
+            currentItemFontFamily: 6,
+            currentItemTextAlign: 'left',
             gridSize: null,
             zoom: { value: 1.0 as any },
             scrollX: 0,
