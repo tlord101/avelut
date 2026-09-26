@@ -231,15 +231,14 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
     }
   };
 
-  // Student Asks a Question -> AI redraws / highlights board & clarifies warmly
+  // Student Asks a Question -> pause, acknowledge, then auto-continue lesson
   const handleStudentSpokenQuery = (query: string) => {
     setInterruptionQuery(`"${query}"`);
     syncEngineRef.current.pause();
+    setIsVoiceRecording(false);
 
-    // Friendly AI Clarification & Dynamic Board Redraw
-    setTutorClarificationText(`Great question, ${effectiveUserName}! Let's zoom into this exact mechanism on the board.`);
+    setTutorClarificationText(`Great question, ${effectiveUserName}! "${query}" — let me clarify that, then we continue.`);
     
-    // Dynamic Redraw: Highlight specific concept or draw rich illustration
     setBoardElements((prev) => [
       ...prev,
       {
@@ -256,7 +255,14 @@ export const LiveSynchronizedTutorialView: React.FC<LiveSynchronizedTutorialView
     ]);
 
     setActiveFocusArea({ x: 20, y: 155, w: 490, h: 120, color: '#0066FF' });
-    addToast(`Tutor answered: "${query}"`, 'success');
+    addToast(`Tutor heard you — answering then continuing…`, 'success');
+
+    window.setTimeout(() => {
+      setInterruptionQuery(null);
+      setTutorClarificationText(null);
+      setActiveFocusArea(null);
+      syncEngineRef.current.play();
+    }, 4500);
   };
 
   const togglePlayback = () => {

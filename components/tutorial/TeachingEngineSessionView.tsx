@@ -72,6 +72,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
   const [showAskModal, setShowAskModal] = useState(false);
   const [isProcessingAsk, setIsProcessingAsk] = useState(false);
   const [isAnsweringOnBoard, setIsAnsweringOnBoard] = useState(false);
+  const isAnsweringOnBoardRef = useRef(false);
 
   const engineRef = useRef<TeachingEngineService | null>(null);
   const boardManagerRef = useRef<BoardStateManager>(new BoardStateManager());
@@ -275,7 +276,8 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
           setIsWaitingForVoice(false);
         }
 
-        if (!playing && isAnsweringOnBoard) {
+        if (!playing && isAnsweringOnBoardRef.current) {
+          isAnsweringOnBoardRef.current = false;
           setIsAnsweringOnBoard(false);
           const snap = savedBoardRef.current;
           savedBoardRef.current = null;
@@ -581,6 +583,7 @@ export const TeachingEngineSessionView: React.FC<TeachingEngineSessionViewProps>
     savedBoardRef.current = boardElementsRef.current.map((el) => ({ ...el }));
     boardManagerRef.current.clearBoard();
     setIsAnsweringOnBoard(true);
+    isAnsweringOnBoardRef.current = true;
     setIsAudioReady(true);
     setShowAskModal(false);
 

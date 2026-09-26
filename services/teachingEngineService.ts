@@ -1547,8 +1547,20 @@ export class TeachingEngineService {
               }
             });
             this.listeners.forEach((l) => l.onAudioPlaybackStateChanged?.(false));
+            this.isPaused = false;
+            this.listeners.forEach((l) => (l as any).onInterruptionComplete?.());
+            setTimeout(() => {
+              if (!this.isDestroyed && !this.isPaused) {
+                this.resumeLesson();
+              }
+            }, 1200);
           },
         });
+      } else {
+        this.isPaused = false;
+        setTimeout(() => {
+          if (!this.isDestroyed) this.resumeLesson();
+        }, 800);
       }
 
       return result;

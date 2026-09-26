@@ -209,7 +209,7 @@ export const UploadCenter: React.FC = () => {
   const [isAddingCourse, setIsAddingCourse] = useState(false);
   const [newCourseType, setNewCourseType] = useState<'private' | 'general'>('private');
 
-  const [extractedCourses, setExtractedCourses] = useState<{ course_name: string; course_code: string; selected: boolean; type: 'private' | 'general' }[]>([]);
+  const [extractedCourses, setExtractedCourses] = useState<{ course_name: string; course_code: string; selected: boolean; type: 'private' | 'general'; level?: string; semester?: 'first' | 'second' }[]>([]);
   const [isExtractingCourses, setIsExtractingCourses] = useState(false);
 
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
@@ -767,9 +767,17 @@ FORMAT: { "is_related": true, "unrelated_reason": "", "questions": [ { "question
     try {
       const base64Chunk = await fileToBase64(file);
       const mimeType = isPdf ? 'application/pdf' : (file.type || 'image/jpeg');
-      const prompt = `Analyze this course form, timetable, syllabus, or academic document carefully.
-Extract all course names and their corresponding course codes (for example: "Elementary Mathematics I" with code "MTH101", "Introduction to Programming" with code "CSC101").
-Return a JSON object with a 'courses' array, where each item has 'course_name' and 'course_code'.`;
+      const prompt = `Analyze this course form, timetable, syllabus, registration slip, or academic document carefully.
+
+Extract EVERY course with:
+- course_name (full title)
+- course_code (e.g. MTH101, CSC101)
+- level: academic year/level as one of: "100lvl", "200lvl", "300lvl", "400lvl", "500lvl". Infer from course code prefix (101-199 → 100lvl, 201-299 → 200lvl, etc.), document headers like "100 Level", "Year 1", "Level 100", or explicit labels. If unclear, omit level.
+- semester: "first" or "second". Detect from labels such as "First Semester", "1st Semester", "Harmattan", "Rain", "Second Semester", "2nd Semester", column headers, or section titles. If the form is clearly one semester only, use that for all courses. If a course is undetermined, omit semester.
+
+Group and return only courses that clearly belong on the document. Prefer accuracy over guessing.
+
+Return JSON: { "courses": [ { "course_name": "...", "course_code": "...", "level": "100lvl", "semester": "first" } ] }`;
 
       const aiResponse = await attemptApiCall(() => ai.models.generateContent({
         model: aiModel,
@@ -785,7 +793,9 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
                   type: Type.OBJECT,
                   properties: {
                     course_name: { type: Type.STRING },
-                    course_code: { type: Type.STRING }
+                    course_code: { type: Type.STRING },
+                    level: { type: Type.STRING },
+                    semester: { type: Type.STRING }
                   },
                   required: ['course_name', 'course_code']
                 }
@@ -815,12 +825,18 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
       if (data.courses && Array.isArray(data.courses) && data.courses.length > 0) {
         const validated = data.courses
           .filter((c: any) => c && (c.course_name || c.name) && (c.course_code || c.code))
-          .map((c: any) => ({
-            course_name: String(c.course_name || c.name).trim(),
-            course_code: String(c.course_code || c.code).trim().toUpperCase(),
-            selected: true,
-            type: 'private' as const,
-          }));
+          .map((c: any) => {
+            const rawLevel = c.level ? normalizeLevel(String(c.level)) : undefined;
+            const rawSemester = c.semester ? normalizeSemester(String(c.semester)) : undefined;
+            return {
+              course_name: String(c.course_name || c.name).trim(),
+              course_code: String(c.course_code || c.code).trim().toUpperCase(),
+              selected: true,
+              type: 'private' as const,
+              level: rawLevel,
+              semester: rawSemester as 'first' | 'second' | undefined,
+            };
+          });
 
         if (validated.length === 0) {
           throw new Error("No valid courses could be identified in the uploaded document.");
@@ -854,24 +870,26 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
 
       coursesToSave.forEach(course => {
         const courseId = course.course_code.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const courseLevel = normalizeLevel((course as any).level || selectedLevel);
+        const courseSemester = normalizeSemester((course as any).semester || selectedSemester);
         const courseData: Partial<Course> = {
           course_id: courseId,
           course_name: course.course_name.trim(),
           course_code: course.course_code.trim().toUpperCase(),
-          level: selectedLevel,
-          semester: selectedSemester,
+          level: courseLevel,
+          semester: courseSemester,
           course_status: 'active',
         };
 
         if (course.type === 'general') {
            if (college && college.departments) {
                Object.keys(college.departments).forEach(deptId => {
-                   updates[`schools_data/${selectedSchoolId}/colleges/${selectedCollegeId}/departments/${deptId}/levels/${selectedLevel}/courses/${courseId}`] = courseData;
+                   updates[`schools_data/${selectedSchoolId}/colleges/${selectedCollegeId}/departments/${deptId}/levels/${courseLevel}/courses/${courseId}`] = courseData;
                });
            }
         } else {
            const deptPath = `${selectedSchoolId}/colleges/${selectedCollegeId}/departments/${selectedDepartmentId}`;
-           updates[`schools_data/${deptPath}/levels/${selectedLevel}/courses/${courseId}`] = courseData;
+           updates[`schools_data/${deptPath}/levels/${courseLevel}/courses/${courseId}`] = courseData;
         }
       });
 
@@ -1328,33 +1346,60 @@ Return a JSON object with a 'courses' array, where each item has 'course_name' a
                           <h4 className="font-bold text-lg text-slate-800 dark:text-slate-200">Extracted Courses</h4>
                           <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
                             {extractedCourses.map((c, idx) => (
-                              <div key={idx} className="flex flex-col sm:flex-row gap-3 items-center p-3 border border-slate-200 rounded-xl bg-slate-50">
-                                <input type="checkbox" checked={c.selected} onChange={e => {
-                                  const newCourses = [...extractedCourses];
-                                  newCourses[idx].selected = e.target.checked;
-                                  setExtractedCourses(newCourses);
-                                }} className="w-5 h-5 rounded text-sky-600 focus:ring-sky-500 cursor-pointer" />
+                              <div key={idx} className="flex flex-col gap-2 p-3 border border-slate-200 rounded-xl bg-slate-50">
+                                <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                  <input type="checkbox" checked={c.selected} onChange={e => {
+                                    const newCourses = [...extractedCourses];
+                                    newCourses[idx].selected = e.target.checked;
+                                    setExtractedCourses(newCourses);
+                                  }} className="w-5 h-5 rounded text-sky-600 focus:ring-sky-500 cursor-pointer" />
 
-                                <input type="text" value={c.course_code} onChange={e => {
-                                  const newCourses = [...extractedCourses];
-                                  newCourses[idx].course_code = e.target.value;
-                                  setExtractedCourses(newCourses);
-                                }} className="w-full sm:w-28 p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400" placeholder="Code" />
+                                  <input type="text" value={c.course_code} onChange={e => {
+                                    const newCourses = [...extractedCourses];
+                                    newCourses[idx].course_code = e.target.value;
+                                    setExtractedCourses(newCourses);
+                                  }} className="w-full sm:w-28 p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400" placeholder="Code" />
 
-                                <input type="text" value={c.course_name} onChange={e => {
-                                  const newCourses = [...extractedCourses];
-                                  newCourses[idx].course_name = e.target.value;
-                                  setExtractedCourses(newCourses);
-                                }} className="flex-1 w-full p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400" placeholder="Course Name" />
+                                  <input type="text" value={c.course_name} onChange={e => {
+                                    const newCourses = [...extractedCourses];
+                                    newCourses[idx].course_name = e.target.value;
+                                    setExtractedCourses(newCourses);
+                                  }} className="flex-1 w-full p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400" placeholder="Course Name" />
 
-                                <select value={c.type} onChange={e => {
-                                  const newCourses = [...extractedCourses];
-                                  newCourses[idx].type = e.target.value as 'private' | 'general';
-                                  setExtractedCourses(newCourses);
-                                }} className="w-full sm:w-36 p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400 bg-white">
-                                  <option value="private">Private</option>
-                                  <option value="general">General</option>
-                                </select>
+                                  <select value={c.type} onChange={e => {
+                                    const newCourses = [...extractedCourses];
+                                    newCourses[idx].type = e.target.value as 'private' | 'general';
+                                    setExtractedCourses(newCourses);
+                                  }} className="w-full sm:w-28 p-2 text-sm border border-slate-200 rounded outline-none focus:border-sky-400 bg-white">
+                                    <option value="private">Private</option>
+                                    <option value="general">General</option>
+                                  </select>
+                                </div>
+                                <div className="flex flex-wrap gap-2 pl-8">
+                                  <select
+                                    value={c.level || selectedLevel}
+                                    onChange={e => {
+                                      const newCourses = [...extractedCourses];
+                                      newCourses[idx].level = e.target.value;
+                                      setExtractedCourses(newCourses);
+                                    }}
+                                    className="p-2 text-xs border border-slate-200 rounded outline-none focus:border-sky-400 bg-white"
+                                  >
+                                    {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                                  </select>
+                                  <select
+                                    value={c.semester || selectedSemester}
+                                    onChange={e => {
+                                      const newCourses = [...extractedCourses];
+                                      newCourses[idx].semester = e.target.value as 'first' | 'second';
+                                      setExtractedCourses(newCourses);
+                                    }}
+                                    className="p-2 text-xs border border-slate-200 rounded outline-none focus:border-sky-400 bg-white"
+                                  >
+                                    <option value="first">1st Semester</option>
+                                    <option value="second">2nd Semester</option>
+                                  </select>
+                                </div>
                               </div>
                             ))}
                           </div>

@@ -46,6 +46,12 @@ ${profile.boardCountHint}
 Every board MUST have a concrete visual_purpose describing what will be DRAWN (not written).
 Prefer illustration-heavy boards. Text-only boards only for pure definitions when no figure helps.
 
+HARD VISUAL RULES (NON-NEGOTIABLE):
+1) After the opening/hook board, the NEXT concept board MUST include a real diagram (paths, arrows, shapes, process flow, or mechanism illustration) — never text-only.
+2) Any board with step_type "comparison" MUST use a multi-column academic TABLE (or side-by-side comparison diagram), not paragraphs of text.
+3) At least one diagram OR table must appear within the first 3 boards after the introduction.
+4) Do not default to writing bullet text on the board when a diagram or table can teach the idea faster.
+
 ${profile.structureExtra}
 
 ${durationMode === 60 ? `For 60-minute mode: organize boards into chapters. Include natural break-friendly boards. Student may pause and resume.` : ''}
@@ -105,6 +111,9 @@ BOARD DESIGN RULES:
 - Every board MUST have a concrete visual_purpose describing what will be DRAWN (path/arrow/diagram). Text is secondary.
 - NEVER put giant walls of text on the board.
 - Keep board titles concise.
+- After the intro/hook board, the first concept board MUST draw a real diagram (not text-only).
+- Comparison boards MUST use a table or side-by-side diagram.
+- At least one diagram or table is required in the first three post-intro boards.
 
 ${ILLUSTRATION_FIRST_PROMPT_BLOCK}
 
@@ -217,7 +226,11 @@ MANDATORY PERFORMANCE REQUIREMENTS:
 - Explain step-by-step with deep pedagogical clarity; do NOT just read board text verbatim.
 ${profile.boardExtra}
 
-2. MASTER SVG TECHNICAL OUTLINE ILLUSTRATION (required):
+2. MASTER SVG / BOARD DRAWING (REQUIRED — NO TEXT-ONLY BOARDS FOR CONCEPTS OR COMPARISONS):
+- If step_type is "concept", "mechanism", "intuition", or "derivation": you MUST produce a real diagram (process flow, labeled shapes, arrows, mechanism) via board_actions and/or svg_illustration. Writing bullets alone is forbidden.
+- If step_type is "comparison": you MUST draw a multi-column TABLE or clear side-by-side comparison diagram — not paragraphs.
+- After the introduction/hook, at least one board must contain a diagram or table before pure text summary boards.
+
 "Generate a clean, minimalist technical outline illustration in valid SVG format (<svg> wrapper, no markdown block wrappers if parsing raw). Use a 400x200 viewBox, a transparent or white background, crisp strokes with light or dashed outlines for structural paths, distinct accent fills for key focal points, and clear sans-serif text labels. Use semantic classes for styling, thin strokes (stroke-width: 1.5 to 2), and a restrained professional color palette. Position all elements with precise coordinate attributes (x, y, cx, cy) to ensure exact alignment and complete responsiveness."
 
 CORE DESIGN RULES:
