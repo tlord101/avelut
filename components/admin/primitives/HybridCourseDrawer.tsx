@@ -207,6 +207,9 @@ export const HybridCourseDrawer: React.FC<HybridCourseDrawerProps> = ({
             });
 
             const mimeType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+            const isPdf = mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+            const isImage = mimeType.startsWith('image/');
+
             const prompt = `Analyze this course form/document and extract all courses listed.
 Extract for each course:
 - course_code (string, e.g. "MEE 301")
@@ -228,16 +231,49 @@ OUTPUT ONLY A VALID JSON OBJECT:
   ]
 }`;
 
-            const modelName = appSettings.openrouter_model || 'qwen/qwen3.7-flash';
+            // Prefer qwen3.8-omni-flash (app standard). Never force qwen-vl-plus.
+            const modelName =
+              appSettings?.usage_settings?.feature_models?.study_guide_extraction ||
+              appSettings?.alibaba_model ||
+              'qwen3.8-omni-flash';
+
+            // Build parts: images go as vision input; PDFs are text-extracted so DashScope
+            // does not receive illegal application/pdf inside image_url.
+            const parts: any[] = [{ text: prompt }];
+            if (isImage) {
+              parts.push({ inlineData: { mimeType, data: base64Data } });
+            } else if (isPdf) {
+              try {
+                const { extractTextFromPDF } = await import('../../../utils/pdfExtraction');
+                const pdfText = await extractTextFromPDF(file);
+                const truncated = (pdfText || '').slice(0, 120000);
+                if (truncated.trim()) {
+                  parts[0] = {
+                    text: `${prompt}\n\n--- DOCUMENT TEXT (extracted from PDF) ---\n${truncated}`,
+                  };
+                } else {
+                  // Fallback: still send as document note; model cannot open raw PDF via image_url
+                  parts.push({
+                    inlineData: { mimeType: 'application/pdf', data: base64Data },
+                  });
+                }
+              } catch (extractErr) {
+                console.warn('PDF text extraction failed, sending as attachment note', extractErr);
+                parts.push({
+                  inlineData: { mimeType: 'application/pdf', data: base64Data },
+                });
+              }
+            } else {
+              // Other docs: try to send as text note / attachment
+              parts.push({ inlineData: { mimeType, data: base64Data } });
+            }
+
             const response = await aiClient.current.models.generateContent({
                 model: modelName,
                 contents: [
                     {
                         role: 'user',
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType, data: base64Data } },
-                        ],
+                        parts,
                     },
                 ],
                 config: {
@@ -265,7 +301,12 @@ OUTPUT ONLY A VALID JSON OBJECT:
                 },
             });
 
-            const responseText = (response as any).text || '';
+            // getResponseText handles both string and function .text forms from createAvelutAI
+            const { getResponseText } = await import('../../../utils/inference');
+            const responseText = getResponseText(response) || '';
+            if (!responseText.trim()) {
+              throw new Error('AI returned an empty response while extracting courses.');
+            }
             const parsed = JSON.parse(responseText);
             const extractedListRaw = Array.isArray(parsed.courses) ? parsed.courses : [];
 
