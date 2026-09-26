@@ -472,7 +472,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         try {
             const ai = createAvelutAI(appSettings, userProfile);
             if (!ai) throw new Error('Avelut AI is not configured in App Controls.');
-            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
 
             const prompt = `Based on this course code/name: "${manualCourseCode}", generate a short, one-line professional course description. Return a JSON object with 'course_name' (guessed full name if possible, else the code), 'course_code' (standardized uppercase code), and 'description'.`;
 
@@ -572,13 +572,34 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         setIsExtractingCourses(true);
         try {
             const ai = createAvelutAI(appSettings, userProfile);
-            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
-            const base64Chunk = await fileToBase64(file);
-            const prompt = `Analyze this PDF document. Extract all course names and course codes. Return a JSON object with a 'courses' array, where each item has 'course_name' and 'course_code'.`;
+            // Prefer Alibaba Omni model (qwen3.8-omni-flash). Do not force VL-only models.
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
+
+            // DashScope Chat Completions cannot open PDF via image_url.
+            // Extract text client-side so the model actually reads the document.
+            const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+            const pdfText = await extractTextFromPDF(file);
+            const truncated = (pdfText || '').slice(0, 120000).trim();
+            if (!truncated) {
+                throw new Error('Could not read any text from this PDF. Try a text-based PDF (not a scanned image-only file), or convert pages to images.');
+            }
+
+            const prompt = `Analyze this course form / curriculum document and extract all courses listed.
+
+DOCUMENT TEXT:
+---
+${truncated}
+---
+
+Extract every course with:
+- course_name (string)
+- course_code (string, e.g. "MEE 301")
+
+Return ONLY a JSON object with a "courses" array.`;
 
             const callRes = await attemptApiCall(() => ai.models.generateContent({
                 model: aiModel,
-                contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType: 'application/pdf', data: base64Chunk } }] }],
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: {
@@ -699,7 +720,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
                 try {
                     const ai = createAvelutAI(appSettings, userProfile);
                     if (ai) {
-                        const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+                        const aiModel = getFeatureModel('study_guide_extraction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
                         const prompt = `Based on this course code: "${code}", generate a standard course name and 1-line description. Return JSON with 'course_name' and 'description'.`;
                         const res = await attemptApiCall(() => ai.models.generateContent({
                             model: aiModel,
@@ -813,7 +834,7 @@ const StudyGuideContent: React.FC<StudyGuideProps> = ({ userProfile, userProgres
         try {
             const ai = createAvelutAI(appSettings, userProfile);
             if (!ai) throw new Error('AI service is not configured in App Controls.');
-            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
 
             const fileName = docUploadFile.name.toLowerCase();
             const isPdf = fileName.endsWith('.pdf') || docUploadFile.type === 'application/pdf';
@@ -832,13 +853,18 @@ Return a JSON object containing a "topics" array.`;
 
             let contents: any;
             if (isPdf) {
-                const base64Data = await fileToBase64(docUploadFile);
+                // Extract text so the model can read the syllabus (PDF cannot be sent as image_url on DashScope)
+                const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+                const pdfText = await extractTextFromPDF(docUploadFile);
+                const truncated = (pdfText || '').slice(0, 120000).trim();
+                if (!truncated) {
+                    throw new Error('Could not read text from this PDF. Use a text-based PDF or convert scanned pages to images.');
+                }
                 contents = [
                     {
                         role: 'user',
                         parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType: 'application/pdf', data: base64Data } }
+                            { text: `${prompt}\n\n=== DOCUMENT TEXT ===\n${truncated}` }
                         ]
                     }
                 ];
@@ -1074,7 +1100,7 @@ Return a JSON object containing a "topics" array.`;
         try {
             const ai = createAvelutAI(appSettings, userProfile);
             if (!ai) throw new Error('AI service not available.');
-            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || 'qwen/qwen3.7-flash';
+            const aiModel = getFeatureModel('study_guide_extraction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
             const prompt = `Write a concise 2-sentence academic overview/scope for the topic "${manualTopicForm.topic_name}" in the course "${target?.course_name || 'Academic Studies'}". Return only the text.`;
             const res = await attemptApiCall(() => ai.models.generateContent({
                 model: aiModel,
