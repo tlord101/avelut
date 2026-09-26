@@ -6,8 +6,8 @@
   "plugins": {
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#00000000",
-      "overlaysWebView": true
+      "backgroundColor": "#000000",
+      "overlaysWebView": false
     },
     "Keyboard": {
       "resize": "body",
