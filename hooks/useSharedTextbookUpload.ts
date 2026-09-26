@@ -173,7 +173,27 @@ export const useSharedTextbookUpload = () => {
 
                 setUploadProgress({ status: `AI extracting syllabus topics (${index + 1}/${pdfFiles.length})...`, percent: 35 + (index * 5) });
 
-                const textbookPrompt = `Analyze this PDF textbook for "${course.course_name}" at "${course.level}" level.
+                // Extract text from the PDF so the model can actually read it.
+                // DashScope Chat Completions rejects application/pdf inside image_url.
+                const { extractTextFromPDF } = await import('../utils/pdfExtraction');
+                let fullPdfText = '';
+                try {
+                    fullPdfText = (await extractTextFromPDF(file) || '').slice(0, 150000).trim();
+                } catch (ex) {
+                    console.warn('PDF text extraction failed', ex);
+                }
+                if (!fullPdfText) {
+                    throw new Error('Could not extract text from this PDF. Use a text-based PDF (not scan-only), or convert pages to images.');
+                }
+
+                // Split long text into chunks for the model
+                const TEXT_CHUNK = 40000;
+                const textChunks: string[] = [];
+                for (let i = 0; i < fullPdfText.length; i += TEXT_CHUNK) {
+                    textChunks.push(fullPdfText.slice(i, i + TEXT_CHUNK));
+                }
+
+                const textbookPromptBase = `Analyze this PDF textbook for "${course.course_name}" at "${course.level}" level.
 Extract a comprehensive syllabus/course outline into a structured JSON array of topics with concise grounding context.
 RULES:
 1. Output ONLY the JSON object.
@@ -181,11 +201,15 @@ RULES:
 3. Each topic object must have: topic_name, topic_id, topic_context, start_point, end_point.
 FORMAT: { "syllabus": [ { "topic_name": "...", "topic_id": "...", "topic_context": "...", "start_point": "...", "end_point": "..." } ] }`;
 
-                const chunkPromises = base64Chunks.map(async (chunkBase64) => {
+                const chunkPromises = textChunks.map(async (chunkText, chunkIdx) => {
                     return attemptApiCall(async () => {
+                        const prompt = `${textbookPromptBase}
+
+=== DOCUMENT TEXT (part ${chunkIdx + 1}/${textChunks.length}) ===
+${chunkText}`;
                         const aiResponse = await ai.models.generateContent({
                             model: aiModel,
-                            contents: [{ role: 'user', parts: [{ text: textbookPrompt }, { inlineData: { mimeType: 'application/pdf', data: chunkBase64 } }] }],
+                            contents: [{ role: 'user', parts: [{ text: prompt }] }],
                             config: {
                                 responseMimeType: 'application/json',
                                 responseSchema: {
