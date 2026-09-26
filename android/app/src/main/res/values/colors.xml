@@ -9,6 +9,4 @@
     <color name="colorAccent">#B3E5FC</color>
     <!-- App background -->
     <color name="colorBackground">#FFFFFF</color>
-    <!-- Splash screen background matches the splash -->
-    <color name="splashBackground">#002D62</color>
 </resources>
