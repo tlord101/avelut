@@ -121,7 +121,7 @@ export class QwenRealtimeTeacherService {
    *  - 'semantic_vad' : server semantic turn detection (auto commit + response).
    *  - 'server_vad'   : tuned fallback, applied at most once per session.
    */
-  private turnDetectionMode: 'manual' | 'semantic_vad' | 'server_vad' = 'manual';
+  private turnDetectionMode: 'manual' | 'semantic_vad' | 'server_vad' = 'semantic_vad';
   /** Ensures we only fall back to the tuned server_vad config once per session */
   private hasTurnDetectionFallback = false;
   /** Explicit response.create fallback when server does not create one after commit */
@@ -197,7 +197,7 @@ export class QwenRealtimeTeacherService {
     this.consecutiveSilenceNudges = 0;
     this.isStarting = true;
     this.hasTurnDetectionFallback = false;
-    this.turnDetectionMode = 'manual';
+    this.turnDetectionMode = 'semantic_vad';
     this.forcedContinuationCount = 0;
     this.stuckListeningSince = null;
     this.pendingResumeAfterReconnect = false;
@@ -764,7 +764,7 @@ export class QwenRealtimeTeacherService {
       [...this.pendingToolCalls.values()].some(
         (t) => t.name === 'draw_mermaid' || t.name === 'illustrate_object',
       );
-    const delayMs = hasSlowTool ? 20000 : 6000;
+    const delayMs = hasSlowTool ? 20000 : 8000;
     this.toolContinuationWatchdog = setTimeout(() => {
       this.toolContinuationWatchdog = null;
       if (this.isAwaitingContinuation || this.hasPendingToolContinuation) {
@@ -800,6 +800,7 @@ export class QwenRealtimeTeacherService {
 
     // requestTeacherContinuation owns the once-per-turn guard and does NOT bump the turn id.
     this.requestTeacherContinuation('tool_done', {
+      force: true,
       instructions:
         'Immediately speak aloud to the student. Explain what was just written or drawn on the whiteboard in clear, engaging spoken language, connecting it to the lesson concepts. When pronouncing formulas or math, speak them naturally in conversational English (e.g. say "a equals negative omega squared x" or "velocity equals frequency times lambda"). NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Continue teaching smoothly without stopping.',
     });
@@ -1715,7 +1716,7 @@ export class QwenRealtimeTeacherService {
           !this.isAudioStreamingFromModel &&
           this.activeAudioSources.length === 0
         ) {
-          this.requestTeacherContinuation('tool_done_after_turn_advance');
+          this.requestTeacherContinuation('tool_done_after_turn_advance', { force: true });
         } else {
           liveLogger.log('[QwenRealtime] Tool finished for advanced turn — active response continues (no extra continuation)');
         }
