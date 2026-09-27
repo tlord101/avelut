@@ -1216,19 +1216,10 @@ Return a JSON object containing a "topics" array.`;
                                 if (syllabus.length > 0) return { ...course, topics: syllabus };
                             }
 
-                            // Provide foundational default topic if course has no topics
+                            // Return course as-is if no topics exist (do not inject synthetic default topics)
                             return {
                                 ...course,
-                                topics: [
-                                    {
-                                        topic_id: `${course.course_id}_core`,
-                                        topic_name: 'Core Principles & Syllabus Overview',
-                                        topic_context: `Overview, foundational principles, and core examination scope for ${course.course_name} (${course.course_code || course.course_id.toUpperCase()}).`,
-                                        start_point: 'Introduction',
-                                        end_point: 'Summary',
-                                        is_complete: false,
-                                    },
-                                ],
+                                topics: Array.isArray(course.topics) ? course.topics : [],
                             };
                         } catch (e) {
                             console.error('Error enriching course with textbook syllabus:', e);
@@ -1270,11 +1261,8 @@ Return a JSON object containing a "topics" array.`;
         if (!isVoiceTutorialActive || !selectedCourse) return null;
         const targetTopic = topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0
             ? selectedCourse.topics[0]
-            : {
-                topic_id: 'core_principles',
-                topic_name: 'Core Principles & Overview',
-                topic_context: `Overview and principles of ${selectedCourse.course_name || 'Course'}`,
-            });
+            : null);
+        if (!targetTopic) return null;
         return {
             course: selectedCourse,
             topic: targetTopic,
@@ -1305,11 +1293,13 @@ Return a JSON object containing a "topics" array.`;
 
     // ── 2. DEFAULT COURSE CHAT TUTOR (SOCRATIC BIT-BY-BIT TEACHING) ──
     if (selectedCourse) {
-        const resolvedTopic: Topic = topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0 ? selectedCourse.topics[0] : {
-            topic_id: 'core_principles',
-            topic_name: 'Core Principles & Overview',
-            topic_context: `Overview and principles of ${selectedCourse.course_name}`,
-        });
+        const resolvedTopic: Topic | null = topicToOpen || (Array.isArray(selectedCourse.topics) && selectedCourse.topics.length > 0 ? selectedCourse.topics[0] : null);
+
+        if (!resolvedTopic) {
+            // Selected course has no topics — close selection
+            setSelectedCourse(null);
+            return null;
+        }
 
         return (
             <CourseChatTutor
@@ -1472,39 +1462,27 @@ Return a JSON object containing a "topics" array.`;
                                 <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-[#1C1C1C] flex items-center justify-center text-slate-400 mb-3">
                                     <i className="bi bi-journal-x text-2xl"></i>
                                 </div>
-                                <p className="text-sm font-bold text-slate-900 dark:text-white">
-                                    No syllabus extracted yet
+                                <p className="text-base font-bold text-slate-900 dark:text-white">
+                                    This course has zero topics
                                 </p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
-                                    Add topics to start learning, or upload a textbook / syllabus document.
+                                    Add topics to start learning, or upload a syllabus document.
                                 </p>
-                                <div className="flex flex-col sm:flex-row items-center gap-2 mt-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setTargetCourseForTopic(topicPickerCourse);
-                                            setAddTopicTab('doc');
-                                            setShowAddTopicModal(true);
-                                            setExtractedTopics([]);
-                                            setDocUploadFile(null);
-                                        }}
-                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                                    >
-                                        <i className="bi bi-file-earmark-arrow-up"></i>
-                                        <span>Upload Document / PDF</span>
-                                    </button>
+                                <div className="flex items-center gap-2 mt-5">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setTargetCourseForTopic(topicPickerCourse);
                                             setAddTopicTab('manual');
                                             setShowAddTopicModal(true);
+                                            setExtractedTopics([]);
+                                            setDocUploadFile(null);
                                             setManualTopicForm({ topic_name: '', topic_context: '', start_point: '', end_point: '' });
                                         }}
-                                        className="px-4 py-2 bg-slate-100 dark:bg-[#1C1C1C] hover:bg-slate-200 dark:hover:bg-[#2A2A2A] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-[#2A2A2A] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                        className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
                                     >
-                                        <i className="bi bi-pencil-square"></i>
-                                        <span>Manually Add Topic</span>
+                                        <i className="bi bi-plus-lg font-black text-sm"></i>
+                                        <span>Add topics</span>
                                     </button>
                                 </div>
                             </div>

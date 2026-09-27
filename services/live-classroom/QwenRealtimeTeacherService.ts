@@ -111,17 +111,16 @@ export class QwenRealtimeTeacherService {
   /** True while the model is actively transmitting audio chunks over WebSocket */
   private isAudioStreamingFromModel = false;
 
-  // ── Turn detection (manual push-to-talk with safe server_vad fallback) ─────
+  // ── Turn detection (pure manual push-to-talk only) ──────────────────────────
   /**
    * Turn detection strategy:
-   *  - 'manual'       (default): server VAD is disabled (`turn_detection: null`).
+   *  - 'manual'       (strictly default): server VAD is disabled (`turn_detection: null`).
    *                   The student opens the mic with a tap and closes it with a
    *                   second tap; we then commit the captured audio and ask the
    *                   teacher for a response ourselves.
-   *  - 'semantic_vad' : server semantic turn detection (auto commit + response).
-   *  - 'server_vad'   : tuned fallback, applied at most once per session.
+   *  - 'server_vad'   : fallback only if server explicitly rejects `null`.
    */
-  private turnDetectionMode: 'manual' | 'semantic_vad' | 'server_vad' = 'semantic_vad';
+  private turnDetectionMode: 'manual' | 'semantic_vad' | 'server_vad' = 'manual';
   /** Ensures we only fall back to the tuned server_vad config once per session */
   private hasTurnDetectionFallback = false;
   /** Explicit response.create fallback when server does not create one after commit */
@@ -197,7 +196,7 @@ export class QwenRealtimeTeacherService {
     this.consecutiveSilenceNudges = 0;
     this.isStarting = true;
     this.hasTurnDetectionFallback = false;
-    this.turnDetectionMode = 'semantic_vad';
+    this.turnDetectionMode = 'manual';
     this.forcedContinuationCount = 0;
     this.stuckListeningSince = null;
     this.pendingResumeAfterReconnect = false;
@@ -246,6 +245,11 @@ export class QwenRealtimeTeacherService {
   /** True while the student's mic is open (tap-to-talk active). */
   public getIsPushToTalkActive(): boolean {
     return this.isPushToTalkActive;
+  }
+
+  /** Returns true if the teacher's last spoken turn was a question to the student */
+  public getLastResponseAskedQuestion(): boolean {
+    return this.lastResponseAskedQuestion;
   }
 
   /**

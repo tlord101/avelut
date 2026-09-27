@@ -637,27 +637,54 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             <MessageSquare className="w-5 h-5" />
           </button>
 
-          {/* Mic button — tap to talk, tap again to send (manual VAD) */}
-          <div className="relative flex items-center justify-center">
-            {isTalking && audioLevel > 0.04 && (
-              <span
-                className="absolute inset-0 rounded-full bg-rose-400/30 animate-ping pointer-events-none"
-                style={{ transform: `scale(${1 + audioLevel})` }}
-              />
-            )}
-            <button
-              onClick={handleToggleTalk}
-              className={`relative z-10 flex items-center justify-center w-14 h-14 rounded-full
-                           shadow-lg transition-all active:scale-90 font-bold ${
-                isTalking
-                  ? 'bg-rose-500 hover:bg-rose-400 text-white animate-pulse'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-black'
-              } ${teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''}`}
-              aria-label={isTalking ? 'Stop speaking and send to the teacher' : 'Tap to speak'}
-            >
-              {isTalking ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-            </button>
-          </div>
+          {/* Mic button — 3 primary states:
+              1. Awaiting student answer (teacher asked question): white circular background + red square center
+              2. PTT active / recording: blue mic button (recording look)
+              3. Muted / idle: neutral/blue control with mic-with-diagonal-slash (MicOff)
+          */}
+          {(() => {
+            const askedQuestion = serviceRef.current?.getLastResponseAskedQuestion() ?? false;
+            const isAwaitingAnswer = askedQuestion && !isTalking;
+
+            let buttonBg = 'bg-[#38BDF8] hover:bg-[#0284c7] text-white';
+            let icon = <MicOff className="w-6 h-6" />;
+            let ariaLabel = 'Tap to open mic';
+
+            if (isTalking) {
+              buttonBg = 'bg-[#38BDF8] hover:bg-[#0284c7] text-white shadow-[0_0_20px_rgba(56,189,248,0.5)]';
+              icon = <Mic className="w-6 h-6 animate-pulse" />;
+              ariaLabel = 'Recording — tap to send speech';
+            } else if (isAwaitingAnswer) {
+              buttonBg = 'bg-white hover:bg-slate-100 border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)]';
+              icon = <div className="w-5 h-5 bg-rose-600 rounded-xs" />;
+              ariaLabel = 'Teacher asked a question — tap to answer';
+            }
+
+            return (
+              <div className="relative flex items-center justify-center">
+                {isTalking && audioLevel > 0.04 && (
+                  <span
+                    className="absolute inset-0 rounded-full bg-[#38BDF8]/40 animate-ping pointer-events-none"
+                    style={{ transform: `scale(${1 + audioLevel})` }}
+                  />
+                )}
+                {isAwaitingAnswer && (
+                  <span className="absolute -inset-1 rounded-full bg-rose-500/20 animate-ping pointer-events-none" />
+                )}
+                <button
+                  onClick={handleToggleTalk}
+                  className={`relative z-10 flex items-center justify-center w-14 h-14 rounded-full
+                               shadow-lg transition-all active:scale-90 font-bold ${buttonBg} ${
+                    teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                  aria-label={ariaLabel}
+                  title={ariaLabel}
+                >
+                  {icon}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Clear board */}
           <button
