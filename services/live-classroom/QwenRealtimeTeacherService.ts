@@ -56,6 +56,7 @@ export class QwenRealtimeTeacherService {
   private isReconnecting = false;
   private reconnectAttempts = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private sessionGeneration = 0;
 
   // ── Audio — input (mic → WS) ────────────────────────────────────────────
   private inputAudioCtx: AudioContext | null = null;
@@ -106,6 +107,10 @@ export class QwenRealtimeTeacherService {
   private currentTeachingTurnId = 0;
   /** Prevents duplicate continuation for the same turn */
   private continuationRequestedForTurn = -1;
+  /** Single-flight guard preventing overlapping response.create executions */
+  private continuationInFlight = false;
+  /** Safety limit counter for uninterrupted automatic continuations */
+  private consecutiveAutoContinueCount = 0;
   /** True while a response.create is in flight or audio is still expected */
   private isResponseActive = false;
   /** True while the model is actively transmitting audio chunks over WebSocket */
@@ -211,7 +216,9 @@ export class QwenRealtimeTeacherService {
 
     try {
       const AudioCtxClass =
-        window.AudioContext || (window as any).webkitAudioContext;
+        typeof window !== 'undefined'
+          ? (window.AudioContext || (window as any).webkitAudioContext)
+          : (globalThis as any).AudioContext;
       this.inputAudioCtx  = new AudioCtxClass({ sampleRate: 16000 });
       // Use native device hardware sample rate for output to prevent Android audio driver cracking
       this.outputAudioCtx = new AudioCtxClass();
@@ -360,6 +367,7 @@ export class QwenRealtimeTeacherService {
         type: 'input_audio_buffer.commit',
       });
 
+      this.isStudentSpeaking = false;
       this.requestTeacherContinuation('push_to_talk_release', {
         force: true,
         instructions:
@@ -528,6 +536,17 @@ export class QwenRealtimeTeacherService {
   }
 
   private async connectWebSocket(modelToUse: string = this.currentModel): Promise<void> {
+    if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onerror = null;
+      this.ws.onclose = null;
+      try { this.ws.close(); } catch {}
+      this.ws = null;
+    }
+
+    this.sessionGeneration++;
+    const currentGen = this.sessionGeneration;
     this.currentModel = modelToUse;
     let wsUrl: string;
     const modelParam = `model=${encodeURIComponent(modelToUse)}`;
@@ -537,14 +556,15 @@ export class QwenRealtimeTeacherService {
     const proxyBase = ((import.meta as any).env?.VITE_QWEN_PROXY_URL || DEFAULT_RENDER_PROXY).trim();
     wsUrl = proxyBase.includes('?') ? `${proxyBase}&${modelParam}` : `${proxyBase}?${modelParam}`;
 
-    liveLogger.log('[QwenRealtime] Connecting strictly via Render proxy:', wsUrl, `(model: ${modelToUse})`);
+    liveLogger.log(`[QwenRealtime] Connecting strictly via Render proxy (gen=${currentGen}):`, wsUrl, `(model: ${modelToUse})`);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
       this.ws = ws;
 
       ws.onopen = () => {
-        liveLogger.log('[QwenRealtime] Proxy connected ✅');
+        if (currentGen !== this.sessionGeneration) return;
+        liveLogger.log(`[QwenRealtime] Proxy connected (gen=${currentGen}) ✅`);
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
         this.setState('connected');
@@ -579,6 +599,7 @@ export class QwenRealtimeTeacherService {
       };
 
       ws.onmessage = async (evt) => {
+        if (currentGen !== this.sessionGeneration) return;
         try {
           let raw: string;
           if (typeof evt.data === 'string') {
@@ -598,6 +619,7 @@ export class QwenRealtimeTeacherService {
       };
 
       ws.onerror = () => {
+        if (currentGen !== this.sessionGeneration) return;
         this.setState('error');
         reject(new Error(
           'Live Teacher connection failed. ' +
@@ -606,6 +628,7 @@ export class QwenRealtimeTeacherService {
       };
 
       ws.onclose = (evt) => {
+        if (currentGen !== this.sessionGeneration) return;
         liveLogger.warn('[QwenRealtime] WebSocket onclose. Code:', evt.code, 'Reason:', evt.reason, 'Explicit:', this.isExplicitlyClosed);
         this.clearHeartbeat();
 
@@ -742,16 +765,20 @@ export class QwenRealtimeTeacherService {
     options?: { injectUserHint?: string; force?: boolean; instructions?: string },
   ): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (this.continuationInFlight) {
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=continuation_in_flight turn=${this.currentTeachingTurnId}`);
+      return;
+    }
     if (this.isStudentSpeaking) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): student speaking`);
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=student_speaking turn=${this.currentTeachingTurnId}`);
       return;
     }
     if (this.isAudioStreamingFromModel) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): audio still streaming from model`);
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=audio_streaming turn=${this.currentTeachingTurnId}`);
       return;
     }
     if (!options?.force && this.continuationRequestedForTurn === this.currentTeachingTurnId) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): already requested for turn ${this.currentTeachingTurnId}`);
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=already_requested turn=${this.currentTeachingTurnId}`);
       return;
     }
     if (
@@ -759,38 +786,59 @@ export class QwenRealtimeTeacherService {
       this.lastSpeechStoppedAt > 0 &&
       Date.now() - this.lastSpeechStoppedAt < this.AUTO_CONTINUE_POST_SPEECH_GUARD_MS
     ) {
-      liveLogger.log(`[QwenRealtime] continuation skipped (${reason}): within ${this.AUTO_CONTINUE_POST_SPEECH_GUARD_MS}ms of student speech_stopped`);
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=post_speech_guard turn=${this.currentTeachingTurnId}`);
       return;
     }
 
-    this.continuationRequestedForTurn = this.currentTeachingTurnId;
-    this.isAwaitingContinuation = false;
-    this.isResponseActive = true;
-    this.clearAutoContinueTimer();
-    liveLogger.log(`[QwenRealtime] requestTeacherContinuation reason=${reason} turn=${this.currentTeachingTurnId}`);
-
-    if (options?.injectUserHint) {
-      this.sendJson({
-        event_id: `cont_hint_${Date.now()}`,
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: options.injectUserHint }],
-        },
-      });
+    if (reason.startsWith('auto_continue')) {
+      this.consecutiveAutoContinueCount++;
+      if (this.consecutiveAutoContinueCount >= 3) {
+        reason = 'auto_continue_ask_question';
+        options = {
+          ...options,
+          injectUserHint:
+            'You have presented several concepts in a row. Stop and ask the student a clear, engaging check-for-understanding question about what you just taught before introducing anything new.',
+        };
+      }
+    } else if (reason !== 'tool_done') {
+      this.consecutiveAutoContinueCount = 0;
     }
 
-    this.sendJson({
-      event_id: `resp_cont_${Date.now()}_${reason}`,
-      type: 'response.create',
-      response: {
-        modalities: ['text', 'audio'],
-        ...(options?.instructions ? { instructions: options.instructions } : {}),
-        tools: this.getTools(),
-        tool_choice: 'auto',
-      },
-    });
+    this.continuationInFlight = true;
+    try {
+      this.continuationRequestedForTurn = this.currentTeachingTurnId;
+      this.isAwaitingContinuation = false;
+      this.isResponseActive = true;
+      this.clearAutoContinueTimer();
+      liveLogger.log(
+        `[QwenRealtime][Continuation] turn=${this.currentTeachingTurnId} reason=${reason} responseInFlight=${this.isResponseActive} continuationInFlight=${this.continuationInFlight} waitingForStudent=${this.lastResponseAskedQuestion} pendingTools=${this.pendingToolCalls.size} sessionGen=${this.sessionGeneration}`
+      );
+
+      if (options?.injectUserHint) {
+        this.sendJson({
+          event_id: `cont_hint_${Date.now()}`,
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: options.injectUserHint }],
+          },
+        });
+      }
+
+      this.sendJson({
+        event_id: `resp_cont_${Date.now()}_${reason}`,
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          ...(options?.instructions ? { instructions: options.instructions } : {}),
+          tools: this.getTools(),
+          tool_choice: 'auto',
+        },
+      });
+    } finally {
+      this.continuationInFlight = false;
+    }
   }
 
   private startToolContinuationWatchdog(toolName?: string): void {
@@ -975,6 +1023,11 @@ export class QwenRealtimeTeacherService {
   private onTeacherAudioFinished(): void {
     if (this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) return;
     if (!this.isResponseActive && this.state !== 'speaking') return;
+
+    if (!this.isTurnResponseDone) {
+      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio playback finished, awaiting response.done`);
+      return;
+    }
 
     liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
     this.isResponseActive = false;
