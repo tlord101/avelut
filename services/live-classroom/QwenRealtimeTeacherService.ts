@@ -1710,7 +1710,7 @@ export class QwenRealtimeTeacherService {
               contents:
                 'Generate ONLY a single well-formed SVG document for an educational whiteboard: one root <svg ...>...</svg>.\n' +
                 'Rules:\n' +
-                '- No markdown fences (no ```xml or ```svg), no explanation before or after.\n' +
+                '- Do NOT use Markdown. Do NOT use ``` fences. Do NOT explain anything.\n' +
                 '- The response MUST begin with <svg and end with </svg>.\n' +
                 '- Required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
                 '- All XML attributes MUST use double quotes.\n' +
@@ -1723,7 +1723,7 @@ export class QwenRealtimeTeacherService {
                 `Object description: ${desc}`,
               config: {
                 temperature: 0.2,
-                maxOutputTokens: 2000,
+                maxOutputTokens: 2048,
               },
             });
             return getResponseText(res);
@@ -1734,21 +1734,24 @@ export class QwenRealtimeTeacherService {
               model: textModel,
               contents:
                 'Fix and repair the following broken SVG document for an educational whiteboard illustration.\n\n' +
-                `Original requested illustration: ${desc}\n` +
-                `Validation error details: ${errorMsg}\n` +
-                `Failed SVG output:\n${failedOutput}\n\n` +
+                `1. Original requested illustration: ${desc}\n` +
+                `2. Exact validation error: ${errorMsg}\n` +
+                `3. Failed SVG:\n${failedOutput}\n\n` +
                 'CRITICAL REPAIR INSTRUCTIONS:\n' +
-                '1. Fix the XML structure, unclosed tags, or entity syntax so it is strictly a single, well-formed SVG document.\n' +
-                '2. Preserve the educational intent, visual elements, and requested object layout.\n' +
-                '3. Return ONLY the complete SVG document. Do NOT use Markdown or ``` code fences. Do NOT explain anything.\n' +
-                '4. The response MUST begin with <svg and end with </svg>.\n' +
-                '5. Ensure required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
-                '6. Escape bare ampersands as &amp;.\n' +
-                '7. Disallow script, foreignObject, external URLs, or event handlers.\n' +
-                '8. Keep SVG compact to avoid truncation.',
+                'Return ONLY one complete SVG document.\n' +
+                'Do not use Markdown.\n' +
+                'Do not use ``` fences.\n' +
+                'Do not explain anything.\n' +
+                'The response MUST begin with <svg and end with </svg>.\n' +
+                'The SVG must be valid XML.\n' +
+                'Preserve the intended visual content and layout rather than replacing it with an unrelated drawing.\n' +
+                'Ensure required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
+                'Escape bare ampersands as &amp;.\n' +
+                'Disallow script, foreignObject, external URLs, or event handlers.\n' +
+                'Keep SVG compact to avoid truncation.',
               config: {
                 temperature: 0.1,
-                maxOutputTokens: 2000,
+                maxOutputTokens: 2048,
               },
             });
             return getResponseText(res);
