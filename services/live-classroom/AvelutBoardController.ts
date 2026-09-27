@@ -413,17 +413,22 @@ export class AvelutBoardController {
 
       const isMobile = this.isMobileView();
       const contentWidth = this.getContentWidth();
-      // Illustrations always span the readable board width: a comfortable minimum,
-      // never wider than the device screen.
-      const maxW = Math.min(isMobile ? 360 : 880, contentWidth);
-      const minW = Math.min(isMobile ? 330 : 640, maxW);
-      const renderW = Math.min(maxW, Math.max(minW, origW > 0 ? Math.min(origW, maxW) : minW));
 
-      const aspect = (origH && origW) ? origH / origW : 0.6;
-      // Ensure generous height and legible scaling on mobile portrait viewports
-      const renderH = isMobile
-        ? Math.max(220, Math.min(420, Math.round(renderW * aspect)))
-        : Math.max(200, Math.round(renderW * aspect));
+      const aspect = (origH > 0 && origW > 0) ? origH / origW : 0.65;
+
+      let renderW: number;
+      if (isMobile) {
+        // On mobile: use full usable board width so diagrams are as large and readable as possible
+        renderW = contentWidth;
+      } else {
+        // On desktop: use generous display width so labels stay large without thumbnail shrinking
+        const minW = Math.min(680, contentWidth);
+        const desiredW = origW > 0 ? Math.max(origW, minW) : Math.min(920, contentWidth);
+        renderW = Math.min(contentWidth, desiredW);
+      }
+
+      // Height follows natural aspect ratio with generous minimum, no artificial height squash caps
+      const renderH = Math.max(240, Math.round(renderW * aspect));
 
       this.clearStageIfFull();
 

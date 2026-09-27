@@ -353,8 +353,9 @@ export class QwenRealtimeTeacherService {
         force: true,
         instructions:
           'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
-          'address it fully in a couple of clear sentences. Then continue teaching the lesson smoothly from where you left off ' +
-          'without waiting for another prompt. If physical/structural, call illustrate_object first; if process/logic, call rich draw_mermaid with subgraphs/edge labels; if math, write worked equation steps. Always speak after the visual diagram is drawn. ' +
+          'address it fully in a couple of clear sentences. Always write 2-5 key terms or formulas on the board via board_action write. ' +
+          'If the concept needs a physical structure or process diagram, call illustrate_object or rich draw_mermaid. ' +
+          'Then continue teaching the lesson smoothly from where you left off. ' +
           'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
       });
     } finally {
@@ -886,7 +887,7 @@ export class QwenRealtimeTeacherService {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. For non-math subtopics, your FIRST action MUST be a visual diagram: call illustrate_object for physical/structural concepts, or rich draw_mermaid (with subgraphs/edge labels) for processes — NEVER a definition glossary write-only dump. Speak about the visual diagram on the board, then advance smoothly.',
+            'Continue teaching smoothly without waiting. Introduce the next concept. Write 2–5 key terms or formulas on the board via board_action write. Call illustrate_object or rich draw_mermaid only if the phase needs a physical structure or process diagram. Speak naturally about what is on the board and advance smoothly.',
         });
       }
     }, waitMs);
@@ -1001,7 +1002,7 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
           this.requestTeacherContinuation('auto_continue_no_question', {
             injectUserHint:
-              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. For non-math topics, call a visual tool FIRST: illustrate_object for physical/structural concepts, or rich draw_mermaid for process/logic flows (NEVER flat A->B->C chains) — do NOT do definition list dumps via board_action write. Speak about the diagram you just drew; then advance to the next subtopic.',
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. Write 2–5 key terms or formulas on the board via board_action write. Call illustrate_object or rich draw_mermaid only when a physical structure or multi-step process diagram is needed. Speak naturally and advance smoothly.',
           });
         }
       }, 500);
@@ -1202,9 +1203,9 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational whiteboard. Writing on the board (action: "write") is used for key terms, core definitions, formulas, and worked math equation steps. ' +
-      'For physical objects, devices, anatomical structures, machines, apparatus, or spatial cross-sections, PREFER illustrate_object over writing or simple drawing. ' +
-      'For processes, workflows, algorithms, or cycles, use draw_mermaid (with subgraphs/edge labels/branches).';
+      'Control the educational whiteboard. Writing on the board (action: "write") is used to put 2–5 key terms, core definitions, formulas, and worked math steps on the board. ' +
+      'EVERY subtopic must put key terms on the board using "write" (with or without a diagram). ' +
+      'Use "draw" for simple custom shapes or arrows. For physical objects, use illustrate_object. For multi-step processes/flows, use draw_mermaid.';
 
     return {
       type: 'function',
@@ -1230,9 +1231,10 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'draw_mermaid',
         description:
-          'Render a Mermaid.js diagram directly onto the visual whiteboard canvas to illustrate process, flow, sequence, cycle, or decision logic. ' +
+          'Render a Mermaid.js diagram directly onto the whiteboard canvas to illustrate a multi-step process, flow, sequence, cycle, or decision logic. ' +
           'MUST include subgraphs, edge labels, or branching decision logic. HARD BAN: NEVER output a single horizontal row of boxes linked only by plain arrows (A --> B --> C --> D). ' +
-          'If the concept is a physical object, structure, device, apparatus, or cross-section, DO NOT use Mermaid — call illustrate_object instead.',
+          'Always write 2–5 essential key terms on the board alongside or after the visual. ' +
+          'If the concept is a physical object, structure, device, or apparatus, call illustrate_object instead.',
         parameters: {
           type: 'object',
           properties: {
@@ -1255,9 +1257,11 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'illustrate_object',
         description:
-          'Generate and render a detailed SVG illustration of a physical object, structure, device, apparatus, biological form, machine, specimen, semiconductor, circuit component, molecule, or spatial/cross-section view directly onto the whiteboard canvas. ' +
-          'PREFERRED for any physical/structural concept ("what it looks like", internal parts, spatial arrangement). ' +
-          'Pass a detailed visual brief specifying viewpoint, cutaway/cross-section, key parts to label, and physical layout.',
+          'Generate and render a detailed SVG illustration of a physical object, structure, device, apparatus, biological form, machine, specimen, semiconductor, circuit component, molecule, or spatial/cross-section view. ' +
+          'MANDATORY UX RULE: Before calling this tool, speak a friendly natural wait line aloud first (e.g. "Let me pull up an illustration of how this looks — give me a few seconds"). ' +
+          'Pass a detailed visual brief specifying viewpoint, cutaway/cross-section, key parts to label, and physical layout. ' +
+          'Always write 2–5 essential key terms on the board as notes and refer to the picture in your spoken explanation. ' +
+          'If the tool result is an error, acknowledge aloud that the picture didn\'t load, write key terms via board_action write, and continue — never pretend an image exists if it failed.',
         parameters: {
           type: 'object',
           properties: {
@@ -1657,11 +1661,19 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[MermaidSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
           toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered and inserted' };
         } else {
-          toolResult = { status: 'error', action: 'draw_mermaid', message: 'Mermaid render returned empty SVG' };
+          toolResult = {
+            status: 'error',
+            action: 'draw_mermaid',
+            message: 'Mermaid render returned empty SVG. Briefly acknowledge aloud that the diagram did not load, write 2-5 key terms on the board via board_action write, and continue teaching.',
+          };
         }
       } catch (err) {
         liveLogger.error('[QwenRealtime] draw_mermaid error:', err);
-        toolResult = { status: 'error', action: 'draw_mermaid', message: String(err) };
+        toolResult = {
+          status: 'error',
+          action: 'draw_mermaid',
+          message: `Mermaid error: ${String(err)}. Briefly acknowledge aloud that the diagram did not load, write 2-5 key terms on the board via board_action write, and continue teaching.`,
+        };
       }
     } else if (name === 'illustrate_object') {
       const desc = args.object_description || args.description || '';
@@ -1678,13 +1690,14 @@ export class QwenRealtimeTeacherService {
           const res = await ai.models.generateContent({
             model: textModel,
             contents:
-              'Generate ONLY raw valid SVG for a white educational whiteboard. ' +
-              'Transparent background. High-contrast dark strokes and readable fills. ' +
-              'No white-on-white, no white text, no invisible shapes. No markdown, no explanations. Object: ' +
+              'Generate ONLY raw valid SVG for an educational whiteboard. ' +
+              'Transparent background. High-contrast, vibrant, sharp strokes and readable fills. ' +
+              'Large, legible text labels (minimum font size 18px). ' +
+              'No white-on-white, no invisible shapes. No markdown codefences, no prose explanations. Object: ' +
               desc,
             config: {
               temperature: 0.2,
-              maxOutputTokens: 1500,
+              maxOutputTokens: 2000,
             },
           });
           return getResponseText(res);
@@ -1699,11 +1712,19 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
           toolResult = { status: 'ok', action: 'illustrate_object', message: 'Illustration generated and inserted' };
         } else {
-          toolResult = { status: 'error', action: 'illustrate_object', message: 'SVG generation returned empty' };
+          toolResult = {
+            status: 'error',
+            action: 'illustrate_object',
+            message: 'SVG generation returned empty. Briefly acknowledge aloud that the illustration did not load, write 2-5 key terms on the board via board_action write, and continue teaching.',
+          };
         }
       } catch (err) {
         liveLogger.error('[QwenRealtime] illustrate_object error:', err);
-        toolResult = { status: 'error', action: 'illustrate_object', message: String(err) };
+        toolResult = {
+          status: 'error',
+          action: 'illustrate_object',
+          message: `Illustration generation error: ${String(err)}. Briefly acknowledge aloud that the illustration did not load, write 2-5 key terms on the board via board_action write, and continue teaching.`,
+        };
       }
     } else {
       liveLogger.warn('[QwenRealtime] Unknown tool:', name);
