@@ -445,7 +445,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     setIsHoldingMic(true);
     setSlideDistance(0);
 
-    if (!svc.isPushToTalkActive()) {
+    if (!svc.getIsPushToTalkActive()) {
       svc.beginPushToTalk();
       setIsTalking(true);
     }
