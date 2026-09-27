@@ -1711,9 +1711,11 @@ export class QwenRealtimeTeacherService {
                 'Generate ONLY a single well-formed SVG document for an educational whiteboard: one root <svg ...>...</svg>.\n' +
                 'Rules:\n' +
                 '- No markdown fences (no ```xml or ```svg), no explanation before or after.\n' +
+                '- The response MUST begin with <svg and end with </svg>.\n' +
                 '- Required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
                 '- All XML attributes MUST use double quotes.\n' +
                 '- Use simple elements: g, rect, circle, ellipse, line, polyline, polygon, path, text.\n' +
+                '- Sanitize text elements: escape bare ampersands as &amp;.\n' +
                 '- NEVER include script, foreignObject, external images/URLs, or event handlers.\n' +
                 '- High-contrast, vibrant, sharp strokes and readable fills. Transparent background.\n' +
                 '- Educational labeled diagram matching the requested object; keep labels short, legible, and font-size >= 16px.\n' +
@@ -1731,19 +1733,19 @@ export class QwenRealtimeTeacherService {
             const res = await ai.models.generateContent({
               model: textModel,
               contents:
-                'The previous SVG generation attempt failed validation.\n' +
-                `Error details: ${errorMsg}\n` +
-                `Previous output:\n${failedOutput}\n\n` +
-                'Instructions:\n' +
-                'Fix the SVG so it is strictly a single, well-formed SVG document (<svg ...></svg>).\n' +
-                'Preserve the educational intent and requested object layout.\n' +
-                'Rules:\n' +
-                '- Output ONLY the corrected <svg ...></svg> document.\n' +
-                '- No markdown fences, no explanatory text.\n' +
-                '- Required: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
-                '- All XML attributes MUST use double quotes.\n' +
-                '- Disallow script, foreignObject, external URLs, event handlers.\n' +
-                '- Keep SVG compact to avoid truncation.',
+                'Fix and repair the following broken SVG document for an educational whiteboard illustration.\n\n' +
+                `Original requested illustration: ${desc}\n` +
+                `Validation error details: ${errorMsg}\n` +
+                `Failed SVG output:\n${failedOutput}\n\n` +
+                'CRITICAL REPAIR INSTRUCTIONS:\n' +
+                '1. Fix the XML structure, unclosed tags, or entity syntax so it is strictly a single, well-formed SVG document.\n' +
+                '2. Preserve the educational intent, visual elements, and requested object layout.\n' +
+                '3. Return ONLY the complete SVG document. Do NOT use Markdown or ``` code fences. Do NOT explain anything.\n' +
+                '4. The response MUST begin with <svg and end with </svg>.\n' +
+                '5. Ensure required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
+                '6. Escape bare ampersands as &amp;.\n' +
+                '7. Disallow script, foreignObject, external URLs, or event handlers.\n' +
+                '8. Keep SVG compact to avoid truncation.',
               config: {
                 temperature: 0.1,
                 maxOutputTokens: 2000,
