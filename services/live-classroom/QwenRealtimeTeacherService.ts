@@ -1690,51 +1690,93 @@ export class QwenRealtimeTeacherService {
       const desc = args.object_description || args.description || '';
       liveLogger.log(`[SvgSync] turn=${turnAtStart} generate-start call=${callId}`);
       try {
-        const svg = await LlmSvgObjectCache.getOrGenerate(desc, async () => {
-          if (!this.appSettings) return null;
+        if (!this.appSettings) {
+          toolResult = {
+            status: 'error',
+            action: 'illustrate_object',
+            message: 'Illustration failed: missing application settings.',
+          };
+        } else {
           const textModel =
             getFeatureModel('chat_interaction', this.appSettings) ||
             this.appSettings?.alibaba_model ||
             'qwen3.8-omni-flash';
 
           const ai = createAvelutAI(this.appSettings, this.userProfile, { feature: 'chat_interaction' });
-          const res = await ai.models.generateContent({
-            model: textModel,
-            contents:
-              'Generate ONLY raw valid SVG for an educational whiteboard. ' +
-              'Transparent background. High-contrast, vibrant, sharp strokes and readable fills. ' +
-              'Large, legible text labels (minimum font size 18px). ' +
-              'No white-on-white, no invisible shapes. No markdown codefences, no prose explanations. Object: ' +
-              desc,
-            config: {
-              temperature: 0.2,
-              maxOutputTokens: 2000,
-            },
-          });
-          return getResponseText(res);
-        });
-        if (turnAtStart !== this.currentTeachingTurnId) {
-          // Turn advanced while generating — apply anyway, never discard the visual.
-          liveLogger.warn(`[SvgSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
-        }
-        if (svg) {
-          // Optional: run through same normalizer if available
-          this.boardController.setSvgIllustration(svg);
-          liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
-          toolResult = { status: 'ok', action: 'illustrate_object', message: 'Illustration generated and inserted' };
-        } else {
-          toolResult = {
-            status: 'error',
-            action: 'illustrate_object',
-            message: 'SVG generation returned empty. Briefly acknowledge aloud that the illustration did not load, write 2-5 key terms on the board via board_action write, and continue teaching.',
+
+          const generateFn = async () => {
+            const res = await ai.models.generateContent({
+              model: textModel,
+              contents:
+                'Generate ONLY a single well-formed SVG document for an educational whiteboard: one root <svg ...>...</svg>.\n' +
+                'Rules:\n' +
+                '- No markdown fences (no ```xml or ```svg), no explanation before or after.\n' +
+                '- Required attributes: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
+                '- All XML attributes MUST use double quotes.\n' +
+                '- Use simple elements: g, rect, circle, ellipse, line, polyline, polygon, path, text.\n' +
+                '- NEVER include script, foreignObject, external images/URLs, or event handlers.\n' +
+                '- High-contrast, vibrant, sharp strokes and readable fills. Transparent background.\n' +
+                '- Educational labeled diagram matching the requested object; keep labels short, legible, and font-size >= 16px.\n' +
+                '- Keep SVG compact to avoid output truncation.\n' +
+                `Object description: ${desc}`,
+              config: {
+                temperature: 0.2,
+                maxOutputTokens: 2000,
+              },
+            });
+            return getResponseText(res);
           };
+
+          const repairFn = async (failedOutput: string, errorMsg: string) => {
+            const res = await ai.models.generateContent({
+              model: textModel,
+              contents:
+                'The previous SVG generation attempt failed validation.\n' +
+                `Error details: ${errorMsg}\n` +
+                `Previous output:\n${failedOutput}\n\n` +
+                'Instructions:\n' +
+                'Fix the SVG so it is strictly a single, well-formed SVG document (<svg ...></svg>).\n' +
+                'Preserve the educational intent and requested object layout.\n' +
+                'Rules:\n' +
+                '- Output ONLY the corrected <svg ...></svg> document.\n' +
+                '- No markdown fences, no explanatory text.\n' +
+                '- Required: xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 800 500".\n' +
+                '- All XML attributes MUST use double quotes.\n' +
+                '- Disallow script, foreignObject, external URLs, event handlers.\n' +
+                '- Keep SVG compact to avoid truncation.',
+              config: {
+                temperature: 0.1,
+                maxOutputTokens: 2000,
+              },
+            });
+            return getResponseText(res);
+          };
+
+          const svg = await LlmSvgObjectCache.getOrGenerate(desc, generateFn, repairFn);
+
+          if (turnAtStart !== this.currentTeachingTurnId) {
+            // Turn advanced while generating — apply anyway, never discard the visual.
+            liveLogger.warn(`[SvgSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
+          }
+
+          if (svg) {
+            this.boardController.setSvgIllustration(svg);
+            liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
+            toolResult = { status: 'ok', action: 'illustrate_object', message: 'Illustration generated and inserted' };
+          } else {
+            toolResult = {
+              status: 'error',
+              action: 'illustrate_object',
+              message: 'Illustration failed to generate a valid SVG. Briefly acknowledge aloud that the picture did not load and continue teaching.',
+            };
+          }
         }
       } catch (err) {
         liveLogger.error('[QwenRealtime] illustrate_object error:', err);
         toolResult = {
           status: 'error',
           action: 'illustrate_object',
-          message: `Illustration generation error: ${String(err)}. Briefly acknowledge aloud that the illustration did not load, write 2-5 key terms on the board via board_action write, and continue teaching.`,
+          message: `Illustration generation error: ${String(err)}. Briefly acknowledge aloud that the picture did not load and continue teaching.`,
         };
       }
     } else {
