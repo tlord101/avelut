@@ -354,7 +354,7 @@ export class QwenRealtimeTeacherService {
         instructions:
           'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
           'address it fully in a couple of clear sentences. Then continue teaching the lesson smoothly from where you left off ' +
-          'without waiting for another prompt. Speak about the diagram or key terms on the board; then advance to the next subtopic with a new diagram first. ' +
+          'without waiting for another prompt. If physical/structural, call illustrate_object first; if process/logic, call rich draw_mermaid with subgraphs/edge labels; if math, write worked equation steps. Always speak after the visual diagram is drawn. ' +
           'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
       });
     } finally {
@@ -689,7 +689,7 @@ export class QwenRealtimeTeacherService {
     }
 
     // Give the model its starting instruction as a user message:
-    // First turn is strictly warm greeting and introduction. Diagrams initiate on the second response.
+    // First turn is strictly warm greeting and introduction. Visuals initiate on the second response.
     this.sendJson({
       event_id: `kickoff_${Date.now()}`,
       type: 'conversation.item.create',
@@ -886,7 +886,7 @@ export class QwenRealtimeTeacherService {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. For non-math subtopics, your FIRST action MUST be a visual diagram (draw_mermaid, illustrate_object, or board_action draw) — NEVER a definition glossary write-only dump. Speak about the diagram you just drew; then advance to the next subtopic with a new diagram first. Pronounce formulas naturally in conversational English — STRICTLY NEVER say "dollar" or LaTeX code aloud in your spoken voice. Keep teaching actively.',
+            'Continue teaching smoothly without waiting. For non-math subtopics, your FIRST action MUST be a visual diagram: call illustrate_object for physical/structural concepts, or rich draw_mermaid (with subgraphs/edge labels) for processes — NEVER a definition glossary write-only dump. Speak about the visual diagram on the board, then advance smoothly.',
         });
       }
     }, waitMs);
@@ -1001,14 +1001,12 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
           this.requestTeacherContinuation('auto_continue_no_question', {
             injectUserHint:
-              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. For non-math topics, call a visual tool FIRST (draw_mermaid, illustrate_object, or board_action draw) before speaking — do NOT do definition list dumps via board_action write. Speak about the diagram you just drew; then advance to the next subtopic with a new diagram first. Pronounce formulas naturally in conversational English — STRICTLY NEVER say "dollar" aloud. Keep teaching actively.',
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. For non-math topics, call a visual tool FIRST: illustrate_object for physical/structural concepts, or rich draw_mermaid for process/logic flows (NEVER flat A->B->C chains) — do NOT do definition list dumps via board_action write. Speak about the diagram you just drew; then advance to the next subtopic.',
           });
         }
       }, 500);
     }
   }
-
-
 
   private clearAutoContinueTimer(): void {
     if (this.autoContinueTimer) {
@@ -1204,7 +1202,9 @@ export class QwenRealtimeTeacherService {
     };
 
     const description =
-      'Control the educational whiteboard. Writing on the board (action: "write") is PRIMARY — write key terms, core definitions, formulas, and step summaries. Call this FIRST when introducing a concept so the student sees the key terms on the board before you speak. Use "draw" to create step-by-step boxes with connecting arrows, or use draw_mermaid for flowcharts/pipelines in rows and columns. Prioritize visualizing ideas and concepts on the board.';
+      'Control the educational whiteboard. Writing on the board (action: "write") is used for key terms, core definitions, formulas, and worked math equation steps. ' +
+      'For physical objects, devices, anatomical structures, machines, apparatus, or spatial cross-sections, PREFER illustrate_object over writing or simple drawing. ' +
+      'For processes, workflows, algorithms, or cycles, use draw_mermaid (with subgraphs/edge labels/branches).';
 
     return {
       type: 'function',
@@ -1230,10 +1230,9 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'draw_mermaid',
         description:
-          'Render a Mermaid.js diagram directly onto the visual whiteboard canvas to illustrate concepts and ideas. ' +
-          'Use for: flowcharts, sequential pipelines, row/column processes with branches, cause/effect, cycles, and component interactions. ' +
-          'Use "graph LR" (horizontal flow in rows/columns with branches) or "graph TD". STRICTLY NEVER generate 360-degree radial trees or mindmaps. ' +
-          'Draw diagrams to visualize concepts when explaining ideas.',
+          'Render a Mermaid.js diagram directly onto the visual whiteboard canvas to illustrate process, flow, sequence, cycle, or decision logic. ' +
+          'MUST include subgraphs, edge labels, or branching decision logic. HARD BAN: NEVER output a single horizontal row of boxes linked only by plain arrows (A --> B --> C --> D). ' +
+          'If the concept is a physical object, structure, device, apparatus, or cross-section, DO NOT use Mermaid — call illustrate_object instead.',
         parameters: {
           type: 'object',
           properties: {
@@ -1256,14 +1255,15 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'illustrate_object',
         description:
-          'PROACTIVELY generate and render a detailed SVG illustration of a complex object, entity, or structure directly onto the whiteboard canvas. ' +
-          'Call this proactively whenever teaching physical, biological, anatomical, astronomical, chemical, or mechanical entities without waiting to be asked.',
+          'Generate and render a detailed SVG illustration of a physical object, structure, device, apparatus, biological form, machine, specimen, semiconductor, circuit component, molecule, or spatial/cross-section view directly onto the whiteboard canvas. ' +
+          'PREFERRED for any physical/structural concept ("what it looks like", internal parts, spatial arrangement). ' +
+          'Pass a detailed visual brief specifying viewpoint, cutaway/cross-section, key parts to label, and physical layout.',
         parameters: {
           type: 'object',
           properties: {
             object_description: {
               type: 'string',
-              description: 'A clear, descriptive label of the object to illustrate (e.g. "plant cell with chloroplasts", "DNA double helix", "water molecule with covalent bonds").',
+              description: 'Detailed educational illustration brief specifying viewpoint, main components, cutaway/cross-section details, and labels (e.g. "Cross-section schematic of a semiconductor PN junction showing p-type and n-type regions, depletion zone, free electrons, holes, and labeled anode/cathode terminals").',
             },
           },
           required: ['object_description'],

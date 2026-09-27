@@ -36,6 +36,33 @@ const DARK_PALETTE = {
 };
 
 /**
+ * Detects whether a Mermaid snippet is an unbranched, ultra-flat single-line arrow chain
+ * (e.g., A --> B --> C --> D) without subgraphs, edge labels, or decision nodes.
+ */
+export function isFlatChainMermaid(code: string): boolean {
+  if (!code) return false;
+  const hasSubgraphs = /\bsubgraph\b/i.test(code);
+  if (hasSubgraphs) return false;
+
+  const hasEdgeLabels = /(-->\||--\s*["']|\|.*?\|)/.test(code);
+  if (hasEdgeLabels) return false;
+
+  const hasDecisionNodes = /\{.*?\}/.test(code);
+  if (hasDecisionNodes) return false;
+
+  const arrowLines = code.split('\n').filter((line) => /-->/.test(line));
+  if (arrowLines.length === 0) return false;
+
+  // Single-line chain or plain linear arrow sequence
+  for (const line of arrowLines) {
+    const parts = line.split(/-->/);
+    if (parts.length > 2) return true;
+  }
+
+  return false;
+}
+
+/**
  * Normalize educational SVG for high contrast on the Excalidraw board.
  * Inspects fill/stroke attributes and style, replaces low-contrast colors.
  */
@@ -211,6 +238,10 @@ export class MermaidBoardService {
   public static async renderToSvg(mermaidCode: string, theme: 'light' | 'dark' = 'light'): Promise<string> {
     let trimmed = mermaidCode.trim();
     if (!trimmed) return '';
+
+    if (isFlatChainMermaid(trimmed)) {
+      console.warn('[MermaidBoardService] ⚠️ Flat Mermaid chain detected. Visual rules mandate rich diagrams with subgraphs, edge labels, or branching.');
+    }
 
     // If mindmap syntax was passed, convert it to a clean horizontal row/column flowchart
     if (trimmed.startsWith('mindmap') || /^mindmap\b/m.test(trimmed)) {
