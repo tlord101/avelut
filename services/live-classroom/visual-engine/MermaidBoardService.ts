@@ -94,7 +94,7 @@ export function normalizeEducationalSvg(svg: string, options?: { theme?: 'light'
         color: ${textColor} !important;
         -webkit-text-fill-color: ${textColor} !important;
         font-weight: 700 !important;
-        font-size: 15px !important;
+        font-size: 17px !important;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         stroke: none !important;
         text-shadow: none !important;
@@ -262,8 +262,8 @@ export class MermaidBoardService {
       if (!codeWithTheme.includes('%%{init')) {
         // High-contrast theme variables tailored for either dark or light board
         const baseThemeVars = isDark
-          ? `'darkMode': true, 'background': '#0A0A0A', 'primaryColor': '#1E293B', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#38BDF8', 'lineColor': '#38BDF8', 'secondaryColor': '#064E3B', 'tertiaryColor': '#78350F', 'fontSize': '18px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`
-          : `'darkMode': false, 'background': '#FFFFFF', 'primaryColor': '#EFF6FF', 'primaryTextColor': '#0F172A', 'primaryBorderColor': '#2563EB', 'lineColor': '#1E40AF', 'secondaryColor': '#ECFDF5', 'tertiaryColor': '#FEF3C7', 'fontSize': '18px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`;
+          ? `'darkMode': true, 'background': '#0A0A0A', 'primaryColor': '#1E293B', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#38BDF8', 'lineColor': '#38BDF8', 'secondaryColor': '#064E3B', 'tertiaryColor': '#78350F', 'fontSize': '20px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`
+          : `'darkMode': false, 'background': '#FFFFFF', 'primaryColor': '#EFF6FF', 'primaryTextColor': '#0F172A', 'primaryBorderColor': '#2563EB', 'lineColor': '#1E40AF', 'secondaryColor': '#ECFDF5', 'tertiaryColor': '#FEF3C7', 'fontSize': '20px', 'fontFamily': 'ui-sans-serif, system-ui, sans-serif'`;
 
         // Explicit section colors for mindmap branches to guarantee contrast and distinct visibility
         const mindmapThemeVars = isDark
