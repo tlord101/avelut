@@ -13,6 +13,25 @@ import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
 /**
+ * Preprocesses raw text from AI model or tool calls:
+ * - Replaces literal 2-character sequence `\n` or `\r\n` with actual newlines.
+ * - Replaces literal `\t` with a space.
+ * - Unescapes double-escaped LaTeX backslashes (e.g. `\\lambda` -> `\lambda`, `\\Omega` -> `\Omega`).
+ */
+export function preprocessBoardText(raw: string): string {
+  if (!raw) return '';
+  let s = String(raw);
+
+  // Replace literal two-character sequences \r\n, \n, \t with actual characters
+  s = s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\t/g, ' ');
+
+  // Unescape double-escaped backslashes before LaTeX command names
+  s = s.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
+
+  return s;
+}
+
+/**
  * Converts raw LaTeX or math expressions into clean Unicode for Excalidraw canvas.
  * Canvas elements cannot render raw LaTeX or $$ delimiters, so we translate:
  * e.g. "$$ Wave Speed: v = f \lambda $$" -> "Wave Speed: v = f · λ"
@@ -20,7 +39,7 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
  */
 export function formatMathForCanvas(raw: string): string {
   if (!raw) return '';
-  let s = String(raw).trim();
+  let s = preprocessBoardText(raw).trim();
 
   // Strip LaTeX math delimiters across the string (both multiline and inline)
   s = s.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
@@ -46,6 +65,9 @@ export function formatMathForCanvas(raw: string): string {
   // Math & trig function names: strip leading backslash
   s = s.replace(/\\(sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|lim|max|min|det|deg)\b/g, '$1');
 
+  // Replace * between variable/number symbols with multiplication dot ·
+  s = s.replace(/([a-zA-Z0-9°Ωλμa-zA-Z])\s*\*\s*([a-zA-Z0-9°Ωλμa-zA-Z])/g, '$1 · $2');
+
   // Greek letters (case-sensitive)
   const greekMap: Record<string, string> = {
     '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\Gamma': 'Γ',
@@ -56,7 +78,7 @@ export function formatMathForCanvas(raw: string): string {
     '\\pi': 'π', '\\Pi': 'Π', '\\rho': 'ρ', '\\sigma': 'σ',
     '\\Sigma': 'Σ', '\\tau': 'τ', '\\upsilon': 'υ', '\\phi': 'φ',
     '\\Phi': 'Φ', '\\chi': 'χ', '\\psi': 'ψ', '\\Psi': 'Ψ',
-    '\\omega': 'ω', '\\Omega': 'Ω',
+    '\\omega': 'ω', '\\Omega': 'Ω', '\\Ohm': 'Ω', '\\ohm': 'Ω',
   };
   for (const [tex, uni] of Object.entries(greekMap)) {
     s = s.split(tex).join(uni);
@@ -120,6 +142,9 @@ export function formatMathForCanvas(raw: string): string {
   // Spacing commands: \quad, \qquad, \;, \,, \:
   s = s.replace(/\\(quad|qquad)/g, '   ');
   s = s.replace(/\\[,;:]/g, ' ');
+
+  // Final catch-all: strip remaining orphan backslashes before control words (e.g. \unknown)
+  s = s.replace(/\\([a-zA-Z]+)/g, '$1');
 
   // Clean up any double spaces or orphan braces
   s = s.replace(/[{}]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
@@ -840,6 +865,8 @@ export class AvelutBoardController {
   private _writeText(text: string, args?: WriteTextArgs): void {
     if (!text?.trim()) return;
 
+    text = preprocessBoardText(text);
+
     console.log('[BoardController] writeText called:', text, args);
 
     if (args?.isFormula) {
@@ -1072,6 +1099,8 @@ export class AvelutBoardController {
     if (!formulaText?.trim()) return;
     this.elements = this.elements.filter(el => el.customData?.slot !== 'formula');
 
+    formulaText = preprocessBoardText(formulaText);
+
     // Ensure KaTeX / LaTeX clean display formatting delimiters for sticky note
     let cleanFormula = formulaText.trim();
     if (!cleanFormula.startsWith('$') && !cleanFormula.startsWith('\\[')) {
@@ -1274,7 +1303,7 @@ export class AvelutBoardController {
     strokeColor?: string;
   }): void {
     this.actionQueue.push(() => {
-      const {
+      let {
         text,
         x = this.getLeftMargin(),
         y = 120,
@@ -1286,6 +1315,7 @@ export class AvelutBoardController {
       } = args;
 
       if (!text?.trim()) return;
+      text = preprocessBoardText(text);
 
       const noteWidth = Math.min(width, this.getContentWidth());
 

@@ -129,9 +129,18 @@ ABSOLUTE CORE RULES: VISUAL TOOL SELECTION & PER-SUBTOPIC SEQUENCE
 
    Default for a light phase: board_action write with clear headings + key terms.
 
-2. ALWAYS WRITE KEY TERMS (WITH OR WITHOUT DIAGRAMS):
+2. ALWAYS WRITE KEY TERMS & CLEAN FORMULAS (WITH OR WITHOUT DIAGRAMS):
    - Every subtopic MUST put key terms / short labels on the board via board_action write (or labeled parts on the illustration).
    - If a diagram/illustration is drawn: STILL write 2–5 essential terms (names of parts, law name, formula short form) under or beside the visual so the board works as clear student notes.
+   - FORMULA & MATH FORMATTING RULES FOR BOARD:
+     * When writing text/formulas on the board, use plain readable multi-line text with actual line breaks in the JSON string (actual newlines).
+     * ABSOLUTE HARD PROHIBITION: NEVER output the literal characters backslash-n ("\\n"), raw "$$" delimiters, or raw LaTeX commands (e.g. "\\Omega", "\\frac"). Use clean Unicode math symbols (Ω, λ, ², ³, ·, ×) and natural line breaks.
+     * Example good multi-line board text:
+       Ohm's Law:
+       V = I · R
+       V — Voltage (V)
+       I — Current (A)
+       R — Resistance (Ω)
    - Forbidden: long glossary walls of text; prefer short bullets or labeled headings.
 
 3. ENGAGING WAIT LINE BEFORE illustrate_object:
