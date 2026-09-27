@@ -126,12 +126,14 @@ export class QwenRealtimeTeacherService {
   /** Explicit response.create fallback when server does not create one after commit */
   private responseCreateFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // ── Push-to-talk (manual VAD state machine) ────────────────────────────────
+  // ── Push-to-talk (manual VAD state machine) & Mute state ───────────────────
   private pttState: 'idle' | 'ptt_active' | 'committing' = 'idle';
-  /** True while the student's mic is open (tap-to-talk active) */
+  /** True while the student's mic is open (press-and-hold or locked active) */
   private isPushToTalkActive = false;
   /** True when mic audio was uploaded but not yet committed to the server */
   private hasUncommittedStudentAudio = false;
+  /** Local mic mute toggle: drops audio streaming without triggering a student turn */
+  private isMuted = false;
 
   // ── Echo gate: rolling peak mic RMS ────────────────────────────────────────
   private micRmsWindow: { rms: number; t: number }[] = [];
@@ -246,6 +248,15 @@ export class QwenRealtimeTeacherService {
   /** True while the student's mic is open (tap-to-talk active). */
   public getIsPushToTalkActive(): boolean {
     return this.isPushToTalkActive;
+  }
+
+  public getIsMuted(): boolean {
+    return this.isMuted;
+  }
+
+  public setIsMuted(muted: boolean): void {
+    this.isMuted = muted;
+    liveLogger.log(`[QwenRealtime] Local mic mute set to: ${muted}`);
   }
 
   /** Returns true if the teacher's last spoken turn was a question to the student */
@@ -1192,7 +1203,7 @@ export class QwenRealtimeTeacherService {
         },
         text: {
           type: 'string',
-          description: 'Keyword, key term, definition, summary note, or formula to write on the board. Structure as "Key Term: definition or formula" (e.g. "Wave Equation: v = f \\lambda").',
+          description: 'Keyword, key term, definition, summary note, or formula to write on the board. Structure as multi-line readable text using real newlines in the JSON string and Unicode math (e.g. Ω, λ, ²). NEVER include literal "\\n", raw "$$", or raw LaTeX commands.',
         },
         target: {
           type: 'string',
@@ -1820,10 +1831,14 @@ export class QwenRealtimeTeacherService {
       const peakRms = this.recordMicRms(rms);
       this.callbacks.onAudioLevel?.(Math.min(1, rms * 4));
 
-      // ── Manual (push-to-talk) turn detection ──────────────────────────────
-      // The mic is only uploaded while the student holds the mic button, so idle
-      // room noise and speaker echo can never reach the server, and a turn can
-      // never be committed before the student pressed "stop".
+      // ── Manual (push-to-talk) & Mute turn detection ───────────────────────
+      // If locally muted, drop PCM streaming without starting a turn
+      if (this.isMuted) {
+        return;
+      }
+
+      // The mic is only uploaded while the student holds the mic button or is locked,
+      // so idle room noise and speaker echo can never reach the server.
       if (this.turnDetectionMode === 'manual' && !this.isPushToTalkActive) {
         return;
       }

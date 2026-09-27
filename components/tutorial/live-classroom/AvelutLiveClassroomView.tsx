@@ -20,6 +20,7 @@ import {
   Mic,
   MicOff,
   Volume2,
+  VolumeX,
   Ear,
   Pencil,
   Sparkles,
@@ -27,8 +28,8 @@ import {
   Send,
   AlertCircle,
   RotateCcw,
-  Maximize2,
-  Minimize2,
+  Lock,
+  ChevronUp,
 } from 'lucide-react';
 import { ExcalidrawLiveBoard } from './ExcalidrawLiveBoard';
 import {
@@ -140,6 +141,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [audioLevel, setAudioLevel] = useState(0);
   /** True while the student's mic is open (manual push-to-talk turn) */
   const [isTalking, setIsTalking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isHoldingMic, setIsHoldingMic] = useState(false);
+  const [isLockedMic, setIsLockedMic] = useState(false);
+  const [slideDistance, setSlideDistance] = useState(0);
+
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -239,9 +245,22 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
         // Sync UI mic state directly with service state machine truth
-        if (svc) setIsTalking(svc.getIsPushToTalkActive());
+        if (svc) {
+          const active = svc.getIsPushToTalkActive();
+          setIsTalking(active);
+          if (!active) {
+            setIsHoldingMic(false);
+            setIsLockedMic(false);
+            setSlideDistance(0);
+          }
+        }
         // Never leave the mic button stuck "on" if the session drops.
-        if (s === 'error' || s === 'closed') setIsTalking(false);
+        if (s === 'error' || s === 'closed') {
+          setIsTalking(false);
+          setIsHoldingMic(false);
+          setIsLockedMic(false);
+          setSlideDistance(0);
+        }
       },
       onTranscript: (text, _isFinal) => {
         setTranscript(text);
@@ -392,27 +411,102 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────
-  /**
-   * Tap-to-talk (manual VAD).
-   * First tap opens the mic and interrupts the teacher; the second tap closes it,
-   * sends the captured audio to the teacher, and lets him answer + continue.
-   */
-  const handleToggleTalk = () => {
+  const pointerStartRef = useRef<{ y: number; id: number } | null>(null);
+
+  const handleToggleMute = () => {
     const svc = serviceRef.current;
     if (!svc) return;
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    svc.setIsMuted(nextMuted);
+  };
 
-    if (svc.getIsPushToTalkActive()) {
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const svc = serviceRef.current;
+    if (!svc || teacherState === 'connecting') return;
+
+    ensureAudioUnlocked();
+
+    // If currently locked in hands-free recording mode, tapping sends audio
+    if (isLockedMic) {
       svc.endPushToTalk();
-      setIsTalking(svc.getIsPushToTalkActive());
+      setIsLockedMic(false);
+      setIsHoldingMic(false);
+      setIsTalking(false);
+      setSlideDistance(0);
       return;
     }
 
-    // Make sure the audio contexts are alive before opening the mic.
-    if (!svc.isAudioUnlocked()) {
-      svc.resumeAudio().catch(() => {});
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
+    pointerStartRef.current = { y: e.clientY, id: e.pointerId };
+    setIsHoldingMic(true);
+    setSlideDistance(0);
+
+    if (!svc.isPushToTalkActive()) {
+      svc.beginPushToTalk();
+      setIsTalking(true);
     }
-    svc.beginPushToTalk();
-    setIsTalking(svc.getIsPushToTalkActive());
+  };
+
+  const handleMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isHoldingMic || isLockedMic || !pointerStartRef.current) return;
+
+    const dy = pointerStartRef.current.y - e.clientY; // upward is positive
+    const dist = Math.max(0, dy);
+    setSlideDistance(dist);
+
+    // Slide up past threshold (~65px) locks recording hands-free
+    if (dist >= 65) {
+      setIsLockedMic(true);
+      setIsHoldingMic(false);
+      setSlideDistance(0);
+      try {
+        e.currentTarget.releasePointerCapture(pointerStartRef.current.id);
+      } catch {}
+      pointerStartRef.current = null;
+    }
+  };
+
+  const handleMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (pointerStartRef.current && pointerStartRef.current.id === e.pointerId) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+      pointerStartRef.current = null;
+    }
+
+    if (isLockedMic) {
+      // Releasing pointer while locked keeps recording hands-free until explicit tap
+      return;
+    }
+
+    if (isHoldingMic) {
+      setIsHoldingMic(false);
+      setSlideDistance(0);
+      const svc = serviceRef.current;
+      if (svc && svc.getIsPushToTalkActive()) {
+        svc.endPushToTalk();
+        setIsTalking(false);
+      }
+    }
+  };
+
+  const handleMicPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    handleMicPointerUp(e);
+  };
+
+  const handleStopLockedRecording = () => {
+    const svc = serviceRef.current;
+    if (svc) {
+      svc.endPushToTalk();
+      setIsLockedMic(false);
+      setIsHoldingMic(false);
+      setIsTalking(false);
+      setSlideDistance(0);
+    }
   };
 
   const handleSendText = (e: React.FormEvent) => {
@@ -600,26 +694,48 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         </div>
       )}
 
-      {/* ── TAP-TO-TALK HINT (manual VAD) ─────────────────────────────────── */}
-      {hasStarted && teacherState !== 'connecting' && !showTextInput && (
+      {/* ── HOLD TO TALK / LOCKED FLOATING UI ──────────────────────────────── */}
+      {hasStarted && teacherState !== 'connecting' && (isHoldingMic || isLockedMic) && (
+        <div className="absolute bottom-28 left-0 right-0 z-30 flex flex-col items-center gap-2 pointer-events-auto animate-in fade-in slide-in-from-bottom-3">
+          {isLockedMic ? (
+            <button
+              onClick={handleStopLockedRecording}
+              className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-[0_0_30px_rgba(225,29,72,0.5)] border border-rose-400/50 active:scale-95 transition-all"
+            >
+              <Lock className="w-4 h-4 animate-bounce" />
+              <span>Locked — tap to send</span>
+            </button>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-white/90 text-xs font-semibold shadow-xl">
+              <div className="flex items-center gap-1 text-[#38BDF8] animate-bounce">
+                <ChevronUp className="w-4 h-4" />
+                <span>Slide up to lock</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── MIC HINT PILL ─────────────────────────────────────────────────── */}
+      {hasStarted && teacherState !== 'connecting' && !showTextInput && !isHoldingMic && !isLockedMic && (
         <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
           <span
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border backdrop-blur-md ${
-              isTalking
-                ? 'bg-rose-500/20 border-rose-400/40 text-rose-200'
+              isMuted
+                ? 'bg-amber-500/20 border-amber-400/40 text-amber-200'
                 : isDark
                   ? 'bg-white/5 border-white/10 text-white/50'
                   : 'bg-slate-900/5 border-slate-900/10 text-slate-500'
             }`}
           >
-            {isTalking ? 'Mic open — speak now, then tap to send' : 'Tap the mic to speak anytime'}
+            {isMuted ? 'Local mic muted' : 'Hold mic to speak • Slide up to lock'}
           </span>
         </div>
       )}
 
       {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
       <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-        <div className={`flex items-center gap-3 px-4 py-2 rounded-full ${
+        <div className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${
           isDark
             ? 'bg-[#18181B]/90 border-white/15 text-white shadow-2xl'
             : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
@@ -640,34 +756,51 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             <MessageSquare className="w-5 h-5" />
           </button>
 
-          {/* Mic button — 3 primary states:
-              1. Awaiting student answer (teacher asked question): white circular background + red square center
-              2. PTT active / recording: blue mic button (recording look)
-              3. Muted / idle: neutral/blue control with mic-with-diagonal-slash (MicOff)
+          {/* Mute button (separate, beside mic) */}
+          <button
+            onClick={handleToggleMute}
+            className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
+              isMuted
+                ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
+                : isDark
+                  ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+            }`}
+            aria-label={isMuted ? 'Unmute mic' : 'Mute mic'}
+            title={isMuted ? 'Unmute mic' : 'Mute mic'}
+          >
+            {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Mic className="w-5 h-5" />}
+          </button>
+
+          {/* Mic button — Press & hold to speak, slide up to lock
+              States:
+              - Idle: Default blue mic
+              - Holding: White circle + red mic icon in center
+              - Locked: White/red recording look + floating lock animation above
           */}
           {(() => {
             const askedQuestion = serviceRef.current?.getLastResponseAskedQuestion() ?? false;
-            const isAwaitingAnswer = askedQuestion && !isTalking;
+            const isAwaitingAnswer = askedQuestion && !isTalking && !isHoldingMic && !isLockedMic;
 
             let buttonBg = 'bg-[#38BDF8] hover:bg-[#0284c7] text-white';
-            let icon = <MicOff className="w-6 h-6" />;
-            let ariaLabel = 'Tap to open mic';
+            let icon = <Mic className="w-6 h-6" />;
+            let ariaLabel = 'Press and hold to speak';
 
-            if (isTalking) {
-              buttonBg = 'bg-[#38BDF8] hover:bg-[#0284c7] text-white shadow-[0_0_20px_rgba(56,189,248,0.5)]';
-              icon = <Mic className="w-6 h-6 animate-pulse" />;
-              ariaLabel = 'Recording — tap to send speech';
+            if (isHoldingMic || isLockedMic) {
+              buttonBg = 'bg-white text-rose-600 shadow-[0_0_25px_rgba(255,255,255,0.8)] border-2 border-rose-500';
+              icon = <Mic className="w-6 h-6 text-rose-600 animate-pulse" />;
+              ariaLabel = isLockedMic ? 'Recording locked — tap to send' : 'Holding mic to speak';
             } else if (isAwaitingAnswer) {
-              buttonBg = 'bg-white hover:bg-slate-100 border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)]';
-              icon = <div className="w-5 h-5 bg-rose-600 rounded-xs" />;
-              ariaLabel = 'Teacher asked a question — tap to answer';
+              buttonBg = 'bg-white hover:bg-slate-100 border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)] text-rose-600';
+              icon = <Mic className="w-6 h-6 text-rose-600 animate-pulse" />;
+              ariaLabel = 'Teacher asked a question — press and hold to answer';
             }
 
             return (
               <div className="relative flex items-center justify-center">
-                {isTalking && audioLevel > 0.04 && (
+                {(isHoldingMic || isLockedMic || isTalking) && audioLevel > 0.04 && (
                   <span
-                    className="absolute inset-0 rounded-full bg-[#38BDF8]/40 animate-ping pointer-events-none"
+                    className="absolute inset-0 rounded-full bg-rose-500/40 animate-ping pointer-events-none"
                     style={{ transform: `scale(${1 + audioLevel})` }}
                   />
                 )}
@@ -675,11 +808,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
                   <span className="absolute -inset-1 rounded-full bg-rose-500/20 animate-ping pointer-events-none" />
                 )}
                 <button
-                  onClick={handleToggleTalk}
+                  onPointerDown={handleMicPointerDown}
+                  onPointerMove={handleMicPointerMove}
+                  onPointerUp={handleMicPointerUp}
+                  onPointerCancel={handleMicPointerCancel}
                   className={`relative z-10 flex items-center justify-center w-14 h-14 rounded-full
-                               shadow-lg transition-all active:scale-90 font-bold ${buttonBg} ${
+                               shadow-lg transition-all active:scale-95 font-bold ${buttonBg} ${
                     teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''
-                  }`}
+                  } touch-none`}
+                  style={{
+                    transform: isHoldingMic && slideDistance > 0
+                      ? `translateY(-${Math.min(slideDistance, 65)}px)`
+                      : undefined,
+                  }}
                   aria-label={ariaLabel}
                   title={ariaLabel}
                 >
