@@ -117,8 +117,11 @@ Output ONLY a valid JSON object matching this schema without markdown fences:
 Rules:
 - Total sum of timeBudgetMins across all phases must equal approximately ${durationMinutes}.
 - Exactly ${targetPhaseCount} phases.
-- Keep pedagogicalGoal, speechFocus, and boardVisualPlan concise (1-2 sentences each) for speed.
-- Visual Diagrams are MANDATORY (60% of board activity): Every single phase/concept MUST feature a visual diagram or illustration ("mermaid", "illustrate", or "draw") representing the concepts, flows, mindmaps, cycles, relationships, or mechanisms. The remaining 40% is concise supporting keywords/formulas ("write").`;
+- Structure phases as real ordered lecture sections (e.g., Overview -> Definition & Core Mechanism -> Classification/Types -> Applications/Worked Steps -> Summary).
+- Key terms MUST be placed ONLY inside the subtopic phase that owns them — NEVER a flat list of vocabulary defined in isolation at the start.
+- For non-math courses: every subtopic phase MUST feature a simple visual diagram or illustration ("mermaid", "illustrate", or "draw").
+- For math/calculation courses: prefer worked step-by-step solutions and equations on the board ("write"), using diagrams ("draw"/"mermaid") when spatial or geometric.
+- Keep pedagogicalGoal, speechFocus, and boardVisualPlan concise (1-2 sentences each) for speed.`;
 
   try {
     const textModel =
