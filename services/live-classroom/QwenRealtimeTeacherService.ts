@@ -126,7 +126,8 @@ export class QwenRealtimeTeacherService {
   /** Explicit response.create fallback when server does not create one after commit */
   private responseCreateFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // ── Push-to-talk (manual VAD) ──────────────────────────────────────────────
+  // ── Push-to-talk (manual VAD state machine) ────────────────────────────────
+  private pttState: 'idle' | 'ptt_active' | 'committing' = 'idle';
   /** True while the student's mic is open (tap-to-talk active) */
   private isPushToTalkActive = false;
   /** True when mic audio was uploaded but not yet committed to the server */
@@ -262,11 +263,12 @@ export class QwenRealtimeTeacherService {
   public beginPushToTalk(): boolean {
     if (this.isExplicitlyClosed) return false;
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    if (this.isPushToTalkActive) return true;
+    if (this.pttState !== 'idle') {
+      liveLogger.log(`[QwenRealtime] beginPushToTalk ignored: pttState is '${this.pttState}'`);
+      return this.isPushToTalkActive;
+    }
 
-    const teacherWasActive =
-      this.isResponseActive || this.isAudioStreamingFromModel || this.activeAudioSources.length > 0;
-
+    this.pttState = 'ptt_active';
     this.isPushToTalkActive = true;
     this.isStudentSpeaking = true;
     this.consecutiveSilenceNudges = 0;
@@ -275,10 +277,9 @@ export class QwenRealtimeTeacherService {
     this.clearResponseCreateFallbackTimer();
     this.stuckListeningSince = null;
 
-    if (teacherWasActive) {
-      // Barge-in: stop the teacher talking so the mic does not pick him up and
-      // the student is not talked over.
-      if (this.isResponseActive || this.isAudioStreamingFromModel) {
+    // Barge-in: stop the teacher talking immediately
+    if (this.isResponseActive || this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) {
+      if (this.isResponseActive) {
         this.isResponseActive = false;
         this.sendJson({
           event_id: `resp_cancel_${Date.now()}`,
@@ -309,41 +310,63 @@ export class QwenRealtimeTeacherService {
    * auto-continue flow takes over), so the lesson never stops.
    */
   public endPushToTalk(): void {
-    if (!this.isPushToTalkActive) return;
-
-    this.isPushToTalkActive = false;
-    this.isStudentSpeaking = false;
-    this.lastSpeechStoppedAt = Date.now();
-    liveLogger.log('[QwenRealtime] 🎙️ Push-to-talk released — committing student audio');
-
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    if (!this.hasUncommittedStudentAudio) {
-      // Nothing was captured (instant tap) — stay quiet instead of committing an
-      // empty buffer.
-      liveLogger.log('[QwenRealtime] Push-to-talk released with no captured audio — skipping commit');
-      this.setState('listening');
+    if (this.pttState !== 'ptt_active') {
+      liveLogger.log(`[QwenRealtime] endPushToTalk ignored: pttState is '${this.pttState}'`);
       return;
     }
 
-    this.hasUncommittedStudentAudio = false;
-    this.consecutiveSilenceNudges = 0;
-    this.clearStudentWaitTimer();
+    this.pttState = 'committing';
+    this.lastSpeechStoppedAt = Date.now();
+    liveLogger.log('[QwenRealtime] 🎙️ Push-to-talk released — committing student audio');
 
-    // Manual VAD: the server never creates a response on its own, so commit the
-    // student turn and ask the teacher for a reply explicitly.
-    this.sendJson({
-      event_id: `buf_commit_${Date.now()}`,
-      type: 'input_audio_buffer.commit',
-    });
-    this.requestTeacherContinuation('push_to_talk_release', {
-      force: true,
-      instructions:
-        'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
-        'address it fully in a couple of clear sentences. Then continue teaching the lesson smoothly from where you left off ' +
-        'without waiting for another prompt. Write the key term, answer, or formula on the board first when it helps, then speak. ' +
-        'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
-    });
+    let shouldTriggerDeferredTool = false;
+
+    try {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        liveLogger.log('[QwenRealtime] endPushToTalk: WebSocket not open, clearing PTT state');
+        return;
+      }
+
+      if (!this.hasUncommittedStudentAudio) {
+        // Nothing was captured (instant tap) — stay quiet instead of committing an
+        // empty buffer.
+        liveLogger.log('[QwenRealtime] Push-to-talk released with no captured audio — skipping commit');
+        this.setState('listening');
+        if (this.hasPendingToolContinuation) {
+          shouldTriggerDeferredTool = true;
+        }
+        return;
+      }
+
+      this.hasUncommittedStudentAudio = false;
+      this.consecutiveSilenceNudges = 0;
+      this.clearStudentWaitTimer();
+
+      // Manual VAD: the server never creates a response on its own, so commit the
+      // student turn and ask the teacher for a reply explicitly.
+      this.sendJson({
+        event_id: `buf_commit_${Date.now()}`,
+        type: 'input_audio_buffer.commit',
+      });
+
+      this.requestTeacherContinuation('push_to_talk_release', {
+        force: true,
+        instructions:
+          'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
+          'address it fully in a couple of clear sentences. Then continue teaching the lesson smoothly from where you left off ' +
+          'without waiting for another prompt. Speak about the diagram or key terms on the board; then advance to the next subtopic with a new diagram first. ' +
+          'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
+      });
+    } finally {
+      this.isPushToTalkActive = false;
+      this.isStudentSpeaking = false;
+      this.pttState = 'idle';
+      liveLogger.log('[QwenRealtime] 🎙️ Push-to-talk state reset to idle');
+      if (shouldTriggerDeferredTool) {
+        liveLogger.log('[QwenRealtime] Triggering deferred tool continuation after resetting PTT state to idle');
+        this.triggerToolContinuation();
+      }
+    }
   }
 
   /**
@@ -431,6 +454,7 @@ export class QwenRealtimeTeacherService {
     this.stuckListeningSince = null;
     this.continuationRequestedForTurn = -1;
     this.micRmsWindow = [];
+    this.pttState = 'idle';
     this.isPushToTalkActive = false;
     this.hasUncommittedStudentAudio = false;
 
@@ -787,14 +811,16 @@ export class QwenRealtimeTeacherService {
 
   private triggerToolContinuation(): void {
     this.clearToolContinuationWatchdog();
+    if (this.isStudentSpeaking || this.isPushToTalkActive) {
+      this.hasPendingToolContinuation = true;
+      liveLogger.log('[QwenRealtime] triggerToolContinuation deferred: student speaking or PTT active');
+      return;
+    }
+
     this.hasPendingToolContinuation = false;
     this.isAwaitingContinuation = false;
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    if (this.isStudentSpeaking) {
-      liveLogger.log('[QwenRealtime] triggerToolContinuation skipped: student speaking');
-      return;
-    }
 
     if (this.state === 'drawing') {
       this.setState(this.activeAudioSources.length > 0 ? 'speaking' : 'listening');
@@ -860,7 +886,7 @@ export class QwenRealtimeTeacherService {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Call board_action write FIRST to put the key term, definition, or formula on the board so the student sees it, then explain it naturally in spoken words. Pronounce formulas naturally in conversational English (e.g. "a equals negative omega squared x") — STRICTLY NEVER say "dollar", "dollar dollar", or LaTeX code aloud in your spoken voice. Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches, or board_action draw) to visualize concepts. Keep teaching actively.',
+            'Continue teaching smoothly without waiting. For non-math subtopics, your FIRST action MUST be a visual diagram (draw_mermaid, illustrate_object, or board_action draw) — NEVER a definition glossary write-only dump. Speak about the diagram you just drew; then advance to the next subtopic with a new diagram first. Pronounce formulas naturally in conversational English — STRICTLY NEVER say "dollar" or LaTeX code aloud in your spoken voice. Keep teaching actively.',
         });
       }
     }, waitMs);
@@ -946,6 +972,12 @@ export class QwenRealtimeTeacherService {
       return;
     }
 
+    if (this.hasPendingToolContinuation) {
+      liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete with deferred pending tool continuation — triggering continuation now`);
+      this.triggerToolContinuation();
+      return;
+    }
+
     if (this.lastResponseAskedQuestion) {
       // ONLY STOP AND WAIT WHEN TEACHER ASKED A QUESTION
       liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} waiting for student answer (question asked)`);
@@ -969,7 +1001,7 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
           this.requestTeacherContinuation('auto_continue_no_question', {
             injectUserHint:
-              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next concept or step. Call board_action write FIRST to put key terms and formulas on the board, then speak naturally to explain them. Pronounce formulas naturally in conversational English (e.g. "a equals negative omega squared x") — STRICTLY NEVER say "dollar", "dollar dollar", or LaTeX syntax aloud in your spoken voice. Prioritize drawing diagrams (using draw_mermaid as horizontal flow "graph LR" in rows/columns with branches, or board_action draw) to visualize concepts. Keep teaching actively.',
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. For non-math topics, call a visual tool FIRST (draw_mermaid, illustrate_object, or board_action draw) before speaking — do NOT do definition list dumps via board_action write. Speak about the diagram you just drew; then advance to the next subtopic with a new diagram first. Pronounce formulas naturally in conversational English — STRICTLY NEVER say "dollar" aloud. Keep teaching actively.',
           });
         }
       }, 500);

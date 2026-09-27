@@ -238,6 +238,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onStateChange: (s) => {
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
+        // Sync UI mic state directly with service state machine truth
+        if (svc) setIsTalking(svc.getIsPushToTalkActive());
         // Never leave the mic button stuck "on" if the session drops.
         if (s === 'error' || s === 'closed') setIsTalking(false);
       },
@@ -399,9 +401,9 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     const svc = serviceRef.current;
     if (!svc) return;
 
-    if (isTalking) {
+    if (svc.getIsPushToTalkActive()) {
       svc.endPushToTalk();
-      setIsTalking(false);
+      setIsTalking(svc.getIsPushToTalkActive());
       return;
     }
 
@@ -409,7 +411,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     if (!svc.isAudioUnlocked()) {
       svc.resumeAudio().catch(() => {});
     }
-    setIsTalking(svc.beginPushToTalk());
+    svc.beginPushToTalk();
+    setIsTalking(svc.getIsPushToTalkActive());
   };
 
   const handleSendText = (e: React.FormEvent) => {
