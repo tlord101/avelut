@@ -281,10 +281,11 @@ export const getResponseReasoningText = (response: any): string => {
  * Convert contents/parts to standard OpenAI/Alibaba chat messages
  * Supports both text and multi-modal image content
  */
-function paramsToChatMessages(params: any): { systemPrompt: string; messages: Array<{ role: string; content: any }>; hasImage: boolean } {
+function paramsToChatMessages(params: any): { systemPrompt: string; messages: Array<{ role: string; content: any }>; hasImage: boolean; hasDocument: boolean } {
   let systemPrompt = '';
   const messages: Array<{ role: string; content: any }> = [];
   let hasImage = false;
+  let hasDocument = false;
 
   const isImageMime = (mime?: string) => {
     const m = (mime || '').toLowerCase();
@@ -316,30 +317,44 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
           if (p.inlineData) return isImageMime(p.inlineData.mimeType);
           return false;
         });
-        const hasDocument = c.parts.some((p: any) => {
+        const partHasDocument = c.parts.some((p: any) => {
           if (!p.inlineData) return false;
           const mime = (p.inlineData.mimeType || '').toLowerCase();
-          return mime === 'application/pdf' || mime.includes('document') || mime.includes('msword') || mime.includes('officedocument') || mime === 'text/plain';
+          return mime === 'application/pdf' || mime.includes('pdf') || mime.includes('document') || mime.includes('msword') || mime.includes('officedocument') || mime === 'text/plain';
         });
 
-        if (hasRealImage || hasDocument) {
+        if (hasRealImage || partHasDocument) {
           if (hasRealImage) hasImage = true;
+          if (partHasDocument) hasDocument = true;
           const multiModalContent: any[] = [];
           for (const p of c.parts) {
             if (p.text) {
               multiModalContent.push({ type: 'text', text: p.text });
             } else if (p.inlineData) {
-              const mime = p.inlineData.mimeType || 'image/jpeg';
+              const mime = (p.inlineData.mimeType || 'image/jpeg').toLowerCase();
               const base64 = p.inlineData.data;
               if (isImageMime(mime)) {
                 multiModalContent.push({
                   type: 'image_url',
                   image_url: { url: `data:${mime};base64,${base64}` },
                 });
+              } else if (mime === 'application/pdf' || mime.includes('pdf')) {
+                // Alibaba Model Studio PDF understanding (OpenAI-compatible file input)
+                multiModalContent.push({
+                  type: 'file',
+                  file: {
+                    file_data: `data:application/pdf;base64,${base64}`,
+                    filename: p.fileName || p.filename || 'document.pdf',
+                    file_format: 'pdf',
+                  },
+                });
               } else {
                 multiModalContent.push({
-                  type: 'text',
-                  text: `[Attached document (${mime}). Binary content cannot be sent as image_url on DashScope Chat Completions. Prefer client-side text extraction for PDFs.]`,
+                  type: 'file',
+                  file: {
+                    file_data: `data:${mime};base64,${base64}`,
+                    filename: p.fileName || p.filename || 'document',
+                  },
                 });
               }
             } else if (p.imageUrl || p.image_url) {
@@ -363,7 +378,7 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
     messages.push({ role: 'user', content: contents });
   }
 
-  return { systemPrompt, messages, hasImage };
+  return { systemPrompt, messages, hasImage, hasDocument };
 }
 
 export const OPENROUTER_MODEL =
@@ -683,7 +698,19 @@ function resolveAlibabaEndpoints(
   ];
 }
 
-export function normalizeAlibabaDashScopeModel(model?: string, hasImage: boolean = false): string {
+export function normalizeAlibabaDashScopeModel(model?: string, hasImage: boolean = false, hasDocument: boolean = false): string {
+  // PDF understanding requires qwen3.8-max / qwen3.8-flash / qwen3.8-27b (not omni).
+  if (hasDocument) {
+    const cleanDoc = (model || '')
+      .replace(/^qwen\//i, '')
+      .replace(/^alibaba\//i, '')
+      .trim()
+      .toLowerCase();
+    if (cleanDoc.includes('qwen3.8-max') || cleanDoc === 'qwen3.8-flash' || cleanDoc.includes('qwen3.8-27b')) {
+      return cleanDoc.includes('max') ? 'qwen3.8-max' : (cleanDoc.includes('27b') ? 'qwen3.8-27b' : 'qwen3.8-flash');
+    }
+    return 'qwen3.8-flash';
+  }
   // Always prefer requested / default Omni model. Do NOT force qwen-vl-plus
   // (that caused "image format is illegal" for PDFs sent as image_url).
   const clean = (model || '')
@@ -728,9 +755,11 @@ async function callAlibabaQwen(
   options?: AvelutAIOptions
 ): Promise<any> {
   const apiKey = getAlibabaApiKey(appSettings);
-  const { messages, hasImage } = paramsToChatMessages(params);
-  const primaryModel = normalizeAlibabaDashScopeModel(params?.model || appSettings?.alibaba_model || 'qwen3.8-omni-flash', hasImage);
-  const candidateModels = Array.from(new Set([primaryModel, 'qwen3.8-omni-flash', 'qwen3.7-flash']));
+  const { messages, hasImage, hasDocument } = paramsToChatMessages(params);
+  const primaryModel = normalizeAlibabaDashScopeModel(params?.model || appSettings?.alibaba_model || 'qwen3.8-omni-flash', hasImage, hasDocument);
+  const candidateModels = hasDocument
+    ? Array.from(new Set([primaryModel, 'qwen3.8-flash', 'qwen3.8-max']))
+    : Array.from(new Set([primaryModel, 'qwen3.8-omni-flash', 'qwen3.7-flash']));
 
   const isNative = typeof window !== 'undefined' && (
     (window as any).Capacitor?.isNativePlatform?.() ||
@@ -748,7 +777,7 @@ async function callAlibabaQwen(
       messages,
       modalities: ['text'],
       temperature: params?.config?.temperature ?? 0.7,
-      max_tokens: params?.config?.maxOutputTokens ?? 4096,
+      max_tokens: params?.config?.maxOutputTokens ?? (hasDocument ? 16384 : 4096),
       include_reasoning: false,
     };
 
@@ -768,8 +797,10 @@ async function callAlibabaQwen(
             headers['Authorization'] = `Bearer ${apiKey}`;
           }
 
+          // PDF understanding can take up to ~300s for first token
           const fetchController = new AbortController();
-          const timeoutId = setTimeout(() => fetchController.abort(), 45000);
+          const timeoutMs = hasDocument ? 280000 : 45000;
+          const timeoutId = setTimeout(() => fetchController.abort(), timeoutMs);
 
           let response: Response;
           try {
