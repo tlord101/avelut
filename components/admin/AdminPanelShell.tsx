@@ -18,6 +18,7 @@ import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS, DEFAULT_USAGE_SETTINGS } from 
 import { getFeatureModel } from "../../utils/usage";
 import { isR2Configured, uploadToR2, deleteFromR2 } from "../../services/cloudflareR2Service";
 import { supabaseStorageService } from "../../services/supabaseStorageService";
+import { sanitizePathSegment } from "../../lib/supabaseRealtimeDb";
 import { AdminLayout } from "../admin/AdminLayout";
 import { DashboardView } from "../admin/pages/DashboardView";
 import { AcademicUnitsView } from "../admin/pages/AcademicUnitsView";
@@ -1729,7 +1730,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             try {
                 const target = resolvePastQuestionTarget(uploadDepartmentId, uploadLevel, uploadCourseName);
-                const pqRef = dbRef(db, `past_questions/${target.departmentId}/${target.level}/${target.courseName}/${year}`);
+                const courseSlug = sanitizePathSegment(target.courseName, 'unassigned_course');
+                const deptSlug = sanitizePathSegment(target.departmentId, 'general');
+                const levelSlug = sanitizePathSegment(target.level, 'unassigned');
+                const pqRef = dbRef(db, `past_questions/${deptSlug}/${levelSlug}/${courseSlug}/${year}`);
                 const newPQRef = push(pqRef);
                 await set(newPQRef, newQuestion);
                 addToast("Question added successfully!", "success");
@@ -1951,11 +1955,12 @@ RULES:
                         `Saving ${bucket.questions.length} questions under ${target.courseName}...`
                     );
 
-                    const pqRef = dbRef(
-                        db,
-                        `past_questions/${target.departmentId}/${target.level}/${target.courseName}/${year}`
-                    );
+                    // Sanitize path segments — commas in course titles break PostgREST (PGRST100)
+                    const courseSlug = sanitizePathSegment(target.courseName, 'unassigned_course');
+                    const deptSlug = sanitizePathSegment(target.departmentId, 'general');
+                    const levelSlug = sanitizePathSegment(target.level, 'unassigned');
 
+                    const normalizedQuestions: any[] = [];
                     for (const q of bucket.questions) {
                         const questionText = String(q.question || q.text || q.prompt || '').trim();
                         if (!questionText) continue;
@@ -1983,12 +1988,19 @@ RULES:
                         if (bucket.courseCode) {
                             payload.courseCode = String(bucket.courseCode);
                         }
-
-                        const newPQRef = push(pqRef);
-                        await set(newPQRef, payload);
-                        totalSaved += 1;
+                        normalizedQuestions.push(payload);
                     }
-                    savedLabels.push(`${target.courseName} (${bucket.questions.length})`);
+
+                    if (normalizedQuestions.length === 0) continue;
+
+                    // One row per course/year with full questions array (no push-id in path)
+                    const pqRef = dbRef(
+                        db,
+                        `past_questions/${deptSlug}/${levelSlug}/${courseSlug}/${year}`
+                    );
+                    await set(pqRef, normalizedQuestions);
+                    totalSaved += normalizedQuestions.length;
+                    savedLabels.push(`${target.courseName} (${normalizedQuestions.length})`);
                 }
 
                 addToast(
