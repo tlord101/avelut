@@ -1,6 +1,6 @@
 import { MarkdownContent } from '../MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import { createAvelutAI } from '../../utils/inference';
+import { createAvelutAI, getResponseText } from '../../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost } from '../../utils/usage';
 import { useToast } from '../../hooks/useToast';
 import type { UserProfile, AppSettings } from '../../types';
@@ -87,8 +87,8 @@ Return strictly valid JSON with no markdown block markers:
   ]
 }`;
 
-      const response = await ai.generateContent(prompt);
-      let jsonStr = (response.text || '').trim();
+      const response = await ai.models.generateContent({ contents: prompt });
+      let jsonStr = (getResponseText(response) || '').trim();
       if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
       if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
       if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
