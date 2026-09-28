@@ -1,4 +1,4 @@
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -47,10 +47,15 @@ export async function POST(req: Request) {
       process.env.VITE_ALIBABA_WORKSPACE_ID ||
       'ws-o3v6mh0i8y9tqdfx';
 
-    // Normalize messages and detect vision requests
+    // Normalize messages and detect vision / PDF-document requests
     const messages = body.messages || [];
     const hasImage = messages.some((m: any) =>
       Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
+    );
+    const hasDocument = messages.some((m: any) =>
+      Array.isArray(m.content) && m.content.some((c: any) =>
+        c.type === 'file' || c.file_url || c.file_data || c.file
+      )
     );
 
     let rawModel = (body.model ? String(body.model).trim() : '');
@@ -67,11 +72,18 @@ export async function POST(req: Request) {
     const isQwenModel = rawModel.toLowerCase().startsWith('qwen');
     const primaryDashscopeModel = isQwenModel ? rawModel : DEFAULT_MODEL;
 
-    const candidateModels = Array.from(new Set([
-      primaryDashscopeModel,
-      DEFAULT_MODEL,
-      'qwen3.7-flash',
-    ]));
+    // PDF understanding only works on qwen3.8-max / qwen3.8-flash / qwen3.8-27b
+    const candidateModels = hasDocument
+      ? Array.from(new Set([
+          primaryDashscopeModel.includes('max') ? 'qwen3.8-max' : 'qwen3.8-flash',
+          'qwen3.8-flash',
+          'qwen3.8-max',
+        ]))
+      : Array.from(new Set([
+          primaryDashscopeModel,
+          DEFAULT_MODEL,
+          'qwen3.7-flash',
+        ]));
 
     // Attempt DashScope / Model Studio MaaS endpoints
     let lastUpstreamError = '';
@@ -93,7 +105,8 @@ export async function POST(req: Request) {
         for (const baseUrl of targetBases) {
           try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 45000);
+            // PDF page parsing can take a long time before first token
+            const timer = setTimeout(() => controller.abort(), hasDocument ? 280000 : 45000);
 
             const payload: any = {
               model: currentModel,
@@ -102,7 +115,7 @@ export async function POST(req: Request) {
               enable_thinking: false,
               include_reasoning: false,
               temperature: body.temperature ?? 0.35,
-              max_tokens: Math.min(body.max_tokens ?? 2500, 4096),
+              max_tokens: Math.min(body.max_tokens ?? (hasDocument ? 16384 : 2500), hasDocument ? 16384 : 4096),
             };
             if (body.response_format && body.response_format.type === 'json_object') {
               payload.response_format = { type: 'json_object' };
