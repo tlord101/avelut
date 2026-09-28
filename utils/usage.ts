@@ -190,6 +190,55 @@ export {
   getLiveDurationCreditCost,
 } from './liveTutorialQuota';
 
+
+export interface UsageRecordInput {
+  userId: string;
+  feature: string;
+  creditsSpent?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  model?: string;
+  provider?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Persist a usage row to Supabase `usage_records` (tokens + credits + metadata).
+ * Safe no-op when Supabase is not configured. Does not throw.
+ */
+export async function recordUsage(input: UsageRecordInput): Promise<void> {
+  if (!isSupabaseConfigured || !supabase || !input.userId) return;
+  const prompt = input.promptTokens ?? 0;
+  const completion = input.completionTokens ?? 0;
+  const total =
+    typeof input.totalTokens === 'number'
+      ? input.totalTokens
+      : prompt + completion;
+  try {
+    const { error } = await supabase.from('usage_records').insert({
+      user_id: input.userId,
+      feature: input.feature,
+      credits_spent: input.creditsSpent ?? 0,
+      cost: input.creditsSpent ?? 0,
+      prompt_tokens: prompt,
+      completion_tokens: completion,
+      model: input.model ?? null,
+      provider: input.provider ?? null,
+      metadata: {
+        ...(input.metadata || {}),
+        total_tokens: total,
+      },
+      created_at: new Date().toISOString(),
+    });
+    if (error) {
+      console.warn('[Usage] recordUsage insert failed:', error.message || error);
+    }
+  } catch (err) {
+    console.warn('[Usage] recordUsage error:', err);
+  }
+}
+
 export const checkAICredits = (
   userProfile?: UserProfile | null,
   cost: number = 1,
@@ -228,11 +277,21 @@ export type DeductCreditsResult = {
   localOnly?: boolean;
 };
 
+export type UsageDetails = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  model?: string;
+  provider?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export const deductAICredits = async (
   userId: string,
   cost: number,
   featureName: string,
-  appSettings?: AppSettings
+  appSettings?: AppSettings,
+  usageDetails?: UsageDetails
 ): Promise<DeductCreditsResult> => {
   if (!userId || cost <= 0) {
     return { success: true, localOnly: true };
@@ -290,11 +349,16 @@ export const deductAICredits = async (
           saveLocalCredits(userId, updatedBalance, 'free').catch(console.warn);
           notifyUserCreditsUpdated(userId, updatedBalance);
         }
-        void supabase.from('usage_records').insert({
-          user_id: userId,
+        void recordUsage({
+          userId,
           feature: featureName,
-          credits_spent: cost,
-          created_at: new Date().toISOString(),
+          creditsSpent: cost,
+          promptTokens: usageDetails?.promptTokens,
+          completionTokens: usageDetails?.completionTokens,
+          totalTokens: usageDetails?.totalTokens,
+          model: usageDetails?.model,
+          provider: usageDetails?.provider,
+          metadata: usageDetails?.metadata,
         });
         return { success: true, balance: updatedBalance ?? undefined };
       }

@@ -1,6 +1,6 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText, accumulateUsageMetadata, type AiUsageMetadata } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
 import { getChapterGeneration, saveChapterGeneration, deleteChapterGeneration, getChapterContent } from '../services/notebookStorageService';
 import { LimitExceededModal } from './LimitExceededModal';
@@ -316,8 +316,9 @@ ${messageText}`;
         timestamp: Date.now(),
       }]);
 
+      const chatModel = getFeatureModel('chat_interaction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash';
       const responseStream = await ai.models.generateContentStream({
-        model: getFeatureModel('chat_interaction', appSettings) || appSettings?.alibaba_model || 'qwen3.8-omni-flash',
+        model: chatModel,
         contents: prompt,
         config: {
           temperature: 0.3,
@@ -327,7 +328,9 @@ ${messageText}`;
 
       let streamedText = '';
       let streamedReasoning = '';
+      let usageAcc: AiUsageMetadata = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
       for await (const chunk of responseStream) {
+        usageAcc = accumulateUsageMetadata(usageAcc, chunk);
         const chunkText = getResponseText(chunk);
         const chunkReasoning = getResponseReasoningText(chunk);
         if (chunkReasoning) {
@@ -357,7 +360,15 @@ ${messageText}`;
       ];
 
       await saveChapterGeneration(notebook.id, chapter.id, userProfile?.uid || 'local', 'chat', finalMessages);
-      void deductAICredits(userProfile?.uid, cost, 'Notebook Chat Tutor', appSettings);
+      if (userProfile?.uid) {
+        void deductAICredits(userProfile.uid, cost, 'Notebook Chat Tutor', appSettings, {
+          promptTokens: usageAcc.promptTokens,
+          completionTokens: usageAcc.completionTokens,
+          totalTokens: usageAcc.totalTokens,
+          model: chatModel,
+          metadata: { path: 'notebook_chat', notebook_id: notebook.id, chapter_id: chapter.id },
+        });
+      }
     } catch (err) {
       console.error('Notebook chat error:', err);
       addToast('Failed to get answer. Please check your connection.', 'error');

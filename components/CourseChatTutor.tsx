@@ -1,7 +1,7 @@
 import { MarkdownContent } from './MarkdownContent';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText, accumulateUsageMetadata, type AiUsageMetadata } from '../utils/inference';
 import { checkAICredits, deductAICredits, getFeatureCost, hasLiveTutorialAccess } from '../utils/usage';
 import { readCachedJson, writeCachedJson, clearCachedKey } from '../utils/cache';
 import { LimitExceededModal } from './LimitExceededModal';
@@ -514,10 +514,12 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
 
     let streamedText = '';
     let streamedReasoning = '';
+    let usageAcc: AiUsageMetadata = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     try {
       const responseStream = await ai.models.generateContentStream(aiParams);
 
       for await (const chunk of responseStream) {
+        usageAcc = accumulateUsageMetadata(usageAcc, chunk);
         const chunkText = getResponseText(chunk);
         const chunkReasoning = getResponseReasoningText(chunk);
         if (chunkReasoning) {
@@ -538,6 +540,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
       console.warn('[CourseChatTutor] Stream failed or interrupted, falling back to generateContent:', streamErr);
       const fallbackResult = await attemptApiCall(async () => {
         const result = await ai.models.generateContent(aiParams);
+        usageAcc = accumulateUsageMetadata(usageAcc, result);
         const resText = getResponseText(result);
         if (!resText) throw new Error('Course Tutor returned an empty response.');
         return resText;
@@ -560,6 +563,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     if (!streamedText.trim()) {
       const fallbackResult = await attemptApiCall(async () => {
         const result = await ai.models.generateContent(aiParams);
+        usageAcc = accumulateUsageMetadata(usageAcc, result);
         const resText = getResponseText(result);
         if (!resText) throw new Error('Course Tutor returned an empty response.');
         return resText;
@@ -582,7 +586,13 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
     });
 
     if (streamedText.trim() && userProfile?.uid) {
-      await deductAICredits(userProfile.uid, cost, 'Course Chat Tutor', appSettings).catch(console.warn);
+      await deductAICredits(userProfile.uid, cost, 'Course Chat Tutor', appSettings, {
+        promptTokens: usageAcc.promptTokens,
+        completionTokens: usageAcc.completionTokens,
+        totalTokens: usageAcc.totalTokens,
+        model: 'qwen3.8-omni-flash',
+        metadata: { path: 'course_chat', topic: topic?.topic_name },
+      }).catch(console.warn);
     }
 
     setIsSending(false);

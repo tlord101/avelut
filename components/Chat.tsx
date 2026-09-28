@@ -1,6 +1,6 @@
 import { db, get, off, onValue, push, ref as dbRef, remove, serverTimestamp, set, update } from '@/lib/backend';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { createAvelutAI, getResponseText, getResponseReasoningText, accumulateUsageMetadata, type AiUsageMetadata } from '../utils/inference';
 import { compressBase64Image } from '../utils/mediaUpload';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
@@ -1264,6 +1264,8 @@ export const Chat: React.FC<ChatProps> = ({
       const cachedReply = currentImages.length > 0 ? null : await getCachedAIResponse(promptText, aiModel, selectedMode);
       let responseText = cachedReply || '';
       let reasoningText = '';
+      let usageAcc: AiUsageMetadata = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      const fromCache = !!responseText;
 
       if (responseText) {
         updateOrAppendAiMessage(responseText);
@@ -1281,6 +1283,7 @@ export const Chat: React.FC<ChatProps> = ({
           const responseStream = await ai.models.generateContentStream(aiParams);
 
           for await (const chunk of responseStream) {
+            usageAcc = accumulateUsageMetadata(usageAcc, chunk);
             const chunkText = getResponseText(chunk);
             const chunkReasoning = getResponseReasoningText(chunk);
             if (chunkReasoning) {
@@ -1295,6 +1298,7 @@ export const Chat: React.FC<ChatProps> = ({
           console.warn('Streaming failed or not supported, falling back to generateContent:', streamErr);
           const aiResult = await attemptApiCall(async () => {
             const result = await ai.models.generateContent(aiParams);
+            usageAcc = accumulateUsageMetadata(usageAcc, result);
             const resText = getResponseText(result);
             if (!resText) throw new Error('Avelut AI returned an empty response.');
             return resText;
@@ -1342,7 +1346,13 @@ export const Chat: React.FC<ChatProps> = ({
         console.error(e);
       }
 
-      void deductAICredits(userProfile.uid, cost, 'AI Chat Assistant', appSettings);
+      void deductAICredits(userProfile.uid, cost, 'AI Chat Assistant', appSettings, {
+        promptTokens: usageAcc.promptTokens,
+        completionTokens: usageAcc.completionTokens,
+        totalTokens: usageAcc.totalTokens,
+        model: aiModel,
+        metadata: { path: 'chat', from_cache: fromCache, mode: selectedMode },
+      });
 
       if (memoryBank?.isEnabled) {
         void extractAndSaveMemoriesFromExchange({

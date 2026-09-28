@@ -46,7 +46,8 @@ import {
   commitActualLiveTutorialMinutes,
   type LiveDurationMinutes,
 } from '../../../utils/liveTutorialQuota';
-import { deductAICredits } from '../../../utils/usage';
+import { deductAICredits, recordUsage } from '../../../utils/usage';
+import { logTeachingEvent } from '../../../services/teachingEventLogger';
 import { notifyUserCreditsUpdated } from '../../../lib/supabaseRealtimeDb';
 import {
   getOrGenerateTeachingPlan,
@@ -294,6 +295,15 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     // Grace period: if user left within 20s (accidental tap), do not deduct anything
     if (elapsedSeconds < 20) {
       console.log('[AvelutLiveClassroomView] Exited within 20s grace period — 0 minutes deducted');
+      logTeachingEvent({
+        type: 'session_error',
+        topic: topicTitle || 'unknown',
+        courseName,
+        duration: durationMinutes,
+        reason: 'grace_period_exit',
+        metadata: { elapsedSeconds },
+        userId: userProfile.uid,
+      });
       return;
     }
 
@@ -303,6 +313,27 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     const paymentMode = paymentModeRef.current;
 
     console.log(`[AvelutLiveClassroomView] Finalizing usage: ${actualMinutes} min(s) (${elapsedSeconds}s elapsed, mode=${paymentMode})`);
+
+    const sessionMeta = {
+      session_kind: 'live_classroom',
+      payment_mode: paymentMode,
+      planned_duration_minutes: durMode,
+      actual_minutes: actualMinutes,
+      elapsed_seconds: elapsedSeconds,
+      topic: topicTitle,
+      course: courseName,
+      // Realtime voice APIs often omit token meters; duration is the primary unit.
+      // When the teacher service exposes usage later, fold prompt/completion into recordUsage.
+    };
+
+    logTeachingEvent({
+      type: 'credit_deduct',
+      topic: topicTitle || 'unknown',
+      courseName,
+      duration: actualMinutes,
+      metadata: sessionMeta,
+      userId: userProfile.uid,
+    });
 
     if (paymentMode === 'included') {
       commitActualLiveTutorialMinutes(userProfile, actualMinutes, appSettings)
@@ -314,6 +345,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         .catch((err) => {
           console.warn('[AvelutLiveClassroomView] commitActualLiveTutorialMinutes error:', err);
         });
+      void recordUsage({
+        userId: userProfile.uid,
+        feature: 'live_tutorial',
+        creditsSpent: 0,
+        metadata: { ...sessionMeta, remaining_pool_minutes: undefined },
+      });
     } else if (paymentMode === 'credits') {
       // 10 credits per actual minute spent
       const creditCost = actualMinutes * 10;
@@ -327,8 +364,15 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         .catch((err) => {
           console.warn('[AvelutLiveClassroomView] deductAICredits error:', err);
         });
+      // deductAICredits already writes a basic usage_records row; add a richer session row.
+      void recordUsage({
+        userId: userProfile.uid,
+        feature: 'live_tutorial_session',
+        creditsSpent: creditCost,
+        metadata: sessionMeta,
+      });
     }
-  }, [userProfile, durationMinutes, appSettings]);
+  }, [userProfile, durationMinutes, appSettings, topicTitle, courseName]);
 
   // Always call the latest finalizeLessonUsage from unmount-only cleanups,
   // so its closure never goes stale while keeping it out of effect deps.
@@ -388,6 +432,14 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       const durMode = (durationMinutes as LiveDurationMinutes) || 15;
       const decision = evaluateLiveTutorialStart(userProfile, durMode, appSettings);
       paymentModeRef.current = decision.payment === 'included' ? 'included' : 'credits';
+      logTeachingEvent({
+        type: 'session_start',
+        topic: topicTitle || 'unknown',
+        courseName,
+        duration: durMode,
+        metadata: { payment: paymentModeRef.current },
+        userId: userProfile.uid,
+      });
     }
 
     const unlocked = await serviceRef.current.resumeAudio();

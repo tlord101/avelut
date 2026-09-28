@@ -182,6 +182,50 @@ const globalRateLimiter = new RpmRateLimiter(10);
  * Safe helper to extract text from an AI model response.
  * Handles both getter and method versions of .text property.
  */
+
+/**
+ * Extract token usage from a generateContent / stream chunk response.
+ * Returns zeros when the provider did not attach usage metadata.
+ */
+export interface AiUsageMetadata {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export const extractUsageMetadata = (response: any): AiUsageMetadata => {
+  const empty: AiUsageMetadata = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  if (!response) return empty;
+
+  const meta = response.usageMetadata || response.usage_metadata || response.usage;
+  if (!meta || typeof meta !== 'object') return empty;
+
+  const prompt =
+    Number(meta.promptTokenCount ?? meta.prompt_tokens ?? meta.input_tokens ?? 0) || 0;
+  const completion =
+    Number(meta.candidatesTokenCount ?? meta.completion_tokens ?? meta.output_tokens ?? 0) || 0;
+  let total = Number(meta.totalTokenCount ?? meta.total_tokens ?? 0) || 0;
+  if (!total && (prompt || completion)) total = prompt + completion;
+
+  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
+};
+
+/**
+ * Merge usage from a stream chunk into a running accumulator (prefer max totals).
+ */
+export const accumulateUsageMetadata = (
+  acc: AiUsageMetadata,
+  response: any
+): AiUsageMetadata => {
+  const next = extractUsageMetadata(response);
+  if (!next.totalTokens && !next.promptTokens && !next.completionTokens) return acc;
+  return {
+    promptTokens: Math.max(acc.promptTokens, next.promptTokens),
+    completionTokens: Math.max(acc.completionTokens, next.completionTokens),
+    totalTokens: Math.max(acc.totalTokens, next.totalTokens) || (next.promptTokens + next.completionTokens),
+  };
+};
+
 export const getResponseText = (response: any): string => {
   if (!response) return '';
   const text = response.text;

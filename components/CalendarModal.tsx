@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createAvelutAI, getResponseText, Type } from '../utils/inference';
 import { useToast } from '../hooks/useToast';
+import { scheduleStudyReminders } from '../utils/nativeNotifications';
 import { getFeatureModel, checkAICredits, deductAICredits, getFeatureCost } from '../utils/usage';
 import { useApiLimiter } from '../hooks/useApiLimiter';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -265,6 +266,11 @@ Return valid JSON with key "sessions" containing an array of objects.`;
 
                 // Notify any listening timetable views
                 window.dispatchEvent(new CustomEvent('avelut_timetable_updated', { detail: timetablePayload }));
+
+                // Schedule on-device local notifications for the new sessions
+                void scheduleStudyReminders(mergedSessions, {
+                    enabled: userProfile.notifications_enabled !== false,
+                });
 
                 addToast('Timetable updated successfully!', 'success');
                 onClose();

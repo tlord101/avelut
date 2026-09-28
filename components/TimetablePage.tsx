@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { UserProfile } from '../types';
 import { useToast } from '../hooks/useToast';
+import { scheduleStudyReminders } from '../utils/nativeNotifications';
 
 export interface TimetableSession {
     id: string;
@@ -139,15 +140,24 @@ export const TimetablePage: React.FC<TimetablePageProps> = ({
                 .maybeSingle();
 
             if (!error && data && data.value) {
+                let loadedSessions: TimetableSession[] = [];
                 if (Array.isArray(data.value)) {
+                    loadedSessions = data.value;
                     setSessions(data.value);
                 } else if (typeof data.value === 'object') {
-                    setSessions(Array.isArray(data.value.sessions) ? data.value.sessions : []);
+                    loadedSessions = Array.isArray(data.value.sessions) ? data.value.sessions : [];
+                    setSessions(loadedSessions);
                     setActivities(Array.isArray(data.value.activities) ? data.value.activities : []);
                 }
                 try {
                     localStorage.setItem(`avelut_timetable_${userProfile.uid}`, JSON.stringify(data.value));
                 } catch {}
+                // Re-sync local study reminders after load (covers reinstall / new device)
+                if (loadedSessions.length > 0) {
+                    void scheduleStudyReminders(loadedSessions, {
+                        enabled: userProfile.notifications_enabled !== false,
+                    });
+                }
             }
         } catch (e) {
             console.warn('[Supabase] Failed to load user timetable:', e);
@@ -235,6 +245,11 @@ export const TimetablePage: React.FC<TimetablePageProps> = ({
                 }, { onConflict: 'key' });
 
             if (error) throw error;
+
+            // Schedule on-device local notifications for class/study reminders
+            void scheduleStudyReminders(newSessions, {
+                enabled: userProfile.notifications_enabled !== false,
+            });
         } catch (err: any) {
             console.error('[TimetablePage] Save error:', err);
             addToast('Failed to save to Supabase. Check network.', 'error');
