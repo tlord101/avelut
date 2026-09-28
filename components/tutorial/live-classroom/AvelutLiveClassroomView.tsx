@@ -241,6 +241,30 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onStateChange: (s) => {
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
+
+        // Auto-open mic when the teacher asks the student a question
+        if (
+          s === 'listening' &&
+          svc &&
+          svc.getLastResponseAskedQuestion() &&
+          !svc.getIsPushToTalkActive()
+        ) {
+          const started = svc.beginPushToTalk();
+          if (started) {
+            setIsTalking(true);
+            if (recordingTimerRef.current) {
+              clearTimeout(recordingTimerRef.current);
+            }
+            recordingTimerRef.current = setTimeout(() => {
+              if (serviceRef.current?.getIsPushToTalkActive()) {
+                serviceRef.current.endPushToTalk();
+                setIsTalking(false);
+              }
+              recordingTimerRef.current = null;
+            }, MAX_RECORDING_MS);
+          }
+        }
+
         // Sync UI mic state with service truth
         if (svc) {
           const active = svc.getIsPushToTalkActive();
@@ -813,11 +837,16 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               disabled={teacherState === 'connecting'}
               className={`relative flex items-center justify-center w-14 h-14 rounded-full
                           shadow-lg transition-all active:scale-95
-                          bg-[#38BDF8] text-black
+                          ${teacherState === 'listening'
+                            ? 'bg-rose-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.4)]'
+                            : 'bg-[#38BDF8] text-black'}
                           ${teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''}`}
-              aria-label="Tap to speak"
+              aria-label={teacherState === 'listening' ? 'Your turn — tap to speak' : 'Tap to speak'}
             >
-              <Mic className="w-6 h-6" />
+              {teacherState === 'listening' && (
+                <span className="absolute inset-0 rounded-full bg-rose-400/30 animate-ping pointer-events-none" />
+              )}
+              <Mic className="w-6 h-6 relative z-10" />
             </button>
 
             <button
