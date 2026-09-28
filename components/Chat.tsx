@@ -1,6 +1,7 @@
 import { db, get, off, onValue, push, ref as dbRef, remove, serverTimestamp, set, update } from '@/lib/backend';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createAvelutAI, getResponseText, getResponseReasoningText } from '../utils/inference';
+import { compressBase64Image } from '../utils/mediaUpload';
 import type { UserProfile, Message, ChatConversation } from '../types';
 import { useToast } from '../hooks/useToast';
 import { checkAICredits, deductAICredits, getFeatureCost, getFeatureModel } from '../utils/usage';
@@ -244,6 +245,7 @@ const CameraCaptureView: React.FC<{
 
 // --- REDESIGNED INPUT COMPOSER ---
 const MAX_CHAT_IMAGES = 6;
+const MAX_SAFE_PAYLOAD_BYTES = 10 * 1024 * 1024; // 10MB safe cap
 
 const ImageGridRenderer: React.FC<{ images: string[] }> = ({ images }) => {
   if (!images || images.length === 0) return null;
@@ -568,6 +570,7 @@ export const Chat: React.FC<ChatProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeRequestIdRef = useRef<string | null>(null);
   const { addToast } = useToast();
   const { attemptApiCall } = useApiLimiter();
   const { settings: appSettings } = useAppSettings();
@@ -599,16 +602,31 @@ export const Chat: React.FC<ChatProps> = ({
     }
   }, [propActiveConversationId]);
 
+  const addOptimizedImage = useCallback(async (base64Img: string) => {
+    try {
+      const optimized = await compressBase64Image(base64Img, 1600, 0.82);
+      setAttachedImages((prev) => {
+        if (prev.length >= MAX_CHAT_IMAGES) {
+          addToast(`Maximum ${MAX_CHAT_IMAGES} images allowed per message.`, 'warning');
+          return prev;
+        }
+        return [...prev, optimized];
+      });
+    } catch {
+      setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, base64Img] : prev);
+    }
+  }, [addToast]);
+
   useEffect(() => {
     const pendingImg = localStorage.getItem('shared_chat_pending_image');
     if (pendingImg) {
-      setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, pendingImg] : prev);
+      void addOptimizedImage(pendingImg);
       localStorage.removeItem('shared_chat_pending_image');
     }
 
     const handleAttach = (e: any) => {
       if (e.detail?.image) {
-        setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, e.detail.image] : prev);
+        void addOptimizedImage(e.detail.image);
         localStorage.removeItem('shared_chat_pending_image');
       }
     };
@@ -616,7 +634,7 @@ export const Chat: React.FC<ChatProps> = ({
     return () => {
       window.removeEventListener('avelut_attach_chat_image', handleAttach);
     };
-  }, []);
+  }, [addOptimizedImage]);
 
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null);
@@ -968,7 +986,7 @@ export const Chat: React.FC<ChatProps> = ({
             reader.onload = (ev) => {
               const result = ev.target?.result as string;
               if (result) {
-                setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, result] : prev);
+                void addOptimizedImage(result);
               }
             };
             reader.readAsDataURL(file);
@@ -980,10 +998,15 @@ export const Chat: React.FC<ChatProps> = ({
 
     window.addEventListener('paste', handleWindowPaste);
     return () => window.removeEventListener('paste', handleWindowPaste);
-  }, []);
+  }, [addOptimizedImage]);
 
   const handleSendMessage = async (customText?: string) => {
     stopVoiceRecognition();
+    if (activeRequestIdRef.current || isLoading) {
+      console.warn('[Chat] Duplicate submission blocked by active requestId lock:', activeRequestIdRef.current);
+      return;
+    }
+
     const textToSend = customText || input;
     if ((!textToSend.trim() && attachedImages.length === 0) || isLoading) return;
 
@@ -998,6 +1021,27 @@ export const Chat: React.FC<ChatProps> = ({
     const cleanUserText = textToSend.replace(/\[Attached Image\]/g, '').trim();
     const promptText = cleanUserText || (currentImages.length > 0 ? 'Please analyze these attached images, solve any problems shown, and explain them step by step in detail.' : '');
     const displayInput = cleanUserText;
+
+    if (currentImages.length > MAX_CHAT_IMAGES) {
+      addToast(`You can attach up to ${MAX_CHAT_IMAGES} images per message.`, 'warning');
+      return;
+    }
+
+    // Estimate total payload size in bytes
+    const totalImageBytes = currentImages.reduce((sum, img) => sum + img.length, 0);
+    const textBytes = promptText.length;
+    const totalPayloadBytes = totalImageBytes + textBytes;
+    const payloadMB = (totalPayloadBytes / (1024 * 1024)).toFixed(2);
+
+    if (totalPayloadBytes > MAX_SAFE_PAYLOAD_BYTES) {
+      addToast('These images are too large to send together. Please remove one or more images or try smaller images.', 'warning');
+      return;
+    }
+
+    const requestId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    activeRequestIdRef.current = requestId;
+
+    console.log(`[Chat] request started requestId=${requestId} imageCount=${currentImages.length} payloadMB=${payloadMB}`);
 
     setInput('');
     setAttachedImages([]);
@@ -1029,8 +1073,11 @@ export const Chat: React.FC<ChatProps> = ({
         onSelectConversation?.(currentConvoId);
       }
 
-      if (isNewConvo && ai && currentConvoId) {
-        const convoIdForTitle = currentConvoId;
+      // Title generation is queued in background without image attachments and strictly non-blocking
+      const convoIdForTitle = currentConvoId;
+      const textOnlyPrompt = (cleanUserText || 'Image Analysis').slice(0, 300);
+      const triggerBackgroundTitleGen = () => {
+        if (!isNewConvo || !ai || !convoIdForTitle) return;
         (async () => {
           try {
             const titleResult = await ai.models.generateContent({
@@ -1038,7 +1085,7 @@ export const Chat: React.FC<ChatProps> = ({
               contents: [{
                 role: 'user',
                 parts: [{
-                  text: `Summarize the following user prompt into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser prompt: "${promptText.slice(0, 300)}"`
+                  text: `Summarize the following user text into a short, concise chat title of 3 to 6 words. Do not use quotes, punctuation, or preamble. Return ONLY the title.\n\nUser text: "${textOnlyPrompt}"`
                 }]
               }],
               config: { temperature: 0.3 }
@@ -1049,10 +1096,10 @@ export const Chat: React.FC<ChatProps> = ({
               void update(dbRef(db, `chat_conversations/${userProfile.uid}/${convoIdForTitle}`), { title: generatedTitle });
             }
           } catch (e) {
-            console.warn('Failed to auto-generate chat title:', e);
+            console.warn('[Chat] Non-blocking title generation skipped on error:', (e as any)?.message || e);
           }
         })();
-      }
+      };
 
       const userMsgAttachments = currentImages.map((img) => ({
         type: 'image' as const,
@@ -1266,6 +1313,9 @@ export const Chat: React.FC<ChatProps> = ({
         if (responseText && currentImages.length === 0) {
           void setCachedAIResponse(promptText, aiModel, selectedMode, responseText);
         }
+
+      // Trigger background title generation after primary chat response is successfully generated
+      triggerBackgroundTitleGen();
       }
 
       if (!responseText.trim()) {
@@ -1307,11 +1357,24 @@ export const Chat: React.FC<ChatProps> = ({
           }
         });
       }
-    } catch (err) {
-      console.error('Error in chat:', err);
-      addToast('An error occurred while sending your message.', 'error');
-      setMessages((prev) => prev.filter((m) => m.text !== ''));
+    } catch (err: any) {
+      console.error('[Chat] Error in chat:', err);
+      // Clean up empty bot placeholder if streaming failed
+      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId || m.text.trim().length > 0));
+
+      // Restore attached images if sending failed so user can easily retry
+      if (currentImages.length > 0) {
+        setAttachedImages((prev) => (prev.length === 0 ? currentImages : prev));
+      }
+
+      const rawErrMsg = err?.message || String(err || '');
+      if (rawErrMsg.includes("temporarily busy") || rawErrMsg.includes("429") || rawErrMsg.includes("RATE_LIMIT") || rawErrMsg.includes("overloaded")) {
+        addToast("Avelut's AI provider is temporarily busy. Please try again in a moment.", "error");
+      } else {
+        addToast(rawErrMsg || 'An error occurred while sending your message.', 'error');
+      }
     } finally {
+      activeRequestIdRef.current = null;
       setIsLoading(false);
     }
   };
@@ -1515,12 +1578,16 @@ export const Chat: React.FC<ChatProps> = ({
         onChange={(e) => {
           const files = e.target.files;
           if (files && files.length > 0) {
-            Array.from(files).forEach((file) => {
+            const selected = Array.from(files);
+            if (selected.length + attachedImages.length > MAX_CHAT_IMAGES) {
+              addToast(`You can attach a maximum of ${MAX_CHAT_IMAGES} images.`, 'warning');
+            }
+            selected.slice(0, MAX_CHAT_IMAGES - attachedImages.length).forEach((file) => {
               const reader = new FileReader();
               reader.onload = (ev) => {
                 const res = ev.target?.result as string;
                 if (res) {
-                  setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, res] : prev);
+                  void addOptimizedImage(res);
                 }
               };
               reader.readAsDataURL(file);
@@ -1539,7 +1606,7 @@ export const Chat: React.FC<ChatProps> = ({
         onToggleVoice={toggleVoice}
         attachedImages={attachedImages}
         onRemoveImage={(idx) => setAttachedImages((prev) => prev.filter((_, i) => i !== idx))}
-        onAttachImage={(img) => setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, img] : prev)}
+        onAttachImage={(img) => void addOptimizedImage(img)}
         onOpenGallery={() => fileInputRef.current?.click()}
         onOpenCamera={() => setIsCameraOpen(true)}
         onOpenMemoryBank={() => setIsMemoryModalOpen(true)}
@@ -1553,7 +1620,7 @@ export const Chat: React.FC<ChatProps> = ({
         <CameraCaptureView
           onClose={() => setIsCameraOpen(false)}
           onConfirm={(base64Img) => {
-            setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, base64Img] : prev);
+            void addOptimizedImage(base64Img);
             setIsCameraOpen(false);
           }}
         />

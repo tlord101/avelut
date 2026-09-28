@@ -660,7 +660,23 @@ export function normalizeAlibabaDashScopeModel(model?: string, hasImage: boolean
 }
 
 /**
- * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with candidate model fallbacks
+ * Helper to calculate backoff delay with exponential scaling and random jitter.
+ */
+function getBackoffDelayMs(attempt: number, retryAfterHeader?: string | null): number {
+  if (retryAfterHeader) {
+    const parsedSec = parseInt(retryAfterHeader, 10);
+    if (!isNaN(parsedSec) && parsedSec > 0) {
+      return Math.min(parsedSec * 1000, 10000);
+    }
+  }
+  const baseDelay = 1000 * Math.pow(2, attempt - 1);
+  const jitter = Math.random() * 500;
+  return Math.min(baseDelay + jitter, 8000);
+}
+
+/**
+ * Call Alibaba Cloud DashScope / Qwen Direct API Endpoint with candidate model fallbacks,
+ * bounded exponential retries with jitter, and controlled OpenRouter fallback on 429 overloads.
  */
 async function callAlibabaQwen(
   params: any,
@@ -670,7 +686,6 @@ async function callAlibabaQwen(
   const apiKey = getAlibabaApiKey(appSettings);
   const { messages, hasImage } = paramsToChatMessages(params);
   const primaryModel = normalizeAlibabaDashScopeModel(params?.model || appSettings?.alibaba_model || 'qwen3.8-omni-flash', hasImage);
-  // Prefer qwen3.8-omni-flash for both text and multimodal. No forced VL-only models.
   const candidateModels = Array.from(new Set([primaryModel, 'qwen3.8-omni-flash', 'qwen3.7-flash']));
 
   const isNative = typeof window !== 'undefined' && (
@@ -681,6 +696,7 @@ async function callAlibabaQwen(
   const endpoints = resolveAlibabaEndpoints(appSettings, apiKey, isNative, options);
 
   let lastError: Error | null = null;
+  let isRateLimited = false;
 
   for (const model of candidateModels) {
     const bodyPayload: any = {
@@ -697,66 +713,97 @@ async function callAlibabaQwen(
     }
 
     for (const endpoint of endpoints) {
-      try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-DashScope-WorkSpace': 'ws-o3v6mh0i8y9tqdfx',
-        };
-        if (apiKey) {
-          headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-
-        const fetchController = new AbortController();
-        const timeoutId = setTimeout(() => fetchController.abort(), 45000);
-
-        let response: Response;
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(bodyPayload),
-            signal: fetchController.signal,
-          });
-        } finally {
-          clearTimeout(timeoutId);
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Alibaba Qwen Direct HTTP ${response.status}: ${errorText}`);
-        }
-
-        const rawText = await response.text();
-        let data: any = null;
-        let extractedText = rawText;
-        try {
-          data = JSON.parse(rawText);
-          if (data?.choices?.[0]?.message?.content !== undefined) {
-            extractedText = data.choices[0].message.content;
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'X-DashScope-WorkSpace': 'ws-o3v6mh0i8y9tqdfx',
+          };
+          if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
           }
-        } catch (_) {}
 
-        return {
-          text: () => extractedText,
-          candidates: [
-            {
-              content: {
-                parts: [{ text: extractedText }],
-                role: 'model',
+          const fetchController = new AbortController();
+          const timeoutId = setTimeout(() => fetchController.abort(), 45000);
+
+          let response: Response;
+          try {
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(bodyPayload),
+              signal: fetchController.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          if (response.status === 429) {
+            isRateLimited = true;
+            const retryAfterHeader = response.headers.get('retry-after');
+            const errText = await response.text().catch(() => '');
+            console.warn(`[AlibabaChat] status=429 reason=upstream_overloaded model=${model} attempt=${attempt}/${maxRetries}`);
+
+            if (attempt < maxRetries) {
+              const delay = getBackoffDelayMs(attempt, retryAfterHeader);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
+            throw new Error(`429_RATE_LIMIT: Upstream provider is temporarily overloaded.`);
+          }
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Alibaba Qwen Direct HTTP ${response.status}: ${errorText}`);
+          }
+
+          const rawText = await response.text();
+          let data: any = null;
+          let extractedText = rawText;
+          try {
+            data = JSON.parse(rawText);
+            if (data?.choices?.[0]?.message?.content !== undefined) {
+              extractedText = data.choices[0].message.content;
+            }
+          } catch (_) {}
+
+          return {
+            text: () => extractedText,
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: extractedText }],
+                  role: 'model',
+                },
+                finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
               },
-              finishReason: data?.choices?.[0]?.finish_reason || 'STOP',
+            ],
+            usageMetadata: {
+              promptTokenCount: data?.usage?.prompt_tokens || 0,
+              candidatesTokenCount: data?.usage?.completion_tokens || 0,
+              totalTokenCount: data?.usage?.total_tokens || 0,
             },
-          ],
-          usageMetadata: {
-            promptTokenCount: data?.usage?.prompt_tokens || 0,
-            candidatesTokenCount: data?.usage?.completion_tokens || 0,
-            totalTokenCount: data?.usage?.total_tokens || 0,
-          },
-        };
-      } catch (err: any) {
-        lastError = err;
+          };
+        } catch (err: any) {
+          lastError = err;
+          if (err?.message?.startsWith('429_RATE_LIMIT')) {
+            break; // Move to next model / fallback
+          }
+        }
       }
     }
+  }
+
+  // If Alibaba endpoint persists in 429 rate limits after retries, fallback to OpenRouter controlled candidate
+  if (isRateLimited) {
+    try {
+      console.warn('[AlibabaChat] Alibaba overloaded after retries. Falling back to OpenRouter vision candidate...');
+      return await callOpenRouterQwen(params, appSettings);
+    } catch (fallbackErr: any) {
+      console.error('[AlibabaChat] OpenRouter fallback failed:', fallbackErr?.message);
+    }
+    throw new Error("Avelut's AI provider is temporarily busy. Please try again in a moment.");
   }
 
   throw new Error(`[Alibaba Qwen API Error] Request failed on model "${primaryModel}": ${lastError?.message || 'No available endpoint'}`);
@@ -836,6 +883,7 @@ async function* callAlibabaQwenStream(
   }
 
   if (!response || !response.body) {
+    console.warn('[Alibaba SSE] Stream response not available, attempting callAlibabaQwen fallback...');
     const fallbackResult = await callAlibabaQwen(params, appSettings);
     yield fallbackResult;
     return;
