@@ -208,18 +208,17 @@ export const LiveTutorialVoiceSelectorModal: React.FC<LiveTutorialVoiceSelectorM
           </button>
         </div>
 
-        {/* Topic & Pricing Ribbon */}
+        {/* Topic Ribbon */}
         <div className="px-6 py-3 bg-[#FFFFFF] border-b border-[#E3E9F1] flex items-center justify-between">
           <div className="min-w-0 pr-2">
             <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block">Topic</span>
-            <span className="text-xs font-bold text-[#002D62] truncate block max-w-[240px] sm:max-w-xs">
+            <span className="text-xs font-bold text-[#002D62] truncate block max-w-[320px] sm:max-w-sm">
               {topicTitle}
             </span>
           </div>
           <div className="flex items-center space-x-1.5 bg-[#F1F5F9] border border-[#E3E9F1] px-3 py-1 rounded-full">
-            <i className="bi bi-lightning-charge-fill text-[#0066FF] text-xs"></i>
-            <span className="text-xs font-bold text-[#0F172A]">150 Credits</span>
-            <span className="text-[10px] text-[#64748B]">(₦150)</span>
+            <i className="bi bi-broadcast text-[#0066FF] text-xs"></i>
+            <span className="text-xs font-bold text-[#0F172A]">Live Interactive Voice</span>
           </div>
         </div>
 

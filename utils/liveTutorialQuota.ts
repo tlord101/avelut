@@ -10,7 +10,7 @@
  */
 
 import type { UserProfile, AppSettings } from '../types';
-import { DEFAULT_USAGE_SETTINGS } from './appSettings';
+import { DEFAULT_USAGE_SETTINGS, CANONICAL_PRICING, resolvePackagePriceNgn } from './appSettings';
 import { readCachedJson, writeCachedJson } from './cache';
 import { supabase } from '../lib/supabaseClient';
 
@@ -107,8 +107,8 @@ export function getLiveMinuteAllowance(
       : typeof tier.live_tutorial_included_minutes === 'number'
         ? tier.live_tutorial_included_minutes
         : key === 'free'
-          ? 15
-          : 450;
+          ? CANONICAL_PRICING.free.liveTutorialMinutes
+          : CANONICAL_PRICING.pro.liveTutorialMinutes;
 
   return { allowance, period: 'month', periodKey: monthKey() };
 }
@@ -175,9 +175,9 @@ export function getLiveDurationCreditCost(
   appSettings?: AppSettings | null
 ): number {
   const costs = (appSettings?.usage_settings?.feature_costs || DEFAULT_USAGE_SETTINGS.feature_costs) as any;
-  if (minutes === 15) return costs.live_tutorial_15 ?? costs.live_tutorial ?? 150;
-  if (minutes === 30) return costs.live_tutorial_30 ?? 350;
-  return costs.live_tutorial_60 ?? 650;
+  if (minutes === 15) return costs.live_tutorial_15 ?? costs.live_tutorial ?? CANONICAL_PRICING.packages.live_tutorial_15.priceNgn;
+  if (minutes === 30) return costs.live_tutorial_30 ?? CANONICAL_PRICING.packages.live_tutorial_30.priceNgn;
+  return costs.live_tutorial_60 ?? CANONICAL_PRICING.packages.live_tutorial_60.priceNgn;
 }
 
 export function evaluateLiveTutorialStart(
@@ -258,7 +258,7 @@ export function evaluateLiveTutorialStart(
       poolUsed: pool.used,
       poolRemaining: pool.remaining,
       reason: 'locked_free',
-      message: `Free trial minutes used up. Upgrade to Pro for 450 monthly live minutes or buy credits (10 credits / min).`,
+      message: `Free trial minutes used up. Upgrade to Pro for 180 monthly live minutes or buy credits.`,
     };
   }
 

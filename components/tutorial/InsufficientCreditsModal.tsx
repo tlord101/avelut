@@ -1,5 +1,6 @@
 import React from 'react';
 import type { UserProfile, AppSettings } from '../../types';
+import { CANONICAL_PRICING } from '../../utils/appSettings';
 
 export interface InsufficientCreditsModalProps {
   isOpen: boolean;
@@ -32,15 +33,13 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
 }) => {
   if (!isOpen) return null;
 
-  const deficit = Math.max(0, requiredCost - currentBalance);
-  
   const isPro = userProfile?.subscription_status === 'pro' ||
     userProfile?.subscription_status === 'monthly' ||
     userProfile?.subscription_status === 'premium' ||
     userProfile?.subscription_status === 'semester';
 
-  const proPriceNgn = appSettings?.usage_settings?.tiers?.premium?.price_ngn || 3999;
-  const proMinutes = appSettings?.usage_settings?.tiers?.premium?.live_tutorial_included_minutes || 450;
+  const proPriceNgn = CANONICAL_PRICING.pro.priceNgn;
+  const proMinutes = CANONICAL_PRICING.pro.liveTutorialMinutes;
 
   const handleBuyCreditsAction = () => {
     if (onBuyCredits) {
@@ -93,17 +92,12 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
         {/* Balance summary */}
         <div className="flex flex-col gap-1.5 p-3.5 bg-white dark:bg-[#0A0A0A] rounded-2xl border border-[#E5E5E0] dark:border-[#2A2A2A] mb-5 text-xs">
           <div className="flex justify-between items-center">
-            <span className="text-[#666666] dark:text-[#A3A3A3]">Your balance</span>
-            <span className="font-semibold">{currentBalance} credits</span>
+            <span className="text-[#666666] dark:text-[#A3A3A3]">Included minutes remaining</span>
+            <span className="font-semibold">{poolRemaining} mins</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[#666666] dark:text-[#A3A3A3]">This lesson</span>
-            <span className="font-semibold">{requiredCost} credits</span>
-          </div>
-          <div className="h-px w-full bg-[#E5E5E0] dark:bg-[#2A2A2A] my-0.5" />
-          <div className="flex justify-between items-center font-bold">
-            <span>Needed</span>
-            <span>{deficit} credits</span>
+            <span className="text-[#666666] dark:text-[#A3A3A3]">Requested lesson</span>
+            <span className="font-semibold">{durationMinutes} mins</span>
           </div>
         </div>
 
@@ -129,10 +123,15 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
             </div>
           )}
 
-          <div className="p-4 rounded-2xl border border-[#E5E5E0] dark:border-[#2A2A2A] bg-white dark:bg-[#0A0A0A] space-y-2">
+          <div className="p-4 rounded-2xl border border-[#E5E5E0] dark:border-[#2A2A2A] bg-white dark:bg-[#0A0A0A] space-y-3">
             <div>
-              <span className="font-bold text-sm block">Buy Credits</span>
-              <span className="text-xs text-[#666666] dark:text-[#A3A3A3]">Add credits and pay as you learn</span>
+              <span className="font-bold text-sm block">Buy Live Tutorial Credits</span>
+              <span className="text-xs text-[#666666] dark:text-[#A3A3A3]">Pay-as-you-go packages:</span>
+            </div>
+            <div className="text-xs space-y-1 text-[#666666] dark:text-[#A3A3A3] font-medium">
+              <div className="flex justify-between"><span>15 min</span><span className="font-bold text-[#111111] dark:text-[#F5F5F5]">₦299</span></div>
+              <div className="flex justify-between"><span>30 min</span><span className="font-bold text-[#111111] dark:text-[#F5F5F5]">₦599</span></div>
+              <div className="flex justify-between"><span>60 min</span><span className="font-bold text-[#111111] dark:text-[#F5F5F5]">₦1,099</span></div>
             </div>
             <button
               onClick={handleBuyCreditsAction}

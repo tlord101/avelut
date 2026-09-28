@@ -14,11 +14,30 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { amount, planKey, type, userId, email: userEmail } = body;
+    const { amount, planKey, packageId, type, userId, email: userEmail } = body;
 
-    if (!amount || amount < 100) {
+    // Server-side authoritative price resolution
+    let resolvedAmountNgn: number | null = null;
+
+    if (packageId) {
+      if (packageId === 'live_tutorial_15' || packageId === 'live_tutorial_pass') resolvedAmountNgn = 299;
+      else if (packageId === 'live_tutorial_30' || packageId === 'live_tutorial_30_pass') resolvedAmountNgn = 599;
+      else if (packageId === 'live_tutorial_60' || packageId === 'live_tutorial_60_pass') resolvedAmountNgn = 1099;
+    }
+
+    if (!resolvedAmountNgn && planKey) {
+      const key = (planKey || '').toLowerCase();
+      if (key === 'pro' || key === 'monthly' || key === 'premium') resolvedAmountNgn = 3999;
+      else if (key === 'weekly' || key === 'basic') resolvedAmountNgn = 1499;
+      else if (key === 'semester') resolvedAmountNgn = 11999;
+    }
+
+    // Fallback if client provided amount for custom refills
+    const finalAmountNgn = resolvedAmountNgn ?? Number(amount);
+
+    if (!finalAmountNgn || finalAmountNgn < 100) {
       return new Response(
-        JSON.stringify({ error: 'Invalid amount. Minimum is ₦100.' }),
+        JSON.stringify({ error: 'Invalid amount or package ID. Minimum is ₦100.' }),
         { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
       );
     }
@@ -38,13 +57,14 @@ export async function POST(req: Request) {
     const email = userEmail || `${userId || 'student'}@avelut.com`;
     const payload = {
       email,
-      amount: Math.round(amount * 100), // Paystack uses kobo
+      amount: Math.round(finalAmountNgn * 100), // Paystack uses kobo
       callback_url,
       metadata: {
         custom_fields: [
           { display_name: 'User ID', variable_name: 'user_id', value: userId },
           { display_name: 'Purchase Type', variable_name: 'purchase_type', value: type },
           { display_name: 'Plan Key', variable_name: 'plan_key', value: planKey || 'none' },
+          { display_name: 'Package ID', variable_name: 'package_id', value: packageId || 'none' },
         ],
       },
     };

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { AppSettings, UserProfile } from '../../types';
+import { CANONICAL_PRICING } from '../../utils/appSettings';
 import { triggerPaystackPurchase } from '../../utils/usage';
 import { useToast } from '../../hooks/useToast';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
@@ -16,31 +17,34 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
     const [isProcessing, setIsProcessing] = useState(false);
     const { addToast } = useToast();
 
-    const quickPacks = [
+    const canonicalPackages = [
         {
-            title: '1 Live Voice Tutorial Pass',
-            amount: 150,
-            description: 'Unlocks 1 full 15-min interactive live blackboard voice tutorial (150 credits).',
+            id: 'live_tutorial_15',
+            title: '15 Minutes Package',
+            amount: CANONICAL_PRICING.packages.live_tutorial_15.priceNgn,
+            description: 'Unlocks 15 minutes of interactive live voice & whiteboard tutorial access.',
             badge: '15 Mins',
             icon: 'bi-broadcast',
         },
         {
-            title: '3 Live Tutorials Bundle',
-            amount: 400,
-            description: '3 full topic live tutorial passes (save ₦50 on bundle).',
-            badge: 'Best Value',
+            title: '30 Minutes Package',
+            id: 'live_tutorial_30',
+            amount: CANONICAL_PRICING.packages.live_tutorial_30.priceNgn,
+            description: 'Unlocks 30 minutes of interactive live voice & whiteboard tutorial access.',
+            badge: '30 Mins',
             icon: 'bi-collection-play',
         },
         {
-            title: 'Study Boost (500 Credits)',
-            amount: 500,
-            description: '500 credits for live lessons, AI chat, quizzes, flashcards & camera solves.',
-            badge: 'Popular',
+            title: '60 Minutes Package',
+            id: 'live_tutorial_60',
+            amount: CANONICAL_PRICING.packages.live_tutorial_60.priceNgn,
+            description: 'Unlocks 60 minutes of interactive live voice & whiteboard tutorial access.',
+            badge: '60 Mins',
             icon: 'bi-lightning-charge',
         },
     ];
 
-    const handlePurchaseCredits = async (amount: number, label?: string) => {
+    const handlePurchaseCredits = async (amount: number, label?: string, packageId?: string) => {
         const searchParams = new URLSearchParams(window.location.search);
         const targetUid = userProfile?.uid || searchParams.get('uid');
         const emailFromParam = searchParams.get('email');
@@ -71,7 +75,7 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
                 amount: amount,
                 userId: targetUid,
                 purchaseType: 'additional_credits',
-                metadata: { credit_amount: amount, pack_label: label || 'Refill Credits' },
+                metadata: { package_id: packageId, credit_amount: amount, pack_label: label || 'Refill Credits' },
                 addToast,
                 onSuccess: async (reference) => {
                     try {
@@ -150,13 +154,13 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
                 {/* Hero Title */}
                 <div className="text-center max-w-2xl mx-auto space-y-3">
                     <span className="text-[11px] font-black uppercase tracking-widest text-[#0066FF] bg-[#F1F5F9] px-3.5 py-1 rounded-full border border-[#E3E9F1]">
-                        Credit Refills & Passes
+                        Live Tutorial Credits
                     </span>
                     <h1 className="text-3xl sm:text-4xl font-black text-[#0F172A] tracking-tight">
                         Pay As You Learn
                     </h1>
                     <p className="text-sm sm:text-base text-[#64748B] font-medium leading-relaxed">
-                        Purchase single Live Voice Tutorial passes (₦150 / 15 mins) or top up your credits without a recurring subscription.
+                        Top up Live Tutorial minutes on demand without a recurring subscription.
                     </p>
                 </div>
 
@@ -174,11 +178,11 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
                     />
                 </div>
 
-                {/* Quick Credit Packs */}
+                {/* Quick Credit Packages */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {quickPacks.map((pack) => (
+                    {canonicalPackages.map((pack) => (
                         <div
-                            key={pack.amount}
+                            key={pack.id}
                             className="bg-white border border-[#E3E9F1] rounded-3xl p-6 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/50 transition-all group"
                         >
                             <div className="space-y-3.5">
@@ -208,11 +212,11 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
                             <div className="pt-5">
                                 <button
                                     type="button"
-                                    onClick={() => handlePurchaseCredits(pack.amount, pack.title)}
+                                    onClick={() => handlePurchaseCredits(pack.amount, pack.title, pack.id)}
                                     disabled={isProcessing || !email}
                                     className="w-full py-3 bg-[#0066FF] hover:bg-slate-900 disabled:opacity-50 text-white rounded-2xl font-black text-xs transition-all cursor-pointer shadow-2xs active:scale-95"
                                 >
-                                    Purchase Pass
+                                    Buy Package
                                 </button>
                             </div>
                         </div>
