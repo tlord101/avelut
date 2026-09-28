@@ -10,8 +10,81 @@ import type {
 
 // --- PAST QUESTIONS STORAGE (100% DATABASE-DRIVEN) ---
 
+/** Normalize admin-saved question shapes into playground PastQuestion */
+function normalizeQuestion(raw: any, index: number): any {
+  if (!raw || typeof raw !== 'object') return null;
+  const prompt = String(raw.prompt || raw.question || raw.text || '').trim();
+  if (!prompt) return null;
+
+  const rawType = String(raw.type || '').toLowerCase();
+  const optionsIn = Array.isArray(raw.options) ? raw.options : [];
+  const optionObjects = optionsIn.map((o: any, i: number) => {
+    if (o && typeof o === 'object' && (o.text || o.label)) {
+      return {
+        id: String(o.id || `opt_${i}`),
+        text: String(o.text || o.label || ''),
+        isCorrect: !!o.isCorrect,
+      };
+    }
+    const text = String(o ?? '');
+    const correct = String(raw.correctAnswer || '');
+    return {
+      id: `opt_${i}`,
+      text,
+      isCorrect: !!correct && (text === correct || text.includes(correct) || correct.includes(text)),
+    };
+  }).filter((o: any) => o.text.trim().length > 0);
+
+  const isMcq = rawType === 'mcq' || optionObjects.length >= 2;
+  return {
+    id: String(raw.id || `q_${index}`),
+    type: isMcq ? 'mcq' : 'theory',
+    prompt,
+    options: isMcq ? optionObjects : undefined,
+    explanation: raw.explanation ? String(raw.explanation) : undefined,
+    marks: raw.marks ?? undefined,
+  };
+}
+
+function rowToPack(row: any): PastQuestionPack | null {
+  if (!row) return null;
+  const rawQuestions = row.questions || row.questions_json || [];
+  const list = Array.isArray(rawQuestions) ? rawQuestions : [];
+  const questions = list.map(normalizeQuestion).filter(Boolean);
+  if (questions.length === 0 && !row.title && !row.course_name) return null;
+
+  const yearVal = row.year;
+  const yearNum = yearVal === null || yearVal === undefined || yearVal === ''
+    ? undefined
+    : (typeof yearVal === 'number' ? yearVal : parseInt(String(yearVal).replace(/\D/g, '').slice(0, 4), 10) || undefined);
+
+  const types = new Set(questions.map((q: any) => q.type));
+  let packType: 'mcq' | 'theory' | 'mixed' = 'mixed';
+  if (types.size === 1) packType = types.has('mcq') ? 'mcq' : 'theory';
+  else if (types.size === 0) packType = (row.type as any) || 'mixed';
+
+  const courseName = row.course_name || row.courseName || row.course_id || '';
+  const courseCode = row.course_code || row.courseCode || '';
+  const title = row.title || [courseCode, courseName, row.year].filter(Boolean).join(' — ') || row.id;
+
+  return {
+    id: String(row.id),
+    title: String(title),
+    courseId: row.course_id || row.courseId,
+    courseCode: courseCode ? String(courseCode) : undefined,
+    courseName: courseName ? String(courseName) : undefined,
+    year: yearNum,
+    type: packType,
+    questionCount: row.question_count || questions.length,
+    questions,
+  };
+}
+
 export async function getPastQuestionPacks(): Promise<PastQuestionPack[]> {
+  const packsById = new Map<string, PastQuestionPack>();
+
   if (isSupabaseConfigured) {
+    // 1) Official playground catalog
     try {
       const { data, error } = await supabase
         .from('past_question_packs')
@@ -19,21 +92,43 @@ export async function getPastQuestionPacks(): Promise<PastQuestionPack[]> {
         .eq('published', true)
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((row: any) => ({
-          id: row.id,
-          title: row.title,
-          courseCode: row.course_code,
-          courseName: row.course_name,
-          year: row.year,
-          type: row.type || 'mixed',
-          questionCount: row.question_count || (Array.isArray(row.questions) ? row.questions.length : 0),
-          questions: row.questions || []
-        }));
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const pack = rowToPack(row);
+          if (pack) packsById.set(pack.id, pack);
+        }
       }
     } catch (err) {
-      console.warn('[PlaygroundStorage] Supabase past question fetch warning:', err);
+      console.warn('[PlaygroundStorage] past_question_packs fetch warning:', err);
     }
+
+    // 2) Admin-uploaded rows in past_questions (extraction / manual entry)
+    try {
+      const { data, error } = await supabase
+        .from('past_questions')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const pack = rowToPack({
+            ...row,
+            title: row.title || [row.course_id, row.year].filter(Boolean).join(' — '),
+            course_name: row.course_name || row.course_id,
+            questions: row.questions_json || row.questions,
+          });
+          if (pack && !packsById.has(pack.id)) {
+            packsById.set(pack.id, pack);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[PlaygroundStorage] past_questions fetch warning:', err);
+    }
+  }
+
+  if (packsById.size > 0) {
+    return Array.from(packsById.values());
   }
 
   const customPacks = await getLocalAppState<PastQuestionPack[]>('playground_past_packs', []);
