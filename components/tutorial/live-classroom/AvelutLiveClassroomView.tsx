@@ -7,7 +7,7 @@
  *   - Full-screen Excalidraw board canvas
  *   - Translucent top bar: back button, LIVE badge, topic title, teacher state pill
  *   - Floating subtitle pill (scrolling teacher transcript)
- *   - Bottom HUD: text input toggle, tap-to-talk mic button, clear board
+ *   - Bottom HUD: text input toggle, one-click mic (wave UI while listening), clear board
  *   - Connection error overlay with retry
  *
  * Architecture:
@@ -18,9 +18,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Mic,
-  MicOff,
   Volume2,
-  VolumeX,
   Ear,
   Pencil,
   Sparkles,
@@ -28,8 +26,6 @@ import {
   Send,
   AlertCircle,
   RotateCcw,
-  Lock,
-  ChevronUp,
 } from 'lucide-react';
 import { ExcalidrawLiveBoard } from './ExcalidrawLiveBoard';
 import {
@@ -140,12 +136,10 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [teacherState, setTeacherState] = useState<TeacherState>('connecting');
   const [transcript, setTranscript] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
-  /** True while the student's mic is open (manual push-to-talk turn) */
+  /** True while the student's mic is open (tap-to-talk active) */
   const [isTalking, setIsTalking] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isHoldingMic, setIsHoldingMic] = useState(false);
-  const [isLockedMic, setIsLockedMic] = useState(false);
-  const [slideDistance, setSlideDistance] = useState(0);
+  /** Drives continuous idle animation of waveform bars while listening */
+  const [, forceWaveTick] = useState(0);
 
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
@@ -155,6 +149,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_RECORDING_MS = 30_000; // auto-submit after 30s
   const startedSessionRef = useRef(false);
   const lessonStartTimeRef = useRef<number | null>(null);
   const hasFinalizedUsageRef = useRef(false);
@@ -245,22 +241,22 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
       onStateChange: (s) => {
         setTeacherState(s);
         if (s === 'connected') setErrorMsg(null);
-        // Sync UI mic state directly with service state machine truth
+        // Sync UI mic state with service truth
         if (svc) {
           const active = svc.getIsPushToTalkActive();
           setIsTalking(active);
-          if (!active) {
-            setIsHoldingMic(false);
-            setIsLockedMic(false);
-            setSlideDistance(0);
+          if (!active && recordingTimerRef.current) {
+            clearTimeout(recordingTimerRef.current);
+            recordingTimerRef.current = null;
           }
         }
-        // Never leave the mic button stuck "on" if the session drops.
+        // Never leave the mic button stuck "on" if the session drops
         if (s === 'error' || s === 'closed') {
           setIsTalking(false);
-          setIsHoldingMic(false);
-          setIsLockedMic(false);
-          setSlideDistance(0);
+          if (recordingTimerRef.current) {
+            clearTimeout(recordingTimerRef.current);
+            recordingTimerRef.current = null;
+          }
         }
       },
       onTranscript: (text, _isFinal) => {
@@ -463,103 +459,60 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────
-  const pointerStartRef = useRef<{ y: number; id: number } | null>(null);
 
-  const handleToggleMute = () => {
-    const svc = serviceRef.current;
-    if (!svc) return;
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    svc.setIsMuted(nextMuted);
-  };
-
-  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const handleMicClick = useCallback(() => {
     const svc = serviceRef.current;
     if (!svc || teacherState === 'connecting') return;
 
     ensureAudioUnlocked();
 
-    // If currently locked in hands-free recording mode, tapping sends audio
-    if (isLockedMic) {
+    if (isTalking) {
+      // Second click → stop & commit to AI
+      if (recordingTimerRef.current) {
+        clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       svc.endPushToTalk();
-      setIsLockedMic(false);
-      setIsHoldingMic(false);
       setIsTalking(false);
-      setSlideDistance(0);
-      return;
-    }
+    } else {
+      // First click → start recording (locked until stop or timeout)
+      if (!svc.getIsPushToTalkActive()) {
+        svc.beginPushToTalk();
+        setIsTalking(true);
 
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
-
-    pointerStartRef.current = { y: e.clientY, id: e.pointerId };
-    setIsHoldingMic(true);
-    setSlideDistance(0);
-
-    if (!svc.getIsPushToTalkActive()) {
-      svc.beginPushToTalk();
-      setIsTalking(true);
-    }
-  };
-
-  const handleMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isHoldingMic || isLockedMic || !pointerStartRef.current) return;
-
-    const dy = pointerStartRef.current.y - e.clientY; // upward is positive
-    const dist = Math.max(0, dy);
-    setSlideDistance(dist);
-
-    // Slide up past threshold (~65px) locks recording hands-free
-    if (dist >= 65) {
-      setIsLockedMic(true);
-      setIsHoldingMic(false);
-      setSlideDistance(0);
-      try {
-        e.currentTarget.releasePointerCapture(pointerStartRef.current.id);
-      } catch {}
-      pointerStartRef.current = null;
-    }
-  };
-
-  const handleMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (pointerStartRef.current && pointerStartRef.current.id === e.pointerId) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {}
-      pointerStartRef.current = null;
-    }
-
-    if (isLockedMic) {
-      // Releasing pointer while locked keeps recording hands-free until explicit tap
-      return;
-    }
-
-    if (isHoldingMic) {
-      setIsHoldingMic(false);
-      setSlideDistance(0);
-      const svc = serviceRef.current;
-      if (svc && svc.getIsPushToTalkActive()) {
-        svc.endPushToTalk();
-        setIsTalking(false);
+        // Auto-submit after max duration so the lesson never gets stuck
+        recordingTimerRef.current = setTimeout(() => {
+          if (serviceRef.current?.getIsPushToTalkActive()) {
+            serviceRef.current.endPushToTalk();
+            setIsTalking(false);
+          }
+          recordingTimerRef.current = null;
+        }, MAX_RECORDING_MS);
       }
     }
-  };
+  }, [isTalking, teacherState, ensureAudioUnlocked]);
 
-  const handleMicPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
-    handleMicPointerUp(e);
-  };
+  // Cleanup recording timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    };
+  }, []);
 
-  const handleStopLockedRecording = () => {
-    const svc = serviceRef.current;
-    if (svc) {
-      svc.endPushToTalk();
-      setIsLockedMic(false);
-      setIsHoldingMic(false);
-      setIsTalking(false);
-      setSlideDistance(0);
-    }
-  };
+  // Keep waves gently alive while listening (even in silence)
+  useEffect(() => {
+    if (!isTalking) return;
+    let raf: number;
+    const loop = () => {
+      forceWaveTick((n) => n + 1);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [isTalking]);
 
   const handleSendText = (e: React.FormEvent) => {
     e.preventDefault();
@@ -579,6 +532,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const handleClearBoard = () => {
     avelutBoardController.clearBoard(true);
   };
+
 
   // ── Render ───────────────────────────────────────────────────────────────
   let isDark = true;
@@ -735,167 +689,149 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               autoFocus
             />
             <button
-              type="submit"
-              disabled={!textInput.trim()}
-              className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#38BDF8] text-black
-                         font-bold disabled:opacity-30 disabled:pointer-events-none transition-all"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ── HOLD TO TALK / LOCKED FLOATING UI ──────────────────────────────── */}
-      {hasStarted && teacherState !== 'connecting' && (isHoldingMic || isLockedMic) && (
-        <div className="absolute bottom-28 left-0 right-0 z-30 flex flex-col items-center gap-2 pointer-events-auto animate-in fade-in slide-in-from-bottom-3">
-          {isLockedMic ? (
-            <button
-              onClick={handleStopLockedRecording}
-              className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-[0_0_30px_rgba(225,29,72,0.5)] border border-rose-400/50 active:scale-95 transition-all"
-            >
-              <Lock className="w-4 h-4 animate-bounce" />
-              <span>Locked — tap to send</span>
-            </button>
-          ) : (
-            <div className="flex flex-col items-center gap-1.5 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-white/90 text-xs font-semibold shadow-xl">
-              <div className="flex items-center gap-1 text-[#38BDF8] animate-bounce">
-                <ChevronUp className="w-4 h-4" />
-                <span>Slide up to lock</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── MIC HINT PILL ─────────────────────────────────────────────────── */}
-      {hasStarted && teacherState !== 'connecting' && !showTextInput && !isHoldingMic && !isLockedMic && (
-        <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-          <span
-            className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border backdrop-blur-md ${
-              isMuted
-                ? 'bg-amber-500/20 border-amber-400/40 text-amber-200'
-                : isDark
-                  ? 'bg-white/5 border-white/10 text-white/50'
-                  : 'bg-slate-900/5 border-slate-900/10 text-slate-500'
-            }`}
+               {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
+      {isTalking ? (
+        /* ===== LISTENING STATE — exact wave replica + red mic ===== */
+        <footer className="absolute bottom-5 left-0 right-0 z-20 flex flex-col items-center px-6 pointer-events-none">
+          <div
+            className={`flex items-center justify-center gap-4 sm:gap-5 px-6 py-3 rounded-2xl
+                        pointer-events-auto select-none
+                        ${isDark
+                          ? 'bg-[#18181B]/90 border border-white/10 shadow-2xl'
+                          : 'bg-white/95 border border-slate-200/80 shadow-xl'
+                        } backdrop-blur-md`}
           >
-            {isMuted ? 'Local mic muted' : 'Hold mic to speak • Slide up to lock'}
-          </span>
-        </div>
-      )}
-
-      {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
-      <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-        <div className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${
-          isDark
-            ? 'bg-[#18181B]/90 border-white/15 text-white shadow-2xl'
-            : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
-        } border backdrop-blur-md pointer-events-auto`}>
-
-          {/* Text input toggle */}
-          <button
-            onClick={() => setShowTextInput(v => !v)}
-            className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
-              showTextInput
-                ? 'bg-[#38BDF8] text-black'
-                : isDark
-                  ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
-            }`}
-            aria-label="Type a message"
-          >
-            <MessageSquare className="w-5 h-5" />
-          </button>
-
-          {/* Mute button (separate, beside mic) */}
-          <button
-            onClick={handleToggleMute}
-            className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
-              isMuted
-                ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
-                : isDark
-                  ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
-            }`}
-            aria-label={isMuted ? 'Unmute mic' : 'Mute mic'}
-            title={isMuted ? 'Unmute mic' : 'Mute mic'}
-          >
-            {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Mic className="w-5 h-5" />}
-          </button>
-
-          {/* Mic button — Press & hold to speak, slide up to lock
-              States:
-              - Idle: Default blue mic
-              - Holding: Red circle + white mic icon in center
-              - Locked: Red recording look + floating lock animation above
-          */}
-          {(() => {
-            const askedQuestion = serviceRef.current?.getLastResponseAskedQuestion() ?? false;
-            const isAwaitingAnswer = askedQuestion && !isTalking && !isHoldingMic && !isLockedMic;
-
-            let buttonBg = 'bg-[#38BDF8] hover:bg-[#0284c7] text-white';
-            let icon = <Mic className="w-6 h-6" />;
-            let ariaLabel = 'Press and hold to speak';
-
-            if (isHoldingMic || isLockedMic) {
-              buttonBg = 'bg-rose-600 text-white shadow-[0_0_25px_rgba(225,29,72,0.65)] border-2 border-rose-400';
-              icon = <Mic className="w-6 h-6 text-white animate-pulse" />;
-              ariaLabel = isLockedMic ? 'Recording locked — tap to send' : 'Holding mic to speak';
-            } else if (isAwaitingAnswer) {
-              buttonBg = 'bg-white hover:bg-slate-100 border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)] text-rose-600';
-              icon = <Mic className="w-6 h-6 text-rose-600 animate-pulse" />;
-              ariaLabel = 'Teacher asked a question — press and hold to answer';
-            }
-
-            return (
-              <div className="relative flex items-center justify-center">
-                {(isHoldingMic || isLockedMic || isTalking) && audioLevel > 0.04 && (
+            {/* LEFT WAVEFORM — live reactive bars (mirrors uploaded design) */}
+            <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
+              {[
+                0.28, 0.42, 0.65, 0.38, 0.88, 0.52, 0.95, 0.45, 0.72, 0.35, 0.58,
+              ].map((base, i) => {
+                // When quiet: subtle idle pulse. When speaking: scale hard with audioLevel.
+                const idle = 0.22 + Math.sin(Date.now() / 180 + i * 0.7) * 0.08;
+                const live = base * (0.35 + audioLevel * 1.55);
+                const h = Math.max(0.15, audioLevel > 0.04 ? live : idle);
+                return (
                   <span
-                    className="absolute inset-0 rounded-full bg-rose-500/40 animate-ping pointer-events-none"
-                    style={{ transform: `scale(${1 + audioLevel})` }}
+                    key={`L${i}`}
+                    className="w-[3px] rounded-full bg-slate-400/75 transition-[height,opacity] duration-75 ease-out"
+                    style={{
+                      height: `${h * 44}px`,
+                      opacity: 0.5 + Math.min(audioLevel, 1) * 0.5,
+                    }}
                   />
-                )}
-                {isAwaitingAnswer && (
-                  <span className="absolute -inset-1 rounded-full bg-rose-500/20 animate-ping pointer-events-none" />
-                )}
-                <button
-                  onPointerDown={handleMicPointerDown}
-                  onPointerMove={handleMicPointerMove}
-                  onPointerUp={handleMicPointerUp}
-                  onPointerCancel={handleMicPointerCancel}
-                  className={`relative z-10 flex items-center justify-center w-14 h-14 rounded-full
-                               shadow-lg transition-all active:scale-95 font-bold ${buttonBg} ${
-                    teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''
-                  } touch-none`}
-                  style={{
-                    transform: isHoldingMic && slideDistance > 0
-                      ? `translateY(-${Math.min(slideDistance, 65)}px)`
-                      : undefined,
-                  }}
-                  aria-label={ariaLabel}
-                  title={ariaLabel}
-                >
-                  {icon}
-                </button>
-              </div>
-            );
-          })()}
+                );
+              })}
+            </div>
 
-          {/* Clear board */}
-          <button
-            onClick={handleClearBoard}
-            className={`flex items-center justify-center w-11 h-11 rounded-full ${
+            {/* CENTER RED MIC BUTTON */}
+            <button
+              onClick={handleMicClick}
+              className="relative flex items-center justify-center w-14 h-14 rounded-full
+                         bg-rose-500 shadow-[0_0_24px_rgba(244,63,94,0.45)]
+                         active:scale-95 transition-transform touch-none"
+              aria-label="Stop recording and send"
+            >
+              {/* Reactive glow ring */}
+              {audioLevel > 0.05 && (
+                <span
+                  className="absolute inset-0 rounded-full bg-rose-400/40 animate-ping pointer-events-none"
+                  style={{ transform: `scale(${1 + audioLevel * 0.55})` }}
+                />
+              )}
+              {/* Soft outer pulse */}
+              <span
+                className="absolute -inset-1 rounded-full border-2 border-rose-400/30 pointer-events-none"
+                style={{
+                  transform: `scale(${1 + audioLevel * 0.25})`,
+                  opacity: 0.4 + audioLevel * 0.5,
+                  transition: 'transform 75ms ease-out, opacity 75ms ease-out',
+                }}
+              />
+              <Mic className="w-6 h-6 text-white relative z-10" strokeWidth={2.25} />
+            </button>
+
+            {/* RIGHT WAVEFORM — mirrored pattern */}
+            <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
+              {[
+                0.58, 0.35, 0.72, 0.45, 0.95, 0.52, 0.88, 0.38, 0.65, 0.42, 0.28,
+              ].map((base, i) => {
+                const idle = 0.22 + Math.sin(Date.now() / 180 + i * 0.7 + 1.2) * 0.08;
+                const live = base * (0.35 + audioLevel * 1.55);
+                const h = Math.max(0.15, audioLevel > 0.04 ? live : idle);
+                return (
+                  <span
+                    key={`R${i}`}
+                    className="w-[3px] rounded-full bg-slate-400/75 transition-[height,opacity] duration-75 ease-out"
+                    style={{
+                      height: `${h * 44}px`,
+                      opacity: 0.5 + Math.min(audioLevel, 1) * 0.5,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-medium tracking-wide ${
+            isDark ? 'text-white/50' : 'text-slate-500'
+          }`}>
+            Listening… tap to send
+          </p>
+        </footer>
+      ) : (
+        /* ===== NORMAL CONTROLS (mute removed) ===== */
+        <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${
               isDark
-                ? 'bg-white/10 hover:bg-white/15 text-white/70 hover:text-white'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-            } active:scale-90 transition-all`}
-            aria-label="Clear board"
+                ? 'bg-[#18181B]/90 border-white/15 text-white shadow-2xl'
+                : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
+            } border backdrop-blur-md pointer-events-auto`}
           >
-            <RotateCcw className="w-5 h-5" />
-          </button>
-        </div>
-      </footer>
+            {/* Text input toggle */}
+            <button
+              onClick={() => setShowTextInput((v) => !v)}
+              className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
+                showTextInput
+                  ? 'bg-[#38BDF8] text-black'
+                  : isDark
+                    ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+              }`}
+              aria-label="Type a message"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+
+            {/* MIC — one click to start listening */}
+            <button
+              onClick={handleMicClick}
+              disabled={teacherState === 'connecting'}
+              className={`relative flex items-center justify-center w-14 h-14 rounded-full
+                          shadow-lg transition-all active:scale-95
+                          bg-[#38BDF8] text-black
+                          ${teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''}`}
+              aria-label="Tap to speak"
+            >
+              <Mic className="w-6 h-6" />
+            </button>
+
+            {/* Clear board */}
+            <button
+              onClick={handleClearBoard}
+              className={`flex items-center justify-center w-11 h-11 rounded-full ${
+                isDark
+                  ? 'bg-white/10 hover:bg-white/15 text-white/70 hover:text-white'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+              } active:scale-90 transition-all`}
+              aria-label="Clear board"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+          </div>
+        </footer>
+      )}
+
     </div>
   );
 };
