@@ -16,6 +16,8 @@ import { Shield } from "lucide-react";
 import { getWindowPathname } from "../../utils/pathname";
 import { APP_SETTINGS_PATH, DEFAULT_APP_SETTINGS, DEFAULT_USAGE_SETTINGS } from "../../utils/appSettings";
 import { getFeatureModel } from "../../utils/usage";
+import { isR2Configured, uploadToR2, deleteFromR2 } from "../../services/cloudflareR2Service";
+import { supabaseStorageService } from "../../services/supabaseStorageService";
 import { AdminLayout } from "../admin/AdminLayout";
 import { DashboardView } from "../admin/pages/DashboardView";
 import { AcademicUnitsView } from "../admin/pages/AcademicUnitsView";
@@ -1753,23 +1755,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }
 
             setIsPQProcessing(true);
-            // PDF understanding models: qwen3.8-flash / qwen3.8-max (not omni)
+            // PDF understanding: qwen3.8-flash / qwen3.8-max (not omni)
             const extractionModel = 'qwen3.8-flash';
-            setExtractionProgress(`Sending PDF to Alibaba (${extractionModel}) for multi-course extraction...`);
+            let uploadedKey: string | null = null;
+            let uploadedBucket: string | null = null;
 
             try {
-                const reader = new FileReader();
-                reader.readAsDataURL(pqFile);
+                // 1) Upload PDF to cloud storage first → public HTTPS URL
+                //    Avoids 413 / huge base64 payloads on the AI API.
+                setExtractionProgress('Uploading PDF to cloud storage...');
+                let publicFileUrl: string | null = null;
 
-                const base64PDF = await new Promise<string>((resolve, reject) => {
-                    reader.onload = () => {
-                        const result = reader.result as string;
-                        const b64 = result?.includes(',') ? result.split(',')[1] : result;
-                        if (!b64) reject(new Error('Failed to read PDF as base64'));
-                        else resolve(b64);
-                    };
-                    reader.onerror = () => reject(new Error('Failed to read PDF file'));
-                });
+                if (isR2Configured()) {
+                    const r2 = await uploadToR2(pqFile, {
+                        customPath: `past-questions/${year}`,
+                        fileName: pqFile.name || `past-questions-${year}.pdf`,
+                        contentType: 'application/pdf',
+                        userId: userProfile?.uid || 'admin',
+                        burnAfterDownload: false,
+                    });
+                    if (!r2.success || !r2.url) {
+                        throw new Error('Failed to upload PDF to Cloudflare R2.');
+                    }
+                    publicFileUrl = r2.url;
+                    uploadedKey = r2.key || null;
+                } else {
+                    const up = await supabaseStorageService.uploadMaterial(
+                        userProfile?.uid || 'admin',
+                        pqFile,
+                        pqFile.name || `past-questions-${year}.pdf`
+                    );
+                    if (!up.url) {
+                        throw new Error(up.error || 'Failed to upload PDF to Supabase Storage. Configure R2 or Supabase materials bucket.');
+                    }
+                    publicFileUrl = up.url;
+                    uploadedKey = up.path || null;
+                    uploadedBucket = 'materials';
+                }
+
+                setExtractionProgress(`Sending PDF URL to Alibaba (${extractionModel}) for multi-course extraction...`);
 
                 const prompt = `You are reading an exam past-questions PDF. The PDF may contain ONE course or MULTIPLE courses.
 
@@ -1805,6 +1829,7 @@ RULES:
 6. correctAnswer must exactly match one string in options.
 7. Keep option text as written in the paper (include letter prefixes if present, consistently).`;
 
+                // 2) Call Alibaba with public file_url (tiny payload) — not base64
                 const response = await ai.models.generateContent({
                     model: extractionModel,
                     contents: [
@@ -1813,11 +1838,9 @@ RULES:
                             parts: [
                                 { text: prompt },
                                 {
-                                    inlineData: {
-                                        mimeType: 'application/pdf',
-                                        data: base64PDF,
-                                    },
+                                    fileUrl: publicFileUrl,
                                     fileName: pqFile.name || 'past-questions.pdf',
+                                    fileFormat: 'pdf',
                                 } as any,
                             ],
                         },
@@ -1931,6 +1954,14 @@ RULES:
                 console.error(error);
                 addToast(`Error: ${error.message}`, 'error');
             } finally {
+                // Optional cleanup of temp PDF from storage (best-effort)
+                try {
+                    if (uploadedKey && isR2Configured()) {
+                        await deleteFromR2(uploadedKey);
+                    } else if (uploadedKey && uploadedBucket) {
+                        await supabaseStorageService.deleteFile(uploadedBucket, uploadedKey);
+                    }
+                } catch (_) {}
                 setIsPQProcessing(false);
                 setExtractionProgress('');
             }
