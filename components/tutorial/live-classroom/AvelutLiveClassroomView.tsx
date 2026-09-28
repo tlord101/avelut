@@ -827,8 +827,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           {/* Mic button — Press & hold to speak, slide up to lock
               States:
               - Idle: Default blue mic
-              - Holding: White circle + red mic icon in center
-              - Locked: White/red recording look + floating lock animation above
+              - Holding: Red circle + white mic icon in center
+              - Locked: Red recording look + floating lock animation above
           */}
           {(() => {
             const askedQuestion = serviceRef.current?.getLastResponseAskedQuestion() ?? false;
@@ -839,8 +839,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
             let ariaLabel = 'Press and hold to speak';
 
             if (isHoldingMic || isLockedMic) {
-              buttonBg = 'bg-white text-rose-600 shadow-[0_0_25px_rgba(255,255,255,0.8)] border-2 border-rose-500';
-              icon = <Mic className="w-6 h-6 text-rose-600 animate-pulse" />;
+              buttonBg = 'bg-rose-600 text-white shadow-[0_0_25px_rgba(225,29,72,0.65)] border-2 border-rose-400';
+              icon = <Mic className="w-6 h-6 text-white animate-pulse" />;
               ariaLabel = isLockedMic ? 'Recording locked — tap to send' : 'Holding mic to speak';
             } else if (isAwaitingAnswer) {
               buttonBg = 'bg-white hover:bg-slate-100 border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)] text-rose-600';
