@@ -62,6 +62,9 @@ importers:
       '@capawesome/capacitor-app-update':
         specifier: ^8.0.3
         version: 8.0.3(@capacitor/core@8.4.1)
+      '@capawesome/capacitor-google-sign-in':
+        specifier: ^0.1.4
+        version: 0.1.4(@capacitor/core@8.4.1)
       '@capgo/capacitor-updater':
         specifier: ^8.50.1
         version: 8.50.1(@capacitor/core@8.4.1)
@@ -533,6 +536,11 @@ packages:
 
   '@capawesome/capacitor-app-update@8.0.3':
     resolution: {integrity: sha512-5pS9I+i2TuUl8b6L3h2WsWF/PE68exzoc9CciXK/I2SdB2fIkdxObrYBeYS2Z09ndCGqJgx4iwZJmhXwVcMh4w==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capawesome/capacitor-google-sign-in@0.1.4':
+    resolution: {integrity: sha512-+8+3mfWN1B0+qB5r1xUZpy0hrYkpEDD5XHxa5LQ5wwDIVKoFLj/orYGRf/RrsB1AbkSpRfZZ1N2U7C3gPcjAdA==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -5665,6 +5673,10 @@ snapshots:
       '@capacitor/core': 8.4.1
 
   '@capawesome/capacitor-app-update@8.0.3(@capacitor/core@8.4.1)':
+    dependencies:
+      '@capacitor/core': 8.4.1
+
+  '@capawesome/capacitor-google-sign-in@0.1.4(@capacitor/core@8.4.1)':
     dependencies:
       '@capacitor/core': 8.4.1
 

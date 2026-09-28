@@ -26,8 +26,12 @@ export const SignUp: React.FC<SignUpProps> = ({ onSwitchToLogin }) => {
         throw new Error(error);
       }
     } catch (err: any) {
-      if (err.message !== 'The user cancelled the sign-in flow.') {
-        addToast(err.message || 'Failed to sign in with Google.', 'error');
+      const msg = err.message || '';
+      if (
+        msg !== 'The user cancelled the sign-in flow.' &&
+        !msg.toLowerCase().includes('cancel')
+      ) {
+        addToast(msg || 'Failed to sign in with Google.', 'error');
       }
       console.error('Google sign in failed:', err);
     } finally {
