@@ -230,42 +230,37 @@ const AppUpdateDropModal: React.FC<{
     if (!visible) return null;
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-[120] flex justify-center px-4 pt-4 sm:pt-6 pointer-events-none">
-            <div className="pointer-events-auto w-full max-w-xl rounded-3xl border border-sky-100 bg-white shadow-2xl shadow-sky-500/20 overflow-hidden animate-[slideDown_280ms_ease-out]">
-                <div className="h-1.5 bg-gradient-to-r from-sky-500 via-cyan-500 to-blue-600" />
-                <div className="p-5 sm:p-6">
-                    <div className="flex items-start gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 16V4" />
-                                <path d="m7 11 5 5 5-5" />
-                                <path d="M5 20h14" />
-                            </svg>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">{title}</h3>
-                            {targetVersionLabel && (
-                                <p className="text-xs font-bold uppercase tracking-widest text-sky-600 mt-1">{targetVersionLabel}</p>
-                            )}
-                            <p className="text-sm text-slate-600 mt-2 leading-relaxed">{message}</p>
-                        </div>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fade-in">
+            <div className="w-full max-w-sm rounded-[24px] border border-[#E5E5E0] dark:border-[#2A2A2A] bg-[#F7F6F1] dark:bg-[#171717] text-[#111111] dark:text-[#F5F5F5] p-6 sm:p-7 text-center shadow-lg">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-neutral-200/60 dark:bg-neutral-800 text-[#111111] dark:text-[#F5F5F5] flex items-center justify-center mb-4">
+                    <i className="bi bi-download text-2xl" />
+                </div>
+                <h3 className="text-xl font-bold tracking-tight mb-1">{title}</h3>
+                <p className="text-sm text-[#666666] dark:text-[#A3A3A3] leading-relaxed mb-3">
+                    {message}
+                </p>
+                {targetVersionLabel && (
+                    <div className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-neutral-200/50 dark:bg-neutral-800 text-[#111111] dark:text-[#F5F5F5] mb-6">
+                        {targetVersionLabel}
                     </div>
-                    <div className="mt-5 flex flex-col sm:flex-row gap-2.5 sm:justify-end">
-                        {!mandatory && (
-                            <button
-                                onClick={onSkip}
-                                className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition"
-                            >
-                                Skip
-                            </button>
-                        )}
+                )}
+                <div className="space-y-2.5 pt-1">
+                    <button
+                        type="button"
+                        onClick={onUpdate}
+                        className="w-full py-3.5 px-4 rounded-2xl bg-black dark:bg-white text-white dark:text-black font-bold text-sm hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors cursor-pointer"
+                    >
+                        Update Now
+                    </button>
+                    {!mandatory && (
                         <button
-                            onClick={onUpdate}
-                            className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-black uppercase tracking-wide hover:bg-sky-700 transition"
+                            type="button"
+                            onClick={onSkip}
+                            className="w-full py-2.5 text-xs font-semibold text-[#666666] dark:text-[#A3A3A3] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors cursor-pointer"
                         >
-                            Update App
+                            Later
                         </button>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

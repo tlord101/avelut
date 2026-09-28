@@ -54,7 +54,7 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
 
   const uid = userProfile?.uid || 'anon';
 
-  const loadBank = async () => {
+  const loadBank = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await getAIMemoryBank(uid, userProfile);
@@ -65,13 +65,13 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [uid, userProfile, onMemoryBankChange]);
 
   useEffect(() => {
     if (isOpen) {
       void loadBank();
     }
-  }, [isOpen, uid]);
+  }, [isOpen, loadBank]);
 
   const filteredItems = useMemo(() => {
     if (!bank) return [];

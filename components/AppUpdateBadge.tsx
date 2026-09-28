@@ -8,19 +8,31 @@ export const AppUpdateBadge: React.FC<{ className?: string }> = ({ className = '
         return null;
     }
 
-    if (updateStatus === 'downloading' || updateStatus === 'checking') {
+    if (updateStatus === 'checking') {
         return (
             <div
-                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 dark:bg-blue-400/15 border border-[#0066FF]/30 dark:border-blue-400/40 text-[#0066FF] dark:text-blue-400 text-xs font-bold shadow-xs animate-fade-in backdrop-blur-md select-none ${className}`}
-                title={`Installing (${newVersion || ''})...`}
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 border border-[#E5E5E0] dark:border-[#2A2A2A] text-[#111111] dark:text-[#F5F5F5] text-xs font-medium select-none ${className}`}
+                title="Checking for updates..."
             >
-                <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
-                    <span className="w-3.5 h-3.5 border-2 border-[#0066FF]/30 border-t-[#0066FF] dark:border-blue-400/30 dark:border-t-blue-400 rounded-full animate-spin" />
-                </div>
-                <span className="truncate max-w-[210px] sm:max-w-xs font-semibold">
+                <span className="w-3 h-3 border-2 border-neutral-400 border-t-neutral-800 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full animate-spin shrink-0" />
+                <span className="truncate max-w-[200px] sm:max-w-xs font-medium">
+                    Checking for update...
+                </span>
+            </div>
+        );
+    }
+
+    if (updateStatus === 'downloading') {
+        return (
+            <div
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 border border-[#E5E5E0] dark:border-[#2A2A2A] text-[#111111] dark:text-[#F5F5F5] text-xs font-medium select-none ${className}`}
+                title={`Downloading version ${newVersion || ''}`}
+            >
+                <span className="w-3 h-3 border-2 border-neutral-400 border-t-neutral-800 dark:border-neutral-500 dark:border-t-neutral-200 rounded-full animate-spin shrink-0" />
+                <span className="truncate max-w-[200px] sm:max-w-xs font-medium">
                     {downloadProgress > 0 && downloadProgress < 100
-                        ? `Installing Update (${downloadProgress}%)`
-                        : 'Installing Update...'}
+                        ? `Downloading update (${downloadProgress}%)`
+                        : 'Downloading update...'}
                 </span>
             </div>
         );
@@ -31,14 +43,11 @@ export const AppUpdateBadge: React.FC<{ className?: string }> = ({ className = '
             <button
                 type="button"
                 onClick={restartToUpdate}
-                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0066FF] hover:bg-[#0052cc] active:scale-95 text-white text-xs font-bold shadow-md shadow-blue-500/25 cursor-pointer animate-pulse transition-all backdrop-blur-md select-none ${className}`}
-                title="Update ready! restart."
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold cursor-pointer transition-colors hover:bg-neutral-800 dark:hover:bg-neutral-200 select-none ${className}`}
+                title="Update ready. Tap to restart."
             >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                <span>Update Ready • Restart</span>
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <i className="bi bi-arrow-repeat text-xs" />
+                <span>Update ready • Restart</span>
             </button>
         );
     }

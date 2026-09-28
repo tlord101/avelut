@@ -156,7 +156,7 @@ export const RefillCreditsWeb: React.FC<RefillCreditsWebProps> = ({ appSettings,
                         Pay As You Learn
                     </h1>
                     <p className="text-sm sm:text-base text-[#64748B] font-medium leading-relaxed">
-                        Purchase single topic Live Voice Tutorial passes (₦300/topic) or extra flashcard credits (₦50/flashcard) without a recurring subscription.
+                        Purchase single Live Voice Tutorial passes (₦150 / 15 mins) or top up your credits without a recurring subscription.
                     </p>
                 </div>
 

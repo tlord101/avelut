@@ -79,12 +79,19 @@ export interface Report {
   timestamp: number;
 }
 
+export interface MessageAttachment {
+  type: 'image';
+  dataUrl: string;
+  mimeType?: string;
+}
+
 export interface Message {
   id: string;
   text?: string;
   sender: 'user' | 'bot';
   timestamp: number;
-  image_url?: string; // Optional image URL
+  image_url?: string; // Optional backward-compatible single image URL
+  attachments?: MessageAttachment[]; // Multiple image attachments (up to 6)
   audioUrl?: string; // For voice notes
   audioDuration?: number; // Duration in seconds
   // FIX: Add optional conversation_id for AI Chat messages.

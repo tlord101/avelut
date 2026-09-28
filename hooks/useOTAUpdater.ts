@@ -27,6 +27,9 @@ function setGlobalState(updater: Partial<OTAState> | ((prev: OTAState) => Partia
 }
 
 let isInitialized = false;
+let checkInFlightPromise: Promise<void> | null = null;
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let pollIntervalTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Splits version strings on dots and dashes to handle semver + timestamp:
@@ -92,17 +95,24 @@ async function checkAndUpdate(data: any) {
             localStorage.getItem('app_bundle_version') ||
             '0.0.0';
 
-        // Check if incoming version is newer than current installed version
-        if (isVersionHigher(data.version, currentOtaVersion)) {
-            const pendingVersion = localStorage.getItem('pending_ota_version');
-            const pendingBundleId = localStorage.getItem('pending_ota_bundle_id');
+        const pendingVersion = localStorage.getItem('pending_ota_version');
+        const pendingBundleId = localStorage.getItem('pending_ota_bundle_id');
 
-            // If already downloaded and pending restart
-            if (pendingVersion === data.version && (pendingBundleId || !Capacitor.isNativePlatform())) {
+        // Rule 9: If an update is already ready, another check must not restart the download.
+        if (pendingVersion === data.version && (pendingBundleId || !Capacitor.isNativePlatform())) {
+            if (globalState.status !== 'ready') {
                 setGlobalState({ status: 'ready', newVersion: data.version, downloadProgress: 100 });
-                return;
             }
+            return;
+        }
 
+        // Rule 8: If an update is already downloading for this version, do not restart download.
+        if (globalState.status === 'downloading' && globalState.newVersion === data.version) {
+            return;
+        }
+
+        // Rule 6: Prevent the same OTA version from being downloaded multiple times.
+        if (isVersionHigher(data.version, currentOtaVersion)) {
             console.log('[OTA] Newer update found on Supabase:', data.version, 'Current:', currentOtaVersion);
             setGlobalState({ status: 'downloading', newVersion: data.version, downloadProgress: 10 });
 
@@ -132,29 +142,44 @@ async function checkAndUpdate(data: any) {
         }
     } catch (error) {
         console.error('[OTA] Update error:', error);
-        setGlobalState({ status: 'idle', newVersion: null, downloadProgress: 0 });
+        if (globalState.status !== 'ready') {
+            setGlobalState({ status: 'idle', newVersion: null, downloadProgress: 0 });
+        }
     }
 }
 
-async function checkSupabaseOTAUpdate() {
-    try {
-        const { data, error } = await supabase
-            .from('app_kv')
-            .select('value')
-            .eq('key', 'app_updates/ota_latest')
-            .maybeSingle();
-
-        if (error) {
-            console.warn('[OTA] Supabase fetch error:', error);
-            return;
-        }
-
-        if (data?.value) {
-            await checkAndUpdate(data.value);
-        }
-    } catch (e) {
-        console.warn('[OTA] Check failed:', e);
+/**
+ * Deduplicated check entry point. Ensures only one check runs at a time.
+ */
+export function checkSupabaseOTAUpdate(): Promise<void> {
+    if (checkInFlightPromise) {
+        return checkInFlightPromise;
     }
+
+    checkInFlightPromise = (async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_kv')
+                .select('value')
+                .eq('key', 'app_updates/ota_latest')
+                .maybeSingle();
+
+            if (error) {
+                console.warn('[OTA] Supabase fetch error:', error);
+                return;
+            }
+
+            if (data?.value) {
+                await checkAndUpdate(data.value);
+            }
+        } catch (e) {
+            console.warn('[OTA] Check failed:', e);
+        } finally {
+            checkInFlightPromise = null;
+        }
+    })();
+
+    return checkInFlightPromise;
 }
 
 function initOTAEngine() {
@@ -185,29 +210,31 @@ function initOTAEngine() {
         }
     }
 
-    // Subscribe to real-time changes on app_kv for OTA updates
-    try {
-        supabase
-            .channel('public:app_kv:ota_update')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'app_kv',
-                    filter: 'key=eq.app_updates/ota_latest',
-                },
-                async (payload: any) => {
-                    const val = payload?.new?.value;
-                    if (val) {
-                        console.log('[OTA] Realtime update detected from Supabase:', val);
-                        await checkAndUpdate(val);
+    // Subscribe to real-time changes on app_kv for OTA updates (deduplicated channel)
+    if (!realtimeChannel) {
+        try {
+            realtimeChannel = supabase
+                .channel('public:app_kv:ota_update')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'app_kv',
+                        filter: 'key=eq.app_updates/ota_latest',
+                    },
+                    async (payload: any) => {
+                        const val = payload?.new?.value;
+                        if (val) {
+                            console.log('[OTA] Realtime update detected from Supabase:', val);
+                            await checkAndUpdate(val);
+                        }
                     }
-                }
-            )
-            .subscribe();
-    } catch (e) {
-        console.warn('[OTA] Realtime subscribe error:', e);
+                );
+            realtimeChannel.subscribe();
+        } catch (e) {
+            console.warn('[OTA] Realtime subscribe error:', e);
+        }
     }
 
     // Check when window gains focus
@@ -228,10 +255,12 @@ function initOTAEngine() {
         })
         .catch(() => {});
 
-    // Periodic check every 30 seconds
-    setInterval(() => {
-        void checkSupabaseOTAUpdate();
-    }, 30_000);
+    // Periodic check every 30 seconds (deduplicated interval)
+    if (!pollIntervalTimer) {
+        pollIntervalTimer = setInterval(() => {
+            void checkSupabaseOTAUpdate();
+        }, 30_000);
+    }
 }
 
 export function useOTAUpdater() {
