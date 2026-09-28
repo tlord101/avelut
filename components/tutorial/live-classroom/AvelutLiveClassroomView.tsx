@@ -65,23 +65,35 @@ export interface AvelutLiveClassroomViewProps {
 }
 
 
-// ─── Exact voice-recorder waveform (listening state) ─────────────────────────
-// Port of voice_recorder_blue_theme design: BASE_PROFILE bars, DOM refs + RAF lerp,
-// driven by classroom audioLevel (0–1) so we do not open a second mic stream.
+// ─── Exact voice-recorder waveform (always-on bottom HUD) ─────────────────
+// Port of voice_recorder_blue_theme: BASE_PROFILE bars, DOM refs + RAF lerp.
+// - Idle / teacher speaking: waves react (teacher uses synthetic energy)
+// - Student recording: mic turns RED, waves driven by real mic audioLevel
+// - Tap mic to speak; silence after speech auto-submits (or max duration)
 
 const WAVE_BASE_PROFILE = [48, 36, 44, 30, 38, 24, 30, 18, 22, 14, 16, 10, 12, 8];
 const WAVE_NUM_BARS = WAVE_BASE_PROFILE.length;
 
 const LiveVoiceWaveform: React.FC<{
+  /** 0–1 mic level while student is recording */
   audioLevel: number;
+  /** True while student push-to-talk is active */
+  isRecording: boolean;
+  /** True while the teacher is currently speaking audio */
+  isTeacherSpeaking: boolean;
   onMicClick: () => void;
-}> = ({ audioLevel, onMicClick }) => {
+  disabled?: boolean;
+}> = ({ audioLevel, isRecording, isTeacherSpeaking, onMicClick, disabled }) => {
   const leftBarsRef = useRef<(HTMLDivElement | null)[]>([]);
   const rightBarsRef = useRef<(HTMLDivElement | null)[]>([]);
   const currentHeights = useRef<number[]>([...WAVE_BASE_PROFILE]);
   const rafIdRef = useRef<number | null>(null);
   const audioLevelRef = useRef(audioLevel);
+  const isRecordingRef = useRef(isRecording);
+  const isTeacherSpeakingRef = useRef(isTeacherSpeaking);
   audioLevelRef.current = audioLevel;
+  isRecordingRef.current = isRecording;
+  isTeacherSpeakingRef.current = isTeacherSpeaking;
 
   const updateDOM = useCallback((heights: number[]) => {
     for (let i = 0; i < WAVE_NUM_BARS; i++) {
@@ -94,23 +106,37 @@ const LiveVoiceWaveform: React.FC<{
 
   useEffect(() => {
     const animate = () => {
-      const normalized = Math.min(1, Math.max(0, audioLevelRef.current));
-      // Map service RMS (often quiet) into a punchier visual range
-      const visual = Math.min(1, normalized * 2.8);
+      let visual = 0;
+      if (isRecordingRef.current) {
+        // Student mic — punch up quiet RMS so bars feel alive
+        visual = Math.min(1, Math.max(0, audioLevelRef.current) * 2.8);
+      } else if (isTeacherSpeakingRef.current) {
+        // Teacher talking — smooth synthetic energy (no student mic level)
+        const t = performance.now() * 0.006;
+        visual = 0.35 + 0.25 * Math.sin(t) + 0.15 * Math.sin(t * 2.3 + 1.1);
+        visual = Math.min(1, Math.max(0.2, visual));
+      } else {
+        // Idle — gentle breathing on base profile
+        const t = performance.now() * 0.003;
+        visual = 0.06 + 0.04 * Math.sin(t);
+      }
 
       for (let i = 0; i < WAVE_NUM_BARS; i++) {
         const centerWeight = 1 - (i / WAVE_NUM_BARS) * 0.4;
         const phase = Math.sin(performance.now() * 0.01 + i) * 0.1 + 0.9;
-        // Synthetic frequency-ish variation per bar so outer bars still move
-        const binSim = visual * (0.55 + 0.45 * Math.sin(performance.now() * 0.008 + i * 1.3));
+        const binSim =
+          visual * (0.55 + 0.45 * Math.sin(performance.now() * 0.008 + i * 1.3));
 
         const targetHeight =
           WAVE_BASE_PROFILE[i] +
           visual * WAVE_BASE_PROFILE[i] * 1.5 * centerWeight * phase +
           binSim * WAVE_BASE_PROFILE[i] * 2.2 * centerWeight;
 
-        const clampedTarget = Math.min(120, Math.max(WAVE_BASE_PROFILE[i], targetHeight));
-        const lerpFactor = visual > 0.02 ? 0.4 : 0.15;
+        const clampedTarget = Math.min(
+          120,
+          Math.max(WAVE_BASE_PROFILE[i], targetHeight),
+        );
+        const lerpFactor = visual > 0.05 ? 0.4 : 0.12;
         currentHeights.current[i] +=
           (clampedTarget - currentHeights.current[i]) * lerpFactor;
       }
@@ -130,6 +156,16 @@ const LiveVoiceWaveform: React.FC<{
     };
   }, [updateDOM]);
 
+  const barColor = isRecording ? 'bg-rose-500' : 'bg-blue-500';
+  const btnColor = isRecording
+    ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/40'
+    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30';
+  const label = isRecording
+    ? 'Listening… (auto-sends when you pause)'
+    : isTeacherSpeaking
+      ? 'Teacher speaking…'
+      : 'Tap mic to speak';
+
   return (
     <div className="flex flex-col items-center w-full max-w-2xl pointer-events-auto select-none">
       <div className="flex items-center justify-center gap-3 sm:gap-6 w-full px-2">
@@ -144,7 +180,7 @@ const LiveVoiceWaveform: React.FC<{
                 ref={(el) => {
                   leftBarsRef.current[idx] = el;
                 }}
-                className="w-1 sm:w-[5px] rounded-full bg-blue-500"
+                className={`w-1 sm:w-[5px] rounded-full transition-colors duration-300 ${barColor}`}
                 style={{ height: `${baseHeight}px`, opacity }}
               />
             );
@@ -153,13 +189,23 @@ const LiveVoiceWaveform: React.FC<{
 
         {/* Center: ripple rings + mic button */}
         <div className="relative flex items-center justify-center shrink-0 w-20 h-20 sm:w-24 sm:h-24">
-          <div className="absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-blue-600/[0.08] pointer-events-none scale-110 transition-transform duration-1000" />
-          <div className="absolute w-22 h-22 sm:w-28 sm:h-28 rounded-full bg-blue-600/[0.12] pointer-events-none scale-110 animate-pulse" />
+          <div
+            className={`absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full pointer-events-none scale-110 transition-colors duration-500 ${
+              isRecording ? 'bg-rose-500/[0.08]' : 'bg-blue-600/[0.08]'
+            }`}
+          />
+          <div
+            className={`absolute w-24 h-24 sm:w-28 sm:h-28 rounded-full pointer-events-none scale-110 animate-pulse transition-colors duration-500 ${
+              isRecording ? 'bg-rose-500/[0.12]' : 'bg-blue-600/[0.12]'
+            }`}
+          />
           <button
             onClick={onMicClick}
-            className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-blue-600 flex items-center justify-center
-                       shadow-xl shadow-blue-600/30 transition-all active:scale-95 hover:bg-blue-700"
-            aria-label="Stop recording and send"
+            disabled={disabled}
+            className={`relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center
+                       shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none
+                       ${btnColor}`}
+            aria-label={isRecording ? 'Stop and send' : 'Tap to speak'}
           >
             <Mic className="text-white w-6 h-6 sm:w-7 sm:h-7" strokeWidth={2} />
           </button>
@@ -175,7 +221,7 @@ const LiveVoiceWaveform: React.FC<{
                 ref={(el) => {
                   rightBarsRef.current[idx] = el;
                 }}
-                className="w-1 sm:w-[5px] rounded-full bg-blue-500"
+                className={`w-1 sm:w-[5px] rounded-full transition-colors duration-300 ${barColor}`}
                 style={{ height: `${baseHeight}px`, opacity }}
               />
             );
@@ -183,8 +229,12 @@ const LiveVoiceWaveform: React.FC<{
         </div>
       </div>
 
-      <p className="mt-4 text-base sm:text-lg font-medium tracking-wide text-blue-400">
-        Listening...
+      <p
+        className={`mt-3 text-sm sm:text-base font-medium tracking-wide transition-colors duration-300 ${
+          isRecording ? 'text-rose-400' : 'text-blue-400'
+        }`}
+      >
+        {label}
       </p>
     </div>
   );
@@ -274,7 +324,10 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [teachingPlan, setTeachingPlan] = useState<TeachingPlan | null>(null);
   const serviceRef = useRef<QwenRealtimeTeacherService | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_RECORDING_MS = 30_000; // auto-submit after 30s
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasSpokenRef = useRef(false);
+  const MAX_RECORDING_MS = 30_000; // hard cap auto-submit
+  const SILENCE_SUBMIT_MS = 1_400; // auto-submit after this much quiet once user has spoken
   const startedSessionRef = useRef(false);
   const lessonStartTimeRef = useRef<number | null>(null);
   const hasFinalizedUsageRef = useRef(false);
@@ -376,14 +429,16 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           const started = svc.beginPushToTalk();
           if (started) {
             setIsTalking(true);
-            if (recordingTimerRef.current) {
-              clearTimeout(recordingTimerRef.current);
-            }
+            hasSpokenRef.current = false;
+            if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
             recordingTimerRef.current = setTimeout(() => {
               if (serviceRef.current?.getIsPushToTalkActive()) {
                 serviceRef.current.endPushToTalk();
-                setIsTalking(false);
               }
+              setIsTalking(false);
+              hasSpokenRef.current = false;
               recordingTimerRef.current = null;
             }, MAX_RECORDING_MS);
           }
@@ -393,17 +448,29 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         if (svc) {
           const active = svc.getIsPushToTalkActive();
           setIsTalking(active);
-          if (!active && recordingTimerRef.current) {
-            clearTimeout(recordingTimerRef.current);
-            recordingTimerRef.current = null;
+          if (!active) {
+            if (recordingTimerRef.current) {
+              clearTimeout(recordingTimerRef.current);
+              recordingTimerRef.current = null;
+            }
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+              silenceTimerRef.current = null;
+            }
+            hasSpokenRef.current = false;
           }
         }
         // Never leave the mic button stuck "on" if the session drops
         if (s === 'error' || s === 'closed') {
           setIsTalking(false);
+          hasSpokenRef.current = false;
           if (recordingTimerRef.current) {
             clearTimeout(recordingTimerRef.current);
             recordingTimerRef.current = null;
+          }
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
           }
         }
       },
@@ -608,47 +675,87 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
+  const clearRecordingTimers = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
+  const stopRecordingAndSubmit = useCallback(() => {
+    const svc = serviceRef.current;
+    clearRecordingTimers();
+    hasSpokenRef.current = false;
+    if (svc?.getIsPushToTalkActive()) {
+      svc.endPushToTalk();
+    }
+    setIsTalking(false);
+  }, [clearRecordingTimers]);
+
+  const startRecording = useCallback(() => {
+    const svc = serviceRef.current;
+    if (!svc || svc.getIsPushToTalkActive()) return;
+    ensureAudioUnlocked();
+    const started = svc.beginPushToTalk();
+    if (!started) return;
+    setIsTalking(true);
+    hasSpokenRef.current = false;
+    clearRecordingTimers();
+    // Hard max so recording never runs forever
+    recordingTimerRef.current = setTimeout(() => {
+      stopRecordingAndSubmit();
+    }, MAX_RECORDING_MS);
+  }, [ensureAudioUnlocked, clearRecordingTimers, stopRecordingAndSubmit]);
+
   const handleMicClick = useCallback(() => {
     const svc = serviceRef.current;
     if (!svc || teacherState === 'connecting') return;
-
     ensureAudioUnlocked();
-
     if (isTalking) {
-      // Second click → stop & commit to AI
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      svc.endPushToTalk();
-      setIsTalking(false);
+      // Manual stop → submit now
+      stopRecordingAndSubmit();
     } else {
-      // First click → start recording (locked until stop or timeout)
-      if (!svc.getIsPushToTalkActive()) {
-        svc.beginPushToTalk();
-        setIsTalking(true);
-
-        // Auto-submit after max duration so the lesson never gets stuck
-        recordingTimerRef.current = setTimeout(() => {
-          if (serviceRef.current?.getIsPushToTalkActive()) {
-            serviceRef.current.endPushToTalk();
-            setIsTalking(false);
-          }
-          recordingTimerRef.current = null;
-        }, MAX_RECORDING_MS);
-      }
+      startRecording();
     }
-  }, [isTalking, teacherState, ensureAudioUnlocked]);
+  }, [isTalking, teacherState, ensureAudioUnlocked, startRecording, stopRecordingAndSubmit]);
 
-  // Cleanup recording timer on unmount
+  // While recording: after user has spoken, auto-submit on sustained silence
+  useEffect(() => {
+    if (!isTalking) {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      return;
+    }
+    const SPEECH_THRESHOLD = 0.04;
+    if (audioLevel > SPEECH_THRESHOLD) {
+      hasSpokenRef.current = true;
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      return;
+    }
+    // Quiet — only arm silence timer once the user has actually spoken
+    if (!hasSpokenRef.current) return;
+    if (silenceTimerRef.current) return;
+    silenceTimerRef.current = setTimeout(() => {
+      silenceTimerRef.current = null;
+      stopRecordingAndSubmit();
+    }, SILENCE_SUBMIT_MS);
+  }, [isTalking, audioLevel, stopRecordingAndSubmit]);
+
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
+      clearRecordingTimers();
     };
-  }, []);
+  }, [clearRecordingTimers]);
 
   const handleSendText = (e: React.FormEvent) => {
     e.preventDefault();
@@ -836,65 +943,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
         </div>
       )}
 
-      {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
-      {isTalking ? (
+      {/* ── BOTTOM HUD — always-on blue wave + mic ───────────────────────── */}
+      {hasStarted && teacherState !== 'connecting' && (
         <footer className="absolute bottom-4 left-0 right-0 z-20 flex justify-center px-3 pointer-events-none">
-          <LiveVoiceWaveform audioLevel={audioLevel} onMicClick={handleMicClick} />
-        </footer>
-      ) : (
-        <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-          <div
-            className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${
-              isDark
-                ? 'bg-[#18181B]/90 border-white/15 text-white shadow-2xl'
-                : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
-            } border backdrop-blur-md pointer-events-auto`}
-          >
-            <button
-              onClick={() => setShowTextInput((v) => !v)}
-              className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
-                showTextInput
-                  ? 'bg-[#38BDF8] text-black'
-                  : isDark
-                    ? 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
-              }`}
-              aria-label="Type a message"
-            >
-              <MessageSquare className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={handleMicClick}
-              disabled={teacherState === 'connecting'}
-              className={`relative flex items-center justify-center w-14 h-14 rounded-full
-                          shadow-lg transition-all active:scale-95
-                          ${teacherState === 'listening'
-                            ? 'bg-rose-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.4)]'
-                            : 'bg-[#38BDF8] text-black'}
-                          ${teacherState === 'connecting' ? 'opacity-50 pointer-events-none' : ''}`}
-              aria-label={teacherState === 'listening' ? 'Your turn — tap to speak' : 'Tap to speak'}
-            >
-              {teacherState === 'listening' && (
-                <span className="absolute inset-0 rounded-full bg-rose-400/30 animate-ping pointer-events-none" />
-              )}
-              <Mic className="w-6 h-6 relative z-10" />
-            </button>
-
-            <button
-              onClick={handleClearBoard}
-              className={`flex items-center justify-center w-11 h-11 rounded-full ${
-                isDark
-                  ? 'bg-white/10 hover:bg-white/15 text-white/70 hover:text-white'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-              } active:scale-90 transition-all`}
-              aria-label="Clear board"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          </div>
+          <LiveVoiceWaveform
+            audioLevel={audioLevel}
+            isRecording={isTalking}
+            isTeacherSpeaking={teacherState === 'speaking'}
+            onMicClick={handleMicClick}
+            disabled={teacherState === 'connecting'}
+          />
         </footer>
       )}
+
     </div>
   );
 };
