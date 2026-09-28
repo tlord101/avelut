@@ -146,13 +146,18 @@ class SupabaseAuthService {
   /**
    * Sign in with Google OAuth
    */
-  public async signInWithGoogle(): Promise<{ error?: string | null }> {
+  public async signInWithGoogle(customRedirectTo?: string): Promise<{ error?: string | null }> {
     if (!isSupabaseConfigured) {
       return { error: 'Supabase is not configured' };
     }
 
     try {
-      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+      const appUrl = 'https://www.avelut.xyz/';
+      const defaultRedirectTo = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1'))
+        ? `${window.location.origin}/`
+        : appUrl;
+      const redirectTo = customRedirectTo || defaultRedirectTo;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -174,13 +179,17 @@ class SupabaseAuthService {
   /**
    * Send Password Reset Email
    */
-  public async sendPasswordReset(email: string): Promise<{ success: boolean; error?: string | null }> {
+  public async sendPasswordReset(email: string, customRedirectTo?: string): Promise<{ success: boolean; error?: string | null }> {
     if (!isSupabaseConfigured) {
       return { success: false, error: 'Supabase is not configured' };
     }
 
     try {
-      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/settings` : undefined;
+      const appUrl = 'https://www.avelut.xyz/settings';
+      const defaultRedirectTo = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1'))
+        ? `${window.location.origin}/settings`
+        : appUrl;
+      const redirectTo = customRedirectTo || defaultRedirectTo;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       });
