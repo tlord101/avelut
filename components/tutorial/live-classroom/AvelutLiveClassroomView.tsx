@@ -689,9 +689,19 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               autoFocus
             />
             <button
-               {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
+              type="submit"
+              disabled={!textInput.trim()}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#38BDF8] text-black
+                         font-bold disabled:opacity-30 disabled:pointer-events-none transition-all"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
       {isTalking ? (
-        /* ===== LISTENING STATE — exact wave replica + red mic ===== */
         <footer className="absolute bottom-5 left-0 right-0 z-20 flex flex-col items-center px-6 pointer-events-none">
           <div
             className={`flex items-center justify-center gap-4 sm:gap-5 px-6 py-3 rounded-2xl
@@ -701,12 +711,11 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
                           : 'bg-white/95 border border-slate-200/80 shadow-xl'
                         } backdrop-blur-md`}
           >
-            {/* LEFT WAVEFORM — live reactive bars (mirrors uploaded design) */}
+            {/* LEFT WAVEFORM */}
             <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
               {[
                 0.28, 0.42, 0.65, 0.38, 0.88, 0.52, 0.95, 0.45, 0.72, 0.35, 0.58,
               ].map((base, i) => {
-                // When quiet: subtle idle pulse. When speaking: scale hard with audioLevel.
                 const idle = 0.22 + Math.sin(Date.now() / 180 + i * 0.7) * 0.08;
                 const live = base * (0.35 + audioLevel * 1.55);
                 const h = Math.max(0.15, audioLevel > 0.04 ? live : idle);
@@ -731,14 +740,12 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
                          active:scale-95 transition-transform touch-none"
               aria-label="Stop recording and send"
             >
-              {/* Reactive glow ring */}
               {audioLevel > 0.05 && (
                 <span
                   className="absolute inset-0 rounded-full bg-rose-400/40 animate-ping pointer-events-none"
                   style={{ transform: `scale(${1 + audioLevel * 0.55})` }}
                 />
               )}
-              {/* Soft outer pulse */}
               <span
                 className="absolute -inset-1 rounded-full border-2 border-rose-400/30 pointer-events-none"
                 style={{
@@ -750,7 +757,7 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               <Mic className="w-6 h-6 text-white relative z-10" strokeWidth={2.25} />
             </button>
 
-            {/* RIGHT WAVEFORM — mirrored pattern */}
+            {/* RIGHT WAVEFORM */}
             <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
               {[
                 0.58, 0.35, 0.72, 0.45, 0.95, 0.52, 0.88, 0.38, 0.65, 0.42, 0.28,
@@ -779,7 +786,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           </p>
         </footer>
       ) : (
-        /* ===== NORMAL CONTROLS (mute removed) ===== */
         <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
           <div
             className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${
@@ -788,7 +794,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
                 : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-xl'
             } border backdrop-blur-md pointer-events-auto`}
           >
-            {/* Text input toggle */}
             <button
               onClick={() => setShowTextInput((v) => !v)}
               className={`flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-90 ${
@@ -803,7 +808,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               <MessageSquare className="w-5 h-5" />
             </button>
 
-            {/* MIC — one click to start listening */}
             <button
               onClick={handleMicClick}
               disabled={teacherState === 'connecting'}
@@ -816,7 +820,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
               <Mic className="w-6 h-6" />
             </button>
 
-            {/* Clear board */}
             <button
               onClick={handleClearBoard}
               className={`flex items-center justify-center w-11 h-11 rounded-full ${
@@ -831,7 +834,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
           </div>
         </footer>
       )}
-
     </div>
   );
 };
