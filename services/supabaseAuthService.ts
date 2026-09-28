@@ -6,6 +6,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { nativeGoogleSignIn } from '../utils/googleSignIn';
 import type { UserProfile } from '../types';
 
 export interface AuthResponse {
@@ -144,7 +145,7 @@ class SupabaseAuthService {
   }
 
   /**
-   * Sign in with Google OAuth
+   * Sign in with Google using native in-app ID token exchange flow.
    */
   public async signInWithGoogle(): Promise<{ error?: string | null }> {
     if (!isSupabaseConfigured) {
@@ -152,19 +153,20 @@ class SupabaseAuthService {
     }
 
     try {
-      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-
-      if (error) return { error: error.message };
+      const res = await nativeGoogleSignIn();
+      if (res.canceled) {
+        return { error: null };
+      }
+      if (res.error) {
+        return { error: res.error };
+      }
+      if (res.user) {
+        await this.upsertProfile(res.user.id, {
+          email: res.user.email || '',
+          display_name: res.user.user_metadata?.full_name || res.user.user_metadata?.name || '',
+          photo_url: res.user.user_metadata?.avatar_url || '',
+        });
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Google Sign-in failed' };

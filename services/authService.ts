@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { nativeGoogleSignIn } from '../utils/googleSignIn';
 import type { UserProfile } from '../types';
 
 export interface AuthSessionUser {
@@ -106,18 +107,16 @@ class AuthService {
   }
 
   /**
-   * Sign in with OAuth (e.g. Google).
+   * Sign in with Google using native in-app ID token flow.
    */
-  public async signInWithGoogle(redirectTo?: string) {
+  public async signInWithGoogle() {
     if (!isSupabaseConfigured) throw new Error('Supabase is not configured.');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectTo || (typeof window !== 'undefined' ? window.location.origin : undefined),
-      },
-    });
-    if (error) throw error;
-    return data;
+    const res = await nativeGoogleSignIn();
+    if (res.canceled) {
+      return { canceled: true, user: null, session: null };
+    }
+    if (res.error) throw new Error(res.error);
+    return res;
   }
 
   /**
