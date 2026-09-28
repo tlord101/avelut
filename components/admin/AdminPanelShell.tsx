@@ -1753,42 +1753,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }
 
             setIsPQProcessing(true);
-            const extractionModel = getFeatureModel('ai_quiz_generation', appSettings);
-            setExtractionProgress(`Extracting questions with ${extractionModel}...`);
+            // PDF understanding models: qwen3.8-flash / qwen3.8-max (not omni)
+            const extractionModel = 'qwen3.8-flash';
+            setExtractionProgress(`Sending PDF to Alibaba (${extractionModel}) for multi-course extraction...`);
 
             try {
                 const reader = new FileReader();
                 reader.readAsDataURL(pqFile);
 
-                const base64PDF = await new Promise<string>((resolve) => {
-                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                const base64PDF = await new Promise<string>((resolve, reject) => {
+                    reader.onload = () => {
+                        const result = reader.result as string;
+                        const b64 = result?.includes(',') ? result.split(',')[1] : result;
+                        if (!b64) reject(new Error('Failed to read PDF as base64'));
+                        else resolve(b64);
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read PDF file'));
                 });
 
-                const prompt = `Analyze this PDF containing past exam questions for ${uploadCourseName ? `"${uploadCourseName}"` : 'the uploaded exam'} (${year}). If the document shows a course title, course code, department, or level, extract that information too. If the admin did not provide a course or level, infer it directly from the PDF when possible.
-            Extract ALL multiple-choice questions into a structured JSON object.
+                const prompt = `You are reading an exam past-questions PDF. The PDF may contain ONE course or MULTIPLE courses.
 
-            RULES:
-            1. Output ONLY a JSON object.
-            2. Include: questions (array), courseCode (string or null), courseName (string or null), level (string or null), department (string or null), sourceYear (string or null).
-            3. Each question object must have: question, options (array of 4 strings), correctAnswer (the exact string of the correct option), and explanation (brief reasoning).
-            4. Ensure the correctAnswer exactly matches one of the strings in the options array.
+Read the entire PDF carefully and extract ALL multiple-choice questions.
 
-            FORMAT:
-            {
-                "questions": [
-                    {
-                        "question": "What is...?",
-                        "options": ["A", "B", "C", "D"],
-                        "correctAnswer": "A",
-                        "explanation": "Because..."
-                    }
-                ],
-                "courseCode": "CS101",
-                "courseName": "Introduction to Programming",
-                "level": "100lvl",
-                "department": "Computer Science",
-                "sourceYear": "2023"
-            }`;
+If the document contains different courses (different course titles, course codes, or clearly separated exam sections), group questions under each course.
+
+RULES:
+1. Output ONLY valid JSON (no markdown fences).
+2. Top-level shape:
+{
+  "courses": [
+    {
+      "courseCode": "string or null",
+      "courseName": "string",
+      "level": "string or null",
+      "department": "string or null",
+      "questions": [
+        {
+          "question": "full question text",
+          "options": ["option A text", "option B text", "option C text", "option D text"],
+          "correctAnswer": "exact string matching one of the options",
+          "explanation": "brief reasoning or empty string"
+        }
+      ]
+    }
+  ],
+  "sourceYear": "${year}"
+}
+3. If only one course is present, still return a courses array with one entry.
+4. Prefer course names/codes written in the PDF. If missing, use "${uploadCourseName || 'Unknown Course'}".
+5. Extract every MCQ you can find. Do not invent questions.
+6. correctAnswer must exactly match one string in options.
+7. Keep option text as written in the paper (include letter prefixes if present, consistently).`;
 
                 const response = await ai.models.generateContent({
                     model: extractionModel,
@@ -1797,59 +1812,124 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             role: 'user',
                             parts: [
                                 { text: prompt },
-                                { inlineData: { mimeType: 'application/pdf', data: base64PDF } }
-                            ]
-                        }
+                                {
+                                    inlineData: {
+                                        mimeType: 'application/pdf',
+                                        data: base64PDF,
+                                    },
+                                    fileName: pqFile.name || 'past-questions.pdf',
+                                } as any,
+                            ],
+                        },
                     ],
                     config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                questions: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            question: { type: Type.STRING },
-                                            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                            correctAnswer: { type: Type.STRING },
-                                            explanation: { type: Type.STRING }
-                                        },
-                                        required: ['question', 'options', 'correctAnswer', 'explanation']
-                                    }
-                                }
-                            },
-                            required: ['questions']
-                        }
-                    }
+                        responseMimeType: 'application/json',
+                        maxOutputTokens: 16384,
+                        temperature: 0.2,
+                    },
                 });
 
-                const responseText = (response as any).text || '';
+                const rawText =
+                    typeof (response as any)?.text === 'function'
+                        ? (response as any).text()
+                        : ((response as any)?.text ?? '');
+                const responseText = (rawText || '').toString().trim();
                 if (!responseText) {
-                    throw new Error("AI returned an empty response while extracting questions.");
-                }
-                const responseData = JSON.parse(responseText);
-                const extractedQuestions = Array.isArray(responseData.questions) ? responseData.questions : [];
-
-                if (extractedQuestions.length === 0) throw new Error("No questions found in the PDF.");
-
-                const target = resolvePastQuestionTarget(uploadDepartmentId, uploadLevel, uploadCourseName, responseData);
-                setExtractionProgress(`Saving ${extractedQuestions.length} questions to database...`);
-
-                const pqRef = dbRef(db, `past_questions/${target.departmentId}/${target.level}/${target.courseName}/${year}`);
-
-                // Push each question individually
-                for (const q of extractedQuestions) {
-                    const newPQRef = push(pqRef);
-                    await set(newPQRef, q);
+                    throw new Error('AI returned an empty response while extracting questions.');
                 }
 
-                addToast(`Successfully extracted and saved ${extractedQuestions.length} questions under ${target.courseName}!`, "success");
+                let responseData: any;
+                try {
+                    const cleaned = responseText
+                        .replace(/^```json\s*/i, '')
+                        .replace(/^```\s*/i, '')
+                        .replace(/\s*```$/i, '')
+                        .trim();
+                    responseData = JSON.parse(cleaned);
+                } catch {
+                    throw new Error('AI returned invalid JSON. Try again or use a clearer PDF.');
+                }
+
+                type CourseBucket = {
+                    courseCode?: string | null;
+                    courseName?: string | null;
+                    level?: string | null;
+                    department?: string | null;
+                    questions: any[];
+                };
+
+                let courseBuckets: CourseBucket[] = [];
+                if (Array.isArray(responseData?.courses) && responseData.courses.length > 0) {
+                    courseBuckets = responseData.courses.map((c: any) => ({
+                        courseCode: c.courseCode ?? c.course_code ?? null,
+                        courseName: c.courseName ?? c.course_name ?? c.course ?? c.courseCode ?? null,
+                        level: c.level ?? null,
+                        department: c.department ?? c.dept ?? null,
+                        questions: Array.isArray(c.questions) ? c.questions : [],
+                    }));
+                } else if (Array.isArray(responseData?.questions) && responseData.questions.length > 0) {
+                    courseBuckets = [{
+                        courseCode: responseData.courseCode ?? null,
+                        courseName: responseData.courseName ?? null,
+                        level: responseData.level ?? null,
+                        department: responseData.department ?? null,
+                        questions: responseData.questions,
+                    }];
+                }
+
+                courseBuckets = courseBuckets.filter((b) => b.questions && b.questions.length > 0);
+                if (courseBuckets.length === 0) {
+                    throw new Error('No questions found in the PDF.');
+                }
+
+                let totalSaved = 0;
+                const savedLabels: string[] = [];
+
+                for (const bucket of courseBuckets) {
+                    const target = resolvePastQuestionTarget(
+                        uploadDepartmentId,
+                        uploadLevel,
+                        uploadCourseName || (bucket.courseName || ''),
+                        {
+                            courseCode: bucket.courseCode,
+                            courseName: bucket.courseName,
+                            level: bucket.level,
+                            department: bucket.department,
+                        }
+                    );
+
+                    setExtractionProgress(
+                        `Saving ${bucket.questions.length} questions under ${target.courseName}...`
+                    );
+
+                    const pqRef = dbRef(
+                        db,
+                        `past_questions/${target.departmentId}/${target.level}/${target.courseName}/${year}`
+                    );
+
+                    for (const q of bucket.questions) {
+                        if (!q?.question) continue;
+                        const payload = {
+                            question: String(q.question || ''),
+                            options: Array.isArray(q.options) ? q.options.map((o: any) => String(o)) : [],
+                            correctAnswer: String(q.correctAnswer || ''),
+                            explanation: String(q.explanation || ''),
+                        };
+                        const newPQRef = push(pqRef);
+                        await set(newPQRef, payload);
+                        totalSaved += 1;
+                    }
+                    savedLabels.push(`${target.courseName} (${bucket.questions.length})`);
+                }
+
+                addToast(
+                    `Successfully extracted and saved ${totalSaved} questions across ${courseBuckets.length} course(s): ${savedLabels.join(', ')}`,
+                    'success'
+                );
                 setPqFile(null);
             } catch (error: any) {
                 console.error(error);
-                addToast(`Error: ${error.message}`, "error");
+                addToast(`Error: ${error.message}`, 'error');
             } finally {
                 setIsPQProcessing(false);
                 setExtractionProgress('');
