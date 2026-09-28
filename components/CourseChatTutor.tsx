@@ -189,7 +189,7 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
             <button
               onClick={handleTriggerLiveTutorial}
               className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl border border-[#2563EB]/30 dark:border-[#3B82F6]/30 hover:border-[#2563EB] dark:hover:border-[#3B82F6] bg-white dark:bg-[#141414] hover:bg-[#F3F3F3] dark:hover:bg-[#1C1C1C] text-[#0F172A] dark:text-white text-xs sm:text-sm font-extrabold active:scale-95 cursor-pointer transition-all shrink-0 shadow-2xs group"
-              title={liveAccess.allowed ? "Launch Live Voice & Whiteboard Tutorial" : "Live Tutorial Locked (Weekly/Monthly Plan or ₦450/topic)"}
+              title={liveAccess.allowed ? "Launch Live Voice & Whiteboard Tutorial" : "Live Tutorial Locked"}
             >
               <div className="w-5 h-5 rounded-full bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 flex items-center justify-center text-[#2563EB] dark:text-[#3B82F6] shrink-0">
                 <i className="bi bi-broadcast text-xs font-bold animate-pulse"></i>
@@ -198,7 +198,6 @@ export const CourseChatTutor: React.FC<CourseChatTutorProps> = ({
               {!liveAccess.allowed && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#F3F3F3] dark:bg-[#1C1C1C] text-[#525252] dark:text-[#A3A3A3] text-[10px] font-extrabold border border-[#E6E6E6] dark:border-[#2A2A2A]">
                   <i className="bi bi-lock-fill text-[10px]"></i>
-                  <span className="hidden sm:inline">₦450</span>
                 </span>
               )}
             </button>

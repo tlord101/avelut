@@ -236,6 +236,34 @@ export interface DashboardData {
     examHistory: ExamHistoryItem[];
 }
 
+export type PlanId = 'free' | 'pro' | 'monthly' | 'weekly' | 'semester' | 'basic' | 'premium';
+export type LiveTutorialPackageId = 'live_tutorial_15' | 'live_tutorial_30' | 'live_tutorial_60';
+
+export interface PlanConfig {
+  id: PlanId;
+  displayName: string;
+  priceNgn: number;
+  billingPeriod?: 'monthly' | 'weekly' | 'semester' | 'one_time';
+  liveTutorialMinutes: number;
+  aiChatAccess: 'limited' | 'generous' | 'unlimited';
+  imageAnalysis: boolean;
+  memory: boolean;
+  description: string;
+}
+
+export interface LiveTutorialPackageConfig {
+  id: LiveTutorialPackageId;
+  durationMinutes: 15 | 30 | 60;
+  priceNgn: number;
+  displayName: string;
+}
+
+export interface CanonicalPricingConfig {
+  free: PlanConfig;
+  pro: PlanConfig;
+  packages: Record<LiveTutorialPackageId, LiveTutorialPackageConfig>;
+}
+
 export interface TierConfig {
   tier_id: string;
   display_name: string;
@@ -245,6 +273,9 @@ export interface TierConfig {
   max_saved_courses: number;
   has_verification_badge: boolean;
   badge_color: 'none' | 'blue' | 'purple' | string;
+  live_tutorial_included_minutes?: number;
+  live_tutorial_minutes_pool?: number;
+  live_tutorial_minutes_label?: string;
 }
 
 export interface UsageSettings {

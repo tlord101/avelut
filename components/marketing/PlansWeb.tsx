@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DEFAULT_USAGE_SETTINGS } from '../../utils/appSettings';
+import { DEFAULT_USAGE_SETTINGS, CANONICAL_PRICING } from '../../utils/appSettings';
 import type { AppSettings, UserProfile } from '../../types';
 import { triggerPaystackPurchase } from '../../utils/usage';
 import { useToast } from '../../hooks/useToast';
@@ -168,88 +168,82 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                     />
                 </div>
 
-                {/* 3 Subscription Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto pt-2">
+                {/* Canonical Launch Subscription Cards: FREE vs PRO */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto pt-2">
                     
-                    {/* 1. Weekly Plan */}
-                    <div id="plan-weekly" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
+                    {/* 1. Free Plan */}
+                    <div id="plan-free" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
                         <div className="space-y-4">
                             <div>
                                 <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                                    Flexible Term
+                                    Starter Tier
                                 </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Weekly Plan</h3>
+                                <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">Free Plan</h3>
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.weekly?.price_ngn?.toLocaleString() || '1,499'}</span>
-                                <span className="text-xs font-bold text-[#64748B]">/ week</span>
+                                <span className="text-4xl font-black text-[#0F172A]">₦0</span>
+                                <span className="text-xs font-bold text-[#64748B]">/ forever</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
-                                Great for test preparation and focused weekly revision sessions.
+                                Everything you need to get started with basic AI learning tools.
                             </p>
 
-                            <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="Unlimited AI Chat per day" included />
-                                <FeatureItem text="105 live voice tutorial minutes included / week" included highlight />
-                                <FeatureItem text="Unlimited Camera Scans per day" included />
-                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
-                                <FeatureItem text="Verification Student Badge" included />
+                            <div className="border-t border-[#E3E9F1] pt-5 space-y-3">
+                                <FeatureItem text="AI Tutor" included />
+                                <FeatureItem text="Limited AI Chat" included />
+                                <FeatureItem text="Image Analysis" included />
+                                <FeatureItem text="Memory" included />
+                                <FeatureItem text="15 Live Tutorial minutes/month" included highlight />
                             </div>
                         </div>
 
-                        <div className="pt-6">
+                        <div className="pt-8">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('weekly', tiers.weekly?.price_ngn || 1499, tiers.weekly?.credit_allocation || 400)}
-                                disabled={isProcessing || !email || currentStatus === 'weekly'}
-                                className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                                    currentStatus === 'weekly'
-                                        ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
-                                        : 'bg-[#0066FF] hover:bg-slate-900 text-white'
-                                }`}
+                                disabled={true}
+                                className="w-full py-3.5 rounded-2xl font-black text-sm bg-[#F1F5F9] text-[#64748B] cursor-default"
                             >
-                                {currentStatus === 'weekly' ? 'Current Plan' : 'Subscribe Weekly'}
+                                {currentStatus === 'free' || !currentStatus ? 'Current Plan' : 'Free Included'}
                             </button>
                         </div>
                     </div>
 
-                    {/* 2. Monthly Pro Plan (Featured) */}
-                    <div id="plan-monthly" className="bg-white border-2 border-[#0066FF] rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between relative transform md:-translate-y-2">
+                    {/* 2. Pro Plan (Featured) */}
+                    <div id="plan-pro" className="bg-white border-2 border-[#0066FF] rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between relative transform md:-translate-y-1">
                         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#0066FF] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
-                            Most Popular
+                            Recommended for Launch
                         </div>
 
                         <div className="space-y-4">
                             <div>
                                 <span className="text-[11px] font-bold text-[#0066FF] uppercase tracking-wider block">
-                                    Standard Term
+                                    Pro Membership
                                 </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Pro Plan</h3>
+                                <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">Pro Plan</h3>
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.monthly?.price_ngn?.toLocaleString() || '3,999'}</span>
+                                <span className="text-4xl font-black text-[#0F172A]">₦3,999</span>
                                 <span className="text-xs font-bold text-[#64748B]">/ month</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
-                                Complete mastery package for active students studying multiple courses.
+                                Complete study power package for active students needing generous live tutoring.
                             </p>
 
-                            <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="Unlimited AI Chat per day" included />
-                                <FeatureItem text="450 live voice tutorial minutes / month included" included highlight />
-                                <FeatureItem text="Flexible per-minute deduction across 15, 30, and 60m lessons" included />
-                                <FeatureItem text="Unlimited Camera Scans & Textbook Solves" included />
-                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
-                                <FeatureItem text="Verification Student Badge" included />
+                            <div className="border-t border-[#E3E9F1] pt-5 space-y-3">
+                                <FeatureItem text="AI Tutor" included />
+                                <FeatureItem text="Generous AI Chat" included />
+                                <FeatureItem text="Image Analysis" included />
+                                <FeatureItem text="Memory" included />
+                                <FeatureItem text="180 Live Tutorial minutes/month" included highlight />
                             </div>
                         </div>
 
-                        <div className="pt-6">
+                        <div className="pt-8">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('monthly', tiers.monthly?.price_ngn || 3999, tiers.monthly?.credit_allocation || 2000)}
+                                onClick={() => handlePurchasePlan('monthly', CANONICAL_PRICING.pro.priceNgn, 2000)}
                                 disabled={isProcessing || !email || currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-md active:scale-95 ${
                                     currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro'
@@ -257,54 +251,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                                         : 'bg-[#0066FF] hover:bg-slate-900 text-white'
                                 }`}
                             >
-                                {currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro' ? 'Current Plan' : 'Subscribe Pro'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* 3. Semester Plan (Best Value) */}
-                    <div id="plan-semester" className="bg-white border border-[#E3E9F1] rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-[#0066FF]/40 transition-all relative">
-                        <div className="absolute -top-3.5 right-6 px-3.5 py-1 bg-[#0F172A] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
-                            Best Value
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                                    Full Semester
-                                </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Semester Plan</h3>
-                            </div>
-
-                            <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.semester?.price_ngn?.toLocaleString() || '11,999'}</span>
-                                <span className="text-xs font-bold text-[#64748B]">/ semester</span>
-                            </div>
-                            <p className="text-xs text-[#64748B] leading-relaxed">
-                                Uninterrupted access for the entire semester. Maximum savings.
-                            </p>
-
-                            <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="All Pro Plan features included" included />
-                                <FeatureItem text="1,800 live voice tutorial minutes included (450/mo)" included highlight />
-                                <FeatureItem text="Unlimited Chats, Scans & Uploads" included />
-                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
-                                <FeatureItem text="Gold Verification Student Badge" included />
-                            </div>
-                        </div>
-
-                        <div className="pt-6">
-                            <button
-                                type="button"
-                                onClick={() => handlePurchasePlan('semester', tiers.semester?.price_ngn || 11999, tiers.semester?.credit_allocation || 8000)}
-                                disabled={isProcessing || !email || currentStatus === 'semester'}
-                                className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                                    currentStatus === 'semester'
-                                        ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
-                                        : 'bg-[#0F172A] hover:bg-slate-800 text-white'
-                                }`}
-                            >
-                                {currentStatus === 'semester' ? 'Current Plan' : 'Get Semester Access'}
+                                {currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro' ? 'Current Plan' : 'Upgrade to Pro'}
                             </button>
                         </div>
                     </div>
@@ -364,16 +311,16 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#0066FF] bg-white/10 px-3 py-0.5 rounded-full inline-block">
                             Pay-As-You-Go Credits
                         </span>
-                        <h4 className="text-lg sm:text-xl font-black">Don't need a weekly subscription?</h4>
+                        <h4 className="text-lg sm:text-xl font-black">Need extra Live Tutorial time?</h4>
                         <p className="text-xs text-slate-300 max-w-md">
-                            Buy single Live Tutorial passes at <strong className="text-white">₦150 / 15 mins</strong> or credit refills anytime.
+                            Buy Live Tutorial credit packages anytime: 15 min (₦299), 30 min (₦599), or 60 min (₦1,099).
                         </p>
                     </div>
                     <a
                         href="/refill-credits"
                         className="px-6 py-3 bg-white text-[#0F172A] hover:bg-[#F6F6F3] font-black text-xs sm:text-sm rounded-2xl shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer"
                     >
-                        Buy Extra Credits (₦150) →
+                        Buy Credits →
                     </a>
                 </div>
             </main>

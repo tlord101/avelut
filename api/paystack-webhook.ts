@@ -89,10 +89,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uidField = customFields.find((f: any) => f?.variable_name === 'user_id');
     const typeField = customFields.find((f: any) => f?.variable_name === 'purchase_type');
     const planField = customFields.find((f: any) => f?.variable_name === 'plan_key');
+    const packageField = customFields.find((f: any) => f?.variable_name === 'package_id');
 
     const uid = uidField?.value || metadata.user_id || metadata.userId;
     const purchaseType = typeField?.value || metadata.purchase_type || metadata.purchaseType;
     const planKey = planField?.value || metadata.plan_key || metadata.planKey;
+    const packageId = packageField?.value || metadata.package_id || metadata.packageId;
     const verifiedAmountKobo = Number(data.amount);
     const verifiedAmountNgn = Number.isFinite(verifiedAmountKobo) ? Math.round(verifiedAmountKobo) / 100 : 0;
 
@@ -103,26 +105,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       if (purchaseType === 'subscription') {
+        const canonicalPlan = (planKey || 'pro').toLowerCase();
+        const effectivePlan = canonicalPlan === 'pro' ? 'monthly' : canonicalPlan;
+
         await supabaseAdmin.from('profiles').update({
           is_paid_subscriber: true,
+          subscription_status: effectivePlan,
           updated_at: new Date().toISOString(),
         }).eq('id', uid);
 
         await supabaseAdmin.from('subscriptions').upsert({
           user_id: uid,
-          plan_type: planKey || 'monthly',
+          plan_type: effectivePlan,
           status: 'active',
           paystack_reference: reference,
           starts_at: new Date().toISOString(),
         });
       } else {
-        const creditMap: Record<number, number> = {
-          500: 500,
-          1000: 1100,
-          2000: 2400,
-          5000: 6500,
-        };
-        const creditsToAdd = creditMap[verifiedAmountNgn] || Math.round(verifiedAmountNgn);
+        let creditsToAdd = Math.round(verifiedAmountNgn);
+        if (packageId === 'live_tutorial_15') creditsToAdd = 299;
+        else if (packageId === 'live_tutorial_30') creditsToAdd = 599;
+        else if (packageId === 'live_tutorial_60') creditsToAdd = 1099;
 
         const { data: profile } = await supabaseAdmin
           .from('profiles')

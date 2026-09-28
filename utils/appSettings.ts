@@ -1,30 +1,86 @@
-import type { AppSettings } from '../types';
+import type { AppSettings, CanonicalPricingConfig, LiveTutorialPackageId } from '../types';
 
 export const APP_SETTINGS_PATH = 'app_settings/global';
 
 /**
- * Pricing model (NGN):
- * - Free: unlimited Avelut AI chat; everything else heavily capped → push to paid
- * - Weekly: short exam-crunch plan
- * - Pro (₦3,999/mo): only monthly Pro plan — unlimited study tools; 15-min live 1×/day included
- * - 30-min & 60-min live tutorials: always credit top-up (all tiers)
+ * CANONICAL LAUNCH PRICING MODEL (October 1 Launch)
+ * Single Source of Truth across the entire Avelut application.
  */
+export const CANONICAL_PRICING: CanonicalPricingConfig = {
+  free: {
+    id: 'free',
+    displayName: 'Free',
+    priceNgn: 0,
+    liveTutorialMinutes: 15,
+    aiChatAccess: 'limited',
+    imageAnalysis: true,
+    memory: true,
+    description: 'AI Tutor, Limited AI Chat, Image Analysis, Memory, 15 Live Tutorial minutes/month',
+  },
+  pro: {
+    id: 'pro',
+    displayName: 'Pro',
+    priceNgn: 3999,
+    billingPeriod: 'monthly',
+    liveTutorialMinutes: 180,
+    aiChatAccess: 'generous',
+    imageAnalysis: true,
+    memory: true,
+    description: 'AI Tutor, Generous AI Chat, Image Analysis, Memory, 180 Live Tutorial minutes/month',
+  },
+  packages: {
+    live_tutorial_15: {
+      id: 'live_tutorial_15',
+      durationMinutes: 15,
+      priceNgn: 299,
+      displayName: '15 Live Tutorial minutes',
+    },
+    live_tutorial_30: {
+      id: 'live_tutorial_30',
+      durationMinutes: 30,
+      priceNgn: 599,
+      displayName: '30 Live Tutorial minutes',
+    },
+    live_tutorial_60: {
+      id: 'live_tutorial_60',
+      durationMinutes: 60,
+      priceNgn: 1099,
+      displayName: '60 Live Tutorial minutes',
+    },
+  },
+};
+
+export function resolvePackagePriceNgn(packageId: string): number | null {
+  const pkg = CANONICAL_PRICING.packages[packageId as LiveTutorialPackageId];
+  if (pkg) return pkg.priceNgn;
+  if (packageId === 'live_tutorial_15' || packageId === 'live_tutorial_pass') return 299;
+  if (packageId === 'live_tutorial_30' || packageId === 'live_tutorial_30_pass') return 599;
+  if (packageId === 'live_tutorial_60' || packageId === 'live_tutorial_60_pass') return 1099;
+  return null;
+}
+
+export function resolvePlanPriceNgn(planKey: string): number | null {
+  const key = planKey.toLowerCase();
+  if (key === 'free') return CANONICAL_PRICING.free.priceNgn;
+  if (key === 'pro' || key === 'monthly' || key === 'premium') return CANONICAL_PRICING.pro.priceNgn;
+  if (key === 'weekly' || key === 'basic') return 1499;
+  if (key === 'semester') return 11999;
+  return null;
+}
+
 export const DEFAULT_USAGE_SETTINGS = {
   tiers: {
     free: {
       tier_id: 'free',
-      display_name: 'Free',
-      description:
-        'Unlimited Avelut AI chat. Study tools heavily limited: 3 flashcard sets/day, 1 quiz/day, 1 camera scan/day. One 15-min live voice tutorial per month. Upgrade for unlimited study tools & daily live lessons.',
-      price_ngn: 0,
+      display_name: CANONICAL_PRICING.free.displayName,
+      description: CANONICAL_PRICING.free.description,
+      price_ngn: CANONICAL_PRICING.free.priceNgn,
       credit_allocation: 50,
       max_saved_courses: 3,
-      // Live: 15 min only, once per month
       live_tutorial_daily_topics: 0,
       live_tutorial_monthly_topics: 1,
-      live_tutorial_included_minutes: 15,
-      live_tutorial_minutes_label: '1 × 15-min lesson / month',
-      // Avelut AI main chat = unlimited; study-guide / notebook tutor chats capped
+      live_tutorial_included_minutes: CANONICAL_PRICING.free.liveTutorialMinutes,
+      live_tutorial_minutes_label: '15 live mins / month included',
       chat_daily_limit: -1,
       study_chat_daily_limit: 15,
       scan_daily_limit: 1,
@@ -45,7 +101,7 @@ export const DEFAULT_USAGE_SETTINGS = {
       tier_id: 'weekly',
       display_name: 'Weekly',
       description:
-        '7-day boost: unlimited study chats, scans, flashcards & quizzes. 105 minutes of live voice tutorials included for the week. Billed per actual minute spent.',
+        '7-day boost: unlimited study chats, scans, flashcards & quizzes. 105 minutes of live voice tutorials included for the week.',
       price_ngn: 1499,
       credit_allocation: 400,
       max_saved_courses: -1,
@@ -66,20 +122,18 @@ export const DEFAULT_USAGE_SETTINGS = {
       has_verification_badge: true,
       badge_color: 'blue',
     },
-    // Sole monthly Pro plan
     monthly: {
       tier_id: 'monthly',
-      display_name: 'Pro',
-      description:
-        'Unlimited study tools (chat, scans, flashcards, quizzes). 450 minutes of live voice tutorials included each month — use anytime with flexible per-minute deduction across 15, 30, and 60-min lessons.',
-      price_ngn: 3999,
+      display_name: CANONICAL_PRICING.pro.displayName,
+      description: CANONICAL_PRICING.pro.description,
+      price_ngn: CANONICAL_PRICING.pro.priceNgn,
       credit_allocation: 2000,
       max_saved_courses: -1,
       live_tutorial_daily_topics: -1,
       live_tutorial_monthly_topics: -1,
-      live_tutorial_included_minutes: 450,
-      live_tutorial_minutes_pool: 450,
-      live_tutorial_minutes_label: '450 live mins / month included',
+      live_tutorial_included_minutes: CANONICAL_PRICING.pro.liveTutorialMinutes,
+      live_tutorial_minutes_pool: CANONICAL_PRICING.pro.liveTutorialMinutes,
+      live_tutorial_minutes_label: '180 live mins / month included',
       chat_daily_limit: -1,
       study_chat_daily_limit: -1,
       scan_daily_limit: -1,
@@ -92,20 +146,19 @@ export const DEFAULT_USAGE_SETTINGS = {
       has_verification_badge: true,
       badge_color: 'purple',
     },
-    // Optional long prepaid (not a monthly charge)
     semester: {
       tier_id: 'semester',
       display_name: 'Semester',
       description:
-        'Pro access for a full semester (~4 months). 1,800 live minutes included (450 mins/mo) with flexible per-minute deduction.',
+        'Pro access for a full semester (~4 months). 720 live minutes included (180 mins/mo) with flexible per-minute deduction.',
       price_ngn: 11999,
       credit_allocation: 8000,
       max_saved_courses: -1,
       live_tutorial_daily_topics: -1,
       live_tutorial_monthly_topics: -1,
-      live_tutorial_included_minutes: 1800,
-      live_tutorial_minutes_pool: 1800,
-      live_tutorial_minutes_label: '1,800 live mins included (450/mo)',
+      live_tutorial_included_minutes: 720,
+      live_tutorial_minutes_pool: 720,
+      live_tutorial_minutes_label: '720 live mins included (180/mo)',
       chat_daily_limit: -1,
       study_chat_daily_limit: -1,
       scan_daily_limit: -1,
@@ -118,7 +171,6 @@ export const DEFAULT_USAGE_SETTINGS = {
       has_verification_badge: true,
       badge_color: 'gold',
     },
-    // Legacy aliases → map to weekly / Pro
     basic: {
       tier_id: 'basic',
       display_name: 'Weekly',
@@ -137,34 +189,32 @@ export const DEFAULT_USAGE_SETTINGS = {
     },
     premium: {
       tier_id: 'premium',
-      display_name: 'Pro',
-      description:
-        'Unlimited study tools. 450 live minutes/month included. Flexible per-minute usage.',
-      price_ngn: 3999,
+      display_name: CANONICAL_PRICING.pro.displayName,
+      description: CANONICAL_PRICING.pro.description,
+      price_ngn: CANONICAL_PRICING.pro.priceNgn,
       credit_allocation: 2000,
       max_saved_courses: -1,
       live_tutorial_daily_topics: -1,
       live_tutorial_monthly_topics: -1,
-      live_tutorial_included_minutes: 450,
-      live_tutorial_minutes_pool: 450,
-      live_tutorial_minutes_label: '450 live mins / month included',
+      live_tutorial_included_minutes: CANONICAL_PRICING.pro.liveTutorialMinutes,
+      live_tutorial_minutes_pool: CANONICAL_PRICING.pro.liveTutorialMinutes,
+      live_tutorial_minutes_label: '180 live mins / month included',
       has_verification_badge: true,
       badge_color: 'purple',
     },
   },
   feature_costs: {
-    // 1 Credit = ₦1 mapping calibrated for >= 60% gross profit margin
-    live_tutorial: 150,              // 15-min live tutorial (Cost: ₦45.08, Margin: 69.9%)
-    live_tutorial_15: 150,           // 15-min live tutorial (Cost: ₦45.08, Margin: 69.9%)
-    live_tutorial_30: 350,           // 30-min live tutorial (Cost: ₦98.42, Margin: 71.9%)
-    live_tutorial_60: 650,           // 60-min live tutorial (Cost: ₦225.12, Margin: 65.4%)
-    live_tutorial_question: 10,      // In-session extra question (Cost: ~₦0.80, Margin: 92%)
-    chat_interaction: 2,             // AI tutor chat message (Cost: ₦0.43, Margin: 78.5%)
-    visual_solve: 5,                 // Camera homework solve (Cost: ₦0.85, Margin: 83.0%)
-    flashcard_generation: 5,         // 10-flashcard set generation (Cost: ₦0.84, Margin: 83.2%)
-    ai_quiz_generation: 5,           // 5-question AI quiz generation (Cost: ₦1.08, Margin: 78.4%)
-    study_guide_lesson: 15,          // Full chapter study guide lesson (Cost: ₦2.28, Margin: 84.8%)
-    study_guide_extraction: 3,       // Document / syllabus extraction (Cost: ₦0.50, Margin: 83.3%)
+    live_tutorial: CANONICAL_PRICING.packages.live_tutorial_15.priceNgn,
+    live_tutorial_15: CANONICAL_PRICING.packages.live_tutorial_15.priceNgn,
+    live_tutorial_30: CANONICAL_PRICING.packages.live_tutorial_30.priceNgn,
+    live_tutorial_60: CANONICAL_PRICING.packages.live_tutorial_60.priceNgn,
+    live_tutorial_question: 10,
+    chat_interaction: 2,
+    visual_solve: 5,
+    flashcard_generation: 5,
+    ai_quiz_generation: 5,
+    study_guide_lesson: 15,
+    study_guide_extraction: 3,
   },
   feature_models: {
     visual_solve: 'qwen3.8-omni-flash',
@@ -176,14 +226,14 @@ export const DEFAULT_USAGE_SETTINGS = {
     title_generation: 'qwen3.8-omni-flash',
   },
   additional_prices: {
-    live_tutorial_pass: 150,         // 15-min single pass (₦150)
-    live_tutorial_30_pass: 350,      // 30-min single pass (₦350)
-    live_tutorial_60_pass: 650,      // 60-min single pass (₦650)
-    flashcards_pack_10: 50,          // 10 flashcard sets pack (₦50)
-    visual_messages_price: 50,       // 10 camera scans bundle (₦50)
+    live_tutorial_pass: CANONICAL_PRICING.packages.live_tutorial_15.priceNgn,
+    live_tutorial_30_pass: CANONICAL_PRICING.packages.live_tutorial_30.priceNgn,
+    live_tutorial_60_pass: CANONICAL_PRICING.packages.live_tutorial_60.priceNgn,
+    flashcards_pack_10: 50,
+    visual_messages_price: 50,
     visual_messages_count: 10,
-    studyguide_course_price: 150,    // Full course study guide package (₦150)
-    studyguide_request_price: 25,    // Custom syllabus study guide request (₦25)
+    studyguide_course_price: 150,
+    studyguide_request_price: 25,
   },
 };
 

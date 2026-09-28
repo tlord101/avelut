@@ -91,6 +91,7 @@ export const LessonDurationModal: React.FC<LessonDurationModalProps> = ({
       60: evaluateLiveTutorialStart(userProfile, 60, appSettings),
     };
     return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile, appSettings, serverPoolTrigger]);
 
   if (!isOpen) return null;
