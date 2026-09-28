@@ -157,6 +157,43 @@ export async function saveAIMemoryBank(bank: AIMemoryBank): Promise<void> {
 }
 
 /**
+ * Queries server-side vector memory.
+ */
+export async function queryVectorMemories(userId: string, queryText: string, topK = 5): Promise<MemoryItem[]> {
+  if (!userId || !queryText) return [];
+  try {
+    const res = await fetch('/api/ai-memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'query',
+        userId,
+        queryText,
+        topK,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.matches)) {
+        return data.matches.map((m: any) => ({
+          id: m.id,
+          category: m.category || 'preference',
+          content: m.content,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          source: 'auto' as const,
+          enabled: m.enabled !== false,
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('[AIMemoryBank] Server vector memory unavailable, using local memory fallback:', e);
+  }
+  return [];
+}
+
+/**
  * Adds a new memory item to the user's Memory Bank.
  */
 export async function addMemoryItem(
@@ -167,6 +204,21 @@ export async function addMemoryItem(
 ): Promise<MemoryItem> {
   const bank = await getAIMemoryBank(userId);
   const now = Date.now();
+
+  // Exclude sensitive information (passwords, tokens, payment details)
+  if (/(password|secret|credit card|cvv|api_key|token|auth_token)/i.test(content)) {
+    console.warn('[AIMemoryBank] Excluded sensitive memory content');
+    return {
+      id: `mem_ignored`,
+      category,
+      content: '',
+      createdAt: now,
+      updatedAt: now,
+      source,
+      enabled: false,
+    };
+  }
+
   const newItem: MemoryItem = {
     id: `mem_${now}_${Math.random().toString(36).substring(2, 7)}`,
     category,
@@ -186,6 +238,17 @@ export async function addMemoryItem(
   if (!exists) {
     bank.items.unshift(newItem);
     await saveAIMemoryBank(bank);
+
+    // Sync to server-side vector DB asynchronously (non-blocking)
+    fetch('/api/ai-memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'upsert',
+        userId,
+        memoryItem: newItem,
+      }),
+    }).catch(() => {});
   }
 
   return newItem;

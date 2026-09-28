@@ -182,7 +182,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦1,200</span>
+                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.weekly?.price_ngn?.toLocaleString() || '1,499'}</span>
                                 <span className="text-xs font-bold text-[#64748B]">/ week</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
@@ -190,20 +190,18 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                             </p>
 
                             <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="Unlimited Chat Tutorial per day" included />
-                                <FeatureItem text="1 Live Tutorial topic / day (7 topics per week)" included highlight />
+                                <FeatureItem text="Unlimited AI Chat per day" included />
+                                <FeatureItem text="105 live voice tutorial minutes included / week" included highlight />
                                 <FeatureItem text="Unlimited Camera Scans per day" included />
-                                <FeatureItem text="Unlimited Textbook Uploads" included />
-                                <FeatureItem text="3 Flashcard generations / day" included />
-                                <FeatureItem text="3 Quizzes / day" included />
-                                <FeatureItem text="All content saved for Offline Access" included />
+                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
+                                <FeatureItem text="Verification Student Badge" included />
                             </div>
                         </div>
 
                         <div className="pt-6">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('weekly', 1200, 500)}
+                                onClick={() => handlePurchasePlan('weekly', tiers.weekly?.price_ngn || 1499, tiers.weekly?.credit_allocation || 400)}
                                 disabled={isProcessing || !email || currentStatus === 'weekly'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
                                     currentStatus === 'weekly'
@@ -216,7 +214,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         </div>
                     </div>
 
-                    {/* 2. Monthly Plan (Featured) */}
+                    {/* 2. Monthly Pro Plan (Featured) */}
                     <div id="plan-monthly" className="bg-white border-2 border-[#0066FF] rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between relative transform md:-translate-y-2">
                         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#0066FF] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
                             Most Popular
@@ -227,11 +225,11 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                                 <span className="text-[11px] font-bold text-[#0066FF] uppercase tracking-wider block">
                                     Standard Term
                                 </span>
-                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Monthly Plan</h3>
+                                <h3 className="text-xl font-black text-[#0F172A] mt-0.5">Pro Plan</h3>
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦4,000</span>
+                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.monthly?.price_ngn?.toLocaleString() || '3,999'}</span>
                                 <span className="text-xs font-bold text-[#64748B]">/ month</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
@@ -239,29 +237,27 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                             </p>
 
                             <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="Unlimited Chats per day" included />
-                                <FeatureItem text="Max 3 Live Tutorial topics / day (15 per month)" included highlight />
-                                <FeatureItem text="50 credits deducted per Q&A question in Live Tutorial" included />
-                                <FeatureItem text="Unlimited Camera Scans per day" included />
-                                <FeatureItem text="Unlimited Textbook Uploads" included />
-                                <FeatureItem text="Unlimited Flashcards per day" included />
-                                <FeatureItem text="Unlimited Quizzes & Tests" included />
-                                <FeatureItem text="All content saved for Offline Access" included />
+                                <FeatureItem text="Unlimited AI Chat per day" included />
+                                <FeatureItem text="450 live voice tutorial minutes / month included" included highlight />
+                                <FeatureItem text="Flexible per-minute deduction across 15, 30, and 60m lessons" included />
+                                <FeatureItem text="Unlimited Camera Scans & Textbook Solves" included />
+                                <FeatureItem text="Unlimited Flashcards & Quizzes" included />
+                                <FeatureItem text="Verification Student Badge" included />
                             </div>
                         </div>
 
                         <div className="pt-6">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('monthly', 4000, 2500)}
-                                disabled={isProcessing || !email || currentStatus === 'monthly' || currentStatus === 'premium'}
+                                onClick={() => handlePurchasePlan('monthly', tiers.monthly?.price_ngn || 3999, tiers.monthly?.credit_allocation || 2000)}
+                                disabled={isProcessing || !email || currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-md active:scale-95 ${
-                                    currentStatus === 'monthly' || currentStatus === 'premium'
+                                    currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro'
                                         ? 'bg-[#F1F5F9] text-[#64748B] cursor-default'
                                         : 'bg-[#0066FF] hover:bg-slate-900 text-white'
                                 }`}
                             >
-                                {currentStatus === 'monthly' || currentStatus === 'premium' ? 'Current Plan' : 'Subscribe Monthly'}
+                                {currentStatus === 'monthly' || currentStatus === 'premium' || currentStatus === 'pro' ? 'Current Plan' : 'Subscribe Pro'}
                             </button>
                         </div>
                     </div>
@@ -281,7 +277,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                             </div>
 
                             <div className="flex items-baseline gap-1.5 pt-1">
-                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦12,000</span>
+                                <span className="text-3xl sm:text-4xl font-black text-[#0F172A]">₦{tiers.semester?.price_ngn?.toLocaleString() || '11,999'}</span>
                                 <span className="text-xs font-bold text-[#64748B]">/ semester</span>
                             </div>
                             <p className="text-xs text-[#64748B] leading-relaxed">
@@ -289,21 +285,18 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                             </p>
 
                             <div className="border-t border-[#E3E9F1] pt-4 space-y-2.5">
-                                <FeatureItem text="All Monthly Plan features included" included />
-                                <FeatureItem text="Max 3 Live Tutorial topics / day (15 per month)" included highlight />
-                                <FeatureItem text="50 credits per Q&A question in Live Tutorial" included />
+                                <FeatureItem text="All Pro Plan features included" included />
+                                <FeatureItem text="1,800 live voice tutorial minutes included (450/mo)" included highlight />
                                 <FeatureItem text="Unlimited Chats, Scans & Uploads" included />
                                 <FeatureItem text="Unlimited Flashcards & Quizzes" included />
-                                <FeatureItem text="Priority AI tutor processing" included />
-                                <FeatureItem text="All content saved Offline — incl. Live Tutorial" included />
-                                <FeatureItem text="Official Verification Student Badge" included />
+                                <FeatureItem text="Gold Verification Student Badge" included />
                             </div>
                         </div>
 
                         <div className="pt-6">
                             <button
                                 type="button"
-                                onClick={() => handlePurchasePlan('semester', 12000, 8000)}
+                                onClick={() => handlePurchasePlan('semester', tiers.semester?.price_ngn || 11999, tiers.semester?.credit_allocation || 8000)}
                                 disabled={isProcessing || !email || currentStatus === 'semester'}
                                 className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all cursor-pointer shadow-2xs active:scale-95 ${
                                     currentStatus === 'semester'
@@ -360,7 +353,7 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                                 <i className="bi bi-lock-fill text-amber-500"></i>
                                 Live Voice Tutorial
                             </span>
-                            <p className="text-[#64748B]">Locked on Free Tier. Available via Plan or ₦300/topic pass.</p>
+                            <p className="text-[#64748B]">15 mins included per month on Free Tier. Top up credits for extra sessions.</p>
                         </div>
                     </div>
                 </div>
@@ -373,14 +366,14 @@ export const PlansWeb: React.FC<PlansWebProps> = ({ appSettings, userProfile }) 
                         </span>
                         <h4 className="text-lg sm:text-xl font-black">Don't need a weekly subscription?</h4>
                         <p className="text-xs text-slate-300 max-w-md">
-                            Buy single Live Tutorial topic passes at <strong className="text-white">₦300 per topic</strong> or flashcard packs at <strong className="text-white">₦50 per flashcard</strong>.
+                            Buy single Live Tutorial passes at <strong className="text-white">₦150 / 15 mins</strong> or credit refills anytime.
                         </p>
                     </div>
                     <a
                         href="/refill-credits"
                         className="px-6 py-3 bg-white text-[#0F172A] hover:bg-[#F6F6F3] font-black text-xs sm:text-sm rounded-2xl shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer"
                     >
-                        Buy Extra Credits (₦300) →
+                        Buy Extra Credits (₦150) →
                     </a>
                 </div>
             </main>

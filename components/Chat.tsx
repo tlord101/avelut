@@ -243,6 +243,36 @@ const CameraCaptureView: React.FC<{
 };
 
 // --- REDESIGNED INPUT COMPOSER ---
+const MAX_CHAT_IMAGES = 6;
+
+const ImageGridRenderer: React.FC<{ images: string[] }> = ({ images }) => {
+  if (!images || images.length === 0) return null;
+
+  if (images.length === 1) {
+    return (
+      <div className="mb-2 overflow-hidden rounded-[20px] border border-neutral-200/80 dark:border-white/10 shadow-sm max-w-sm">
+        <img
+          src={images[0]}
+          alt="Uploaded attachment"
+          className="w-full max-h-72 object-contain bg-neutral-100 dark:bg-neutral-900 rounded-[20px]"
+        />
+      </div>
+    );
+  }
+
+  const gridCols = images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3';
+
+  return (
+    <div className={`grid ${gridCols} gap-2 mb-2 max-w-md w-full`}>
+      {images.map((src, idx) => (
+        <div key={idx} className="relative aspect-square overflow-hidden rounded-[16px] border border-neutral-200/80 dark:border-white/10 bg-neutral-100 dark:bg-neutral-900">
+          <img src={src} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const GrokChatComposer: React.FC<{
   input: string;
   setInput: (val: string) => void;
@@ -251,8 +281,8 @@ const GrokChatComposer: React.FC<{
   onSelectMode: (mode: ChatMode) => void;
   voiceStatus: 'idle' | 'listening' | 'processing';
   onToggleVoice: () => void;
-  attachedImage: string | null;
-  onRemoveImage: () => void;
+  attachedImages: string[];
+  onRemoveImage: (index: number) => void;
   onAttachImage?: (base64Img: string) => void;
   onOpenGallery: () => void;
   onOpenCamera: () => void;
@@ -267,7 +297,7 @@ const GrokChatComposer: React.FC<{
   isLoading,
   voiceStatus,
   onToggleVoice,
-  attachedImage,
+  attachedImages,
   onRemoveImage,
   onAttachImage,
   onOpenGallery,
@@ -281,6 +311,7 @@ const GrokChatComposer: React.FC<{
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+  const hasAutoFocusedRef = useRef(false);
 
   // Close attach menu when clicking outside
   useEffect(() => {
@@ -296,12 +327,9 @@ const GrokChatComposer: React.FC<{
   }, [showAttachMenu]);
 
   useEffect(() => {
-    if (autoFocus && textareaRef.current) {
+    if (autoFocus && !hasAutoFocusedRef.current && textareaRef.current) {
+      hasAutoFocusedRef.current = true;
       textareaRef.current.focus();
-      const timer = setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 300);
-      return () => clearTimeout(timer);
     }
   }, [autoFocus]);
 
@@ -347,7 +375,7 @@ const GrokChatComposer: React.FC<{
     setShowAttachMenu((prev) => !prev);
   };
 
-  const hasText = Boolean(input.trim()) || Boolean(attachedImage);
+  const hasText = Boolean(input.trim()) || attachedImages.length > 0;
 
   return (
     <div
@@ -356,36 +384,38 @@ const GrokChatComposer: React.FC<{
     >
       <div className="relative flex flex-col bg-[#f4f4f5] dark:bg-[#212124] rounded-[28px] border border-neutral-200/70 dark:border-white/5 transition-all focus-within:ring-1 focus-within:ring-black/10 dark:focus-within:ring-white/10 shadow-sm">
         
-        {/* Attached Image Preview Pill */}
-        {attachedImage && (
-          <div className="px-4 pt-4 pb-0 flex">
-            <div className="relative group">
-              <img 
-                src={attachedImage} 
-                alt="Attached" 
-                className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-[14px] border border-black/10 dark:border-white/10 shadow-sm"
-              />
-              <button
-                onClick={onRemoveImage}
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-neutral-800 text-white flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-md"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+        {/* Attached Images Preview Row */}
+        {attachedImages.length > 0 && (
+          <div className="px-4 pt-4 pb-0 flex flex-wrap gap-2.5">
+            {attachedImages.map((src, index) => (
+              <div key={index} className="relative group shrink-0">
+                <img
+                  src={src}
+                  alt={`Attached ${index + 1}`}
+                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-[14px] border border-black/10 dark:border-white/10 shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemoveImage(index)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-neutral-900 text-white flex items-center justify-center shadow-md hover:bg-neutral-800 transition-colors cursor-pointer"
+                  aria-label="Remove image"
+                >
+                  <i className="bi bi-x text-xs" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
         {/* Top: Text input / textarea */}
-        <div className={`px-4 ${attachedImage ? 'pt-2' : 'pt-3.5'} pb-1`}>
+        <div className={`px-4 ${attachedImages.length > 0 ? 'pt-2' : 'pt-3.5'} pb-1`}>
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Ask anything or paste an image"
+            placeholder="Ask anything or paste images..."
             rows={1}
             className="w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 text-[15px] sm:text-base resize-none max-h-36 py-0 leading-relaxed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           />
@@ -442,60 +472,23 @@ const GrokChatComposer: React.FC<{
                   </svg>
                   Camera
                 </button>
-                {onOpenMemoryBank && (
-                  <>
-                    <div className="h-[1px] bg-neutral-200 dark:bg-white/10" />
-                    <button
-                      onClick={() => {
-                        setShowAttachMenu(false);
-                        onOpenMemoryBank();
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
-                    >
-                      <i className="bi bi-cpu text-emerald-500 text-sm" />
-                      Memory Bank
-                    </button>
-                  </>
-                )}
               </div>
             )}
           </div>
 
-          {/* Center-Left: Memory Bank Pill Toggle */}
-          {onOpenMemoryBank && (
-            <button
-              type="button"
-              onClick={onOpenMemoryBank}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all mr-auto ml-1.5 ${
-                isMemoryActive
-                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                  : 'bg-neutral-200/60 dark:bg-white/10 hover:bg-neutral-200 text-neutral-600 dark:text-neutral-400'
-              }`}
-              title="AI Memory Bank: Personalizes answers based on what Avelut knows about you"
-            >
-              <i className="bi bi-cpu text-xs text-emerald-500" />
-              <span className="hidden xs:inline font-medium">Memory</span>
-              {memoryCount !== undefined && memoryCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-bold leading-tight">
-                  {memoryCount}
-                </span>
-              )}
-            </button>
-          )}
-
           {/* Right: Pill-shaped Action Button for Speaker and Send states */}
-          <div className="flex items-center">
+          <div className="flex items-center ml-auto">
             <button
               type="button"
               onClick={isLoading ? undefined : (voiceStatus === 'listening' ? onToggleVoice : (hasText ? onSend : onToggleVoice))}
               disabled={isLoading}
-              className={`h-9 sm:h-10 px-4 rounded-full flex items-center justify-center gap-1.5 shrink-0 shadow-sm transition-all duration-200 active:scale-95 font-medium text-xs sm:text-sm select-none ${
+              className={`h-9 sm:h-10 px-4 rounded-full flex items-center justify-center gap-1.5 shrink-0 shadow-xs transition-all duration-200 active:scale-95 font-medium text-xs sm:text-sm select-none ${
                 isLoading
-                  ? 'bg-[#2563EB]/70 text-white cursor-not-allowed'
+                  ? 'bg-black/70 dark:bg-white/70 text-white dark:text-black cursor-not-allowed'
                   : voiceStatus === 'listening'
                   ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
                   : hasText
-                  ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white'
+                  ? 'bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black'
                   : 'bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900'
               }`}
               title={isLoading ? 'Thinking...' : voiceStatus === 'listening' ? 'Stop listening' : hasText ? 'Send message' : 'Speak to dictate'}
@@ -503,7 +496,7 @@ const GrokChatComposer: React.FC<{
             >
               {isLoading ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   <span className="hidden sm:inline">Thinking</span>
                 </>
               ) : voiceStatus === 'listening' ? (
@@ -569,7 +562,7 @@ export const Chat: React.FC<ChatProps> = ({
   const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [memoryBank, setMemoryBank] = useState<AIMemoryBank | null>(null);
   const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -609,13 +602,13 @@ export const Chat: React.FC<ChatProps> = ({
   useEffect(() => {
     const pendingImg = localStorage.getItem('shared_chat_pending_image');
     if (pendingImg) {
-      setAttachedImage(pendingImg);
+      setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, pendingImg] : prev);
       localStorage.removeItem('shared_chat_pending_image');
     }
 
     const handleAttach = (e: any) => {
       if (e.detail?.image) {
-        setAttachedImage(e.detail.image);
+        setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, e.detail.image] : prev);
         localStorage.removeItem('shared_chat_pending_image');
       }
     };
@@ -794,12 +787,22 @@ export const Chat: React.FC<ChatProps> = ({
     getLocalMessages(activeConversationId).then((localMsgs) => {
       if (isMounted && localMsgs.length > 0) {
         setMessages((current) => {
-          const localFormatted: Message[] = localMsgs.map((m) => ({
-            id: m.id,
-            text: m.text,
-            sender: (m.sender === 'user' ? 'user' : 'bot') as 'user' | 'bot',
-            timestamp: m.timestamp,
-          }));
+          const localFormatted: Message[] = localMsgs.map((m) => {
+            let attachments: any[] | undefined = undefined;
+            if (m.attachments_json) {
+              try {
+                attachments = JSON.parse(m.attachments_json);
+              } catch {}
+            }
+            return {
+              id: m.id,
+              text: m.text,
+              image_url: m.image_url || undefined,
+              attachments,
+              sender: (m.sender === 'user' ? 'user' : 'bot') as 'user' | 'bot',
+              timestamp: m.timestamp,
+            };
+          });
           const existingIds = new Set(localFormatted.map((m) => m.id));
           const existingTexts = new Set(localFormatted.map((m) => `${m.sender}:${m.text}`));
           const uniqueCurrent = current.filter(
@@ -815,7 +818,12 @@ export const Chat: React.FC<ChatProps> = ({
       if (snapshot.exists()) {
         const data: any[] = [];
         snapshot.forEach((child) => {
-          data.push({ id: child.key, ...child.val() });
+          let attachments: any[] | undefined = undefined;
+          const val = child.val();
+          if (val.attachments_json) {
+            try { attachments = JSON.parse(val.attachments_json); } catch {}
+          }
+          data.push({ id: child.key, ...val, attachments });
         });
         const sorted = data.sort((a, b) => a.timestamp - b.timestamp);
         if (isMounted) {
@@ -960,7 +968,7 @@ export const Chat: React.FC<ChatProps> = ({
             reader.onload = (ev) => {
               const result = ev.target?.result as string;
               if (result) {
-                setAttachedImage(result);
+                setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, result] : prev);
               }
             };
             reader.readAsDataURL(file);
@@ -977,7 +985,7 @@ export const Chat: React.FC<ChatProps> = ({
   const handleSendMessage = async (customText?: string) => {
     stopVoiceRecognition();
     const textToSend = customText || input;
-    if ((!textToSend.trim() && !attachedImage) || isLoading) return;
+    if ((!textToSend.trim() && attachedImages.length === 0) || isLoading) return;
 
     const cost = getFeatureCost('chat_interaction', appSettings);
     const creditCheck = checkAICredits(userProfile, cost, appSettings);
@@ -986,13 +994,13 @@ export const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    const currentImage = attachedImage;
+    const currentImages = [...attachedImages];
     const cleanUserText = textToSend.replace(/\[Attached Image\]/g, '').trim();
-    const promptText = cleanUserText || (currentImage ? 'Please analyze this image, solve any problems shown, and explain it step by step in detail.' : '');
+    const promptText = cleanUserText || (currentImages.length > 0 ? 'Please analyze these attached images, solve any problems shown, and explain them step by step in detail.' : '');
     const displayInput = cleanUserText;
 
     setInput('');
-    setAttachedImage(null);
+    setAttachedImages([]);
     setIsLoading(true);
 
     try {
@@ -1002,7 +1010,7 @@ export const Chat: React.FC<ChatProps> = ({
       const isNewConvo = !currentConvoId;
       if (!currentConvoId) {
         currentConvoId = generateLocalId('conv');
-        const initialTitle = (cleanUserText || (currentImage ? 'Image Analysis' : 'New Chat')).slice(0, 30);
+        const initialTitle = (cleanUserText || (currentImages.length > 0 ? 'Image Analysis' : 'New Chat')).slice(0, 30);
         void saveLocalConversation({
           id: currentConvoId,
           user_id: userProfile.uid,
@@ -1046,6 +1054,11 @@ export const Chat: React.FC<ChatProps> = ({
         })();
       }
 
+      const userMsgAttachments = currentImages.map((img) => ({
+        type: 'image' as const,
+        dataUrl: img,
+      }));
+
       const userMsgId = generateLocalId('msg');
       void saveLocalMessage({
         id: userMsgId,
@@ -1053,7 +1066,8 @@ export const Chat: React.FC<ChatProps> = ({
         user_id: userProfile.uid,
         sender: 'user',
         text: displayInput,
-        image_url: currentImage || undefined,
+        attachments_json: userMsgAttachments.length > 0 ? JSON.stringify(userMsgAttachments) : null,
+        image_url: currentImages[0] || undefined,
         timestamp: now,
       });
 
@@ -1061,7 +1075,14 @@ export const Chat: React.FC<ChatProps> = ({
 
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== aiMsgId),
-        { id: userMsgId, text: displayInput, image_url: currentImage || undefined, sender: 'user', timestamp: now },
+        {
+          id: userMsgId,
+          text: displayInput,
+          image_url: currentImages[0] || undefined,
+          attachments: userMsgAttachments,
+          sender: 'user',
+          timestamp: now,
+        },
       ]);
 
       const updateOrAppendAiMessage = (text: string, reasoningText?: string) => {
@@ -1080,7 +1101,8 @@ export const Chat: React.FC<ChatProps> = ({
         push(messagesRef, {
           text: displayInput,
           sender: 'user',
-          image_url: currentImage || null,
+          image_url: currentImages[0] || null,
+          attachments_json: userMsgAttachments.length > 0 ? JSON.stringify(userMsgAttachments) : null,
           timestamp: serverTimestamp(),
         });
       } catch (e) {
@@ -1102,7 +1124,7 @@ export const Chat: React.FC<ChatProps> = ({
         '  * Highlight critical terms with ==this== or <mark>this</mark>',
         '  * Use bullet lists and numbered steps for readability',
         '  * Use code fences with syntax highlighting for code/examples',
-        '- When given an image, thoroughly inspect and solve any mathematical problems, diagrams, text, or questions shown.',
+        '- When given images, thoroughly inspect and solve any mathematical problems, diagrams, text, or questions shown across all provided images.',
       ].join('\n');
 
       let modeInstruction = '';
@@ -1117,17 +1139,17 @@ export const Chat: React.FC<ChatProps> = ({
       const memoryContext = memoryBank?.isEnabled ? buildMemoryPromptContext(memoryBank, userProfile) : '';
       const fullSystemInstruction = `${baseSystemInstruction}${modeInstruction}${memoryContext ? `\n\n${memoryContext}` : ''}`;
 
-      // Build multimodal parts for the current user turn
+      // Build multimodal parts for the current user turn: text + image 1 + image 2 + image 3...
       const userParts: any[] = [];
-      if (currentImage) {
+      currentImages.forEach((imgUrl) => {
         let mimeType = 'image/jpeg';
-        let base64Data = currentImage;
-        const dataUrlMatch = currentImage.match(/^data:([^;]+);base64,(.+)$/);
+        let base64Data = imgUrl;
+        const dataUrlMatch = imgUrl.match(/^data:([^;]+);base64,(.+)$/);
         if (dataUrlMatch) {
           mimeType = dataUrlMatch[1];
           base64Data = dataUrlMatch[2];
-        } else if (currentImage.startsWith('data:')) {
-          const parts = currentImage.split(',');
+        } else if (imgUrl.startsWith('data:')) {
+          const parts = imgUrl.split(',');
           base64Data = parts[1] || '';
           const mimeMatch = parts[0].match(/:(.*?);/);
           if (mimeMatch) mimeType = mimeMatch[1];
@@ -1138,15 +1160,27 @@ export const Chat: React.FC<ChatProps> = ({
             data: base64Data,
           },
         });
-      }
+      });
       userParts.push({ text: promptText });
 
       const historyContents = messages
-        .filter((m) => (m.text && m.text.trim()) || m.image_url)
+        .filter((m) => (m.text && m.text.trim()) || m.image_url || (m.attachments && m.attachments.length > 0))
         .slice(-10)
         .map((m) => {
           const parts: any[] = [];
-          if (m.image_url) {
+          if (m.attachments && m.attachments.length > 0) {
+            m.attachments.forEach((att) => {
+              const dataUrlMatch = att.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+              if (dataUrlMatch) {
+                parts.push({
+                  inlineData: {
+                    mimeType: dataUrlMatch[1],
+                    data: dataUrlMatch[2],
+                  },
+                });
+              }
+            });
+          } else if (m.image_url) {
             const dataUrlMatch = m.image_url.match(/^data:([^;]+);base64,(.+)$/);
             if (dataUrlMatch) {
               parts.push({
@@ -1180,7 +1214,7 @@ export const Chat: React.FC<ChatProps> = ({
         },
       };
 
-      const cachedReply = currentImage ? null : await getCachedAIResponse(promptText, aiModel, selectedMode);
+      const cachedReply = currentImages.length > 0 ? null : await getCachedAIResponse(promptText, aiModel, selectedMode);
       let responseText = cachedReply || '';
       let reasoningText = '';
 
@@ -1229,7 +1263,7 @@ export const Chat: React.FC<ChatProps> = ({
           updateOrAppendAiMessage(responseText, reasoningText);
         }
 
-        if (responseText && !currentImage) {
+        if (responseText && currentImages.length === 0) {
           void setCachedAIResponse(promptText, aiModel, selectedMode, responseText);
         }
       }
@@ -1341,15 +1375,11 @@ export const Chat: React.FC<ChatProps> = ({
               >
                 {msg.sender === 'user' ? (
                   <div className="max-w-[85%] sm:max-w-[75%] flex flex-col items-end">
-                    {msg.image_url && (
-                      <div className="mb-2 overflow-hidden rounded-[20px] border border-neutral-200/80 dark:border-white/10 shadow-sm max-w-sm">
-                        <img
-                          src={msg.image_url}
-                          alt="Uploaded attachment"
-                          className="w-full max-h-72 object-contain bg-neutral-100 dark:bg-neutral-900 rounded-[20px]"
-                        />
-                      </div>
-                    )}
+                    {msg.attachments && msg.attachments.length > 0 ? (
+                      <ImageGridRenderer images={msg.attachments.map((a) => a.dataUrl)} />
+                    ) : msg.image_url ? (
+                      <ImageGridRenderer images={[msg.image_url]} />
+                    ) : null}
                     {msg.text ? <CollapsibleUserMessage text={msg.text} /> : null}
                   </div>
                 ) : (
@@ -1480,15 +1510,21 @@ export const Chat: React.FC<ChatProps> = ({
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              setAttachedImage(ev.target?.result as string);
-            };
-            reader.readAsDataURL(file);
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            Array.from(files).forEach((file) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const res = ev.target?.result as string;
+                if (res) {
+                  setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, res] : prev);
+                }
+              };
+              reader.readAsDataURL(file);
+            });
           }
           if (fileInputRef.current) fileInputRef.current.value = '';
         }}
@@ -1501,9 +1537,9 @@ export const Chat: React.FC<ChatProps> = ({
         onSelectMode={setSelectedMode}
         voiceStatus={voiceStatus}
         onToggleVoice={toggleVoice}
-        attachedImage={attachedImage}
-        onRemoveImage={() => setAttachedImage(null)}
-        onAttachImage={(img) => setAttachedImage(img)}
+        attachedImages={attachedImages}
+        onRemoveImage={(idx) => setAttachedImages((prev) => prev.filter((_, i) => i !== idx))}
+        onAttachImage={(img) => setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, img] : prev)}
         onOpenGallery={() => fileInputRef.current?.click()}
         onOpenCamera={() => setIsCameraOpen(true)}
         onOpenMemoryBank={() => setIsMemoryModalOpen(true)}
@@ -1517,7 +1553,7 @@ export const Chat: React.FC<ChatProps> = ({
         <CameraCaptureView
           onClose={() => setIsCameraOpen(false)}
           onConfirm={(base64Img) => {
-            setAttachedImage(base64Img);
+            setAttachedImages((prev) => prev.length < MAX_CHAT_IMAGES ? [...prev, base64Img] : prev);
             setIsCameraOpen(false);
           }}
         />
