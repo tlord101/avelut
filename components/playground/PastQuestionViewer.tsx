@@ -1,6 +1,6 @@
 import { MarkdownContent } from '../MarkdownContent';
 import React, { useState, useEffect } from 'react';
-import { createAvelutAI } from '../../utils/inference';
+import { createAvelutAI, getResponseText } from '../../utils/inference';
 import { checkAICredits, deductAICredits } from '../../utils/usage';
 import type { UserProfile, AppSettings } from '../../types';
 import type { PastQuestionPack, PastQuestion } from '../../types/playground';
@@ -84,8 +84,8 @@ Course: ${currentPack.courseCode || currentPack.title}
 Question:
 ${q.prompt}`;
 
-      const response = await ai.generateContent(prompt);
-      const resultText = response.text || 'Unable to generate solution.';
+      const response = await ai.models.generateContent({ contents: prompt });
+      const resultText = getResponseText(response) || 'Unable to generate solution.';
 
       setTheorySolutionText(resultText);
       await saveTheorySolution(currentPack.id, q.id, resultText);

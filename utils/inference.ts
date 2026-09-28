@@ -1072,26 +1072,39 @@ export const createAvelutAI = (
   userProfile?: UserProfile | null,
   options?: AvelutAIOptions
 ): any => {
+  const normalizeParams = (params: any) => {
+    if (typeof params === 'string') {
+      return { contents: params };
+    }
+    return params;
+  };
+
+  const generateContent = async (params: any) => {
+    return await callAlibabaQwen(normalizeParams(params), appSettings, options);
+  };
+
+  const generateContentStream = async (params: any) => {
+    const streamGen = callAlibabaQwenStream(normalizeParams(params), appSettings, options);
+    return {
+      [Symbol.asyncIterator]: () => streamGen,
+      stream: streamGen,
+      response: Promise.resolve(null),
+    };
+  };
+
   return {
+    generateContent,
+    generateContentStream,
     models: {
-      generateContent: async (params: any) => {
-        return await callAlibabaQwen(params, appSettings, options);
-      },
-      generateContentStream: async (params: any) => {
-        const streamGen = callAlibabaQwenStream(params, appSettings, options);
-        return {
-          [Symbol.asyncIterator]: () => streamGen,
-          stream: streamGen,
-          response: Promise.resolve(null),
-        };
-      },
+      generateContent,
+      generateContentStream,
       generateImages: async () => {
         throw new Error('Image generation is not supported on this model endpoint.');
       },
     },
     interactions: {
       create: async (params: any) => {
-        return await callAlibabaQwen(params, appSettings, options);
+        return await callAlibabaQwen(normalizeParams(params), appSettings, options);
       },
     },
   };
