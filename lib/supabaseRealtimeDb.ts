@@ -2130,6 +2130,30 @@ export async function set(r: DbRef, value: any): Promise<void> {
         updated_at: new Date().toISOString(),
       });
       if (error) throw new Error(error.message);
+
+      // Also publish into past_question_packs so Playground catalog can list them
+      try {
+        const qCount = Array.isArray(finalQuestions) ? finalQuestions.length : 0;
+        const types = new Set(
+          (finalQuestions || []).map((q: any) => String(q?.type || '').toLowerCase()).filter(Boolean)
+        );
+        let packType = 'mixed';
+        if (types.size === 1) packType = types.has('mcq') ? 'mcq' : 'theory';
+        await client.from('past_question_packs').upsert({
+          id: pqId,
+          title: `${courseId} — ${year}`,
+          course_code: courseId,
+          course_name: courseId,
+          year: String(year),
+          type: packType,
+          question_count: qCount,
+          questions: finalQuestions,
+          published: true,
+          created_at: new Date().toISOString(),
+        });
+      } catch (packErr) {
+        console.warn('[supabaseRealtimeDb] past_question_packs upsert warning:', packErr);
+      }
     }
     setLocalCache(r.path, value);
     // Reload using sanitized path to avoid filter parse errors
