@@ -33,6 +33,23 @@ export type TeacherState =
   | 'error'
   | 'closed';
 
+export type ResponseLifecycleState =
+  | 'NO_RESPONSE'
+  | 'RESPONSE_CREATING'
+  | 'RESPONSE_ACTIVE'
+  | 'RESPONSE_COMPLETED'
+  | 'RESPONSE_CANCELLED'
+  | 'RESPONSE_FAILED';
+
+export interface PendingToolCall {
+  name: string;
+  call_id: string;
+  arguments: string;
+  startedTurn: number;
+  sessionGeneration: number;
+  timer?: ReturnType<typeof setTimeout> | null;
+}
+
 export interface QwenTeacherCallbacks {
   onStateChange?: (state: TeacherState) => void;
   /** Rolling transcript of teacher speech */
@@ -84,7 +101,7 @@ export class QwenRealtimeTeacherService {
   private appSettings: AppSettings | null = null;
   private userProfile: UserProfile | null = null;
   private fullTranscript = '';
-  private pendingToolCalls = new Map<string, { name: string; call_id: string; arguments: string }>();
+  private pendingToolCalls = new Map<string, PendingToolCall>();
   private toolItemIdToCallId = new Map<string, string>();
   private isTurnResponseDone = false;
   private hasPendingToolContinuation = false;
@@ -111,7 +128,9 @@ export class QwenRealtimeTeacherService {
   private continuationInFlight = false;
   /** Safety limit counter for uninterrupted automatic continuations */
   private consecutiveAutoContinueCount = 0;
-  /** True while a response.create is in flight or audio is still expected */
+  /** Explicit response lifecycle state */
+  private responseLifecycleState: ResponseLifecycleState = 'NO_RESPONSE';
+  /** Deprecated legacy flag synced with responseLifecycleState */
   private isResponseActive = false;
   /** True while the model is actively transmitting audio chunks over WebSocket */
   private isAudioStreamingFromModel = false;
@@ -181,6 +200,11 @@ export class QwenRealtimeTeacherService {
     } else {
       this.clearStudentWaitTimer();
     }
+  }
+
+  private setResponseLifecycleState(rlState: ResponseLifecycleState): void {
+    this.responseLifecycleState = rlState;
+    this.isResponseActive = rlState === 'RESPONSE_CREATING' || rlState === 'RESPONSE_ACTIVE';
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -296,9 +320,13 @@ export class QwenRealtimeTeacherService {
     this.stuckListeningSince = null;
 
     // Barge-in: stop the teacher talking immediately
-    if (this.isResponseActive || this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) {
-      if (this.isResponseActive) {
-        this.isResponseActive = false;
+    const isActiveResponse =
+      this.responseLifecycleState === 'RESPONSE_CREATING' ||
+      this.responseLifecycleState === 'RESPONSE_ACTIVE';
+
+    if (isActiveResponse || this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) {
+      if (isActiveResponse) {
+        this.setResponseLifecycleState('RESPONSE_CANCELLED');
         this.sendJson({
           event_id: `resp_cancel_${Date.now()}`,
           type: 'response.cancel',
@@ -723,6 +751,8 @@ export class QwenRealtimeTeacherService {
       });
     }
 
+    this.setResponseLifecycleState('RESPONSE_CREATING');
+
     // Give the model its starting instruction as a user message:
     // First turn is strictly warm greeting and introduction. Visuals initiate on the second response.
     this.sendJson({
@@ -765,6 +795,16 @@ export class QwenRealtimeTeacherService {
     options?: { injectUserHint?: string; force?: boolean; instructions?: string },
   ): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    // INVARIANT 1: Never start a new response while tools are still running!
+    if (this.pendingToolCalls.size > 0) {
+      this.hasPendingToolContinuation = true;
+      liveLogger.log(
+        `[QwenRealtime][Continuation] SKIPPED reason=pending_tools count=${this.pendingToolCalls.size} turn=${this.currentTeachingTurnId}`
+      );
+      return;
+    }
+
     if (this.continuationInFlight) {
       liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=continuation_in_flight turn=${this.currentTeachingTurnId}`);
       return;
@@ -775,6 +815,10 @@ export class QwenRealtimeTeacherService {
     }
     if (this.isAudioStreamingFromModel) {
       liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=audio_streaming turn=${this.currentTeachingTurnId}`);
+      return;
+    }
+    if (this.responseLifecycleState === 'RESPONSE_CREATING' || this.responseLifecycleState === 'RESPONSE_ACTIVE') {
+      liveLogger.log(`[QwenRealtime][Continuation] SKIPPED reason=response_active state=${this.responseLifecycleState} turn=${this.currentTeachingTurnId}`);
       return;
     }
     if (!options?.force && this.continuationRequestedForTurn === this.currentTeachingTurnId) {
@@ -808,7 +852,7 @@ export class QwenRealtimeTeacherService {
     try {
       this.continuationRequestedForTurn = this.currentTeachingTurnId;
       this.isAwaitingContinuation = false;
-      this.isResponseActive = true;
+      this.setResponseLifecycleState('RESPONSE_CREATING');
       this.clearAutoContinueTimer();
       liveLogger.log(
         `[QwenRealtime][Continuation] turn=${this.currentTeachingTurnId} reason=${reason} responseInFlight=${this.isResponseActive} continuationInFlight=${this.continuationInFlight} waitingForStudent=${this.lastResponseAskedQuestion} pendingTools=${this.pendingToolCalls.size} sessionGen=${this.sessionGeneration}`
@@ -843,20 +887,25 @@ export class QwenRealtimeTeacherService {
 
   private startToolContinuationWatchdog(toolName?: string): void {
     this.clearToolContinuationWatchdog();
-    // Slow tools (remote Mermaid render / LLM SVG generation) legitimately take 15–20s.
-    // A short watchdog previously forced a continuation mid-tool, which bumped the turn
-    // id and caused "[MermaidSync] stale turn — discarding SVG".
     const hasSlowTool =
       toolName === 'draw_mermaid' ||
       toolName === 'illustrate_object' ||
       [...this.pendingToolCalls.values()].some(
         (t) => t.name === 'draw_mermaid' || t.name === 'illustrate_object',
       );
-    const delayMs = hasSlowTool ? 20000 : 8000;
+    const delayMs = hasSlowTool ? 25000 : 10000;
     this.toolContinuationWatchdog = setTimeout(() => {
       this.toolContinuationWatchdog = null;
+      if (this.pendingToolCalls.size > 0) {
+        liveLogger.warn(
+          `[QwenRealtime] ⚠️ Tool execution watchdog expired after ${delayMs}ms while ${this.pendingToolCalls.size} tool(s) pending. DO NOT force response.create.`
+        );
+        // Do NOT create another Qwen response while pendingTools > 0!
+        // The individual tool timer will handle completing the tool call safely if it timed out.
+        return;
+      }
       if (this.isAwaitingContinuation || this.hasPendingToolContinuation) {
-        liveLogger.warn(`[QwenRealtime] ⚠️ Tool continuation watchdog expired after ${delayMs}ms! Forcing continuation for turn ${this.currentTeachingTurnId}`);
+        liveLogger.warn(`[QwenRealtime] Tool continuation watchdog expired after ${delayMs}ms. Triggering continuation.`);
         this.triggerToolContinuation();
       }
     }, delayMs);
@@ -1022,7 +1071,6 @@ export class QwenRealtimeTeacherService {
    */
   private onTeacherAudioFinished(): void {
     if (this.isAudioStreamingFromModel || this.activeAudioSources.length > 0) return;
-    if (!this.isResponseActive && this.state !== 'speaking') return;
 
     if (!this.isTurnResponseDone) {
       liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio playback finished, awaiting response.done`);
@@ -1030,7 +1078,6 @@ export class QwenRealtimeTeacherService {
     }
 
     liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete`);
-    this.isResponseActive = false;
 
     if (this.pendingToolCalls.size > 0) {
       liveLogger.log(`[VoiceSync] turn=${this.currentTeachingTurnId} audio-complete, awaiting ${this.pendingToolCalls.size} pending tool calls`);
@@ -1458,7 +1505,7 @@ export class QwenRealtimeTeacherService {
         this.fullTranscript = '';
         this.lastResponseAskedQuestion = false;
         this.hasReceivedAudioInCurrentResponse = false;
-        this.isResponseActive = true;
+        this.setResponseLifecycleState('RESPONSE_ACTIVE');
         this.isAudioStreamingFromModel = true;
         this.isAwaitingContinuation = false;
         this.isTurnResponseDone = false;
@@ -1610,20 +1657,21 @@ export class QwenRealtimeTeacherService {
 
       case 'response.done': {
         liveLogger.log(`[QwenRealtime] response.done turn=${this.currentTeachingTurnId}`);
+        this.setResponseLifecycleState('RESPONSE_COMPLETED');
         this.isAudioStreamingFromModel = false;
         this.isTurnResponseDone = true;
         this.drainAudioQueue(true);
+
+        // If tools are still executing (e.g. SVG generation in progress)
+        if (this.pendingToolCalls.size > 0) {
+          liveLogger.log('[QwenRealtime] response.done while tool is executing — awaiting tool completion');
+          break;
+        }
 
         // If a tool output was submitted and is waiting for response.done to finish turn
         if (this.hasPendingToolContinuation) {
           liveLogger.log('[QwenRealtime] response.done arrived with pending tool continuation — triggering now');
           this.triggerToolContinuation();
-          break;
-        }
-
-        // If tools are still executing (e.g. SVG generation in progress)
-        if (this.isAwaitingContinuation || this.pendingToolCalls.size > 0) {
-          liveLogger.log('[QwenRealtime] response.done while tool is executing — awaiting tool completion');
           break;
         }
 
@@ -1636,10 +1684,20 @@ export class QwenRealtimeTeacherService {
 
       case 'error':
         liveLogger.error('[QwenRealtime] Server error:', event.error);
+        this.setResponseLifecycleState('RESPONSE_FAILED');
         if (event.error?.message?.includes('Voice') && !this.retriedWithDefaultVoice) {
           this.retriedWithDefaultVoice = true;
           liveLogger.warn('[QwenRealtime] Voice error — auto-recovering with "Katerina"');
           this.sendSessionInit('Katerina');
+          return;
+        }
+
+        // Reconciliation on "Conversation has none active response" / "no active response"
+        if (typeof event.error?.message === 'string' && /no active response|none active response/i.test(event.error.message)) {
+          liveLogger.warn('[QwenRealtime] Server reported no active response — reconciling local response lifecycle state');
+          this.setResponseLifecycleState('NO_RESPONSE');
+          this.continuationInFlight = false;
+          this.hasPendingToolContinuation = false;
           return;
         }
         const isModelRejectedInEvent =
@@ -1690,9 +1748,20 @@ export class QwenRealtimeTeacherService {
     this.executedCallIds.add(callId);
 
     const turnAtStart = this.currentTeachingTurnId;
+    const sessionGenAtStart = this.sessionGeneration;
     this.setState('drawing');
     this.isAwaitingContinuation = true;
     this.startToolContinuationWatchdog(name);
+
+    liveLogger.log(
+      `[QwenRealtime][Tool]\n` +
+      `id=${callId}\n` +
+      `name=${name}\n` +
+      `startedTurn=${turnAtStart}\n` +
+      `currentTurn=${this.currentTeachingTurnId}\n` +
+      `sessionGen=${sessionGenAtStart}\n` +
+      `pendingTools=${this.pendingToolCalls.size}`
+    );
 
     let args: any = {};
     try {
@@ -1715,12 +1784,11 @@ export class QwenRealtimeTeacherService {
       liveLogger.log(`[MermaidSync] turn=${turnAtStart} render-start call=${callId}`);
       try {
         const svg = await MermaidBoardService.renderToSvg(code, theme);
-        if (turnAtStart !== this.currentTeachingTurnId) {
-          // Turn advanced while rendering (e.g. watchdog forced a continuation).
-          // Apply the visual anyway — never discard the only visual for a turn.
-          liveLogger.warn(`[MermaidSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
-        }
-        if (svg) {
+        if (sessionGenAtStart !== this.sessionGeneration) {
+          liveLogger.warn(
+            `[QwenRealtime][Tool] IGNORED_STALE_RESULT id=${callId} toolSessionGen=${sessionGenAtStart} currentSessionGen=${this.sessionGeneration}`
+          );
+        } else if (svg) {
           this.boardController.setSvgIllustration(svg);
           liveLogger.log(`[MermaidSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
           toolResult = { status: 'ok', action: 'draw_mermaid', message: 'Diagram rendered and inserted' };
@@ -1776,7 +1844,7 @@ export class QwenRealtimeTeacherService {
                 `Object description: ${desc}`,
               config: {
                 temperature: 0.2,
-                maxOutputTokens: 2048,
+                maxOutputTokens: 3000,
               },
             });
             return getResponseText(res);
@@ -1804,7 +1872,7 @@ export class QwenRealtimeTeacherService {
                 'Keep SVG compact to avoid truncation.',
               config: {
                 temperature: 0.1,
-                maxOutputTokens: 2048,
+                maxOutputTokens: 3000,
               },
             });
             return getResponseText(res);
@@ -1812,12 +1880,11 @@ export class QwenRealtimeTeacherService {
 
           const svg = await LlmSvgObjectCache.getOrGenerate(desc, generateFn, repairFn);
 
-          if (turnAtStart !== this.currentTeachingTurnId) {
-            // Turn advanced while generating — apply anyway, never discard the visual.
-            liveLogger.warn(`[SvgSync] turn advanced (${turnAtStart} → ${this.currentTeachingTurnId}) — applying SVG anyway`);
-          }
-
-          if (svg) {
+          if (sessionGenAtStart !== this.sessionGeneration) {
+            liveLogger.warn(
+              `[QwenRealtime][Tool] IGNORED_STALE_RESULT id=${callId} toolSessionGen=${sessionGenAtStart} currentSessionGen=${this.sessionGeneration}`
+            );
+          } else if (svg) {
             this.boardController.setSvgIllustration(svg);
             liveLogger.log(`[SvgSync] turn=${turnAtStart} insert-complete total=${Date.now() - t0}ms`);
             toolResult = { status: 'ok', action: 'illustrate_object', message: 'Illustration generated and inserted' };
@@ -1842,23 +1909,28 @@ export class QwenRealtimeTeacherService {
       toolResult = { status: 'error', message: `Unknown tool: ${name}` };
     }
 
-    // Always surface the tool result — even if the turn advanced while the tool
-    // ran, the server conversation must stay consistent (B3). Never drop it silently.
-    if (turnAtStart !== this.currentTeachingTurnId) {
-      liveLogger.log(`[QwenRealtime] Tool ${name} finished for advanced turn ${turnAtStart} (now ${this.currentTeachingTurnId}) — still submitting result`);
+    const success = toolResult?.status === 'ok';
+    liveLogger.log(
+      `[QwenRealtime][Tool]\n` +
+      `id=${callId}\n` +
+      `startedTurn=${turnAtStart}\n` +
+      `currentTurn=${this.currentTeachingTurnId}\n` +
+      `sessionGen=${sessionGenAtStart}\n` +
+      `success=${success}\n` +
+      `reason=${toolResult?.message || toolResult?.status}`
+    );
+
+    if (sessionGenAtStart === this.sessionGeneration) {
+      this.sendJson({
+        event_id: `tool_out_${Date.now()}`,
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: callId,
+          output: JSON.stringify(toolResult),
+        },
+      });
     }
-
-    liveLogger.log('[QwenRealtime] TOOL EXECUTED', name, toolResult?.status);
-
-    this.sendJson({
-      event_id: `tool_out_${Date.now()}`,
-      type: 'conversation.item.create',
-      item: {
-        type: 'function_call_output',
-        call_id: callId,
-        output: JSON.stringify(toolResult),
-      },
-    });
 
     // Clear pending entry
     this.pendingToolCalls.delete(callId);
@@ -1875,6 +1947,7 @@ export class QwenRealtimeTeacherService {
 
     // AUTO-CONTINUE TEACHING:
     if (this.pendingToolCalls.size === 0) {
+      this.isAwaitingContinuation = false;
       liveLogger.log(`[QwenRealtime] All pending tools finished (isTurnResponseDone=${this.isTurnResponseDone})`);
       if (turnAtStart !== this.currentTeachingTurnId) {
         // A newer response already owns the lesson. Request at most one extra

@@ -249,6 +249,7 @@ describe('QwenRealtimeTeacherService Continuation Tests', () => {
     service.triggerInitialGreeting();
     ws.emitServerEvent({ type: 'response.created' });
     ws.emitServerEvent({ type: 'response.audio.done' });
+    ws.emitServerEvent({ type: 'response.done' });
 
     // Trigger two requests for current turn simultaneously
     (service as any).requestTeacherContinuation('reason_1');
@@ -310,6 +311,7 @@ describe('QwenRealtimeTeacherService Continuation Tests', () => {
     service.triggerInitialGreeting();
     ws.emitServerEvent({ type: 'response.created' });
     ws.emitServerEvent({ type: 'response.audio.done' });
+    ws.emitServerEvent({ type: 'response.done' });
 
     (service as any).requestTeacherContinuation('auto_continue_no_question', { injectUserHint: 'Continue teaching' });
 
@@ -407,5 +409,62 @@ describe('QwenRealtimeTeacherService Continuation Tests', () => {
     // Verify turn requests are clean without duplicates
     const responseCreates = ws.sentMessages.filter((m) => m.type === 'response.create');
     expect(responseCreates.length).toBe(4); // 1 greet + 1 tool_done + 2 auto_continues
+  });
+
+  it('Test 13 — Watchdog while tool pending does not force response.create', async () => {
+    vi.useFakeTimers();
+    try {
+      const sessionPromise = service.startSession({ topicTitle: 'Maths' });
+      await vi.advanceTimersByTimeAsync(50);
+      await sessionPromise;
+      const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+      service.triggerInitialGreeting();
+      ws.emitServerEvent({ type: 'response.created' });
+      ws.emitServerEvent({
+        type: 'response.output_item.added',
+        item: { id: 'call_13', call_id: 'call_13', type: 'function_call', name: 'illustrate_object', arguments: '{"object_description":"Cell"}' },
+      });
+
+      // Directly start tool continuation watchdog
+      (service as any).startToolContinuationWatchdog('illustrate_object');
+      // Advance timers past watchdog timeout (25s)
+      await vi.advanceTimersByTimeAsync(30000);
+
+      const responseCreates = ws.sentMessages.filter((m) => m.type === 'response.create');
+      expect(responseCreates.length).toBe(1); // Only greeting
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Test 14 — Push-to-talk when no active response does not send response.cancel', async () => {
+    await service.startSession({ topicTitle: 'Maths' });
+    await new Promise((r) => setTimeout(r, 10));
+    const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    // Ensure state is NO_RESPONSE / RESPONSE_COMPLETED
+    (service as any).setResponseLifecycleState('NO_RESPONSE');
+
+    service.beginPushToTalk();
+
+    const cancelMessages = ws.sentMessages.filter((m) => m.type === 'response.cancel');
+    expect(cancelMessages.length).toBe(0);
+    expect(service.getIsPushToTalkActive()).toBe(true);
+  });
+
+  it('Test 15 — Server "none active response" reconciles local state', async () => {
+    await service.startSession({ topicTitle: 'Maths' });
+    await new Promise((r) => setTimeout(r, 10));
+    const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    // Emit server error
+    ws.emitServerEvent({
+      type: 'error',
+      error: { type: 'invalid_request_error', message: 'Conversation has none active response' },
+    });
+
+    expect((service as any).responseLifecycleState).toBe('NO_RESPONSE');
+    expect((service as any).continuationInFlight).toBe(false);
   });
 });
