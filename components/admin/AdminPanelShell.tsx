@@ -1755,14 +1755,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }
 
             setIsPQProcessing(true);
-            // PDF understanding: qwen3.8-flash / qwen3.8-max (not omni)
             const extractionModel = 'qwen3.8-flash';
             let uploadedKey: string | null = null;
             let uploadedBucket: string | null = null;
 
             try {
-                // 1) Upload PDF to cloud storage first → public HTTPS URL
-                //    Avoids 413 / huge base64 payloads on the AI API.
                 setExtractionProgress('Uploading PDF to cloud storage...');
                 let publicFileUrl: string | null = null;
 
@@ -1793,43 +1790,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     uploadedBucket = 'materials';
                 }
 
-                setExtractionProgress(`Sending PDF URL to Alibaba (${extractionModel}) for multi-course extraction...`);
+                setExtractionProgress(`Sending PDF URL to Alibaba (${extractionModel}) — extracting theory + MCQ by course...`);
 
-                const prompt = `You are reading an exam past-questions PDF. The PDF may contain ONE course or MULTIPLE courses.
+                const prompt = `You are reading a university past-exam PDF. It may contain ONE course or MANY courses in the same file (common in scanned question-paper packs).
 
-Read the entire PDF carefully and extract ALL multiple-choice questions.
+Extract EVERY exam question you can find — both multiple-choice AND theory/essay/calculation questions.
 
-If the document contains different courses (different course titles, course codes, or clearly separated exam sections), group questions under each course.
+QUESTION TYPES TO EXTRACT:
+1. MCQ: has options A/B/C/D (or 1/2/3/4). Set type="mcq", fill options[], set correctAnswer if the paper shows the answer (else "").
+2. Theory / essay / calculation / "define/describe/discuss/solve": Set type="theory", options=[], correctAnswer="", keep full question text including parts (a)(b)(c) when they form one numbered question OR split sub-parts into separate items if clearer.
+3. Scenario questions: type="theory".
 
-RULES:
-1. Output ONLY valid JSON (no markdown fences).
-2. Top-level shape:
+MULTI-COURSE RULES:
+- Whenever course code/title changes (e.g. GET 307, GET 305, GET 301, MEE 317), start a NEW object in "courses".
+- Read headers carefully: Course Code, Course Title, Department, Examination session.
+- If course name is missing, invent a short descriptive name from the header text.
+
+OUTPUT: ONLY valid JSON (no markdown fences). Shape:
 {
   "courses": [
     {
-      "courseCode": "string or null",
-      "courseName": "string",
-      "level": "string or null",
-      "department": "string or null",
+      "courseCode": "GET 307",
+      "courseName": "Introduction to Artificial Intelligence, Machine Learning and Convergent Technologies",
+      "level": null,
+      "department": "College of Engineering and Technology",
       "questions": [
         {
-          "question": "full question text",
-          "options": ["option A text", "option B text", "option C text", "option D text"],
-          "correctAnswer": "exact string matching one of the options",
-          "explanation": "brief reasoning or empty string"
+          "type": "theory",
+          "question": "1(a) Give the definition of artificial intelligence that influenced Turing test of intelligence.",
+          "marks": 2,
+          "options": [],
+          "correctAnswer": "",
+          "explanation": ""
+        },
+        {
+          "type": "mcq",
+          "question": "Which of the following is ...?",
+          "marks": 1,
+          "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+          "correctAnswer": "B) ...",
+          "explanation": ""
         }
       ]
     }
   ],
   "sourceYear": "${year}"
 }
-3. If only one course is present, still return a courses array with one entry.
-4. Prefer course names/codes written in the PDF. If missing, use "${uploadCourseName || 'Unknown Course'}".
-5. Extract every MCQ you can find. Do not invent questions.
-6. correctAnswer must exactly match one string in options.
-7. Keep option text as written in the paper (include letter prefixes if present, consistently).`;
 
-                // 2) Call Alibaba with public file_url (tiny payload) — not base64
+RULES:
+1. Do NOT skip theory questions — they are the majority on many Nigerian university papers.
+2. Preserve numbering (1, 1a, 2b, Question 5, etc.) inside the question text.
+3. marks: number if stated on the paper, else null.
+4. If only one course exists, still return courses as a one-element array.
+5. Prefer course names/codes from the PDF. Fallback courseName: "${uploadCourseName || 'Unknown Course'}".
+6. Extract as many questions as possible; do not invent content that is not in the PDF.
+7. For MCQ, correctAnswer must exactly match one options[] string when known; otherwise "".`;
+
                 const response = await ai.models.generateContent({
                     model: extractionModel,
                     contents: [
@@ -1900,7 +1916,17 @@ RULES:
                     }];
                 }
 
-                courseBuckets = courseBuckets.filter((b) => b.questions && b.questions.length > 0);
+                // Keep any question that has non-empty text (theory OR mcq)
+                courseBuckets = courseBuckets
+                    .map((b) => ({
+                        ...b,
+                        questions: (b.questions || []).filter((q: any) => {
+                            const text = (q?.question || q?.text || q?.prompt || '').toString().trim();
+                            return text.length > 0;
+                        }),
+                    }))
+                    .filter((b) => b.questions.length > 0);
+
                 if (courseBuckets.length === 0) {
                     throw new Error('No questions found in the PDF.');
                 }
@@ -1931,13 +1957,33 @@ RULES:
                     );
 
                     for (const q of bucket.questions) {
-                        if (!q?.question) continue;
-                        const payload = {
-                            question: String(q.question || ''),
-                            options: Array.isArray(q.options) ? q.options.map((o: any) => String(o)) : [],
-                            correctAnswer: String(q.correctAnswer || ''),
+                        const questionText = String(q.question || q.text || q.prompt || '').trim();
+                        if (!questionText) continue;
+
+                        const rawType = String(q.type || '').toLowerCase();
+                        const options = Array.isArray(q.options)
+                            ? q.options.map((o: any) => String(o)).filter((o: string) => o.trim().length > 0)
+                            : [];
+                        const isMcq = rawType === 'mcq' || options.length >= 2;
+                        const marks =
+                            q.marks === null || q.marks === undefined || q.marks === ''
+                                ? null
+                                : Number(q.marks);
+
+                        const payload: Record<string, any> = {
+                            type: isMcq ? 'mcq' : 'theory',
+                            question: questionText,
+                            options: isMcq ? options : [],
+                            correctAnswer: isMcq ? String(q.correctAnswer || '') : '',
                             explanation: String(q.explanation || ''),
                         };
+                        if (marks !== null && !Number.isNaN(marks)) {
+                            payload.marks = marks;
+                        }
+                        if (bucket.courseCode) {
+                            payload.courseCode = String(bucket.courseCode);
+                        }
+
                         const newPQRef = push(pqRef);
                         await set(newPQRef, payload);
                         totalSaved += 1;
@@ -1954,7 +2000,6 @@ RULES:
                 console.error(error);
                 addToast(`Error: ${error.message}`, 'error');
             } finally {
-                // Optional cleanup of temp PDF from storage (best-effort)
                 try {
                     if (uploadedKey && isR2Configured()) {
                         await deleteFromR2(uploadedKey);
