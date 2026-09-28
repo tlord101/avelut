@@ -61,6 +61,25 @@ function getLocalCache(path: string): any {
   return null;
 }
 
+/** Make path segments / PostgREST filter values safe (no commas, spaces, quotes). */
+export function sanitizePathSegment(raw: string | null | undefined, fallback = 'unassigned'): string {
+  const s = (raw || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120);
+  return s || fallback;
+}
+
+/** Double-quote a value for PostgREST .or() filters when it may contain reserved chars. */
+function quotePostgrestValue(raw: string): string {
+  // PostgREST: double-quote and escape internal quotes
+  const escaped = String(raw).replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 function setLocalCache(path: string, val: any) {
   pathDataCache.set(path, val);
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -931,17 +950,38 @@ async function loadPath(path: string): Promise<any> {
       const { data } = await client.from('past_questions').select('*');
       const map: Record<string, any> = {};
       (data || []).forEach((pq: any) => {
-        map[pq.id] = pq.questions_json || pq;
+        map[pq.id] = pq.questions_json || pq.questions || pq;
       });
       return map;
     } else if (parts.length >= 2) {
-      const queryId = parts.slice(1).join('_');
-      const { data } = await client
-        .from('past_questions')
-        .select('*')
-        .or(`id.eq.${queryId},id.eq.${parts[1]}`)
-        .maybeSingle();
-      if (data) return data.questions_json || data;
+      // Sanitize each segment so commas in course titles never break PostgREST filters
+      const safeParts = parts.slice(1).map((p) => sanitizePathSegment(p, p));
+      const queryId = safeParts.join('_');
+      const deptId = safeParts[0];
+
+      // Prefer exact id match; avoid unquoted .or() filters (commas = PGRST100)
+      let data: any = null;
+      {
+        const res = await client.from('past_questions').select('*').eq('id', queryId).maybeSingle();
+        data = res.data;
+      }
+      if (!data && deptId && deptId !== queryId) {
+        const res = await client.from('past_questions').select('*').eq('id', deptId).maybeSingle();
+        data = res.data;
+      }
+      // Legacy rows that may have been stored with raw (unsanitized) ids
+      if (!data) {
+        const legacyId = parts.slice(1).join('_');
+        if (legacyId !== queryId) {
+          const res = await client
+            .from('past_questions')
+            .select('*')
+            .eq('id', legacyId)
+            .maybeSingle();
+          data = res.data;
+        }
+      }
+      if (data) return data.questions_json || data.questions || data;
     }
   }
 
@@ -2052,22 +2092,48 @@ export async function set(r: DbRef, value: any): Promise<void> {
   // ── Handle past_questions in Supabase ────────────────────────────────────
   if (parts[0] === 'past_questions' && parts.length >= 2) {
     const client = supabaseAdmin || supabase;
-    const pqId = parts.slice(1).join('_');
+    // Sanitize path segments (course titles often contain commas → PGRST100)
+    const safeParts = parts.slice(1).map((p) => sanitizePathSegment(p, p));
+    const pqId = safeParts.join('_');
+    const departmentId = safeParts[0] || 'general';
+    const level = safeParts[1] || '100lvl';
+    const courseId = safeParts[2] || pqId;
+    const year = safeParts[3] || String(new Date().getFullYear());
+
     if (value === null) {
-      await client.from('past_questions').delete().eq('id', pqId);
+      const { error } = await client.from('past_questions').delete().eq('id', pqId);
+      if (error) throw new Error(error.message);
     } else {
-      await client.from('past_questions').upsert({
+      // value may be a single question object (legacy push) or a full questions array
+      const questionsPayload = Array.isArray(value) ? value : [value];
+      // Merge with existing questions for this course/year when writing a single item
+      let finalQuestions = questionsPayload;
+      if (!Array.isArray(value)) {
+        const { data: existing } = await client
+          .from('past_questions')
+          .select('questions_json, questions')
+          .eq('id', pqId)
+          .maybeSingle();
+        const prev = (existing?.questions_json || existing?.questions || []) as any[];
+        const prevArr = Array.isArray(prev) ? prev : [];
+        finalQuestions = [...prevArr, ...questionsPayload];
+      }
+
+      const { error } = await client.from('past_questions').upsert({
         id: pqId,
-        department_id: parts[1] || 'general',
-        level: parts[2] || '100lvl',
-        course_id: parts[3] || pqId,
-        year: parts[4] || String(new Date().getFullYear()),
-        questions_json: value,
+        department_id: departmentId,
+        level,
+        course_id: courseId,
+        year,
+        questions_json: finalQuestions,
+        questions: finalQuestions,
         updated_at: new Date().toISOString(),
       });
+      if (error) throw new Error(error.message);
     }
     setLocalCache(r.path, value);
-    notify(r.path, await loadPath(r.path));
+    // Reload using sanitized path to avoid filter parse errors
+    notify(r.path, await loadPath(`past_questions/${safeParts.join('/')}`));
     return;
   }
 
