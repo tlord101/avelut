@@ -64,6 +64,132 @@ export interface AvelutLiveClassroomViewProps {
   setCustomHeaderConfig?: (config: any) => void;
 }
 
+
+// ─── Exact voice-recorder waveform (listening state) ─────────────────────────
+// Port of voice_recorder_blue_theme design: BASE_PROFILE bars, DOM refs + RAF lerp,
+// driven by classroom audioLevel (0–1) so we do not open a second mic stream.
+
+const WAVE_BASE_PROFILE = [48, 36, 44, 30, 38, 24, 30, 18, 22, 14, 16, 10, 12, 8];
+const WAVE_NUM_BARS = WAVE_BASE_PROFILE.length;
+
+const LiveVoiceWaveform: React.FC<{
+  audioLevel: number;
+  onMicClick: () => void;
+}> = ({ audioLevel, onMicClick }) => {
+  const leftBarsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const rightBarsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const currentHeights = useRef<number[]>([...WAVE_BASE_PROFILE]);
+  const rafIdRef = useRef<number | null>(null);
+  const audioLevelRef = useRef(audioLevel);
+  audioLevelRef.current = audioLevel;
+
+  const updateDOM = useCallback((heights: number[]) => {
+    for (let i = 0; i < WAVE_NUM_BARS; i++) {
+      const rightBar = rightBarsRef.current[i];
+      if (rightBar) rightBar.style.height = `${heights[i]}px`;
+      const leftBar = leftBarsRef.current[WAVE_NUM_BARS - 1 - i];
+      if (leftBar) leftBar.style.height = `${heights[i]}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    const animate = () => {
+      const normalized = Math.min(1, Math.max(0, audioLevelRef.current));
+      // Map service RMS (often quiet) into a punchier visual range
+      const visual = Math.min(1, normalized * 2.8);
+
+      for (let i = 0; i < WAVE_NUM_BARS; i++) {
+        const centerWeight = 1 - (i / WAVE_NUM_BARS) * 0.4;
+        const phase = Math.sin(performance.now() * 0.01 + i) * 0.1 + 0.9;
+        // Synthetic frequency-ish variation per bar so outer bars still move
+        const binSim = visual * (0.55 + 0.45 * Math.sin(performance.now() * 0.008 + i * 1.3));
+
+        const targetHeight =
+          WAVE_BASE_PROFILE[i] +
+          visual * WAVE_BASE_PROFILE[i] * 1.5 * centerWeight * phase +
+          binSim * WAVE_BASE_PROFILE[i] * 2.2 * centerWeight;
+
+        const clampedTarget = Math.min(120, Math.max(WAVE_BASE_PROFILE[i], targetHeight));
+        const lerpFactor = visual > 0.02 ? 0.4 : 0.15;
+        currentHeights.current[i] +=
+          (clampedTarget - currentHeights.current[i]) * lerpFactor;
+      }
+
+      updateDOM(currentHeights.current);
+      rafIdRef.current = requestAnimationFrame(animate);
+    };
+
+    rafIdRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      currentHeights.current = [...WAVE_BASE_PROFILE];
+      updateDOM(currentHeights.current);
+    };
+  }, [updateDOM]);
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-2xl pointer-events-auto select-none">
+      <div className="flex items-center justify-center gap-3 sm:gap-6 w-full px-2">
+        {/* Left Waveform — edge → center */}
+        <div className="flex items-center justify-end gap-1 sm:gap-1.5 h-24 flex-1">
+          {WAVE_BASE_PROFILE.slice().reverse().map((baseHeight, idx) => {
+            const distanceFromCenter = WAVE_NUM_BARS - 1 - idx;
+            const opacity = 1 - (distanceFromCenter / WAVE_NUM_BARS) * 0.7;
+            return (
+              <div
+                key={`left-${idx}`}
+                ref={(el) => {
+                  leftBarsRef.current[idx] = el;
+                }}
+                className="w-1 sm:w-[5px] rounded-full bg-blue-500"
+                style={{ height: `${baseHeight}px`, opacity }}
+              />
+            );
+          })}
+        </div>
+
+        {/* Center: ripple rings + mic button */}
+        <div className="relative flex items-center justify-center shrink-0 w-20 h-20 sm:w-24 sm:h-24">
+          <div className="absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-blue-600/[0.08] pointer-events-none scale-110 transition-transform duration-1000" />
+          <div className="absolute w-22 h-22 sm:w-28 sm:h-28 rounded-full bg-blue-600/[0.12] pointer-events-none scale-110 animate-pulse" />
+          <button
+            onClick={onMicClick}
+            className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-blue-600 flex items-center justify-center
+                       shadow-xl shadow-blue-600/30 transition-all active:scale-95 hover:bg-blue-700"
+            aria-label="Stop recording and send"
+          >
+            <Mic className="text-white w-6 h-6 sm:w-7 sm:h-7" strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Right Waveform — center → edge */}
+        <div className="flex items-center justify-start gap-1 sm:gap-1.5 h-24 flex-1">
+          {WAVE_BASE_PROFILE.map((baseHeight, idx) => {
+            const opacity = 1 - (idx / WAVE_NUM_BARS) * 0.7;
+            return (
+              <div
+                key={`right-${idx}`}
+                ref={(el) => {
+                  rightBarsRef.current[idx] = el;
+                }}
+                className="w-1 sm:w-[5px] rounded-full bg-blue-500"
+                style={{ height: `${baseHeight}px`, opacity }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="mt-4 text-base sm:text-lg font-medium tracking-wide text-blue-400">
+        Listening...
+      </p>
+    </div>
+  );
+};
+
 // ─── Teacher State Pill ───────────────────────────────────────────────────────
 
 const TeacherStatePill: React.FC<{ state: TeacherState }> = ({ state }) => {
@@ -138,8 +264,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
   const [audioLevel, setAudioLevel] = useState(0);
   /** True while the student's mic is open (tap-to-talk active) */
   const [isTalking, setIsTalking] = useState(false);
-  /** Drives continuous idle animation of waveform bars while listening */
-  const [, forceWaveTick] = useState(0);
 
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
@@ -526,18 +650,6 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
     };
   }, []);
 
-  // Keep waves gently alive while listening (even in silence)
-  useEffect(() => {
-    if (!isTalking) return;
-    let raf: number;
-    const loop = () => {
-      forceWaveTick((n) => n + 1);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [isTalking]);
-
   const handleSendText = (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim() || !serviceRef.current) return;
@@ -726,88 +838,8 @@ export const AvelutLiveClassroomView: React.FC<AvelutLiveClassroomViewProps> = (
 
       {/* ── BOTTOM HUD ────────────────────────────────────────────────────── */}
       {isTalking ? (
-        <footer className="absolute bottom-5 left-0 right-0 z-20 flex flex-col items-center px-6 pointer-events-none">
-          <div
-            className={`flex items-center justify-center gap-4 sm:gap-5 px-6 py-3 rounded-2xl
-                        pointer-events-auto select-none
-                        ${isDark
-                          ? 'bg-[#18181B]/90 border border-white/10 shadow-2xl'
-                          : 'bg-white/95 border border-slate-200/80 shadow-xl'
-                        } backdrop-blur-md`}
-          >
-            {/* LEFT WAVEFORM */}
-            <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
-              {[
-                0.28, 0.42, 0.65, 0.38, 0.88, 0.52, 0.95, 0.45, 0.72, 0.35, 0.58,
-              ].map((base, i) => {
-                const idle = 0.22 + Math.sin(Date.now() / 180 + i * 0.7) * 0.08;
-                const live = base * (0.35 + audioLevel * 1.55);
-                const h = Math.max(0.15, audioLevel > 0.04 ? live : idle);
-                return (
-                  <span
-                    key={`L${i}`}
-                    className="w-[3px] rounded-full bg-slate-400/75 transition-[height,opacity] duration-75 ease-out"
-                    style={{
-                      height: `${h * 44}px`,
-                      opacity: 0.5 + Math.min(audioLevel, 1) * 0.5,
-                    }}
-                  />
-                );
-              })}
-            </div>
-
-            {/* CENTER RED MIC BUTTON */}
-            <button
-              onClick={handleMicClick}
-              className="relative flex items-center justify-center w-14 h-14 rounded-full
-                         bg-rose-500 shadow-[0_0_24px_rgba(244,63,94,0.45)]
-                         active:scale-95 transition-transform touch-none"
-              aria-label="Stop recording and send"
-            >
-              {audioLevel > 0.05 && (
-                <span
-                  className="absolute inset-0 rounded-full bg-rose-400/40 animate-ping pointer-events-none"
-                  style={{ transform: `scale(${1 + audioLevel * 0.55})` }}
-                />
-              )}
-              <span
-                className="absolute -inset-1 rounded-full border-2 border-rose-400/30 pointer-events-none"
-                style={{
-                  transform: `scale(${1 + audioLevel * 0.25})`,
-                  opacity: 0.4 + audioLevel * 0.5,
-                  transition: 'transform 75ms ease-out, opacity 75ms ease-out',
-                }}
-              />
-              <Mic className="w-6 h-6 text-white relative z-10" strokeWidth={2.25} />
-            </button>
-
-            {/* RIGHT WAVEFORM */}
-            <div className="flex items-end justify-center gap-[3px] h-11 w-[72px]">
-              {[
-                0.58, 0.35, 0.72, 0.45, 0.95, 0.52, 0.88, 0.38, 0.65, 0.42, 0.28,
-              ].map((base, i) => {
-                const idle = 0.22 + Math.sin(Date.now() / 180 + i * 0.7 + 1.2) * 0.08;
-                const live = base * (0.35 + audioLevel * 1.55);
-                const h = Math.max(0.15, audioLevel > 0.04 ? live : idle);
-                return (
-                  <span
-                    key={`R${i}`}
-                    className="w-[3px] rounded-full bg-slate-400/75 transition-[height,opacity] duration-75 ease-out"
-                    style={{
-                      height: `${h * 44}px`,
-                      opacity: 0.5 + Math.min(audioLevel, 1) * 0.5,
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          <p className={`mt-3 text-sm font-medium tracking-wide ${
-            isDark ? 'text-white/50' : 'text-slate-500'
-          }`}>
-            Listening… tap to send
-          </p>
+        <footer className="absolute bottom-4 left-0 right-0 z-20 flex justify-center px-3 pointer-events-none">
+          <LiveVoiceWaveform audioLevel={audioLevel} onMicClick={handleMicClick} />
         </footer>
       ) : (
         <footer className="absolute bottom-5 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
