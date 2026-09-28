@@ -28,7 +28,16 @@ class SupabaseAuthService {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const user = session?.user || null;
       if (user) {
-        const profile = await this.getUserProfile(user.id);
+        let profile = await this.getUserProfile(user.id);
+        if (!profile) {
+          // If user signed in via OAuth (e.g. Google redirect) and no profile exists yet in public.profiles
+          await this.upsertProfile(user.id, {
+            email: user.email || '',
+            display_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            photo_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+          });
+          profile = await this.getUserProfile(user.id);
+        }
         callback(user, profile);
       } else {
         callback(null, null);

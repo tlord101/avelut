@@ -1,5 +1,6 @@
 import { GoogleSignIn, ErrorCode } from '@capawesome/capacitor-google-sign-in';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { isNative } from './capacitorUtils';
 import type { User, Session } from '@supabase/supabase-js';
 
 let isPluginInitialized = false;
@@ -12,8 +13,8 @@ export interface GoogleSignInResponse {
 }
 
 /**
- * Performs native Google Sign-In using the Capacitor Google Sign-In plugin,
- * then exchanges the retrieved ID Token with Supabase Auth via `signInWithIdToken`.
+ * Performs Google Sign-In using Supabase OAuth on web or native Google Sign-In plugin on mobile,
+ * then exchanges the retrieved ID Token with Supabase Auth via `signInWithIdToken` for native apps.
  */
 export async function nativeGoogleSignIn(): Promise<GoogleSignInResponse> {
   if (!isSupabaseConfigured) {
@@ -24,13 +25,52 @@ export async function nativeGoogleSignIn(): Promise<GoogleSignInResponse> {
     };
   }
 
+  const redirectUrl =
+    typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : 'https://www.avelut.xyz';
+
+  // On Web browser (non-native Capacitor), use Supabase OAuth redirect flow directly
+  if (!isNative()) {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (error) {
+        return {
+          user: null,
+          session: null,
+          error: error.message || 'Google OAuth failed to start.',
+        };
+      }
+
+      // signInWithOAuth redirects the browser, so session/user will be handled on return
+      return {
+        user: null,
+        session: null,
+        error: null,
+      };
+    } catch (err: any) {
+      return {
+        user: null,
+        session: null,
+        error: err?.message || 'Google OAuth redirection failed.',
+      };
+    }
+  }
+
+  // Native Mobile Flow (Capacitor Android / iOS)
   const clientId =
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
     '1087192461942-7p6u3m8a0c23k1r3n9g4j8k5l2m0n1o2.apps.googleusercontent.com';
 
   try {
     if (!isPluginInitialized) {
-      await GoogleSignIn.initialize({ clientId });
+      await GoogleSignIn.initialize({ clientId, redirectUrl });
       isPluginInitialized = true;
     }
 
