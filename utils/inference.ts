@@ -318,6 +318,8 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
           return false;
         });
         const partHasDocument = c.parts.some((p: any) => {
+          if (p.fileUrl || p.file_url) return true;
+          if (p.file && (p.file.file_url || p.file.file_data)) return true;
           if (!p.inlineData) return false;
           const mime = (p.inlineData.mimeType || '').toLowerCase();
           return mime === 'application/pdf' || mime.includes('pdf') || mime.includes('document') || mime.includes('msword') || mime.includes('officedocument') || mime === 'text/plain';
@@ -330,6 +332,18 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
           for (const p of c.parts) {
             if (p.text) {
               multiModalContent.push({ type: 'text', text: p.text });
+            } else if (p.fileUrl || p.file_url || (p.file && p.file.file_url)) {
+              // Preferred path: public HTTPS URL (avoids 413 on large PDFs)
+              // Alibaba PDF understanding: type "file" + file_url
+              const url = p.fileUrl || p.file_url || p.file.file_url;
+              multiModalContent.push({
+                type: 'file',
+                file: {
+                  file_url: typeof url === 'string' ? url : url.url,
+                  filename: p.fileName || p.filename || 'document.pdf',
+                  file_format: p.fileFormat || p.file_format || 'pdf',
+                },
+              });
             } else if (p.inlineData) {
               const mime = (p.inlineData.mimeType || 'image/jpeg').toLowerCase();
               const base64 = p.inlineData.data;
@@ -339,7 +353,7 @@ function paramsToChatMessages(params: any): { systemPrompt: string; messages: Ar
                   image_url: { url: `data:${mime};base64,${base64}` },
                 });
               } else if (mime === 'application/pdf' || mime.includes('pdf')) {
-                // Alibaba Model Studio PDF understanding (OpenAI-compatible file input)
+                // Fallback only for small PDFs — prefer fileUrl for large files
                 multiModalContent.push({
                   type: 'file',
                   file: {
