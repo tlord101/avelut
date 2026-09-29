@@ -33,9 +33,11 @@ export const getPlatform = (): string => {
 export const setStatusBarStyle = async (dark: boolean = true): Promise<void> => {
   if (!isNative()) return;
   try {
-    await StatusBar.setStyle({ style: dark ? StatusBarStyle.Dark : StatusBarStyle.Light });
+    // dark=true  → dark mode app: light icons on dark (black) status bar
+    // dark=false → light mode app: dark icons on white status bar
+    await StatusBar.setStyle({ style: dark ? StatusBarStyle.Light : StatusBarStyle.Dark });
     if (getPlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: dark ? '#FFFFFF' : '#002D62' });
+      await StatusBar.setBackgroundColor({ color: dark ? '#000000' : '#FFFFFF' });
       await StatusBar.setOverlaysWebView({ overlay: false });
     }
   } catch (err) {

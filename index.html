@@ -80,7 +80,45 @@
     #root {
       height: 100%;
     }
+
+    :root {
+      /* Default: no extra safe-area padding (set by JS below for iOS) */
+      --header-safe-top: 0.625rem;
+    }
   </style>
+  <script>
+    /* Set --header-safe-top correctly:
+       - iOS native (standalone / webkit): needs env(safe-area-inset-top) because the
+         WKWebView extends under the status bar.
+       - Android (Capacitor overlaysWebView=false): The OS already offsets the WebView
+         below the status bar, so env(safe-area-inset-top) would double the gap.
+       - Web browser: env() is fine on iOS Safari, no-op on others. */
+    (function () {
+      try {
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/.test(ua);
+        const isAndroid = /Android/.test(ua);
+        const isCapacitor = window.Capacitor !== undefined || /; wv/.test(ua) || window.navigator.userAgent.includes('wv');
+        if (isIOS) {
+          // iOS: always respect safe area — WKWebView extends under notch
+          document.documentElement.style.setProperty(
+            '--header-safe-top',
+            'max(0.625rem, env(safe-area-inset-top, 0.625rem))'
+          );
+        } else if (isAndroid && isCapacitor) {
+          // Android Capacitor with overlaysWebView=false:
+          // OS already pushes WebView below status bar — no extra padding needed
+          document.documentElement.style.setProperty('--header-safe-top', '0.625rem');
+        } else {
+          // PWA/browser: safe to use env() — it will be 0 on Android Chrome
+          document.documentElement.style.setProperty(
+            '--header-safe-top',
+            'max(0.625rem, env(safe-area-inset-top, 0px))'
+          );
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 </head>
 
 <body class="bg-[#F6F6F3] dark:bg-black text-[#0F172A] dark:text-[#F8FAFC] transition-colors duration-300 antialiased">

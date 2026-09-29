@@ -1693,7 +1693,8 @@ const App: React.FC = () => {
 
     return (
         <div
-            className="flex fixed inset-0 w-full bg-off-white dark:bg-black font-sans text-charcoal dark:text-white selection:bg-brand-200 selection:text-brand-900 overflow-hidden"
+            className="flex fixed inset-0 w-full bg-off-white dark:bg-black font-sans text-charcoal dark:text-white selection:bg-brand-200 selection:text-brand-900"
+            style={{ overflow: 'visible' }}
         >
             <NativePullToRefresh />
 
@@ -1747,7 +1748,7 @@ const App: React.FC = () => {
                 sidebarRef={sidebarRef}
                 containerRef={containerRef}
             />
-            <main ref={mainRef as any} className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            <main ref={mainRef as any} className="flex-1 flex flex-col min-w-0 relative" style={{ overflowX: 'hidden', overflowY: 'visible' }}>
                 <Header
                     activeItem={activeItem}
                     currentPageLabel={typeof customHeaderConfig?.title === 'string' ? customHeaderConfig.title : currentPageLabel}

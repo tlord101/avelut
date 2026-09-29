@@ -21,8 +21,10 @@ dependencies {
     implementation project(':capacitor-toast')
     implementation project(':capawesome-team-capacitor-file-opener')
     implementation project(':capawesome-capacitor-app-update')
+    implementation project(':capawesome-capacitor-google-sign-in')
     implementation project(':capgo-capacitor-updater')
     implementation project(':capacitor-plugin-send-intent')
+    implementation project(':capacitor-local-notifications')
 
 }
 

@@ -100,11 +100,11 @@ export const Header: React.FC<HeaderProps> = ({
       className={`z-40 flex items-center justify-between w-full ${
         isFloating
           ? className
-          : `sticky top-0 flex-shrink-0 px-3 sm:px-6 md:px-8 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top,0px))] ${
+          : `sticky top-0 flex-shrink-0 px-3 sm:px-6 md:px-8 py-2.5 ${
               className || 'bg-white/70 dark:bg-black/60 backdrop-blur-xl border-b border-black/5 dark:border-white/8'
             }`
       }`}
-      style={!isFloating ? { paddingTop: 'max(0.625rem, env(safe-area-inset-top, 0px))' } : undefined}
+      style={!isFloating ? { paddingTop: 'var(--header-safe-top, 0.625rem)' } : undefined}
     >
       {/* Left Slot: Menu Hamburger Circular Button */}
       <div className="flex items-center gap-2 min-w-[40px] shrink-0">
@@ -156,11 +156,11 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Slot: Combined Pill Control + Optional Update Badge */}
-      <div className="flex items-center gap-2 min-w-[40px] justify-end shrink-0">
+      <div className="flex items-center gap-2 min-w-[40px] justify-end shrink-0 overflow-visible">
         {rightActions ? (
           rightActions
         ) : (
-          <div className="relative pointer-events-auto" ref={dropdownRef}>
+          <div className="relative pointer-events-auto overflow-visible" ref={dropdownRef}>
             {/* Combined Pill Container */}
             <div className="h-10 sm:h-11 rounded-full bg-white dark:bg-[#212124] shadow-md hover:shadow-lg border border-black/5 dark:border-white/10 px-1.5 flex items-center gap-1 shrink-0">
               {/* Colored Calendar Icon Button */}
@@ -273,7 +273,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Three Dot Dropdown Popover */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 sm:w-60 bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-neutral-200/80 dark:border-white/10 py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
+              <div className="absolute right-0 top-full mt-2 w-56 sm:w-60 bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-neutral-200/80 dark:border-white/10 py-1.5 z-[9999] animate-in fade-in slide-in-from-top-2">
                 {userProfile && (
                   <div className="px-3.5 py-2 border-b border-neutral-100 dark:border-white/10 mb-1">
                     <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
