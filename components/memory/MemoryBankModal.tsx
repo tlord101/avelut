@@ -19,8 +19,9 @@ interface MemoryBankModalProps {
   onMemoryBankChange?: (bank: AIMemoryBank) => void;
 }
 
-const CATEGORIES: Array<{ id: 'all' | MemoryCategory; label: string; icon: string }> = [
-  { id: 'all', label: 'All', icon: 'bi-grid' },
+const CATEGORIES: Array<{ id: 'all' | 'auto' | MemoryCategory; label: string; icon: string }> = [
+  { id: 'all', label: 'All Memories', icon: 'bi-grid' },
+  { id: 'auto', label: '⚡ Auto-Added by AI', icon: 'bi-stars' },
   { id: 'academic', label: 'Academic', icon: 'bi-mortarboard' },
   { id: 'learning_style', label: 'Learning Style', icon: 'bi-lightning' },
   { id: 'goals', label: 'Goals', icon: 'bi-trophy' },
@@ -44,7 +45,7 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
 }) => {
   const [bank, setBank] = useState<AIMemoryBank | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | MemoryCategory>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'auto' | MemoryCategory>('all');
   const [newMemoryText, setNewMemoryText] = useState('');
   const [newMemoryCategory, setNewMemoryCategory] = useState<MemoryCategory>('learning_style');
   const [isAdding, setIsAdding] = useState(false);
@@ -73,11 +74,26 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
     }
   }, [isOpen, loadBank]);
 
+  useEffect(() => {
+    const handleMemoryAdded = () => {
+      void loadBank();
+    };
+    window.addEventListener('avelut_memory_auto_added', handleMemoryAdded);
+    return () => {
+      window.removeEventListener('avelut_memory_auto_added', handleMemoryAdded);
+    };
+  }, [loadBank]);
+
   const filteredItems = useMemo(() => {
     if (!bank) return [];
     if (selectedCategory === 'all') return bank.items;
+    if (selectedCategory === 'auto') return bank.items.filter((item) => item.source === 'auto');
     return bank.items.filter((item) => item.category === selectedCategory);
   }, [bank, selectedCategory]);
+
+  const autoCount = useMemo(() => {
+    return bank?.items?.filter((item) => item.source === 'auto').length || 0;
+  }, [bank]);
 
   const handleToggleBank = async () => {
     if (!bank) return;
@@ -229,6 +245,24 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
             </div>
           )}
 
+          {/* Adaptive Auto-Learning Informational Banner */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-purple-50/90 dark:from-blue-950/30 dark:via-indigo-950/20 dark:to-purple-950/30 border border-blue-200/70 dark:border-blue-800/40 flex items-start gap-3 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm shadow-blue-500/25">
+              <i className="bi bi-robot text-sm"></i>
+            </div>
+            <div className="flex-1 min-w-0 text-xs text-neutral-700 dark:text-neutral-300">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-bold text-neutral-900 dark:text-white">Auto-Adaptive Student Memory</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Active
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-neutral-600 dark:text-neutral-400">
+                Avelut automatically identifies your academic level, major, exam goals, subject struggles, and learning preferences during your chats and preserves them below so every future response is personalized.
+              </p>
+            </div>
+          </div>
+
           {/* Quick Add Form */}
           <form
             onSubmit={handleSaveNewMemory}
@@ -275,6 +309,8 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
               const isSelected = selectedCategory === cat.id;
               const count = cat.id === 'all'
                 ? bank?.items.length || 0
+                : cat.id === 'auto'
+                ? autoCount
                 : bank?.items.filter((i) => i.category === cat.id).length || 0;
               return (
                 <button
@@ -309,10 +345,12 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
               </div>
               <div>
                 <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-                  No memories in this category yet
+                  No memories in this view yet
                 </p>
                 <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
-                  Avelut automatically learns about you as you chat, or you can add suggestions below.
+                  {selectedCategory === 'auto'
+                    ? 'Avelut will automatically add memories here as you chat and mention your courses, goals, and style preferences.'
+                    : 'Avelut automatically learns about you as you chat, or you can add suggestions below.'}
                 </p>
               </div>
 
@@ -348,16 +386,23 @@ export const MemoryBankModal: React.FC<MemoryBankModalProps> = ({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200/60 dark:border-white/5">
                             {item.category.replace('_', ' ')}
                           </span>
                           {item.source === 'auto' ? (
-                            <span className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 font-semibold">
-                              <i className="bi bi-stars"></i> Auto-Learned
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide bg-gradient-to-r from-blue-500/15 via-purple-500/15 to-indigo-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 flex items-center gap-1 shadow-xs">
+                              <i className="bi bi-stars text-blue-500 dark:text-blue-400 animate-pulse"></i> Auto-Added by AI
                             </span>
                           ) : (
-                            <span className="text-[10px] text-neutral-400">Custom</span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/50 dark:border-white/5">
+                              Custom
+                            </span>
+                          )}
+                          {item.createdAt && (
+                            <span className="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium">
+                              {new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
                           )}
                         </div>
 

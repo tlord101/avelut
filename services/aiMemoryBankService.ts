@@ -231,24 +231,40 @@ export async function addMemoryItem(
 
   // Avoid adding near-duplicates
   const normalized = content.toLowerCase().trim();
-  const exists = bank.items.some(
-    (item) => item.content.toLowerCase().trim() === normalized
+  const existingItem = bank.items.find(
+    (item) => item.content.toLowerCase().trim() === normalized ||
+      (normalized.length > 15 && item.content.toLowerCase().trim().includes(normalized)) ||
+      (item.content.length > 15 && normalized.includes(item.content.toLowerCase().trim()))
   );
 
-  if (!exists) {
-    bank.items.unshift(newItem);
-    await saveAIMemoryBank(bank);
+  if (existingItem) {
+    return {
+      ...existingItem,
+      enabled: true,
+    };
+  }
 
-    // Sync to server-side vector DB asynchronously (non-blocking)
-    fetch('/api/ai-memory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'upsert',
-        userId,
-        memoryItem: newItem,
-      }),
-    }).catch(() => {});
+  bank.items.unshift(newItem);
+  await saveAIMemoryBank(bank);
+
+  // Sync to server-side vector DB asynchronously (non-blocking)
+  fetch('/api/ai-memory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'upsert',
+      userId,
+      memoryItem: newItem,
+    }),
+  }).catch(() => {});
+
+  // Dispatch global event so UI and open tabs can update instantly
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('avelut_memory_auto_added', {
+        detail: { item: newItem },
+      })
+    );
   }
 
   return newItem;
@@ -334,6 +350,95 @@ export function buildMemoryPromptContext(bank?: AIMemoryBank | null, userProfile
 }
 
 /**
+ * Fast deterministic heuristics to extract unambiguous student details immediately.
+ */
+function extractHeuristicMemories(userMessage: string): Array<{ content: string; category: MemoryCategory }> {
+  const items: Array<{ content: string; category: MemoryCategory }> = [];
+
+  const text = userMessage.trim();
+
+  // 1. Preferred Name: "call me David", "my name is Tobi"
+  const nameMatch = text.match(/(?:my name is|call me|i am called|you can call me)\s+([A-Z][a-zA-Z]{1,20})(?:[.,\s]|$)/i);
+  if (nameMatch && !/^(sorry|fine|here|doing|studying|happy|ready|tired|hungry|confused)$/i.test(nameMatch[1])) {
+    items.push({
+      content: `Student's name is ${nameMatch[1].trim()}`,
+      category: 'academic',
+    });
+  }
+
+  // 2. Department / Course / Major: "i study Biochemistry", "my department is Mechanical Engineering"
+  const courseMatch = text.match(/(?:i(?:'m| am)?\s*(?:studying|reading|a student of)|my (?:major|course|department) is)\s+([A-Za-z0-9&/,\s]{3,40})(?:[.,\n]|$)/i);
+  if (courseMatch) {
+    const rawCourse = courseMatch[1].trim().replace(/\b(?:at|in)\s+.*$/i, '').trim();
+    if (rawCourse.length > 2 && !/^(it|that|something|now|here|a lot)$/i.test(rawCourse)) {
+      items.push({
+        content: `Studying: ${rawCourse}`,
+        category: 'academic',
+      });
+    }
+  }
+
+  // 3. Level: "100 level", "200l", "300 level", "400 lvl", "500 level"
+  const lvlMatch = text.match(/(?:i(?:'m| am)?\s*(?:in|a)\s*)?([1-5]00)\s*(?:level|lvl|\bL\b)/i);
+  if (lvlMatch) {
+    items.push({
+      content: `Academic Level: ${lvlMatch[1]} Level`,
+      category: 'academic',
+    });
+  }
+
+  // 4. University / School: "i attend UNILAG", "study at University of Ibadan"
+  const uniMatch = text.match(/(?:i (?:attend|go to|study at)|my (?:school|university|institution|polytechnic|college) is)\s+([A-Za-z0-9&/,\s]{2,40})(?:[.,\n]|$)/i);
+  if (uniMatch) {
+    const uni = uniMatch[1].trim();
+    if (uni.length > 1 && !/^(it|class|school|church|home)$/i.test(uni)) {
+      items.push({
+        content: `Institution: ${uni}`,
+        category: 'academic',
+      });
+    }
+  }
+
+  // 5. Explicit "remember that..." or "don't forget that..."
+  const rememberMatch = text.match(/(?:please\s*)?(?:remember that|don't forget that|keep in mind that|note that)\s+([^.!?\n]{5,120})/i);
+  if (rememberMatch) {
+    items.push({
+      content: rememberMatch[1].trim(),
+      category: 'preference',
+    });
+  }
+
+  // 6. Struggles / Difficulties
+  const struggleMatch = text.match(/(?:i (?:struggle with|find|have difficulty with|am weak (?:at|in)|have issues with|hate)|hard for me to understand)\s+([A-Za-z0-9\s]{3,45})(?:[.,\n]|$)/i);
+  if (struggleMatch) {
+    items.push({
+      content: `Struggles with: ${struggleMatch[1].trim()}`,
+      category: 'strengths_weaknesses',
+    });
+  }
+
+  // 7. Goals & Exam Targets
+  const goalMatch = text.match(/(?:my goal is|i want to (?:graduate with|score|get an? a in)|preparing for|targeting)\s+([A-Za-z0-9\s]{3,45})(?:[.,\n]|$)/i);
+  if (goalMatch) {
+    items.push({
+      content: `Academic Goal: ${goalMatch[1].trim()}`,
+      category: 'goals',
+    });
+  }
+
+  // 8. Learning Style
+  const styleMatch = text.match(/(?:explain (?:like|in)|use|prefer)\s+((?:nigerian|simple terms|step by step|bullet points|practical examples|danfo|pos|market analogies)[^.,\n]{0,35})/i);
+  if (styleMatch) {
+    items.push({
+      content: `Prefers explanations with ${styleMatch[1].trim()}`,
+      category: 'learning_style',
+    });
+  }
+
+  return items;
+}
+
+/**
  * Asynchronously detects and extracts salient learning facts or preferences from a user exchange.
  */
 export async function extractAndSaveMemoriesFromExchange(params: {
@@ -344,69 +449,87 @@ export async function extractAndSaveMemoriesFromExchange(params: {
   userProfile?: UserProfile;
 }): Promise<MemoryItem[]> {
   const { userId, userMessage, appSettings, userProfile } = params;
-  if (!userId || !userMessage || userMessage.trim().length < 15) return [];
+  if (!userId || !userMessage || userMessage.trim().length < 5) return [];
 
   const bank = await getAIMemoryBank(userId, userProfile);
   if (!bank.isEnabled) return [];
 
-  const text = userMessage.toLowerCase();
+  const addedItems: MemoryItem[] = [];
+  const existingSet = new Set(bank.items.map((m) => m.content.toLowerCase().trim()));
 
-  // Fast heuristic checks for explicit memory triggers
-  const mentionsPreference = /i (prefer|like|love|hate|struggle with|don't understand|want to learn|am studying|attend|go to|am in|my major is|my name is)/i.test(userMessage);
-  const mentionsStyle = /(explain like|in simple terms|use nigerian|use analogies|step by step|give me formulas|don't use emojis)/i.test(userMessage);
-  const mentionsGoal = /(my goal|preparing for|my exam is|i need to pass|targeting|first class|gpa)/i.test(userMessage);
-
-  if (!mentionsPreference && !mentionsStyle && !mentionsGoal) {
-    return [];
+  // 1. Run deterministic heuristic extraction (instant & reliable)
+  const heuristicCandidates = extractHeuristicMemories(userMessage);
+  for (const cand of heuristicCandidates) {
+    const norm = cand.content.toLowerCase().trim();
+    if (!existingSet.has(norm)) {
+      const added = await addMemoryItem(userId, cand.content, cand.category, 'auto');
+      existingSet.add(norm);
+      addedItems.push(added);
+    }
   }
 
-  // Use fast lightweight AI inference to extract candidate memory if available
+  // 2. Fast heuristic checks for whether LLM extraction is warranted
+  const mentionsPersonalContext = /(i |my |me |prefer|like|love|hate|struggle|weak|difficult|exam|pass|goal|target|major|degree|level|study|school|remember|analog)/i.test(userMessage);
+  if (!mentionsPersonalContext && userMessage.trim().length < 20) {
+    return addedItems;
+  }
+
+  // 3. Run fast lightweight AI inference to extract any nuanced memories
   try {
     const ai = createAvelutAI(appSettings, userProfile, {
       feature: 'chat_interaction',
       endpointPreference: 'openai_compatible_first',
     });
 
-    if (!ai) return [];
+    if (ai) {
+      const existingMemoriesSummary = bank.items.map((m) => m.content).slice(0, 15).join('; ');
 
-    const existingMemoriesSummary = bank.items.map((m) => m.content).slice(0, 10).join('; ');
+      const extractionPrompt = [
+        'You are the Avelut Adaptive Memory Engine. Analyze the student\'s conversation input.',
+        'Extract any durable, personal academic facts, learning preferences, goals, or subject struggles worth remembering across sessions.',
+        'RULES:',
+        '1. Only extract long-term relevant information (e.g. major, university, degree goals, weakness topics, preferred explanation style).',
+        '2. Do NOT extract ephemeral questions, greetings, or trivial banter.',
+        '3. Do NOT extract facts already present in existing memories.',
+        '4. Format each memory concisely in 3rd person (e.g. "Student struggles with organic synthesis mechanisms").',
+        '',
+        `Existing Memories: "${existingMemoriesSummary}"`,
+        `Student Input: "${userMessage}"`,
+        '',
+        'Output a valid JSON array or empty array if none:',
+        '[{"content": "...", "category": "academic" | "learning_style" | "strengths_weaknesses" | "goals" | "preference"}]',
+      ].join('\n');
 
-    const extractionPrompt = [
-      'You are Avelut Memory Bank extractor. Analyze the student message below.',
-      'Identify any NEW, durable personal facts, learning style preferences, academic goals, or topic difficulties worth remembering.',
-      'Do NOT extract temporary questions or trivial chatter.',
-      'Do NOT extract facts already present in existing memories.',
-      '',
-      `Existing Memories: "${existingMemoriesSummary}"`,
-      `Student Message: "${userMessage}"`,
-      '',
-      'Return a valid JSON array of new memory items or an empty array [] if none:',
-      '[{"content": "Concise fact written in 3rd person (e.g. Student prefers Nigerian market analogies)", "category": "learning_style" | "academic" | "strengths_weaknesses" | "goals" | "preference"}]',
-    ].join('\n');
+      const result = await ai.models.generateContent({
+        model: 'qwen3.8-omni-flash',
+        contents: [{ role: 'user', parts: [{ text: extractionPrompt }] }],
+        config: { temperature: 0.1, maxOutputTokens: 300 },
+      });
 
-    const result = await ai.models.generateContent({
-      model: 'qwen3.8-omni-flash',
-      contents: [{ role: 'user', parts: [{ text: extractionPrompt }] }],
-      config: { temperature: 0.1, maxOutputTokens: 250 },
-    });
+      const responseText = getResponseText(result).trim();
+      const parsed = cleanAndParseJson<Array<{ content: string; category: MemoryCategory }>>(responseText, {
+        expectArray: true,
+        fallback: [],
+      });
 
-    const responseText = getResponseText(result).trim();
-    const parsed = cleanAndParseJson<Array<{ content: string; category: MemoryCategory }>>(responseText);
-
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const addedItems: MemoryItem[] = [];
-      for (const item of parsed) {
-        if (item.content && item.content.trim().length > 5) {
-          const added = await addMemoryItem(userId, item.content, item.category || 'preference', 'auto');
-          addedItems.push(added);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        for (const item of parsed) {
+          if (item && item.content && item.content.trim().length > 4) {
+            const norm = item.content.toLowerCase().trim();
+            if (!existingSet.has(norm)) {
+              const added = await addMemoryItem(userId, item.content, item.category || 'preference', 'auto');
+              existingSet.add(norm);
+              addedItems.push(added);
+            }
+          }
         }
       }
-      return addedItems;
     }
   } catch (err) {
     // Non-blocking background extraction
-    console.debug('[AIMemoryBank] Extraction skipped or failed:', err);
+    console.debug('[AIMemoryBank] Background AI extraction notice:', err);
   }
 
-  return [];
+  return addedItems;
 }
+

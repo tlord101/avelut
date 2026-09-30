@@ -95,3 +95,16 @@ export const listenToKeyboard = (
     hideHandler.then(l => l.remove()).catch(() => {});
   };
 };
+
+/**
+ * Programmatically request native keyboard to show.
+ */
+export const showKeyboard = async (): Promise<void> => {
+  if (!isNative()) return;
+  try {
+    await Keyboard.show();
+  } catch (err) {
+    // Silently ignore if not supported in current environment
+  }
+};
+

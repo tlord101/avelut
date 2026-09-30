@@ -33,6 +33,7 @@ import {
   type AIMemoryBank,
 } from '../services/aiMemoryBankService';
 import { MemoryBankModal } from './memory/MemoryBankModal';
+import { showKeyboard } from '../utils/capacitorUtils';
 
 export type ChatMode = 'context' | 'fast' | 'deep' | 'exam';
 
@@ -313,7 +314,6 @@ const GrokChatComposer: React.FC<{
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
-  const hasAutoFocusedRef = useRef(false);
 
   // Close attach menu when clicking outside
   useEffect(() => {
@@ -328,12 +328,65 @@ const GrokChatComposer: React.FC<{
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showAttachMenu]);
 
+  // Robust function to activate focus and trigger the software keyboard
+  const activateKeyboard = useCallback(() => {
+    if (!textareaRef.current) return;
+    try {
+      textareaRef.current.focus({ preventScroll: true });
+      const len = textareaRef.current.value.length;
+      try {
+        textareaRef.current.setSelectionRange(len, len);
+      } catch {}
+    } catch {}
+    void showKeyboard();
+  }, []);
+
+  // Always activate keyboard whenever:
+  // 1. App is opened or mounted
+  // 2. User returns to app (visibilitychange or window focus or native appStateChange)
+  // 3. User navigates to chat
   useEffect(() => {
-    if (autoFocus && !hasAutoFocusedRef.current && textareaRef.current) {
-      hasAutoFocusedRef.current = true;
-      textareaRef.current.focus();
-    }
-  }, [autoFocus]);
+    activateKeyboard();
+    const t1 = setTimeout(activateKeyboard, 80);
+    const t2 = setTimeout(activateKeyboard, 250);
+    const t3 = setTimeout(activateKeyboard, 500);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        activateKeyboard();
+        setTimeout(activateKeyboard, 150);
+      }
+    };
+
+    const handleWindowFocus = () => {
+      activateKeyboard();
+    };
+
+    const handleAppBecameActive = () => {
+      activateKeyboard();
+      setTimeout(activateKeyboard, 150);
+    };
+
+    const handleFocusEvent = () => {
+      activateKeyboard();
+      setTimeout(activateKeyboard, 100);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('avelut_app_became_active', handleAppBecameActive);
+    window.addEventListener('avelut_focus_chat_input', handleFocusEvent);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('avelut_app_became_active', handleAppBecameActive);
+      window.removeEventListener('avelut_focus_chat_input', handleFocusEvent);
+    };
+  }, [activateKeyboard]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -370,6 +423,8 @@ const GrokChatComposer: React.FC<{
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSend();
+      // Keep keyboard continuously active
+      setTimeout(activateKeyboard, 40);
     }
   };
 
@@ -381,8 +436,13 @@ const GrokChatComposer: React.FC<{
 
   return (
     <div
-      className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-3 sm:pb-5 pt-2 relative"
+      className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-[calc(max(0.75rem,env(safe-area-inset-bottom)))] pt-2 sticky bottom-0 z-20 bg-white/95 dark:bg-black/95 backdrop-blur-md"
       onPaste={handlePaste}
+      onClick={() => {
+        if (document.activeElement !== textareaRef.current) {
+          activateKeyboard();
+        }
+      }}
     >
       <div className="relative flex flex-col bg-[#f4f4f5] dark:bg-[#212124] rounded-[28px] border border-neutral-200/70 dark:border-white/5 transition-all focus-within:ring-1 focus-within:ring-black/10 dark:focus-within:ring-white/10 shadow-sm">
         
@@ -425,70 +485,91 @@ const GrokChatComposer: React.FC<{
 
         {/* Bottom Row */}
         <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-          {/* Left: + (plus) button with Popup Menu */}
-          <div className="relative" ref={attachMenuRef}>
-            <button
-              type="button"
-              onClick={handleAttachClick}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                showAttachMenu
-                  ? 'bg-neutral-200 dark:bg-white/20 text-neutral-900 dark:text-white'
-                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10'
-              }`}
-              title="Attach file"
-              aria-label="Attach file"
-            >
-              <svg className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+          {/* Left Actions: + (plus) button AND Memory Card quick button */}
+          <div className="flex items-center gap-2">
+            <div className="relative" ref={attachMenuRef}>
+              <button
+                type="button"
+                onClick={handleAttachClick}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  showAttachMenu
+                    ? 'bg-neutral-200 dark:bg-white/20 text-neutral-900 dark:text-white'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/50 dark:hover:bg-white/10'
+                }`}
+                title="Attach file"
+                aria-label="Attach file"
+              >
+                <svg className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
 
-            {/* Popup Menu — Gallery / Camera */}
-            {showAttachMenu && (
-              <div className="absolute bottom-full left-0 mb-3 w-52 bg-white dark:bg-[#222] rounded-3xl shadow-2xl border border-black/8 dark:border-white/10 overflow-hidden z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
-                <div className="px-4 pt-4 pb-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Attach Image</p>
+              {/* Popup Menu — Gallery / Camera */}
+              {showAttachMenu && (
+                <div className="absolute bottom-full left-0 mb-3 w-52 bg-white dark:bg-[#222] rounded-3xl shadow-2xl border border-black/8 dark:border-white/10 overflow-hidden z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
+                  <div className="px-4 pt-4 pb-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Attach Image</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      onOpenGallery();
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <span className="block font-bold text-sm">Gallery</span>
+                      <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Pick from photos</span>
+                    </div>
+                  </button>
+                  <div className="h-[1px] bg-neutral-100 dark:bg-white/8 mx-4" />
+                  <button
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      onOpenCamera();
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2-2h6l2 2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <span className="block font-bold text-sm">Camera</span>
+                      <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Take a photo now</span>
+                    </div>
+                  </button>
+                  <div className="pb-2" />
                 </div>
-                <button
-                  onClick={() => {
-                    setShowAttachMenu(false);
-                    onOpenGallery();
-                  }}
-                  className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                  </div>
-                  <div className="text-left">
-                    <span className="block font-bold text-sm">Gallery</span>
-                    <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Pick from photos</span>
-                  </div>
-                </button>
-                <div className="h-[1px] bg-neutral-100 dark:bg-white/8 mx-4" />
-                <button
-                  onClick={() => {
-                    setShowAttachMenu(false);
-                    onOpenCamera();
-                  }}
-                  className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-500/15 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2-2h6l2 2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                      <circle cx="12" cy="13" r="4" />
-                    </svg>
-                  </div>
-                  <div className="text-left">
-                    <span className="block font-bold text-sm">Camera</span>
-                    <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Take a photo now</span>
-                  </div>
-                </button>
-                <div className="pb-2" />
-              </div>
+              )}
+            </div>
+
+            {/* AI Memory Card Quick Button */}
+            {onOpenMemoryBank && (
+              <button
+                type="button"
+                onClick={onOpenMemoryBank}
+                className="h-8 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 bg-neutral-200/70 hover:bg-blue-100 dark:bg-white/10 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer active:scale-95 shrink-0"
+                title="AI Memory Card — View what Avelut AI remembers about you"
+                aria-label="View Memory Card"
+              >
+                <i className="bi bi-cpu text-blue-600 dark:text-blue-400 text-xs"></i>
+                <span className="font-bold text-[11px] sm:text-xs">Memory</span>
+                {memoryCount !== undefined && memoryCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-blue-600 text-white dark:bg-blue-500">
+                    {memoryCount}
+                  </span>
+                )}
+              </button>
             )}
           </div>
 
@@ -594,13 +675,24 @@ export const Chat: React.FC<ChatProps> = ({
 
   useEffect(() => {
     let isMounted = true;
-    if (userProfile?.uid) {
-      getAIMemoryBank(userProfile.uid, userProfile).then((bank) => {
-        if (isMounted) setMemoryBank(bank);
-      });
-    }
+    const fetchBank = () => {
+      if (userProfile?.uid) {
+        getAIMemoryBank(userProfile.uid, userProfile).then((bank) => {
+          if (isMounted) setMemoryBank(bank);
+        });
+      }
+    };
+
+    fetchBank();
+
+    const handleMemoryAutoAdded = () => {
+      fetchBank();
+    };
+    window.addEventListener('avelut_memory_auto_added', handleMemoryAutoAdded);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('avelut_memory_auto_added', handleMemoryAutoAdded);
     };
   }, [userProfile?.uid, userProfile]);
 
@@ -1061,6 +1153,7 @@ export const Chat: React.FC<ChatProps> = ({
     setAttachedImages([]);
     setIsLoading(true);
 
+    let aiMsgId = '';
     try {
       let currentConvoId = activeConversationId;
       const now = Date.now();
@@ -1132,7 +1225,7 @@ export const Chat: React.FC<ChatProps> = ({
         timestamp: now,
       });
 
-      const aiMsgId = generateLocalId('msg');
+      aiMsgId = generateLocalId('msg');
 
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== aiMsgId),
@@ -1369,7 +1462,8 @@ export const Chat: React.FC<ChatProps> = ({
         metadata: { path: 'chat', from_cache: fromCache, mode: selectedMode },
       });
 
-      if (memoryBank?.isEnabled) {
+      const shouldExtract = memoryBank ? memoryBank.isEnabled : true;
+      if (shouldExtract) {
         void extractAndSaveMemoriesFromExchange({
           userId: userProfile.uid,
           userMessage: displayInput,
@@ -1378,7 +1472,11 @@ export const Chat: React.FC<ChatProps> = ({
           userProfile,
         }).then((newItems) => {
           if (newItems && newItems.length > 0) {
-            void getAIMemoryBank(userProfile.uid, userProfile).then(setMemoryBank);
+            void getAIMemoryBank(userProfile.uid, userProfile).then((updatedBank) => {
+              setMemoryBank(updatedBank);
+              const preview = newItems.map((i) => i.content).slice(0, 2).join('; ');
+              addToast(`🧠 AI remembered: "${preview}" (Saved to Memory Card)`, 'info');
+            });
           }
         });
       }

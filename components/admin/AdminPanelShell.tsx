@@ -19,6 +19,7 @@ import { getFeatureModel } from "../../utils/usage";
 import { isR2Configured, uploadToR2, deleteFromR2 } from "../../services/cloudflareR2Service";
 import { supabaseStorageService } from "../../services/supabaseStorageService";
 import { sanitizePathSegment } from "../../lib/supabaseRealtimeDb";
+import { supabase } from "../../lib/supabaseClient";
 import { AdminLayout } from "../admin/AdminLayout";
 import { DashboardView } from "../admin/pages/DashboardView";
 import { AcademicUnitsView } from "../admin/pages/AcademicUnitsView";

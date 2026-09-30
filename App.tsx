@@ -906,7 +906,9 @@ const App: React.FC = () => {
         });
 
         const appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-            // handle app state changes
+            if (isActive && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('avelut_app_became_active'));
+            }
         });
 
         return () => {
@@ -914,6 +916,16 @@ const App: React.FC = () => {
             appStateListener.then(listener => listener.remove());
         };
     }, [user, addToast]);
+
+    useEffect(() => {
+        if (activeItem === 'chat' && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('avelut_focus_chat_input'));
+            const t = setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('avelut_focus_chat_input'));
+            }, 100);
+            return () => clearTimeout(t);
+        }
+    }, [activeItem]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
