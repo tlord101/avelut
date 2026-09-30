@@ -381,12 +381,35 @@ export const Level3CourseCatalog: React.FC<Level3CourseCatalogProps> = ({
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {courses.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (selectedCourseIds.size === courses.length) {
+                                    setSelectedCourseIds(new Set());
+                                } else {
+                                    setSelectedCourseIds(new Set(courses.map(c => c.course_id)));
+                                }
+                            }}
+                            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={selectedCourseIds.size === courses.length && courses.length > 0}
+                                ref={el => { if (el) el.indeterminate = selectedCourseIds.size > 0 && selectedCourseIds.size < courses.length; }}
+                                onChange={() => {}}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-500 cursor-pointer pointer-events-none"
+                            />
+                            <span>{selectedCourseIds.size === courses.length && courses.length > 0 ? 'Deselect All' : `Select All (${courses.length})`}</span>
+                        </button>
+                    )}
+
                     {selectedCourseIds.size > 0 && (
                         <button
                             type="button"
                             onClick={handleTriggerBatchDelete}
                             disabled={isDeleting}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-100 transition-colors border border-rose-500/30 cursor-pointer disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-100 dark:hover:bg-rose-950/60 transition-colors border border-rose-500/30 cursor-pointer disabled:opacity-50"
                         >
                             <Trash2 className="w-4 h-4" />
                             <span>Delete Selected ({selectedCourseIds.size})</span>

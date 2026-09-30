@@ -213,7 +213,7 @@ export const HybridCourseDrawer: React.FC<HybridCourseDrawerProps> = ({
             const prompt = `Analyze this course form/document and extract all courses listed.
 Extract for each course:
 - course_code (string, e.g. "MEE 301")
-- course_name (string, e.g. "Applied Thermodynamics")
+- course_name (string, strictly in CAPITAL LETTERS as written on the document, e.g. "APPLIED THERMODYNAMICS" — NO snake_case, NO underscores)
 - course_unit (number, e.g. 3)
 - level (string, e.g. "300lvl")
 - semester (string, "first" or "second")
@@ -223,7 +223,7 @@ OUTPUT ONLY A VALID JSON OBJECT:
   "courses": [
     {
       "course_code": "MEE 301",
-      "course_name": "Applied Thermodynamics",
+      "course_name": "APPLIED THERMODYNAMICS",
       "course_unit": 3,
       "level": "300lvl",
       "semester": "first"
@@ -316,7 +316,8 @@ OUTPUT ONLY A VALID JSON OBJECT:
 
             const items: ExtractedCourseItem[] = extractedListRaw.map((item: any) => {
                 const courseCode = (item.course_code || '').trim().toUpperCase();
-                const courseName = (item.course_name || '').trim();
+                const rawName = (item.course_name || '').trim();
+                const courseName = rawName.replace(/_/g, ' ').replace(/\s+/g, ' ').toUpperCase().trim();
                 const courseId = (courseCode || courseName).toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '');
 
                 const globalEntry = globalCoursesMap[courseId];

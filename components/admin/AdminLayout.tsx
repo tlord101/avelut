@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Menu, Bell } from 'lucide-react';
+import { Menu, Bell, Sun, Moon } from 'lucide-react';
 import type { UserProfile } from '../../types';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export type AdminTab = 'dashboard' | 'schools' | 'departments' | 'questions' | 'users' | 'payments' | 'usage-analytics' | 'app' | 'app-updates' | 'email-configs' | 'notifications' | 'emails' | 'usage-settings' | 'purchase-logs' | 'tickets' | 'cofounders' | 'seo' | 'feedback' | 'github-integration' | 'database-migrations';
 
@@ -34,14 +35,19 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     children, activeTab, onNavigate, userProfile 
 }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { mode, setMode } = useTheme();
 
     const handleNav = (tab: AdminTab) => {
         onNavigate(tab);
         setIsMobileMenuOpen(false);
     };
 
+    const toggleTheme = () => {
+        setMode(mode === 'dark' ? 'light' : 'dark');
+    };
+
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex overflow-hidden">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex overflow-hidden transition-colors duration-200">
             {/* Sidebar */}
             <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
                 <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
@@ -106,20 +112,29 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 )}
 
                 {/* Topbar */}
-                <header className="h-20 bg-white backdrop-blur-xl border-b border-slate-200 sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between">
+                <header className="h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between transition-colors duration-200">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-slate-500 hover: dark:text-white rounded-xl hover:bg-slate-100 transition">
+                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
                             <Menu className="w-6 h-6" />
                         </button>
-                        <h2 className="text-xl sm:text-2xl font-black  dark:text-white tracking-tight capitalize hidden sm:block">
+                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight capitalize hidden sm:block">
                             {(activeTab || '').replace('-', ' ')}
                         </h2>
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <button className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover: dark:text-white hover:bg-slate-50 transition relative">
+                        {/* Theme Toggle (Dark / Light) */}
+                        <button
+                            onClick={toggleTheme}
+                            title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                            className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                        >
+                            {mode === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-700" />}
+                        </button>
+
+                        <button className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition relative cursor-pointer">
                             <Bell className="w-5 h-5" />
-                            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+                            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-900" />
                         </button>
                     </div>
                 </header>

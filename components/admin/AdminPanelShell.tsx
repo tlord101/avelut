@@ -1815,7 +1815,7 @@ OUTPUT: ONLY valid JSON (no markdown fences). Shape:
   "courses": [
     {
       "courseCode": "GET 307",
-      "courseName": "Introduction to Artificial Intelligence, Machine Learning and Convergent Technologies",
+      "courseName": "INTRODUCTION TO ARTIFICIAL INTELLIGENCE, MACHINE LEARNING AND CONVERGENT TECHNOLOGIES",
       "level": null,
       "department": "College of Engineering and Technology",
       "questions": [
@@ -1843,12 +1843,13 @@ OUTPUT: ONLY valid JSON (no markdown fences). Shape:
 
 RULES:
 1. Do NOT skip theory questions — they are the majority on many Nigerian university papers.
-2. Preserve numbering (1, 1a, 2b, Question 5, etc.) inside the question text.
-3. marks: number if stated on the paper, else null.
-4. If only one course exists, still return courses as a one-element array.
-5. Prefer course names/codes from the PDF. Fallback courseName: "${uploadCourseName || 'Unknown Course'}".
-6. Extract as many questions as possible; do not invent content that is not in the PDF.
-7. For MCQ, correctAnswer must exactly match one options[] string when known; otherwise "".`;
+2. COURSE TITLE IN CAPITAL LETTERS: Extract courseName strictly in CAPITAL LETTERS as written on the paper/document (e.g. "ENGINEERING MATHEMATICS I", "APPLIED THERMODYNAMICS"). Do NOT output snake_case, underscores, or lowercase.
+3. Preserve numbering (1, 1a, 2b, Question 5, etc.) inside the question text.
+4. marks: number if stated on the paper, else null.
+5. If only one course exists, still return courses as a one-element array.
+6. Prefer course names/codes from the PDF. Fallback courseName: "${(uploadCourseName || 'UNKNOWN COURSE').toUpperCase()}".
+7. Extract as many questions as possible; do not invent content that is not in the PDF.
+8. For MCQ, correctAnswer must exactly match one options[] string when known; otherwise "".`;
 
                 const response = await ai.models.generateContent({
                     model: extractionModel,
@@ -1939,25 +1940,29 @@ RULES:
                 const savedLabels: string[] = [];
 
                 for (const bucket of courseBuckets) {
+                    const rawCourseName = bucket.courseName || uploadCourseName || bucket.courseCode || 'GENERAL COURSE';
+                    const cleanCourseName = rawCourseName.replace(/_/g, ' ').replace(/\s+/g, ' ').toUpperCase().trim();
+                    const courseCode = (bucket.courseCode || '').toUpperCase().trim();
+
                     const target = resolvePastQuestionTarget(
                         uploadDepartmentId,
                         uploadLevel,
-                        uploadCourseName || (bucket.courseName || ''),
+                        cleanCourseName,
                         {
-                            courseCode: bucket.courseCode,
-                            courseName: bucket.courseName,
+                            courseCode,
+                            courseName: cleanCourseName,
                             level: bucket.level,
                             department: bucket.department,
                         }
                     );
 
                     setExtractionProgress(
-                        `Saving ${bucket.questions.length} questions under ${target.courseName}...`
+                        `Saving ${bucket.questions.length} questions under ${cleanCourseName}...`
                     );
 
-                    // Sanitize path segments — commas in course titles break PostgREST (PGRST100)
-                    const courseSlug = sanitizePathSegment(target.courseName, 'unassigned_course');
-                    const deptSlug = sanitizePathSegment(target.departmentId, 'general');
+                    // Sanitize path segments — store under 'general' so all departments in college share access without duplication
+                    const courseSlug = sanitizePathSegment(courseCode || cleanCourseName, 'unassigned_course');
+                    const deptSlug = 'general';
                     const levelSlug = sanitizePathSegment(target.level, 'unassigned');
 
                     const normalizedQuestions: any[] = [];
@@ -1985,22 +1990,55 @@ RULES:
                         if (marks !== null && !Number.isNaN(marks)) {
                             payload.marks = marks;
                         }
-                        if (bucket.courseCode) {
-                            payload.courseCode = String(bucket.courseCode);
+                        if (courseCode) {
+                            payload.courseCode = courseCode;
                         }
                         normalizedQuestions.push(payload);
                     }
 
                     if (normalizedQuestions.length === 0) continue;
 
-                    // One row per course/year with full questions array (no push-id in path)
+                    // Centralized general access for all departments in the college
                     const pqRef = dbRef(
                         db,
                         `past_questions/${deptSlug}/${levelSlug}/${courseSlug}/${year}`
                     );
                     await set(pqRef, normalizedQuestions);
+
+                    // Also sync directly to Supabase past_questions & past_question_packs
+                    const pqId = `${deptSlug}_${levelSlug}_${courseSlug}_${year}`;
+                    const fullTitle = courseCode ? `${courseCode} — ${cleanCourseName} (${year})` : `${cleanCourseName} (${year})`;
+                    try {
+                        await supabase.from('past_questions').upsert({
+                            id: pqId,
+                            department_id: deptSlug,
+                            level: target.level,
+                            course_id: courseCode || courseSlug,
+                            course_name: cleanCourseName,
+                            title: fullTitle,
+                            year: String(year),
+                            questions_json: normalizedQuestions,
+                            questions: normalizedQuestions,
+                            updated_at: new Date().toISOString(),
+                        });
+                        await supabase.from('past_question_packs').upsert({
+                            id: pqId,
+                            title: fullTitle,
+                            course_code: courseCode || courseSlug,
+                            course_name: cleanCourseName,
+                            year: String(year),
+                            type: normalizedQuestions.some(q => q.type === 'mcq') ? (normalizedQuestions.every(q => q.type === 'mcq') ? 'mcq' : 'mixed') : 'theory',
+                            question_count: normalizedQuestions.length,
+                            questions: normalizedQuestions,
+                            published: true,
+                            created_at: new Date().toISOString(),
+                        });
+                    } catch (supabaseSyncErr) {
+                        console.warn('[handlePQUpload] Supabase sync warning:', supabaseSyncErr);
+                    }
+
                     totalSaved += normalizedQuestions.length;
-                    savedLabels.push(`${target.courseName} (${normalizedQuestions.length})`);
+                    savedLabels.push(`${cleanCourseName} (${normalizedQuestions.length})`);
                 }
 
                 addToast(
