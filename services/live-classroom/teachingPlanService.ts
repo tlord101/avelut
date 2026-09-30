@@ -120,11 +120,11 @@ Rules:
 - Structure phases as real ordered lecture sections (e.g., Overview -> Definition & Core Mechanism -> Classification/Types -> Applications/Worked Steps -> Summary).
 - Key terms MUST be placed ONLY inside the subtopic phase that owns them — NEVER a flat list of vocabulary defined in isolation at the start.
 - VISUAL ACTION SELECTION RULES for boardVisualPlan.action:
-  * "illustrate" (illustrate_object): Use when the phase focuses on a physical object, device, apparatus, machine, biological structure/organ, specimen, semiconductor, circuit component, molecule, or spatial/cross-section view.
-  * "mermaid" (draw_mermaid): Use for process flows, multi-step sequences, algorithms, cycles, or decision logic. MUST be rich (subgraphs, edge labels, or branching). STRICTLY BAN flat label chains (e.g. A --> B --> C).
-  * "write" (board_action write): Preferred for simple definitions, one-line facts, short clarifications, key terms, or worked math steps. DEFAULT for light phases where a full diagram is not needed.
+  * "illustrate" (illustrate_object): PREFERRED for introducing and explaining concepts, physical structures, devices, apparatus, machines, biological organs/specimens, circuits, molecules, or any topic that benefits from a concrete visual.
+  * "mermaid" (draw_mermaid): Use for process flows, multi-step sequences, algorithms, cycles, or decision logic. MUST be rich (subgraphs, edge labels, or branching).
+  * "write" (board_action write): Used for writing definitions, formulas, key bullet points, or worked calculation steps on the board.
   * "draw" (board_action draw): Simple custom shapes or arrows when spatial/geometric math or a simple layout is needed.
-- Visual diagrams are SELECTIVE. Draw/illustrate when the phase NEEDS a picture or structure. For light definition phases, prefer writing clear headings and key terms ("write").
+- Prioritize visual illustrations: Whenever a concept, structure, or mechanism is introduced, use "illustrate" so students have rich visual diagrams on the board.
 - Keep pedagogicalGoal, speechFocus, and boardVisualPlan concise (1-2 sentences each) for speed.`;
 
   try {

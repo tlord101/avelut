@@ -57,6 +57,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; convo: ChatConversation | null }>({ isOpen: false, convo: null });
     const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
     const openContextMenu = (e: React.MouseEvent, convo: ChatConversation) => {
@@ -253,10 +254,9 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
         {content(false)}
       </aside>
       
-      {/* Mobile Panel */}
-      <div className={`fixed inset-0 z-[100] transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`} >
-          <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onCloseMobilePanel} aria-hidden="true" ></div>
-          <div className="relative w-[320px] h-full border-r border-gray-100 bg-white dark:bg-black shadow-xl">
+      {/* Mobile Panel — Full Screen */}
+      <div className={`fixed inset-0 z-[100] transform transition-transform duration-300 ease-in-out md:hidden ${isMobilePanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="relative w-full h-full bg-white dark:bg-black shadow-xl">
               {content(true)}
           </div>
       </div>
@@ -271,68 +271,82 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
             <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                    top: `${Math.max(16, Math.min(contextMenu.y - 20, window.innerHeight - 150))}px`,
-                    left: `${Math.max(16, Math.min(contextMenu.x + 10, window.innerWidth - 180))}px`,
+                    top: `${Math.max(16, Math.min(contextMenu.y - 20, window.innerHeight - 130))}px`,
+                    left: `${Math.max(16, Math.min(contextMenu.x + 10, window.innerWidth - 210))}px`,
                 }}
-                className="z-[161] bg-white dark:bg-[#1C1C1C] border border-neutral-200 dark:border-neutral-800 shadow-2xl transition-all absolute w-48 rounded-2xl p-1.5 space-y-0.5"
+                className="z-[161] bg-white dark:bg-[#1C1C1C] border border-neutral-200 dark:border-neutral-800 shadow-2xl absolute w-52 rounded-2xl p-1.5 space-y-0.5 animate-in zoom-in-95 fade-in duration-150"
             >
-                {/* Rename Action */}
+                {/* Rename */}
+                <button
+                    type="button"
+                    onClick={() => { startRename(contextMenu.convo); }}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left text-sm font-semibold transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+                >
+                    <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 flex items-center justify-center shrink-0">
+                        <PencilIcon className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <span>Rename</span>
+                </button>
+                {/* Delete — opens modal */}
                 <button
                     type="button"
                     onClick={() => {
-                        startRename(contextMenu.convo);
+                        setDeleteModal({ isOpen: true, convo: contextMenu.convo });
+                        setContextMenu(null);
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 cursor-pointer"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left text-sm font-semibold transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 cursor-pointer"
                 >
-                    <div className="w-5 h-5 flex items-center justify-center shrink-0 text-indigo-500">
-                        <PencilIcon className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-500/15 flex items-center justify-center shrink-0">
+                        <TrashIcon className="w-4 h-4 text-rose-500" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                        <span className="block truncate">Rename</span>
-                    </div>
+                    <span>Delete Chat</span>
                 </button>
-
-                {/* Delete Action with Confirmation */}
-                {!confirmDelete ? (
-                    <button
-                        type="button"
-                        onClick={() => setConfirmDelete(true)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-medium transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 cursor-pointer"
-                    >
-                        <div className="w-5 h-5 flex items-center justify-center shrink-0 text-rose-500">
-                            <TrashIcon className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <span className="block truncate">Delete</span>
-                        </div>
-                    </button>
-                ) : (
-                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl space-y-2 border border-rose-200 dark:border-rose-900/50 animate-fade-in">
-                        <p className="text-[12px] font-semibold text-rose-700 dark:text-rose-300 leading-tight">
-                            Delete this chat?
-                        </p>
-                        <div className="flex items-center gap-2 pt-1">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDelete(false)}
-                                className="flex-1 py-1.5 px-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    onDeleteConversation(contextMenu.convo.id);
-                                    setContextMenu(null);
-                                }}
-                                className="flex-1 py-1.5 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ─────────────────────────────────────────── */}
+      {deleteModal.isOpen && deleteModal.convo && (
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 sm:p-6">
+          {/* Scrim */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-[3px] animate-in fade-in duration-200"
+            onClick={() => setDeleteModal({ isOpen: false, convo: null })}
+          />
+          {/* Card */}
+          <div className="relative bg-white dark:bg-[#141414] border border-neutral-200 dark:border-neutral-800 rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in slide-in-from-bottom-4 sm:zoom-in-95 fade-in duration-250">
+            <div className="flex flex-col items-center text-center space-y-3 pt-2">
+              <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-950/40 flex items-center justify-center">
+                <TrashIcon className="w-8 h-8 text-red-500" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-black text-neutral-900 dark:text-white">Delete this chat?</h3>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                  "<span className="font-semibold text-neutral-700 dark:text-neutral-300">{deleteModal.convo.title}</span>" will be permanently deleted. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteConversation(deleteModal.convo!.id);
+                  setDeleteModal({ isOpen: false, convo: null });
+                }}
+                disabled={isDeleting}
+                className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-black text-base tracking-wide transition-all shadow-lg shadow-red-500/20 cursor-pointer disabled:opacity-60"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteModal({ isOpen: false, convo: null })}
+                className="w-full py-3.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-[0.98] text-neutral-700 dark:text-neutral-300 font-semibold text-sm transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

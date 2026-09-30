@@ -96,6 +96,30 @@
     font-family: 'Nunito', ui-sans-serif, system-ui, sans-serif;
   }
 
+  /* ── Text Selection Visibility Fix ─────────────────────────────────────────
+     Ensures highlighted text has a clearly visible selection color on all
+     backgrounds. Without this, white-on-white or black-on-black selections
+     are invisible on certain OS/browser themes.                               */
+  ::selection {
+    background-color: #2563EB;
+    color: #ffffff;
+  }
+  ::-moz-selection {
+    background-color: #2563EB;
+    color: #ffffff;
+  }
+  /* Dark surfaces use a slightly lighter blue so selection stays visible */
+  .dark ::selection,
+  [data-theme="dark"] ::selection {
+    background-color: #3B82F6;
+    color: #ffffff;
+  }
+  .dark ::-moz-selection,
+  [data-theme="dark"] ::-moz-selection {
+    background-color: #3B82F6;
+    color: #ffffff;
+  }
+
   /* Global Button Animations */
   button, 
   [role="button"],

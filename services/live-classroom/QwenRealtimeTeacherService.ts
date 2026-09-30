@@ -400,8 +400,8 @@ export class QwenRealtimeTeacherService {
         force: true,
         instructions:
           'The student just spoke or asked something. First answer the student directly and, if they asked a question, ' +
-          'address it fully in a couple of clear sentences. Always write 2-5 key terms or formulas on the board via board_action write. ' +
-          'If the concept needs a physical structure or process diagram, call illustrate_object or rich draw_mermaid. ' +
+          'address it fully in a couple of clear sentences. Proactively illustrate the concept by calling illustrate_object ' +
+          'to render a clear labeled diagram on the whiteboard (or draw_mermaid for processes), and write 2-5 key terms on the board via board_action write. ' +
           'Then continue teaching the lesson smoothly from where you left off. ' +
           'When you pronounce maths or formulas, say them naturally in conversational English (never say "dollar" or read LaTeX aloud).',
       });
@@ -763,7 +763,7 @@ export class QwenRealtimeTeacherService {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `The lesson topic "${topic}" is written in blue on the board. Greet the student warmly in 1 or 2 engaging sentences and introduce what we are exploring today. Do not draw a diagram yet (greetings and introductions first). You will begin teaching and visualizing concepts on the next turn.`,
+          text: `The lesson topic "${topic}" is written in blue on the board. Greet the student warmly in 1 or 2 engaging sentences and introduce what we are exploring today. Note: immediately on your very next turn, proactively call illustrate_object to display a rich labeled illustration of the concept on the whiteboard while teaching.`,
         }],
       },
     });
@@ -989,13 +989,13 @@ export class QwenRealtimeTeacherService {
         this.lastResponseAskedQuestion = false;
         this.requestTeacherContinuation('silence_after_question', {
           injectUserHint:
-            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself. Write key terms or draw a clarifying diagram on the board first, then continue explaining the next concept smoothly. Pronounce formulas naturally — never say "dollar" aloud. Do not wait for the student.',
+            'The student has not responded yet. Provide a brief encouraging hint or briefly answer the question yourself. Proactively call illustrate_object to clarify the concept visually with a diagram on the board, and write 2-4 key terms via board_action write. Then continue explaining the next concept smoothly. Pronounce formulas naturally — never say "dollar" aloud. Do not wait for the student.',
         });
       } else {
         // Continuous teaching: move to the next concept or example automatically
         this.requestTeacherContinuation('silence_continue', {
           injectUserHint:
-            'Continue teaching smoothly without waiting. Introduce the next concept. Write 2–5 key terms or formulas on the board via board_action write. Call illustrate_object or rich draw_mermaid only if the phase needs a physical structure or process diagram. Speak naturally about what is on the board and advance smoothly.',
+            'Continue teaching smoothly without waiting. Introduce the next concept. Proactively call illustrate_object to render a clear labeled educational diagram of the concept on the whiteboard, and write 2–4 key terms via board_action write. Speak naturally about what is illustrated and advance smoothly.',
         });
       }
     }, waitMs);
@@ -1113,7 +1113,7 @@ export class QwenRealtimeTeacherService {
           liveLogger.log(`[QwenRealtime] Continuous teaching auto-continue turn=${this.currentTeachingTurnId}`);
           this.requestTeacherContinuation('auto_continue_no_question', {
             injectUserHint:
-              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. Write 2–5 key terms or formulas on the board via board_action write. Call illustrate_object or rich draw_mermaid only when a physical structure or multi-step process diagram is needed. Speak naturally and advance smoothly.',
+              'Continue teaching smoothly without waiting. Move directly to introducing and explaining the next subtopic or concept. Proactively call illustrate_object to display a labeled diagram on the whiteboard, and write 2–4 key terms via board_action write. Speak naturally and advance smoothly.',
           });
         }
       }, 500);
@@ -1368,11 +1368,10 @@ export class QwenRealtimeTeacherService {
       function: {
         name: 'illustrate_object',
         description:
-          'Generate and render a detailed SVG illustration of a physical object, structure, device, apparatus, biological form, machine, specimen, semiconductor, circuit component, molecule, or spatial/cross-section view. ' +
-          'MANDATORY UX RULE: Before calling this tool, speak a friendly natural wait line aloud first (e.g. "Let me pull up an illustration of how this looks — give me a few seconds"). ' +
-          'Pass a detailed visual brief specifying viewpoint, cutaway/cross-section, key parts to label, and physical layout. ' +
-          'Always write 2–5 essential key terms on the board as notes and refer to the picture in your spoken explanation. ' +
-          'If the tool result is an error, acknowledge aloud that the picture didn\'t load, write key terms via board_action write, and continue — never pretend an image exists if it failed.',
+          'Proactively generate and render a high-quality educational labeled SVG illustration/diagram directly onto the whiteboard canvas. ' +
+          'Call this tool whenever introducing, explaining, or reviewing a concept, physical structure, device, apparatus, machine, biological organ, circuit component, molecule, or visual concept. ' +
+          'Pass a detailed visual brief specifying viewpoint, cross-section/cutaway, and key labeled parts. ' +
+          'Refer to the visual in your spoken explanation to teach the student effectively.',
         parameters: {
           type: 'object',
           properties: {

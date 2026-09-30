@@ -443,37 +443,51 @@ const GrokChatComposer: React.FC<{
               </svg>
             </button>
 
-            {/* Popup Menu */}
+            {/* Popup Menu — Gallery / Camera */}
             {showAttachMenu && (
-              <div className="absolute bottom-full left-0 mb-2 w-36 bg-white dark:bg-[#2a2a2a] rounded-2xl shadow-xl border border-black/5 dark:border-white/10 overflow-hidden animate-in slide-in-from-bottom-2 fade-in z-50">
+              <div className="absolute bottom-full left-0 mb-3 w-52 bg-white dark:bg-[#222] rounded-3xl shadow-2xl border border-black/8 dark:border-white/10 overflow-hidden z-50 animate-in slide-in-from-bottom-3 fade-in duration-200">
+                <div className="px-4 pt-4 pb-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Attach Image</p>
+                </div>
                 <button
                   onClick={() => {
                     setShowAttachMenu(false);
                     onOpenGallery();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
+                  className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                  Gallery
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <span className="block font-bold text-sm">Gallery</span>
+                    <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Pick from photos</span>
+                  </div>
                 </button>
-                <div className="h-[1px] bg-neutral-200 dark:bg-white/10" />
+                <div className="h-[1px] bg-neutral-100 dark:bg-white/8 mx-4" />
                 <button
                   onClick={() => {
                     setShowAttachMenu(false);
                     onOpenCamera();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-[14px] font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#333] transition-colors"
+                  className="w-full flex items-center gap-4 px-4 py-4 text-[15px] font-semibold text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-white/8 transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2-2h6l2 2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
-                  Camera
+                  <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2-2h6l2 2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <span className="block font-bold text-sm">Camera</span>
+                    <span className="block text-xs text-neutral-400 dark:text-neutral-500 font-normal">Take a photo now</span>
+                  </div>
                 </button>
+                <div className="pb-2" />
               </div>
             )}
           </div>
@@ -484,13 +498,13 @@ const GrokChatComposer: React.FC<{
               type="button"
               onClick={isLoading ? undefined : (voiceStatus === 'listening' ? onToggleVoice : (hasText ? onSend : onToggleVoice))}
               disabled={isLoading}
-              className={`h-9 sm:h-10 px-4 rounded-full flex items-center justify-center gap-1.5 shrink-0 shadow-xs transition-all duration-200 active:scale-95 font-medium text-xs sm:text-sm select-none ${
+              className={`h-11 sm:h-12 px-5 sm:px-6 rounded-full flex items-center justify-center gap-2 shrink-0 shadow-md transition-all duration-200 active:scale-95 font-bold text-sm select-none ${
                 isLoading
                   ? 'bg-black/70 dark:bg-white/70 text-white dark:text-black cursor-not-allowed'
                   : voiceStatus === 'listening'
-                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse shadow-red-500/25'
                   : hasText
-                  ? 'bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black'
+                  ? 'bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-100 text-white dark:text-black shadow-black/20 dark:shadow-white/20'
                   : 'bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900'
               }`}
               title={isLoading ? 'Thinking...' : voiceStatus === 'listening' ? 'Stop listening' : hasText ? 'Send message' : 'Speak to dictate'}
@@ -498,22 +512,22 @@ const GrokChatComposer: React.FC<{
             >
               {isLoading ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Thinking</span>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Thinking</span>
                 </>
               ) : voiceStatus === 'listening' ? (
                 <>
-                  <span className="flex items-center gap-0.5 h-3.5">
-                    <span className="w-1 h-3 bg-white rounded-full animate-pulse" />
-                    <span className="w-1 h-4 bg-white rounded-full animate-pulse" />
-                    <span className="w-1 h-2 bg-white rounded-full animate-pulse" />
+                  <span className="flex items-center gap-0.5 h-4">
+                    <span className="w-1 h-3 bg-white rounded-full animate-pulse" style={{animationDelay:'0ms'}} />
+                    <span className="w-1 h-5 bg-white rounded-full animate-pulse" style={{animationDelay:'150ms'}} />
+                    <span className="w-1 h-2 bg-white rounded-full animate-pulse" style={{animationDelay:'300ms'}} />
                   </span>
                   <span>Listening...</span>
                 </>
               ) : hasText ? (
                 <>
                   <span>Send</span>
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5M5 12l7-7 7 7" />
                   </svg>
                 </>
@@ -1257,7 +1271,8 @@ export const Chat: React.FC<ChatProps> = ({
         contents: historyContents,
         config: {
           systemInstruction: fullSystemInstruction,
-          temperature: 0.7,
+          temperature: selectedMode === 'fast' ? 0.3 : 0.5,
+          // Lower temperature = faster, more deterministic responses
         },
       };
 
