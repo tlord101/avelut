@@ -552,25 +552,6 @@ const GrokChatComposer: React.FC<{
                 </div>
               )}
             </div>
-
-            {/* AI Memory Card Quick Button */}
-            {onOpenMemoryBank && (
-              <button
-                type="button"
-                onClick={onOpenMemoryBank}
-                className="h-8 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 bg-neutral-200/70 hover:bg-blue-100 dark:bg-white/10 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer active:scale-95 shrink-0"
-                title="AI Memory Card — View what Avelut AI remembers about you"
-                aria-label="View Memory Card"
-              >
-                <i className="bi bi-cpu text-blue-600 dark:text-blue-400 text-xs"></i>
-                <span className="font-bold text-[11px] sm:text-xs">Memory</span>
-                {memoryCount !== undefined && memoryCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-blue-600 text-white dark:bg-blue-500">
-                    {memoryCount}
-                  </span>
-                )}
-              </button>
-            )}
           </div>
 
           {/* Right: Pill-shaped Action Button for Speaker and Send states */}
