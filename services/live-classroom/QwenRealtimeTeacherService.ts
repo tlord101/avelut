@@ -579,12 +579,24 @@ export class QwenRealtimeTeacherService {
     let wsUrl: string;
     const modelParam = `model=${encodeURIComponent(modelToUse)}`;
 
-    // Strict default: use persistent Render-hosted WebSocket proxy to bypass 5-min serverless limits
-    const DEFAULT_RENDER_PROXY = 'wss://avelut-realtime-proxy.onrender.com/qwen-realtime';
-    const proxyBase = ((import.meta as any).env?.VITE_QWEN_PROXY_URL || DEFAULT_RENDER_PROXY).trim();
+    const isDev =
+      typeof import.meta !== 'undefined' &&
+      Boolean((import.meta as any).env?.DEV);
+
+    const DEFAULT_CLOUDFLARE_PROXY =
+      'wss://avelut-realtime-proxy.davidowei984.workers.dev/qwen-realtime';
+
+    const DEFAULT_LOCAL_PROXY =
+      'ws://localhost:3001/qwen-realtime';
+
+    const proxyBase = (
+      (import.meta as any).env?.VITE_QWEN_PROXY_URL ||
+      (isDev ? DEFAULT_LOCAL_PROXY : DEFAULT_CLOUDFLARE_PROXY)
+    ).trim();
+
     wsUrl = proxyBase.includes('?') ? `${proxyBase}&${modelParam}` : `${proxyBase}?${modelParam}`;
 
-    liveLogger.log(`[QwenRealtime] Connecting strictly via Render proxy (gen=${currentGen}):`, wsUrl, `(model: ${modelToUse})`);
+    liveLogger.log(`[QwenRealtime] Connecting via realtime proxy (gen=${currentGen}):`, wsUrl, `(model: ${modelToUse})`);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
