@@ -1776,6 +1776,10 @@ const App: React.FC = () => {
         );
     }
 
+    if (isProfileLoading) {
+        return <div key="profile-loader-state"><AppLoader /></div>;
+    }
+
     if (!userProfile) {
         return (
             <div key="no-profile-state" className="flex items-center justify-center min-h-screen bg-gray-100">

@@ -92,8 +92,8 @@ export class QwenRealtimeTeacherService {
   private pcmSampleQueue: Float32Array[] = [];
   private totalQueuedSamples = 0;
   private isStreamPlaying = false;
-  private readonly TARGET_CHUNK_SAMPLES = 2400; // ~100ms contiguous chunks @ 24kHz
-  private readonly PREROLL_MIN_SAMPLES = 2880; // ~120ms initial cushion before audio playback starts
+  private readonly TARGET_CHUNK_SAMPLES = 3600; // ~150ms contiguous chunks @ 24kHz
+  private readonly PREROLL_MIN_SAMPLES = 4800; // ~200ms initial cushion before audio playback starts
   private isBurstStart = true;
 
   // ── Session ────────────────────────────────────────────────────────────────
@@ -2323,16 +2323,17 @@ export class QwenRealtimeTeacherService {
 
     const now = this.outputAudioCtx.currentTime;
 
-    // Smooth gapless scheduling:
-    // If nextPlayTime has fallen slightly behind 'now':
-    // If the gap is small (< 50ms), schedule AT 'now' seamlessly WITHOUT inserting a 45ms silence hole!
-    // If the gap is larger (cold start or long gap), prime with a tiny 25ms lead-in to give the audio driver headroom.
+    // Smooth gapless scheduling and Underrun Recovery
+    // If nextPlayTime has fallen behind 'now', it means the audio buffer ran dry (underrun).
     if (this.nextPlayTime < now) {
       const gap = now - this.nextPlayTime;
-      if (gap < 0.05) {
-        this.nextPlayTime = now;
+      if (gap < 0.03) {
+        // Minor CPU jitter: tiny pad to prevent instant overlapping click
+        this.nextPlayTime = now + 0.02;
       } else {
-        this.nextPlayTime = now + 0.025;
+        // Major network underrun: The buffer completely dried up.
+        // Re-establish a solid 150ms jitter buffer for all subsequent chunks to stabilize stream.
+        this.nextPlayTime = now + 0.150;
       }
     }
 

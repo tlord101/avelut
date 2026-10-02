@@ -70,7 +70,10 @@ export async function nativeGoogleSignIn(): Promise<GoogleSignInResponse> {
 
   try {
     if (!isPluginInitialized) {
-      await GoogleSignIn.initialize({ clientId, redirectUrl });
+      await GoogleSignIn.initialize({ 
+        clientId, 
+        scopes: ['profile', 'email'] 
+      });
       isPluginInitialized = true;
     }
 
@@ -105,10 +108,14 @@ export async function nativeGoogleSignIn(): Promise<GoogleSignInResponse> {
   } catch (err: any) {
     const errorMessage = err?.message || String(err);
 
+    // Only silently ignore explicit user cancellations.
+    // If it's a configuration error (SHA-1 mismatch, etc.), show the error so the developer knows.
     if (
       err?.code === ErrorCode.SignInCanceled ||
+      errorMessage === 'Sign in canceled' ||
+      errorMessage === 'The user closed the hint selector.' ||
       errorMessage.includes('SIGN_IN_CANCELED') ||
-      errorMessage.toLowerCase().includes('cancel')
+      (errorMessage.toLowerCase().includes('cancel') && !errorMessage.includes('GetCredential'))
     ) {
       return {
         user: null,
