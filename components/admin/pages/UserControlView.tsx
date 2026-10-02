@@ -34,6 +34,7 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
         const matchesSearch = (user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                user.email?.toLowerCase().includes(searchQuery.toLowerCase()));
         
+        if (user.status === 'deleted') return false; // Hide deleted users completely
         if (statusFilter === 'premium') return matchesSearch && user.subscription_status === 'premium';
         if (statusFilter === 'suspended') return matchesSearch && user.status === 'suspended';
         return matchesSearch;
@@ -77,9 +78,7 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
     const handleDeleteUser = async (uid: string, name: string) => {
         if (!window.confirm(`Are you absolutely sure you want to completely delete ${name}? This action cannot be undone.`)) return;
         try {
-            // Note: In Firebase Auth, a server function is needed to actually delete the auth account. 
-            // We just mark as deleted or remove from Realtime DB.
-            await remove(dbRef(db, `users/${uid}`));
+            await update(dbRef(db, `users/${uid}`), { status: 'deleted' });
             addToast("User completely deleted.", "success");
             setSelectedUsers(prev => {
                 const next = new Set(prev);
@@ -98,7 +97,7 @@ export const UserControlView: React.FC<UserControlViewProps> = ({ allUsersList, 
         try {
             const updates: any = {};
             selectedUsers.forEach(uid => {
-                updates[`users/${uid}`] = null;
+                updates[`users/${uid}`] = { status: 'deleted' };
             });
             await update(dbRef(db), updates);
             addToast(`${selectedUsers.size} users completely deleted.`, "success");

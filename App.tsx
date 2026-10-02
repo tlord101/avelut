@@ -12,6 +12,8 @@ import { Onboarding } from './components/Onboarding';
 
 import { createAvelutAI } from './utils/inference';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import OneSignal from '@onesignal/capacitor-plugin';
+
 import { App as CapacitorApp } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
@@ -363,6 +365,14 @@ const App: React.FC = () => {
     const { updatePrompt, dismissUpdatePrompt, openUpdateInStore } = useAppUpdate();
     useOTAUpdater();
     useGlobalRefresh();
+
+    useEffect(() => {
+        if (Capacitor.isNativePlatform()) {
+            OneSignal.initialize("805fdff6-e515-4ace-ad01-f2dcec4f0a37");
+            OneSignal.Notifications.requestPermission(true);
+        }
+    }, []);
+
     const [currentPath, setCurrentPath] = useState(getWindowPathname());
     const [user, setUser] = useState<AuthUser | null>(() => {
         if (auth.currentUser) return auth.currentUser;
@@ -425,6 +435,54 @@ const App: React.FC = () => {
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
+
+    const timeSpentRef = useRef(userProfile?.time_spent_in_app || 0);
+    const xpRef = useRef(userProfile?.xp || 0);
+
+    useEffect(() => {
+        if (userProfile?.time_spent_in_app !== undefined) {
+            timeSpentRef.current = userProfile.time_spent_in_app;
+        }
+        if (userProfile?.xp !== undefined) {
+            xpRef.current = userProfile.xp;
+        }
+    }, [userProfile?.time_spent_in_app, userProfile?.xp]);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+
+        let activeTimeSeconds = 0;
+        
+        const interval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                activeTimeSeconds += 10;
+                
+                if (activeTimeSeconds >= 60) {
+                    const minutesGained = Math.floor(activeTimeSeconds / 60);
+                    activeTimeSeconds = activeTimeSeconds % 60;
+                    
+                    const newTimeSpent = timeSpentRef.current + (minutesGained * 60);
+                    const newXp = xpRef.current + minutesGained;
+                    
+                    timeSpentRef.current = newTimeSpent;
+                    xpRef.current = newXp;
+
+                    updateProfile(user, {
+                        time_spent_in_app: newTimeSpent,
+                        xp: newXp
+                    }).catch(() => {});
+
+                    setUserProfile(prev => prev ? {
+                        ...prev,
+                        time_spent_in_app: newTimeSpent,
+                        xp: newXp
+                    } : prev);
+                }
+            }
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [user?.uid]);
 
     const [userProgress, setUserProgress] = useState<UserProgress>(() => {
         const uid = userProfile?.uid || (typeof window !== 'undefined' ? window.localStorage?.getItem('avelut_last_uid') : null);
@@ -527,7 +585,30 @@ const App: React.FC = () => {
                 window.history.pushState(null, '', newPath);
             }
         }
+        
+        if (Capacitor.isNativePlatform()) {
+            OneSignal.Session.addOutcome('nav_' + newItem).catch(() => {});
+        }
     }, []);
+
+    useEffect(() => {
+        if (Capacitor.isNativePlatform()) {
+            OneSignal.Notifications.addEventListener('click', (event) => {
+                const url = event.result?.url;
+                if (url) {
+                    try {
+                        const path = new URL(url).pathname;
+                        if (path) {
+                            const newRoute = resolveActiveItemFromPath(path);
+                            if (newRoute) {
+                                setActiveItem(newRoute);
+                            }
+                        }
+                    } catch (e) {}
+                }
+            });
+        }
+    }, [setActiveItem]);
 
     const dismissedClipboardSigsRef = useRef<Set<string>>(new Set());
     const currentClipboardSigRef = useRef<string | null>(null);
@@ -673,12 +754,14 @@ const App: React.FC = () => {
                 console.warn("Caught and silenced YouTube Player API unmount exception:", err);
                 event.preventDefault();
                 event.stopPropagation();
+                return;
             }
+            addToast(`Error: ${msg}`, 'error');
         };
 
         window.addEventListener('error', handleGlobalError);
         return () => window.removeEventListener('error', handleGlobalError);
-    }, []);
+    }, [addToast]);
 
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
         if (typeof window === 'undefined') return false;

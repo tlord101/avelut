@@ -7,6 +7,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import type { AuthUser } from '@/lib/backend';
+import OneSignal from '@onesignal/capacitor-plugin';
 
 type AddToastFn = (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 type SetActiveItemFn = (item: string) => void;
@@ -314,6 +315,62 @@ export const clearDeliveredNotifications = async (): Promise<void> => {
   }
 };
 
+export async function showMessengerNotification(
+  chatId: string,
+  senderName: string,
+  message: string,
+  messageHistory: string = ''
+) {
+  const LocalNotifications = await getLocalNotifications();
+  if (!LocalNotifications) return;
+
+  await ensureChannel(LocalNotifications);
+
+  try {
+    await LocalNotifications.registerActionTypes({
+      types: [
+        {
+          id: 'MESSENGER_REPLY',
+          actions: [
+            {
+              id: 'reply',
+              title: 'Reply',
+              input: true
+            }
+          ]
+        }
+      ]
+    });
+  } catch (e) {
+    console.warn('[LocalNotifications] Failed to register action type', e);
+  }
+
+  let fullBody = messageHistory;
+  if (senderName && message) {
+      fullBody = fullBody ? `${fullBody}\n${senderName}: ${message}` : `${senderName}: ${message}`;
+  } else if (!fullBody) {
+      fullBody = 'New message';
+  }
+
+  const notificationId = hashId(chatId, 999);
+
+  await LocalNotifications.schedule({
+    notifications: [{
+      id: notificationId,
+      title: 'New Message',
+      body: fullBody,
+      channelId: CHANNEL_ID,
+      actionTypeId: 'MESSENGER_REPLY',
+      extra: {
+        type: 'messenger',
+        route: 'messenger',
+        chatId: chatId,
+        history: fullBody
+      }
+    }]
+  });
+}
+
 /**
  * Attach tap listener once and store navigation callbacks.
  */
@@ -339,6 +396,27 @@ export const initNativeNotifications = async (
     await LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
       const extra = (action.notification?.extra || {}) as Record<string, string>;
       const route = extra.route || 'timetable';
+      
+      if (action.actionId === 'reply' && action.inputValue) {
+         const chatId = extra.chatId;
+         const history = extra.history || '';
+         const newHistory = history ? `${history}\nYou: ${action.inputValue}` : `You: ${action.inputValue}`;
+         
+         window.dispatchEvent(new CustomEvent('avelut_messenger_reply', { 
+            detail: { chatId, text: action.inputValue } 
+         }));
+         
+         if (chatId) {
+             void showMessengerNotification(chatId, '', '', newHistory);
+         }
+         
+         if (Capacitor.isNativePlatform()) {
+             OneSignal.Session.addOutcome('messenger_reply_inline').catch(() => {});
+         }
+         
+         return;
+      }
+
       if (navigationHandlers.setActiveItem) {
         navigationHandlers.setActiveItem(route);
       }
