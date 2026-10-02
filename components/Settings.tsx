@@ -350,6 +350,17 @@ export const SettingsScreen: React.FC<SettingsProps> = ({
               }
             />
           )}
+          {isNotificationSwitchOn && isNative() && matchSearch('Test Notifications', 'Send a test notification') && (
+             <SettingsRow
+                icon={<i className="bi bi-send text-lg" />}
+                title="Test Notifications"
+                subtitle="Send a test notification to this device"
+                onClick={() => {
+                   import('../utils/nativeNotifications').then(m => m.sendTestNotification());
+                   addToast('Test notification will appear in 2 seconds (minimize app to see it)', 'info');
+                }}
+             />
+          )}
           {matchSearch('Billing & Plans', 'Top-up AI credits, view plans & invoices') && (
             <SettingsRow
               icon={<i className="bi bi-credit-card text-lg" />}

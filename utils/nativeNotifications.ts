@@ -371,6 +371,22 @@ export async function showMessengerNotification(
   });
 }
 
+export async function sendTestNotification() {
+  const LocalNotifications = await getLocalNotifications();
+  if (!LocalNotifications) return;
+  await ensureChannel(LocalNotifications);
+  
+  await LocalNotifications.schedule({
+    notifications: [{
+      id: Math.floor(Math.random() * 100000) + 200000,
+      title: 'Test Notification',
+      body: 'Notifications are working perfectly! 🎉',
+      channelId: CHANNEL_ID,
+      schedule: { at: new Date(Date.now() + 2000) } // 2 seconds from now
+    }]
+  });
+}
+
 /**
  * Attach tap listener once and store navigation callbacks.
  */
