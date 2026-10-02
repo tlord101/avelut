@@ -373,6 +373,15 @@ const App: React.FC = () => {
         }
     }, []);
 
+    useEffect(() => {
+        if (Capacitor.isNativePlatform() && user?.uid) {
+            OneSignal.login(user.uid);
+        } else if (Capacitor.isNativePlatform() && !user?.uid) {
+            OneSignal.logout();
+        }
+    }, [user?.uid]);
+
+
     const [currentPath, setCurrentPath] = useState(getWindowPathname());
     const [user, setUser] = useState<AuthUser | null>(() => {
         if (auth.currentUser) return auth.currentUser;
