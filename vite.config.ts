@@ -64,14 +64,8 @@ export default defineConfig(({ command, mode }) => {
             changeOrigin: true,
             secure: true,
           },
-          // Dev HTTP proxy for sending notifications
-          '/api/send-notification': {
-            target: 'https://www.avelut.xyz',
-            changeOrigin: true,
-            secure: true,
-          },
-          // Dev HTTP proxy for scheduling reminders
-          '/api/schedule-reminders': {
+          // Dev HTTP proxy for notifications (send & schedule)
+          '/api/notifications': {
             target: 'https://www.avelut.xyz',
             changeOrigin: true,
             secure: true,

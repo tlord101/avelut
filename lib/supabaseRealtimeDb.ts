@@ -313,10 +313,11 @@ async function persistMessage(chatId: string, messageId: string, value: Record<s
           ? 'https://www.avelut.xyz' 
           : '';
           
-        fetch(`${apiBase}/api/send-notification`, {
+        fetch(`${apiBase}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'send',
             targetUserId: member.user_id,
             title: "New Message",
             message: summary

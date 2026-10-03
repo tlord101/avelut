@@ -140,10 +140,11 @@ export async function scheduleStudyReminders(
      const uid = window.localStorage?.getItem('avelut_last_uid');
      if (!uid) return;
 
-     await fetch(`${apiBase}/api/schedule-reminders`, {
+     await fetch(`${apiBase}/api/notifications`, {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({
+             action: 'schedule',
              targetUserId: uid,
              reminders: toSchedule
          })
