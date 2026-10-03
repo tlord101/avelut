@@ -373,13 +373,7 @@ const App: React.FC = () => {
         }
     }, []);
 
-    useEffect(() => {
-        if (Capacitor.isNativePlatform() && user?.uid) {
-            OneSignal.login(user.uid);
-        } else if (Capacitor.isNativePlatform() && !user?.uid) {
-            OneSignal.logout();
-        }
-    }, [user?.uid]);
+
 
 
     const [currentPath, setCurrentPath] = useState(getWindowPathname());
@@ -408,6 +402,15 @@ const App: React.FC = () => {
         }
         return null;
     });
+
+    useEffect(() => {
+        if (Capacitor.isNativePlatform() && user?.uid) {
+            OneSignal.login(user.uid);
+        } else if (Capacitor.isNativePlatform() && !user?.uid) {
+            OneSignal.logout();
+        }
+    }, [user?.uid]);
+
     const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
         if (typeof window !== 'undefined') {
             const lastUid = window.localStorage?.getItem('avelut_last_uid') || auth.currentUser?.uid;
