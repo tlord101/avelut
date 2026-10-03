@@ -1,6 +1,6 @@
 import { runQuery, runStatement } from '../lib/sqlite/sqliteService';
 import { enqueueSyncAction, generateLocalId } from './chatStorageService';
-import type { SavedItem } from '../utils/history';
+import type { SavedItem } from '../types/historyTypes';
 
 export interface LocalMaterialRow {
   id: string;

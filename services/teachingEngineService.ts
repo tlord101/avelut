@@ -30,7 +30,7 @@ import {
 } from './teachingEnginePrompt';
 import { createAvelutAI, getResponseText } from '../utils/inference';
 import { cleanAndParseJson } from '../utils/jsonUtils';
-import { saveTeachingStructureOnly, topicKeyFromTitle, ensureTargetBoardCount, isValidStructureForDuration } from './liveTeachingProgressService';
+import { saveTeachingStructureOnly, topicKeyFromTitle, ensureTargetBoardCount, isValidStructureForDuration } from './teachingStructureUtils';
 import { supabaseDataService } from './supabaseDataService';
 import { unifiedVoiceRouter } from './voice/UnifiedVoiceRouter';
 import { sanitizeSvg } from '../utils/svgSanitizer';

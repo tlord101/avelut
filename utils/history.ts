@@ -6,15 +6,7 @@ import {
   bulkUpsertRemoteMaterials,
 } from "../services/materialStorageService";
 
-export type SavedItemType = 'flashcards' | 'exam' | 'past_questions';
-
-export interface SavedItem {
-  id?: string;
-  type: SavedItemType;
-  title: string;
-  data: any;
-  createdAt: number | object;
-}
+import type { SavedItem, SavedItemType } from '../types/historyTypes';
 
 /**
  * Saves a generated material to SQLite per user instantly for offline usage and syncs with remote DB.

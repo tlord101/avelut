@@ -83,7 +83,7 @@ export default defineConfig(({ command, mode }) => {
         }
       },
       build: {
-        sourcemap: false,
+        sourcemap: true,
         chunkSizeWarningLimit: 1200,
         cssCodeSplit: true,
         minify: 'esbuild',

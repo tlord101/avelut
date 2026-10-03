@@ -24,10 +24,10 @@ import {
 } from '../utils/liveTutorialQuota';
 import {
   getLiveTeachingProgress,
-  topicKeyFromTitle,
   formatResumeLabel,
   type LiveTeachingProgress,
 } from '../services/liveTeachingProgressService';
+import { topicKeyFromTitle } from '../services/teachingStructureUtils';
 import { readCachedJson, writeCachedJson } from '../utils/cache';
 import { getOrGenerateTopicStructure } from '../services/topicStructureService';
 

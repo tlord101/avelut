@@ -18,12 +18,12 @@ import { unifiedVoiceRouter } from '../../services/voice/UnifiedVoiceRouter';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { useToast } from '../../hooks/useToast';
 import {
-  topicKeyFromTitle,
   getLiveTeachingProgress,
   getSavedTeachingStructure,
   saveLiveTeachingProgress,
   formatResumeLabel,
 } from '../../services/liveTeachingProgressService';
+import { topicKeyFromTitle } from '../../services/teachingStructureUtils';
 import { logTeachingEvent } from '../../services/teachingEventLogger';
 import type { LessonDurationMode } from './LessonDurationModal';
 import { lessonPrepService, buildPrepKey } from '../../services/lessonPrepService';
