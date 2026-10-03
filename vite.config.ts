@@ -58,6 +58,24 @@ export default defineConfig(({ command, mode }) => {
             changeOrigin: true,
             secure: true,
           },
+          // Dev HTTP proxy for chatbot primitive
+          '/api/primitives/chatbot': {
+            target: 'https://www.avelut.xyz',
+            changeOrigin: true,
+            secure: true,
+          },
+          // Dev HTTP proxy for sending notifications
+          '/api/send-notification': {
+            target: 'https://www.avelut.xyz',
+            changeOrigin: true,
+            secure: true,
+          },
+          // Dev HTTP proxy for scheduling reminders
+          '/api/schedule-reminders': {
+            target: 'https://www.avelut.xyz',
+            changeOrigin: true,
+            secure: true,
+          },
         },
       },
       plugins: [

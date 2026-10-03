@@ -3,12 +3,13 @@ import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabaseClient';
 
-export type OTAUpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready';
+export type OTAUpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
 
 interface OTAState {
     status: OTAUpdateStatus;
     newVersion: string | null;
     downloadProgress: number;
+    errorMsg?: string;
 }
 
 // Global shared state across all hook subscribers
@@ -140,10 +141,16 @@ async function checkAndUpdate(data: any) {
                 setGlobalState({ status: 'idle', newVersion: null, downloadProgress: 0 });
             }
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('[OTA] Update error:', error);
         if (globalState.status !== 'ready') {
-            setGlobalState({ status: 'idle', newVersion: null, downloadProgress: 0 });
+            setGlobalState({ status: 'error', newVersion: null, downloadProgress: 0, errorMsg: error?.message || String(error) });
+            // Optionally, revert to idle after a few seconds so the user isn't stuck with an error badge forever
+            setTimeout(() => {
+                if (globalState.status === 'error') {
+                    setGlobalState({ status: 'idle', errorMsg: undefined });
+                }
+            }, 5000);
         }
     }
 }

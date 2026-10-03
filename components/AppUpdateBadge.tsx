@@ -52,6 +52,20 @@ export const AppUpdateBadge: React.FC<{ className?: string }> = ({ className = '
         );
     }
 
+    if (updateStatus === 'error') {
+        return (
+            <div
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-xs font-medium select-none ${className}`}
+                title="Update failed"
+            >
+                <i className="bi bi-exclamation-triangle text-xs" />
+                <span className="truncate max-w-[200px] sm:max-w-xs font-medium">
+                    Update failed
+                </span>
+            </div>
+        );
+    }
+
     return null;
 };
 

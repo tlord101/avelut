@@ -306,6 +306,25 @@ async function persistMessage(chatId: string, messageId: string, value: Record<s
         })
         .eq('chat_id', chatId)
         .eq('user_id', member.user_id);
+
+      // Send OneSignal push notification to the recipient
+      try {
+        const apiBase = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.() 
+          ? 'https://www.avelut.xyz' 
+          : '';
+          
+        fetch(`${apiBase}/api/send-notification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetUserId: member.user_id,
+            title: "New Message",
+            message: summary
+          })
+        }).catch(() => {});
+      } catch (e) {
+        // ignore fetch errors
+      }
     }
   }
 

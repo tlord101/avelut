@@ -22,7 +22,7 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import type { UIMessage } from "ai"
 import { memo, useState } from "react"
-
+import { Capacitor } from "@capacitor/core"
 type MessageComponentProps = {
   message: UIMessage
   isLastMessage: boolean
@@ -127,7 +127,7 @@ function ConversationPromptInput() {
 
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
-      api: "/api/primitives/chatbot",
+      api: Capacitor.isNativePlatform() ? "https://www.avelut.xyz/api/primitives/chatbot" : "/api/primitives/chatbot",
     }),
   })
 
