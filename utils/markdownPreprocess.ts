@@ -24,11 +24,35 @@ export function preprocessMarkdown(content: string): string {
 }
 
 export function prepareMarkdown(content: string): string {
-  // Keep the existing math repair helper, but never rewrite source code or URLs.
-  const formatted = transformProse(preprocessMarkdown(content), formatLatexMath, false);
-  // Inline sentinels avoid CommonMark treating a leading <mark> as an HTML
-  // block. Markdown emphasis and math inside the highlight still get parsed.
-  return transformProse(formatted, (text) => text.replace(/<mark>/g, '\uE000').replace(/<\/mark>/g, '\uE001'), true);
+  // Combine highlight expansion, LaTeX math formatting, and sentinel conversion (\uE000/\uE001)
+  // into a single transform pass over prose chunks to eliminate redundant literalPattern regex scans
+  // and intermediate string allocations during markdown rendering.
+  return transformProse(content, (text) => {
+    // For math expressions ($...$ or $$...$$), only run formatLatexMath to preserve math boundaries
+    if (text.startsWith('$')) {
+      return formatLatexMath(text);
+    }
+
+    // Step 1: Expand highlights (==highlight== or <mark>...</mark>) directly into inline sentinels
+    const textWithSentinels = text.replace(
+      /<mark>[\s\S]*?<\/mark>|(?<![=\\])==([^=\s](?:[^=\n]*?[^=\s])?)==(?![=])/g,
+      (match, highlighted: string | undefined) => {
+        if (highlighted !== undefined) {
+          return `\uE000${highlighted}\uE001`;
+        }
+        if (match.startsWith('<mark>')) {
+          return match.replace(/<mark>/g, '\uE000').replace(/<\/mark>/g, '\uE001');
+        }
+        return match;
+      },
+    );
+
+    // Step 2: Format plain math expressions outside math blocks into LaTeX
+    const formattedMath = formatLatexMath(textWithSentinels);
+
+    // Step 3: Ensure any leftover <mark> or </mark> tags are converted to sentinels
+    return formattedMath.replace(/<mark>/g, '\uE000').replace(/<\/mark>/g, '\uE001');
+  }, false);
 }
 
 interface MarkdownNode {
