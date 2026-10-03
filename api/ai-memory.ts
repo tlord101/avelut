@@ -117,7 +117,7 @@ export default async function handler(req: any, res: any) {
       if (!memoryId) {
         return res.status(400).json({ error: 'BAD_REQUEST', message: 'Missing memoryId' });
       }
-      await userNamespace.deleteOne(memoryId);
+      await userNamespace.deleteOne({ id: memoryId });
       return res.status(200).json({ success: true, id: memoryId });
     }
 
